@@ -726,8 +726,17 @@ export class FileSystemManager {
 
     const destPath = path.join(modsDir, mod.filename);
 
-    // Se esiste già, non copiare
+    // Load manifest
+    const manifest = await this.loadModpackModsManifest(modpackId);
+
+    // Se esiste già, assicurati che il manifest sia aggiornato
     if (await fs.pathExists(destPath)) {
+      // Update manifest to ensure proper metadata tracking
+      if (!manifest[modId]) {
+        manifest[modId] = mod.filename;
+        await this.saveModpackModsManifest(modpackId, manifest);
+        console.log(`[FSManager] Updated manifest for existing file: ${mod.filename}`);
+      }
       return { success: true };
     }
 
@@ -744,8 +753,7 @@ export class FileSystemManager {
           
           if (result.success) {
             console.log(`[FSManager] Downloaded mod to: ${result.filePath}`);
-            // Save to manifest with library mod ID
-            const manifest = await this.loadModpackModsManifest(modpackId);
+            // Save to manifest with library mod ID (already loaded above)
             manifest[modId] = mod.filename;
             await this.saveModpackModsManifest(modpackId, manifest);
             return { success: true };
@@ -766,8 +774,7 @@ export class FileSystemManager {
 
     try {
       await fs.copy(mod.path, destPath);
-      // Save to manifest with library mod ID
-      const manifest = await this.loadModpackModsManifest(modpackId);
+      // Save to manifest with library mod ID (already loaded above)
       manifest[modId] = mod.filename;
       await this.saveModpackModsManifest(modpackId, manifest);
       return { success: true };
@@ -939,6 +946,8 @@ export class FileSystemManager {
         size: m.size,
         loader: m.loader,
         game_version: m.game_version,
+        cf_project_id: (m as any).cf_project_id,
+        cf_file_id: (m as any).cf_file_id,
       })),
       stats: {
         mod_count: mods.length,
@@ -967,13 +976,7 @@ export class FileSystemManager {
     // Aggiungi manifest
     zip.addFile("modex.json", Buffer.from(JSON.stringify(manifest, null, 2)));
 
-    // Aggiungi mods
-    for (const mod of mods) {
-      if (mod.path && await fs.pathExists(mod.path)) {
-        const modBuffer = await fs.readFile(mod.path);
-        zip.addFile(`mods/${mod.filename}`, modBuffer);
-      }
-    }
+    // Note: We don't bundle JAR files anymore - mods will be downloaded from CurseForge on import
 
     // Aggiungi cover se esiste
     const modpackPath = this.getModpackPath(modpackId);
@@ -1022,39 +1025,15 @@ export class FileSystemManager {
     const isUpdate = !!existingModpack;
 
     let modpackId: string;
-    let changes = { added: 0, removed: 0, unchanged: 0 };
+    let oldModsInModpack: Mod[] = [];
 
     if (isUpdate && existingModpack) {
       // Update esistente
       modpackId = existingModpack.id;
-      const existingMods = await this.getModsInModpack(modpackId);
-      const existingHashes = new Set<string>(existingMods.map(m => m.hash).filter((h): h is string => !!h));
-      const newHashes = new Set<string>(manifest.mods.map((m: any) => m.hash as string));
-
-      // Calcola changes
-      for (const hash of newHashes) {
-        if (existingHashes.has(hash)) {
-          changes.unchanged++;
-        } else {
-          changes.added++;
-        }
-      }
-      for (const hash of existingHashes) {
-        if (!newHashes.has(hash as string)) {
-          changes.removed++;
-        }
-      }
-
-      // Rimuovi mods non più presenti
-      const modsDir = path.join(this.getModpackPath(modpackId), "mods");
-      for (const mod of existingMods) {
-        if (mod.hash && !newHashes.has(mod.hash)) {
-          const modPath = path.join(modsDir, mod.filename);
-          if (await fs.pathExists(modPath)) {
-            await fs.remove(modPath);
-          }
-        }
-      }
+      oldModsInModpack = await this.getModsInModpack(modpackId);
+      console.log(`[MODEX Import] Updating existing modpack: ${existingModpack.name}`);
+      console.log(`[MODEX Import] Current mods: ${oldModsInModpack.length}`);
+      console.log(`[MODEX Import] New manifest has: ${manifest.mods.length} mods`);
     } else {
       // Nuovo modpack
       modpackId = await this.createModpack({
@@ -1062,22 +1041,271 @@ export class FileSystemManager {
         version: manifest.modpack.version,
         description: manifest.modpack.description,
       });
-      changes.added = manifest.mods.length;
+      console.log(`[MODEX Import] Creating new modpack: ${manifest.modpack.name}`);
     }
 
-    // Estrai mods
+    // Download mods from CurseForge (same logic as CF import)
     const modsDir = path.join(this.getModpackPath(modpackId), "mods");
     await fs.ensureDir(modsDir);
 
-    const modEntries = zip.getEntries().filter(e => e.entryName.startsWith("mods/"));
-    for (const entry of modEntries) {
-      const filename = path.basename(entry.entryName);
-      const destPath = path.join(modsDir, filename);
-      
-      // Salta se già esiste con stesso nome (potrebbe avere stesso hash)
-      if (!await fs.pathExists(destPath)) {
-        await fs.writeFile(destPath, entry.getData());
+    const mcVersion = manifest.modpack.version;
+    const loader = manifest.mods[0]?.loader || "forge"; // Use first mod's loader as default
+
+    // Build cache of existing mods by CF project-file ID
+    const existingMods = await this.getAllMods();
+    const existingModsMap = new Map<string, Mod>();
+    for (const mod of existingMods) {
+      const cfData = mod as any;
+      if (cfData.cf_project_id && cfData.cf_file_id) {
+        existingModsMap.set(`${cfData.cf_project_id}-${cfData.cf_file_id}`, mod);
       }
+      // Also map by hash for non-CF mods
+      if (mod.hash) {
+        existingModsMap.set(`hash-${mod.hash}`, mod);
+      }
+    }
+
+    let modsImported = 0;
+    let modsSkipped = 0;
+    const errors: string[] = [];
+    const downloadedModIds = new Set<string>(); // Track which mods were successfully added
+
+    for (let i = 0; i < manifest.mods.length; i++) {
+      const modEntry = manifest.mods[i];
+      const projectID = modEntry.cf_project_id;
+      const fileID = modEntry.cf_file_id;
+
+      console.log(`[MODEX Import] Processing mod ${i + 1}/${manifest.mods.length}: ${modEntry.name}`);
+
+      // Skip mods without CF IDs (local mods) - would need fallback to bundled JAR
+      if (!projectID || !fileID) {
+        console.log(`[MODEX Import] Skipping ${modEntry.name} - no CurseForge IDs`);
+        modsSkipped++;
+        continue;
+      }
+
+      // Check if already in library
+      const existingKey = `${projectID}-${fileID}`;
+      const existingMod = existingModsMap.get(existingKey);
+
+      if (existingMod && await fs.pathExists(existingMod.path)) {
+        console.log(`[MODEX Import] Found in library: ${modEntry.name}`);
+        const destPath = path.join(modsDir, existingMod.filename);
+        if (!await fs.pathExists(destPath)) {
+          await fs.copy(existingMod.path, destPath);
+        }
+        await this.addModToModpack(modpackId, existingMod.id);
+        downloadedModIds.add(existingMod.id);
+        modsImported++;
+        continue;
+      }
+
+      // Download from CurseForge
+      try {
+        const cfMod = await this.curseforgeService!.getMod(projectID);
+        const cfFile = await this.curseforgeService!.getModFile(projectID, fileID);
+
+        // Verify exact version match
+        const fileGameVersions = cfFile.gameVersions.filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v));
+        if (!fileGameVersions.includes(mcVersion)) {
+          console.log(`[MODEX Import] Version mismatch for ${modEntry.name}: expected ${mcVersion}, got ${fileGameVersions.join(", ")}`);
+          
+          // Try to find correct version
+          const correctFile = await this.curseforgeService!.findFileForVersion(projectID, mcVersion, loader);
+          if (correctFile) {
+            console.log(`[MODEX Import] Found correct version: ${correctFile.fileName}`);
+            const correctCfFile = await this.curseforgeService!.getModFile(projectID, correctFile.id);
+            
+            // Check if we already have this version
+            const correctKey = `${projectID}-${correctFile.id}`;
+            const existingCorrectMod = existingModsMap.get(correctKey);
+            
+            if (existingCorrectMod && await fs.pathExists(existingCorrectMod.path)) {
+              console.log(`[MODEX Import] Found correct version in library`);
+              const destPath = path.join(modsDir, existingCorrectMod.filename);
+              if (!await fs.pathExists(destPath)) {
+                await fs.copy(existingCorrectMod.path, destPath);
+              }
+              await this.addModToModpack(modpackId, existingCorrectMod.id);
+              downloadedModIds.add(existingCorrectMod.id);
+              modsImported++;
+              continue;
+            }
+            
+            // Download the correct version
+            const tempDir = path.join(app.getPath("temp"), "modex-import");
+            await fs.ensureDir(tempDir);
+
+            const downloadResult = await this.curseforgeService!.downloadFile(projectID, correctFile.id, tempDir);
+
+            if (downloadResult.success) {
+              const modData = this.curseforgeService!.modToLibraryFormat(cfMod, correctCfFile, loader, mcVersion);
+              const modId = `cf-${projectID}-${correctFile.id}`;
+              const modPath = path.join(this.libraryDir, modData.filename);
+
+              await fs.move(downloadResult.filePath, modPath, { overwrite: true });
+
+              const newMod: Mod = {
+                id: modId,
+                filename: modData.filename,
+                name: modData.name,
+                version: modData.version,
+                game_version: modData.game_version,
+                loader: modData.loader,
+                description: modData.description,
+                author: modData.author,
+                path: modPath,
+                created_at: new Date().toISOString(),
+                size: modData.file_size,
+                hash: "", // Will be calculated if needed
+                cf_project_id: projectID,
+                cf_file_id: correctFile.id,
+                thumbnail_url: modData.thumbnail_url || undefined,
+                download_count: modData.download_count,
+                release_type: modData.release_type,
+                date_released: modData.date_released,
+                source: "curseforge",
+              } as any;
+
+              // Calculate hash
+              const fileBuffer = await fs.readFile(modPath);
+              newMod.hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+
+              await this.addMod(newMod);
+              existingModsMap.set(`${projectID}-${correctFile.id}`, newMod);
+              
+              const destPath = path.join(modsDir, newMod.filename);
+              if (!await fs.pathExists(destPath)) {
+                await fs.copy(modPath, destPath);
+              }
+              
+              await this.addModToModpack(modpackId, newMod.id);
+              downloadedModIds.add(newMod.id);
+              modsImported++;
+              continue;
+            }
+          }
+          
+          errors.push(`${modEntry.name}: version mismatch`);
+          modsSkipped++;
+          continue;
+        }
+
+        // Download the exact file
+        const tempDir = path.join(app.getPath("temp"), "modex-import");
+        await fs.ensureDir(tempDir);
+
+        const downloadResult = await this.curseforgeService!.downloadFile(projectID, fileID, tempDir);
+
+        if (downloadResult.success) {
+          const modData = this.curseforgeService!.modToLibraryFormat(cfMod, cfFile, loader, mcVersion);
+          const modId = `cf-${projectID}-${fileID}`;
+          const modPath = path.join(this.libraryDir, modData.filename);
+
+          await fs.move(downloadResult.filePath, modPath, { overwrite: true });
+
+          const newMod: Mod = {
+            id: modId,
+            filename: modData.filename,
+            name: modData.name,
+            version: modData.version,
+            game_version: modData.game_version,
+            loader: modData.loader,
+            description: modData.description,
+            author: modData.author,
+            path: modPath,
+            created_at: new Date().toISOString(),
+            size: modData.file_size,
+            hash: "", // Will be calculated
+            cf_project_id: projectID,
+            cf_file_id: fileID,
+            thumbnail_url: modData.thumbnail_url || undefined,
+            download_count: modData.download_count,
+            release_type: modData.release_type,
+            date_released: modData.date_released,
+            source: "curseforge",
+          } as any;
+
+          // Calculate hash
+          const fileBuffer = await fs.readFile(modPath);
+          newMod.hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+
+          await this.addMod(newMod);
+          existingModsMap.set(`${projectID}-${fileID}`, newMod);
+          
+          const destPath = path.join(modsDir, newMod.filename);
+          if (!await fs.pathExists(destPath)) {
+            await fs.copy(modPath, destPath);
+          }
+          
+          await this.addModToModpack(modpackId, newMod.id);
+          downloadedModIds.add(newMod.id);
+          modsImported++;
+        } else {
+          errors.push(`${modEntry.name}: download failed`);
+          modsSkipped++;
+        }
+      } catch (error: any) {
+        console.error(`[MODEX Import] Error downloading ${modEntry.name}:`, error);
+        errors.push(`${modEntry.name}: ${error.message}`);
+        modsSkipped++;
+      }
+    }
+
+    console.log(`[MODEX Import] Complete: ${modsImported} imported, ${modsSkipped} skipped, ${errors.length} errors`);
+
+    // Calculate detailed changes if this was an update
+    let detailedChanges: {
+      added: Array<{ name: string; version: string }>;
+      removed: Array<{ name: string; version: string }>;
+      unchanged: Array<{ name: string; version: string }>;
+    } | undefined;
+
+    if (isUpdate) {
+      const oldModIds = new Set(oldModsInModpack.map(m => m.id));
+      const added: Array<{ name: string; version: string }> = [];
+      const removed: Array<{ name: string; version: string }> = [];
+      const unchanged: Array<{ name: string; version: string }> = [];
+
+      // Refresh mod list to get all newly added mods
+      const currentMods = await this.getModsInModpack(modpackId);
+      const currentModsMap = new Map(currentMods.map(m => [m.id, m]));
+
+      // Find added and unchanged mods
+      for (const modId of downloadedModIds) {
+        const mod = currentModsMap.get(modId);
+        if (!mod) continue;
+
+        if (oldModIds.has(modId)) {
+          unchanged.push({ name: mod.name, version: mod.version });
+        } else {
+          added.push({ name: mod.name, version: mod.version });
+        }
+      }
+
+      // Find removed mods and delete their files
+      const modsDir = path.join(this.getModpackPath(modpackId), "mods");
+      for (const oldMod of oldModsInModpack) {
+        if (!downloadedModIds.has(oldMod.id)) {
+          removed.push({ name: oldMod.name, version: oldMod.version });
+          
+          // Remove from modpack directory
+          const modPath = path.join(modsDir, oldMod.filename);
+          if (await fs.pathExists(modPath)) {
+            await fs.remove(modPath);
+            console.log(`[MODEX Import] Removed: ${oldMod.name} ${oldMod.version}`);
+          }
+        }
+      }
+
+      detailedChanges = { added, removed, unchanged };
+
+      console.log(`[MODEX Import] Changes:`);
+      console.log(`  Added: ${added.length}`);
+      added.forEach(m => console.log(`    + ${m.name} ${m.version}`));
+      console.log(`  Removed: ${removed.length}`);
+      removed.forEach(m => console.log(`    - ${m.name} ${m.version}`));
+      console.log(`  Unchanged: ${unchanged.length}`);
     }
 
     // Estrai cover se presente
@@ -1099,7 +1327,7 @@ export class FileSystemManager {
       modpackId,
       code: manifest.share_code,
       isUpdate,
-      changes: isUpdate ? changes : undefined,
+      changes: detailedChanges,
     };
   }
 

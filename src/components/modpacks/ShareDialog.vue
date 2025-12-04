@@ -33,7 +33,11 @@ const importResult = ref<{
   modpackId: string;
   code: string;
   isUpdate: boolean;
-  changes?: { added: number; removed: number; unchanged: number };
+  changes?: {
+    added: Array<{ name: string; version: string }>;
+    removed: Array<{ name: string; version: string }>;
+    unchanged: Array<{ name: string; version: string }>;
+  };
 } | null>(null);
 
 // Existing share info
@@ -48,7 +52,7 @@ watch(() => props.open, async (isOpen) => {
     exportPath.value = null;
     importResult.value = null;
     copied.value = false;
-    
+
     // Load existing share info if we have a modpack
     if (props.modpackId) {
       activeTab.value = "export";
@@ -68,10 +72,10 @@ watch(() => props.open, async (isOpen) => {
 
 async function exportModex() {
   if (!props.modpackId) return;
-  
+
   isExporting.value = true;
   exportSuccess.value = false;
-  
+
   try {
     const result = await window.api.share.exportModex(props.modpackId);
     if (result) {
@@ -90,7 +94,7 @@ async function exportModex() {
 async function importModex() {
   isImporting.value = true;
   importResult.value = null;
-  
+
   try {
     const result = await window.api.share.importModex();
     if (result) {
@@ -130,24 +134,15 @@ function formatBytes(bytes: number): string {
     <div class="min-w-[400px]">
       <!-- Tabs -->
       <div class="flex border-b border-border mb-4">
-        <button
-          v-if="modpackId"
-          class="flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2"
-          :class="activeTab === 'export' 
-            ? 'border-primary text-primary' 
-            : 'border-transparent text-muted-foreground hover:text-foreground'"
-          @click="activeTab = 'export'"
-        >
+        <button v-if="modpackId" class="flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2" :class="activeTab === 'export'
+          ? 'border-primary text-primary'
+          : 'border-transparent text-muted-foreground hover:text-foreground'" @click="activeTab = 'export'">
           <Upload class="inline w-4 h-4 mr-1.5" />
           Export
         </button>
-        <button
-          class="flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2"
-          :class="activeTab === 'import' 
-            ? 'border-primary text-primary' 
-            : 'border-transparent text-muted-foreground hover:text-foreground'"
-          @click="activeTab = 'import'"
-        >
+        <button class="flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2" :class="activeTab === 'import'
+          ? 'border-primary text-primary'
+          : 'border-transparent text-muted-foreground hover:text-foreground'" @click="activeTab = 'import'">
           <Download class="inline w-4 h-4 mr-1.5" />
           Import
         </button>
@@ -189,18 +184,15 @@ function formatBytes(bytes: number): string {
         </div>
 
         <!-- Export Button -->
-        <Button 
-          class="w-full" 
-          @click="exportModex" 
-          :disabled="isExporting"
-        >
+        <Button class="w-full" @click="exportModex" :disabled="isExporting">
           <RefreshCw v-if="isExporting" class="w-4 h-4 mr-2 animate-spin" />
           <Share2 v-else class="w-4 h-4 mr-2" />
           {{ isExporting ? 'Exporting...' : 'Export as .modex' }}
         </Button>
 
         <!-- Export Success -->
-        <div v-if="exportSuccess" class="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 text-sm">
+        <div v-if="exportSuccess"
+          class="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 text-sm">
           <div class="font-medium">✓ Exported successfully!</div>
           <div class="text-xs mt-1 opacity-70 truncate">{{ exportPath }}</div>
           <div class="text-xs mt-2">
@@ -219,34 +211,59 @@ function formatBytes(bytes: number): string {
         </div>
 
         <!-- Import Button -->
-        <Button 
-          class="w-full" 
-          @click="importModex" 
-          :disabled="isImporting"
-        >
+        <Button class="w-full" @click="importModex" :disabled="isImporting">
           <RefreshCw v-if="isImporting" class="w-4 h-4 mr-2 animate-spin" />
           <Download v-else class="w-4 h-4 mr-2" />
           {{ isImporting ? 'Importing...' : 'Select .modex file' }}
         </Button>
 
         <!-- Import Result -->
-        <div v-if="importResult" class="p-4 rounded-lg border text-sm space-y-2"
-          :class="importResult.isUpdate 
-            ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400'
-            : 'bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400'">
-          
+        <div v-if="importResult" class="p-4 rounded-lg border text-sm space-y-2" :class="importResult.isUpdate
+          ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400'
+          : 'bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400'">
+
           <div class="font-medium">
             {{ importResult.isUpdate ? '↻ Modpack Updated!' : '✓ Modpack Imported!' }}
           </div>
-          
+
           <div class="text-xs opacity-70">
             Code: <span class="font-mono">{{ importResult.code }}</span>
           </div>
-          
-          <div v-if="importResult.changes" class="flex gap-4 text-xs mt-2">
-            <span class="text-green-500">+{{ importResult.changes.added }} added</span>
-            <span class="text-red-500">-{{ importResult.changes.removed }} removed</span>
-            <span class="text-muted-foreground">{{ importResult.changes.unchanged }} unchanged</span>
+
+          <div v-if="importResult.changes" class="space-y-2 text-xs mt-3">
+            <!-- Summary -->
+            <div class="flex gap-4 font-medium">
+              <span class="text-green-500">+{{ importResult.changes.added.length }} added</span>
+              <span class="text-red-500">-{{ importResult.changes.removed.length }} removed</span>
+              <span class="text-muted-foreground">{{ importResult.changes.unchanged.length }} unchanged</span>
+            </div>
+
+            <!-- Added Mods -->
+            <div v-if="importResult.changes.added.length > 0" class="space-y-0.5">
+              <div class="text-green-500 font-medium">Added:</div>
+              <div v-for="mod in importResult.changes.added.slice(0, 5)" :key="mod.name" class="pl-3 text-green-500/80">
+                + {{ mod.name }} <span class="text-green-500/50">{{ mod.version }}</span>
+              </div>
+              <div v-if="importResult.changes.added.length > 5" class="pl-3 text-green-500/50">
+                ... and {{ importResult.changes.added.length - 5 }} more
+              </div>
+            </div>
+
+            <!-- Removed Mods -->
+            <div v-if="importResult.changes.removed.length > 0" class="space-y-0.5">
+              <div class="text-red-500 font-medium">Removed:</div>
+              <div v-for="mod in importResult.changes.removed.slice(0, 5)" :key="mod.name" class="pl-3 text-red-500/80">
+                - {{ mod.name }} <span class="text-red-500/50">{{ mod.version }}</span>
+              </div>
+              <div v-if="importResult.changes.removed.length > 5" class="pl-3 text-red-500/50">
+                ... and {{ importResult.changes.removed.length - 5 }} more
+              </div>
+            </div>
+
+            <!-- Unchanged (show count only) -->
+            <div v-if="importResult.changes.unchanged.length > 0" class="text-muted-foreground/70">
+              {{ importResult.changes.unchanged.length }} mods unchanged
+            </div>
           </div>
         </div>
 

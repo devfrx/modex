@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useToast } from "@/composables/useToast";
 import ModpackCard from "@/components/modpacks/ModpackCard.vue";
 import ModpackEditor from "@/components/modpacks/ModpackEditor.vue";
 import ModpackCompareDialog from "@/components/modpacks/ModpackCompareDialog.vue";
@@ -23,6 +24,7 @@ import type { Modpack, Mod } from "@/types/electron";
 
 const route = useRoute();
 const router = useRouter();
+const toast = useToast();
 
 interface ModpackWithCount extends Modpack {
   modCount: number;
@@ -221,7 +223,7 @@ async function cloneModpack(modpackId: string) {
   try {
     // Use the new clone API that handles everything
     const newPackId = await window.api.modpacks.clone(modpackId, `${original.name} (Copy)`);
-    
+
     if (!newPackId) {
       throw new Error("Clone failed");
     }
@@ -248,28 +250,30 @@ const importProgress = ref({ current: 0, total: 0, modName: '' });
 
 async function importCurseForgeModpack() {
   if (!isElectron()) return;
-  
+
   showProgress.value = true;
   progressTitle.value = "Importing CurseForge Modpack";
   progressMessage.value = "Select a modpack ZIP file...";
   importProgress.value = { current: 0, total: 0, modName: '' };
-  
+
   // Listen for progress updates
   const progressHandler = (data: { current: number; total: number; modName: string }) => {
     importProgress.value = data;
     progressMessage.value = `Downloading mod ${data.current}/${data.total}: ${data.modName}`;
   };
-  
+
   window.api.on('cf-import-progress', progressHandler);
-  
+
   try {
     const result = await window.api.share.importCurseForgeZip();
-    
+
     if (!result) {
+      // User cancelled - cleanup and return
+      window.ipcRenderer.off('cf-import-progress', progressHandler as any);
       showProgress.value = false;
-      return; // User cancelled
+      return;
     }
-    
+
     if (result.success) {
       let message = `Successfully imported ${result.modsImported} mods.`;
       if (result.modsSkipped > 0) {
@@ -281,15 +285,25 @@ async function importCurseForgeModpack() {
           message += `\n... and ${result.errors.length - 5} more errors`;
         }
       }
-      alert(message);
+      toast.success('Import Successful', message, 7000);
       await loadModpacks();
     } else {
-      alert("Import failed: " + (result.errors[0] || "Unknown error"));
+      toast.error('Import Failed', result.errors[0] || "Unknown error", 7000);
     }
   } catch (err) {
-    alert("Import failed: " + (err as Error).message);
+    toast.error('Import Error', (err as Error).message, 7000);
   } finally {
+    window.ipcRenderer.off('cf-import-progress', progressHandler as any);
     showProgress.value = false;
+    // Ensure DOM update completes
+    await nextTick();
+    // Force focus restore - sometimes Electron loses focus after alert()
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    document.body.focus();
+    document.body.blur();
+    console.log('[ModpackView] Progress dialog closed, showProgress =', showProgress.value);
   }
 }
 
@@ -356,28 +370,28 @@ async function handleDrop(event: DragEvent) {
   event.preventDefault();
   isDragging.value = false;
   dragCounter.value = 0;
-  
+
   if (!event.dataTransfer?.files.length) return;
-  
+
   const file = event.dataTransfer.files[0];
   if (!file.name.endsWith('.zip')) {
     alert("Please drop a .zip modpack file.");
     return;
   }
-  
+
   // Use electronUtils to get the file path safely
   const zipPath = window.electronUtils?.getPathForFile(file) || (file as any).path;
   if (!zipPath) {
     alert("Could not read file path. Please try importing via the button.");
     return;
   }
-  
+
   const zipName = file.name.replace(".zip", "");
-  
+
   showProgress.value = true;
   progressTitle.value = "Importing Modpack";
   progressMessage.value = "Extracting and importing mods...";
-  
+
   try {
     const result = await window.api.scanner.importModpack(zipPath, zipName);
     showProgress.value = false;
@@ -414,12 +428,12 @@ function toggleFavoriteModpack(id: string) {
 // Sort and filter modpacks
 const sortedModpacks = computed(() => {
   let result = [...modpacks.value];
-  
+
   // Apply quick filter
   if (quickFilter.value === "favorites") {
     result = result.filter(p => favoriteModpacks.value.has(p.id));
   }
-  
+
   // Sort - favorites first, then by name
   return result.sort((a, b) => {
     const aFav = favoriteModpacks.value.has(a.id) ? 0 : 1;
@@ -449,18 +463,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div 
-    class="p-6 h-full flex flex-col space-y-6 relative"
-    @dragenter="handleDragEnter"
-    @dragover="handleDragOver"
-    @dragleave="handleDragLeave"
-    @drop="handleDrop"
-  >
+  <div class="p-6 h-full flex flex-col space-y-6 relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
+    @dragleave="handleDragLeave" @drop="handleDrop">
     <!-- Drag & Drop Overlay -->
-    <div 
-      v-if="isDragging"
-      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none"
-    >
+    <div v-if="isDragging"
+      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
       <div class="text-center">
         <Download class="w-16 h-16 mx-auto text-primary mb-4" />
         <p class="text-xl font-semibold">Drop modpack .zip here</p>
@@ -469,9 +476,7 @@ onMounted(() => {
     </div>
 
     <!-- Header -->
-    <div
-      class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
-    >
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
         <h1 class="text-3xl font-bold tracking-tight">Modpacks</h1>
         <p class="text-muted-foreground">
@@ -479,38 +484,19 @@ onMounted(() => {
         </p>
       </div>
       <div class="flex gap-2">
-        <Button
-          @click="showCompare = true"
-          :disabled="modpacks.length < 2"
-          variant="outline"
-          class="gap-2"
-        >
+        <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="outline" class="gap-2">
           <ArrowLeftRight class="w-4 h-4" />
           Compare
         </Button>
-        <Button
-          @click="openShareImport"
-          :disabled="!isElectron()"
-          variant="outline"
-          class="gap-2"
-        >
+        <Button @click="openShareImport" :disabled="!isElectron()" variant="outline" class="gap-2">
           <Share2 class="w-4 h-4" />
           Import .modex
         </Button>
-        <Button
-          @click="importCurseForgeModpack"
-          :disabled="!isElectron()"
-          variant="secondary"
-          class="gap-2"
-        >
+        <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" class="gap-2">
           <Download class="w-4 h-4" />
           Import CF Modpack
         </Button>
-        <Button
-          @click="showCreateDialog = true"
-          :disabled="!isElectron()"
-          class="gap-2"
-        >
+        <Button @click="showCreateDialog = true" :disabled="!isElectron()" class="gap-2">
           <PackagePlus class="w-4 h-4" />
           Create
         </Button>
@@ -519,18 +505,14 @@ onMounted(() => {
 
     <!-- Quick Filters -->
     <div class="flex items-center gap-2">
-      <button
-        class="px-3 py-1.5 text-sm rounded-full transition-colors"
+      <button class="px-3 py-1.5 text-sm rounded-full transition-colors"
         :class="quickFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'"
-        @click="quickFilter = 'all'; router.push('/modpacks')"
-      >
+        @click="quickFilter = 'all'; router.push('/modpacks')">
         All
       </button>
-      <button
-        class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5"
+      <button class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5"
         :class="quickFilter === 'favorites' ? 'bg-yellow-500 text-white' : 'bg-muted hover:bg-accent'"
-        @click="quickFilter = 'favorites'; router.push('/modpacks?filter=favorites')"
-      >
+        @click="quickFilter = 'favorites'; router.push('/modpacks?filter=favorites')">
         <Star class="w-3.5 h-3.5" />
         Favorites
         <span v-if="favoriteModpacks.size > 0" class="text-xs opacity-80">({{ favoriteModpacks.size }})</span>
@@ -544,21 +526,14 @@ onMounted(() => {
 
     <div v-else-if="isLoading" class="flex items-center justify-center flex-1">
       <div class="flex flex-col items-center gap-2">
-        <div
-          class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-        ></div>
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         <p class="text-muted-foreground">Loading...</p>
       </div>
     </div>
 
-    <div
-      v-else-if="modpacks.length === 0"
-      class="flex items-center justify-center flex-1"
-    >
+    <div v-else-if="modpacks.length === 0" class="flex items-center justify-center flex-1">
       <div class="text-center max-w-md">
-        <div
-          class="bg-secondary/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-        >
+        <div class="bg-secondary/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
           <PackagePlus class="w-8 h-8 text-muted-foreground" />
         </div>
         <h3 class="text-lg font-semibold mb-2">No modpacks yet</h3>
@@ -572,92 +547,45 @@ onMounted(() => {
       </div>
     </div>
 
-    <div
-      v-else
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1 pb-20 overflow-auto"
-    >
-      <ModpackCard
-        v-for="pack in sortedModpacks"
-        :key="pack.id"
-        :modpack="pack"
-        :selected="selectedModpackIds.has(pack.id)"
-        :favorite="favoriteModpacks.has(pack.id)"
-        @delete="confirmDelete"
-        @edit="openEditor"
-        @toggle-select="toggleSelection"
-        @clone="cloneModpack"
-        @open-folder="openInExplorer"
-        @toggle-favorite="toggleFavoriteModpack"
-        @share="openShareExport"
-      />
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1 pb-20 overflow-auto">
+      <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
+        :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete"
+        @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
+        @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" />
     </div>
 
     <!-- Bulk Action Bar -->
-    <BulkActionBar
-      v-if="selectedModpackIds.size > 0"
-      :count="selectedModpackIds.size"
-      label="modpacks"
-      @clear="clearSelection"
-    >
-      <Button
-        variant="destructive"
-        size="sm"
-        class="gap-2"
-        @click="deleteSelectedModpacks"
-      >
+    <BulkActionBar v-if="selectedModpackIds.size > 0" :count="selectedModpackIds.size" label="modpacks"
+      @clear="clearSelection">
+      <Button variant="destructive" size="sm" class="gap-2" @click="deleteSelectedModpacks">
         <Trash2 class="w-4 h-4" />
         Delete
       </Button>
     </BulkActionBar>
 
     <!-- Modpack Editor Modal -->
-    <ModpackEditor
-      v-if="selectedModpackId"
-      :modpack-id="selectedModpackId"
-      :is-open="showEditor"
-      @close="showEditor = false"
-      @update="loadModpacks"
-      @export="exportModpack(selectedModpackId || '')"
-      @exportToGame="exportModpackToGame(selectedModpackId || '')"
-    />
+    <ModpackEditor v-if="selectedModpackId" :modpack-id="selectedModpackId" :is-open="showEditor"
+      @close="showEditor = false" @update="loadModpacks" @export="exportModpack(selectedModpackId || '')"
+      @exportToGame="exportModpackToGame(selectedModpackId || '')" />
 
     <!-- Compare Dialog -->
     <ModpackCompareDialog :open="showCompare" @close="showCompare = false" />
 
     <!-- Create Dialog -->
-    <CreateModpackDialog
-      :open="showCreateDialog"
-      @close="showCreateDialog = false"
-      @create="createModpack"
-    />
+    <CreateModpackDialog :open="showCreateDialog" @close="showCreateDialog = false" @create="createModpack" />
 
     <!-- Delete Confirmation -->
-    <Dialog
-      :open="showDeleteDialog"
-      title="Delete Modpack"
-      description="This will not delete the mods inside."
-    >
+    <Dialog :open="showDeleteDialog" title="Delete Modpack" description="This will not delete the mods inside.">
       <template #footer>
-        <Button variant="outline" @click="showDeleteDialog = false"
-          >Cancel</Button
-        >
+        <Button variant="outline" @click="showDeleteDialog = false">Cancel</Button>
         <Button variant="destructive" @click="deleteModpack">Delete</Button>
       </template>
     </Dialog>
 
-    <ProgressDialog
-      :open="showProgress"
-      :title="progressTitle"
-      :message="progressMessage"
-    />
+    <ProgressDialog :open="showProgress" :title="progressTitle" :message="progressMessage" />
 
     <!-- Share Dialog -->
-    <ShareDialog
-      :open="showShareDialog"
-      :modpack-id="shareModpackId ?? undefined"
-      :modpack-name="shareModpackName"
-      @close="showShareDialog = false"
-      @refresh="loadModpacks"
-    />
+    <ShareDialog :open="showShareDialog" :modpack-id="shareModpackId ?? undefined" :modpack-name="shareModpackName"
+      @close="showShareDialog = false" @refresh="loadModpacks" />
   </div>
 </template>

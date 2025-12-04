@@ -14,6 +14,7 @@ export interface Mod {
   author?: string;
   path: string;
   hash: string;
+  size: number;
   created_at: string;
 }
 

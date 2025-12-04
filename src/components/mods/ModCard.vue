@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { Box, Trash2, Edit, Check, Info } from "lucide-vue-next";
+import { Box, Trash2, Edit, Check, Info, Star, AlertTriangle } from "lucide-vue-next";
 import type { Mod } from "@/types/electron";
 import Button from "@/components/ui/Button.vue";
 
 const props = defineProps<{
   mod: Mod;
   selected?: boolean;
+  favorite?: boolean;
+  isDuplicate?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -13,13 +15,17 @@ const emit = defineEmits<{
   (e: "edit", id: string): void;
   (e: "toggle-select", id: string): void;
   (e: "show-details", mod: Mod): void;
+  (e: "toggle-favorite", id: string): void;
 }>();
 </script>
 
 <template>
   <div
     class="glass-card relative rounded-lg p-4 group overflow-hidden transition-all duration-200"
-    :class="{ 'ring-2 ring-primary bg-primary/5': selected }"
+    :class="{ 
+      'ring-2 ring-primary bg-primary/5': selected,
+      'ring-1 ring-orange-500/50': isDuplicate && !selected
+    }"
     @click="$emit('toggle-select', mod.id)"
     @dblclick.stop="$emit('show-details', mod)"
   >
@@ -27,6 +33,28 @@ const emit = defineEmits<{
     <div
       class="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
     />
+
+    <!-- Favorite Button -->
+    <button
+      class="absolute top-3 left-3 z-20 transition-all duration-200"
+      :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+      @click.stop="$emit('toggle-favorite', mod.id)"
+      title="Toggle favorite"
+    >
+      <Star 
+        class="w-5 h-5 transition-colors" 
+        :class="favorite ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground hover:text-yellow-500'"
+      />
+    </button>
+
+    <!-- Duplicate Warning -->
+    <div 
+      v-if="isDuplicate"
+      class="absolute top-3 left-10 z-20"
+      title="Potential duplicate mod"
+    >
+      <AlertTriangle class="w-4 h-4 text-orange-500" />
+    </div>
 
     <!-- Selection Checkbox -->
     <div

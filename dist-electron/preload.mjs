@@ -31,11 +31,14 @@ electron.contextBridge.exposeInMainWorld("api", {
     selectFolder: () => electron.ipcRenderer.invoke("scanner:selectFolder"),
     selectFiles: () => electron.ipcRenderer.invoke("scanner:selectFiles"),
     selectZipFile: () => electron.ipcRenderer.invoke("scanner:selectZipFile"),
+    selectGameFolder: () => electron.ipcRenderer.invoke("scanner:selectGameFolder"),
     scanFolder: (folderPath) => electron.ipcRenderer.invoke("scanner:scanFolder", folderPath),
     scanFiles: (filePaths) => electron.ipcRenderer.invoke("scanner:scanFiles", filePaths),
     importMods: (filePaths) => electron.ipcRenderer.invoke("scanner:importMods", filePaths),
     importModpack: (zipPath, modpackName) => electron.ipcRenderer.invoke("scanner:importModpack", zipPath, modpackName),
     exportModpack: (modpackId, exportPath) => electron.ipcRenderer.invoke("scanner:exportModpack", modpackId, exportPath),
+    exportToGameFolder: (modIds, targetFolder) => electron.ipcRenderer.invoke("scanner:exportToGameFolder", modIds, targetFolder),
+    exportModpackToGameFolder: (modpackId, targetFolder) => electron.ipcRenderer.invoke("scanner:exportModpackToGameFolder", modpackId, targetFolder),
     selectExportPath: (defaultName) => electron.ipcRenderer.invoke("scanner:selectExportPath", defaultName),
     openInExplorer: (path) => electron.ipcRenderer.invoke("scanner:openInExplorer", path),
     openLibrary: () => electron.ipcRenderer.invoke("scanner:openLibrary"),
@@ -68,4 +71,7 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
     const [channel, ...omit] = args;
     return electron.ipcRenderer.invoke(channel, ...omit);
   }
+});
+electron.contextBridge.exposeInMainWorld("electronUtils", {
+  getPathForFile: (file) => electron.webUtils.getPathForFile(file)
 });

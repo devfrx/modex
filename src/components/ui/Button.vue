@@ -48,7 +48,7 @@ const props = withDefaults(defineProps<Props>(), {
         props.class
       )
     "
-    :disabled="loading || $attrs.disabled as boolean"
+    :disabled="loading || !!$attrs.disabled"
     v-bind="$attrs"
   >
     <Loader2 v-if="loading" class="w-4 h-4 mr-2 animate-spin" />

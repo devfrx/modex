@@ -7,6 +7,7 @@ import {
   Image,
   Copy,
   FolderOpen,
+  Star,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 
@@ -23,6 +24,7 @@ interface ModpackWithCount {
 defineProps<{
   modpack: ModpackWithCount;
   selected?: boolean;
+  favorite?: boolean;
 }>();
 
 defineEmits<{
@@ -31,6 +33,7 @@ defineEmits<{
   (e: "toggle-select", id: string): void;
   (e: "clone", id: string): void;
   (e: "open-folder", id: string): void;
+  (e: "toggle-favorite", id: string): void;
 }>();
 
 function handleImageError(event: Event) {
@@ -63,6 +66,19 @@ function handleImageError(event: Event) {
       v-else
       class="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
     />
+
+    <!-- Favorite Button -->
+    <button
+      class="absolute top-3 left-3 z-20 transition-all duration-200"
+      :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+      @click.stop="$emit('toggle-favorite', modpack.id)"
+      title="Toggle favorite"
+    >
+      <Star 
+        class="w-5 h-5 transition-colors" 
+        :class="favorite ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground hover:text-yellow-500'"
+      />
+    </button>
 
     <!-- Selection Checkbox -->
     <div

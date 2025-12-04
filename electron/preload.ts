@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 export interface Mod {
   id: string; // Hash SHA256
@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld("api", {
     selectFolder: (): Promise<string | null> => ipcRenderer.invoke("scanner:selectFolder"),
     selectFiles: (): Promise<string[]> => ipcRenderer.invoke("scanner:selectFiles"),
     selectZipFile: (): Promise<string | null> => ipcRenderer.invoke("scanner:selectZipFile"),
+    selectGameFolder: (): Promise<string | null> => ipcRenderer.invoke("scanner:selectGameFolder"),
     scanFolder: (folderPath: string) =>
       ipcRenderer.invoke("scanner:scanFolder", folderPath),
     scanFiles: (filePaths: string[]) =>
@@ -79,6 +80,10 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("scanner:importModpack", zipPath, modpackName),
     exportModpack: (modpackId: string, exportPath: string): Promise<{ success: boolean; path: string }> =>
       ipcRenderer.invoke("scanner:exportModpack", modpackId, exportPath),
+    exportToGameFolder: (modIds: string[], targetFolder: string): Promise<{ success: boolean; count: number }> =>
+      ipcRenderer.invoke("scanner:exportToGameFolder", modIds, targetFolder),
+    exportModpackToGameFolder: (modpackId: string, targetFolder: string): Promise<{ success: boolean; count: number }> =>
+      ipcRenderer.invoke("scanner:exportModpackToGameFolder", modpackId, targetFolder),
     selectExportPath: (defaultName: string): Promise<string | null> =>
       ipcRenderer.invoke("scanner:selectExportPath", defaultName),
     openInExplorer: (path: string): Promise<void> =>
@@ -118,4 +123,9 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
     const [channel, ...omit] = args;
     return ipcRenderer.invoke(channel, ...omit);
   },
+});
+
+// Expose webUtils for drag & drop file path extraction
+contextBridge.exposeInMainWorld("electronUtils", {
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
 });

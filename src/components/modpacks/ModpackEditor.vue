@@ -8,6 +8,7 @@ import {
   Download,
   Check,
   ImagePlus,
+  HardDrive,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import type { Mod, Modpack } from "@/types/electron";
@@ -21,6 +22,7 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "update"): void;
   (e: "export"): void;
+  (e: "exportToGame"): void;
 }>();
 
 const modpack = ref<Modpack | null>(null);
@@ -227,9 +229,20 @@ watch(
             size="sm"
             class="gap-2"
             @click="$emit('export')"
+            title="Export as ZIP file"
           >
             <Download class="w-4 h-4" />
-            Export
+            Export ZIP
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            class="gap-2"
+            @click="$emit('exportToGame')"
+            title="Copy mods to game folder"
+          >
+            <HardDrive class="w-4 h-4" />
+            To Game
           </Button>
           <Button variant="ghost" size="icon" @click="$emit('close')">
             <X class="w-5 h-5" />

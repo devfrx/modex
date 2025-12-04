@@ -8,6 +8,8 @@ import ModEditDialog from "@/components/mods/ModEditDialog.vue";
 import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import AddToModpackDialog from "@/components/modpacks/AddToModpackDialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
+import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
+import { useFolderTree } from "@/composables/useFolderTree";
 import {
   Search,
   Filter,
@@ -22,18 +24,46 @@ import {
   LayoutList,
   Info,
   X,
+  Star,
+  Copy,
+  AlertTriangle,
+  FolderOutput,
+  HardDrive,
+  Folder,
+  FolderInput,
 } from "lucide-vue-next";
-import { ref, onMounted, computed, watch } from "vue";
-import type { Mod } from "@/types/electron";
+import { ref, onMounted, computed, watch, nextTick } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import type { Mod, ModFolder } from "@/types/electron";
+
+const route = useRoute();
+const router = useRouter();
+
+// Folder tree integration
+const { folders, moveModsToFolder, getModFolder, createFolder } = useFolderTree();
+
+// Search input ref for focus
+const searchInputRef = ref<HTMLInputElement | null>(null);
 
 const mods = ref<Mod[]>([]);
 const isLoading = ref(true);
 const error = ref<string | null>(null);
 const searchQuery = ref("");
 const selectedLoader = ref<string>("all");
+const searchField = ref<"all" | "name" | "author" | "version" | "description">("all");
+
+// Folder filter
+const selectedFolderId = ref<string | null>(null);
+
+// Favorites system (stored in localStorage)
+const favoriteMods = ref<Set<string>>(new Set());
+const quickFilter = ref<"all" | "favorites" | "recent">("all");
+
+// Duplicate detection
+const duplicates = ref<Map<string, string[]>>(new Map());
 
 // Sorting
-const sortBy = ref<"name" | "loader" | "created_at" | "version">("name");
+const sortBy = ref<"name" | "loader" | "created_at" | "version" | "size">("name");
 const sortDir = ref<"asc" | "desc">("asc");
 
 // View Mode
@@ -51,6 +81,7 @@ const showDeleteDialog = ref(false);
 const showEditDialog = ref(false);
 const showCreateModpackDialog = ref(false);
 const showAddToModpackDialog = ref(false);
+const showMoveToFolderDialog = ref(false);
 const modToDelete = ref<string | null>(null);
 const modToEdit = ref<Mod | null>(null);
 
@@ -73,26 +104,149 @@ const loaderStats = computed(() => {
 
 const loaders = computed(() => Object.keys(loaderStats.value).sort());
 
+// Advanced search function
+function matchesSearchQuery(mod: Mod, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  
+  switch (searchField.value) {
+    case "name":
+      return mod.name.toLowerCase().includes(q);
+    case "author":
+      return (mod.author || "").toLowerCase().includes(q);
+    case "version":
+      return mod.version.toLowerCase().includes(q) || 
+             mod.game_version.toLowerCase().includes(q);
+    case "description":
+      return (mod.description || "").toLowerCase().includes(q);
+    case "all":
+    default:
+      return mod.name.toLowerCase().includes(q) ||
+             (mod.author || "").toLowerCase().includes(q) ||
+             mod.version.toLowerCase().includes(q) ||
+             (mod.description || "").toLowerCase().includes(q) ||
+             mod.loader.toLowerCase().includes(q);
+  }
+}
+
 const filteredMods = computed(() => {
   let result = mods.value.filter((mod) => {
-    const matchesSearch = mod.name
-      .toLowerCase()
-      .includes(searchQuery.value.toLowerCase());
+    const matchesSearch = matchesSearchQuery(mod, searchQuery.value);
     const matchesLoader =
       selectedLoader.value === "all" || mod.loader === selectedLoader.value;
-    return matchesSearch && matchesLoader;
+    
+    // Quick filter
+    let matchesQuickFilter = true;
+    if (quickFilter.value === "favorites") {
+      matchesQuickFilter = favoriteMods.value.has(mod.id);
+    } else if (quickFilter.value === "recent") {
+      // Show mods added in last 7 days
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      matchesQuickFilter = new Date(mod.created_at).getTime() > weekAgo;
+    }
+    
+    // Folder filter
+    let matchesFolder = true;
+    if (selectedFolderId.value !== null) {
+      matchesFolder = getModFolder(mod.id) === selectedFolderId.value;
+    }
+    
+    return matchesSearch && matchesLoader && matchesQuickFilter && matchesFolder;
   });
 
-  // Sort
+  // Sort (favorites first if enabled, then by selected field)
   result.sort((a, b) => {
-    const aVal = a[sortBy.value] || "";
-    const bVal = b[sortBy.value] || "";
+    // Favorites always first
+    const aFav = favoriteMods.value.has(a.id) ? 0 : 1;
+    const bFav = favoriteMods.value.has(b.id) ? 0 : 1;
+    if (aFav !== bFav) return aFav - bFav;
+    
+    // Handle size sorting numerically
+    if (sortBy.value === "size") {
+      const diff = (a.size || 0) - (b.size || 0);
+      return sortDir.value === "asc" ? diff : -diff;
+    }
+    
+    const aVal = String(a[sortBy.value] || "");
+    const bVal = String(b[sortBy.value] || "");
     const cmp = aVal.localeCompare(bVal);
     return sortDir.value === "asc" ? cmp : -cmp;
   });
 
   return result;
 });
+
+// Move mods to folder
+function moveSelectedToFolder(folderId: string | null) {
+  const ids = Array.from(selectedModIds.value);
+  moveModsToFolder(ids, folderId);
+  showMoveToFolderDialog.value = false;
+  clearSelection();
+}
+
+// Favorite functions
+function loadFavorites() {
+  const stored = localStorage.getItem("modex:favorites:mods");
+  if (stored) {
+    favoriteMods.value = new Set(JSON.parse(stored));
+  }
+}
+
+function saveFavorites() {
+  localStorage.setItem("modex:favorites:mods", JSON.stringify([...favoriteMods.value]));
+  // Trigger storage event for sidebar update
+  window.dispatchEvent(new Event("storage"));
+}
+
+function toggleFavorite(modId: string) {
+  if (favoriteMods.value.has(modId)) {
+    favoriteMods.value.delete(modId);
+  } else {
+    favoriteMods.value.add(modId);
+  }
+  saveFavorites();
+}
+
+function isFavorite(modId: string): boolean {
+  return favoriteMods.value.has(modId);
+}
+
+// Duplicate detection
+function detectDuplicates() {
+  const nameMap = new Map<string, string[]>();
+  for (const mod of mods.value) {
+    const key = mod.name.toLowerCase();
+    if (!nameMap.has(key)) {
+      nameMap.set(key, []);
+    }
+    nameMap.get(key)!.push(mod.id);
+  }
+  
+  // Filter to only show actual duplicates
+  duplicates.value = new Map(
+    [...nameMap.entries()].filter(([_, ids]) => ids.length > 1)
+  );
+}
+
+const duplicateCount = computed(() => duplicates.value.size);
+
+// Set of all duplicate mod IDs for the grid
+const duplicateModIds = computed(() => {
+  const ids = new Set<string>();
+  for (const modIds of duplicates.value.values()) {
+    for (const id of modIds) {
+      ids.add(id);
+    }
+  }
+  return ids;
+});
+
+function isDuplicate(modId: string): boolean {
+  for (const ids of duplicates.value.values()) {
+    if (ids.includes(modId)) return true;
+  }
+  return false;
+}
 
 async function loadMods() {
   if (!isElectron()) {
@@ -109,6 +263,8 @@ async function loadMods() {
     for (const id of selectedModIds.value) {
       if (!currentIds.has(id)) selectedModIds.value.delete(id);
     }
+    // Detect duplicates after loading
+    detectDuplicates();
   } catch (err) {
     console.error("Failed to load mods:", err);
     error.value = "Failed to load mods: " + (err as Error).message;
@@ -180,6 +336,32 @@ async function deleteSelectedMods() {
     clearSelection();
   } catch (err) {
     alert("Delete failed: " + (err as Error).message);
+  } finally {
+    showProgress.value = false;
+  }
+}
+
+async function exportToGame() {
+  // Let user select game mods folder
+  const targetFolder = await window.api.scanner.selectGameFolder();
+  if (!targetFolder) return;
+
+  showProgress.value = true;
+  progressTitle.value = "Exporting Mods";
+  progressMessage.value = "Copying mods to game folder...";
+
+  try {
+    const ids = Array.from(selectedModIds.value);
+    const result = await window.api.scanner.exportToGameFolder(ids, targetFolder);
+    
+    if (result.success) {
+      alert(`Successfully exported ${result.count} mods to:\n${targetFolder}`);
+      clearSelection();
+    } else {
+      alert("Export failed. Please check the target folder and try again.");
+    }
+  } catch (err) {
+    alert("Export failed: " + (err as Error).message);
   } finally {
     showProgress.value = false;
   }
@@ -322,11 +504,168 @@ async function saveMod(updatedMod: Partial<Mod>) {
   }
 }
 
-onMounted(() => loadMods());
+// Drag & Drop support
+const isDragging = ref(false);
+const dragCounter = ref(0);
+
+function handleDragEnter(event: DragEvent) {
+  event.preventDefault();
+  dragCounter.value++;
+  isDragging.value = true;
+}
+
+function handleDragOver(event: DragEvent) {
+  event.preventDefault();
+}
+
+function handleDragLeave(event: DragEvent) {
+  event.preventDefault();
+  dragCounter.value--;
+  if (dragCounter.value === 0) {
+    isDragging.value = false;
+  }
+}
+
+async function handleDrop(event: DragEvent) {
+  event.preventDefault();
+  isDragging.value = false;
+  dragCounter.value = 0;
+  
+  if (!event.dataTransfer?.files.length) return;
+  
+  const jarFiles: string[] = [];
+  for (const file of Array.from(event.dataTransfer.files)) {
+    if (file.name.endsWith('.jar')) {
+      // Use electronUtils to get the file path safely
+      const filePath = window.electronUtils?.getPathForFile(file) || (file as any).path;
+      if (filePath) {
+        jarFiles.push(filePath);
+      }
+    }
+  }
+  
+  if (jarFiles.length === 0) {
+    alert("No .jar files found. Please drop Minecraft mod files.");
+    return;
+  }
+  
+  showProgress.value = true;
+  progressTitle.value = "Importing Mods";
+  progressMessage.value = `Importing ${jarFiles.length} mods...`;
+  
+  try {
+    await window.api.scanner.importMods(jarFiles);
+    await loadMods();
+  } catch (err) {
+    alert("Import failed: " + (err as Error).message);
+  } finally {
+    showProgress.value = false;
+  }
+}
+
+// Handle URL filter parameter
+watch(
+  () => route.query.filter,
+  (filter) => {
+    if (filter === "favorites") {
+      quickFilter.value = "favorites";
+    } else if (filter === "recent") {
+      quickFilter.value = "recent";
+    } else {
+      quickFilter.value = "all";
+    }
+  },
+  { immediate: true }
+);
+
+// Keyboard shortcuts
+useKeyboardShortcuts([
+  {
+    key: "f",
+    ctrl: true,
+    handler: () => {
+      // Focus search input
+      const input = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+      input?.focus();
+    }
+  },
+  {
+    key: "a",
+    ctrl: true,
+    handler: () => selectAll()
+  },
+  {
+    key: "Escape",
+    handler: () => {
+      if (selectedModIds.value.size > 0) {
+        clearSelection();
+      } else if (showDetails.value) {
+        closeDetails();
+      }
+    }
+  },
+  {
+    key: "Delete",
+    handler: () => {
+      if (selectedModIds.value.size > 0) {
+        deleteSelectedMods();
+      }
+    }
+  },
+  {
+    key: "i",
+    ctrl: true,
+    handler: () => importFiles()
+  },
+  {
+    key: "n",
+    ctrl: true,
+    handler: () => {
+      if (selectedModIds.value.size > 0) {
+        showCreateModpackDialog.value = true;
+      }
+    }
+  },
+  {
+    key: "1",
+    handler: () => { viewMode.value = "grid"; }
+  },
+  {
+    key: "2",
+    handler: () => { viewMode.value = "list"; }
+  },
+  {
+    key: "3",
+    handler: () => { viewMode.value = "compact"; }
+  }
+]);
+
+onMounted(() => {
+  loadFavorites();
+  loadMods();
+});
 </script>
 
 <template>
-  <div class="p-6 h-full flex flex-col space-y-4 relative">
+  <div 
+    class="p-6 h-full flex flex-col space-y-4 relative"
+    @dragenter="handleDragEnter"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
+    <!-- Drag & Drop Overlay -->
+    <div 
+      v-if="isDragging"
+      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none"
+    >
+      <div class="text-center">
+        <FilePlus class="w-16 h-16 mx-auto text-primary mb-4" />
+        <p class="text-xl font-semibold">Drop .jar files here</p>
+        <p class="text-muted-foreground">Files will be imported to your library</p>
+      </div>
+    </div>
+
     <!-- Header -->
     <div
       class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
@@ -364,18 +703,69 @@ onMounted(() => loadMods());
       </div>
     </div>
 
+    <!-- Quick Filters -->
+    <div class="flex items-center gap-2">
+      <button
+        class="px-3 py-1.5 text-sm rounded-full transition-colors"
+        :class="quickFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'"
+        @click="quickFilter = 'all'; router.push('/library')"
+      >
+        All
+      </button>
+      <button
+        class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5"
+        :class="quickFilter === 'favorites' ? 'bg-yellow-500 text-white' : 'bg-muted hover:bg-accent'"
+        @click="quickFilter = 'favorites'; router.push('/library?filter=favorites')"
+      >
+        <Star class="w-3.5 h-3.5" />
+        Favorites
+        <span v-if="favoriteMods.size > 0" class="text-xs opacity-80">({{ favoriteMods.size }})</span>
+      </button>
+      <button
+        class="px-3 py-1.5 text-sm rounded-full transition-colors"
+        :class="quickFilter === 'recent' ? 'bg-blue-500 text-white' : 'bg-muted hover:bg-accent'"
+        @click="quickFilter = 'recent'; router.push('/library?filter=recent')"
+      >
+        Recent
+      </button>
+      
+      <!-- Duplicate Warning -->
+      <div 
+        v-if="duplicateCount > 0"
+        class="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-500/20 text-orange-500 rounded-full cursor-pointer hover:bg-orange-500/30"
+        @click="searchQuery = ''"
+        title="Click to show all and review duplicates"
+      >
+        <AlertTriangle class="w-3.5 h-3.5" />
+        {{ duplicateCount }} potential duplicates
+      </div>
+    </div>
+
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center gap-3">
       <!-- Search -->
-      <div class="relative flex-1 min-w-[200px] max-w-sm">
-        <Search
-          class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"
-        />
-        <Input
-          v-model="searchQuery"
-          placeholder="Search mods..."
-          class="pl-9"
-        />
+      <div class="relative flex-1 min-w-[200px] max-w-md flex gap-2">
+        <div class="relative flex-1">
+          <Search
+            class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"
+          />
+          <Input
+            v-model="searchQuery"
+            :placeholder="searchField === 'all' ? 'Search all fields...' : `Search by ${searchField}...`"
+            class="pl-9"
+          />
+        </div>
+        <select
+          v-model="searchField"
+          class="h-10 rounded-md border border-input bg-background px-2 py-2 text-xs ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+          title="Search field"
+        >
+          <option value="all">All</option>
+          <option value="name">Name</option>
+          <option value="author">Author</option>
+          <option value="version">Version</option>
+          <option value="description">Description</option>
+        </select>
       </div>
 
       <!-- Loader Filter -->
@@ -415,6 +805,17 @@ onMounted(() => loadMods());
           @click="toggleSort('loader')"
         >
           Loader
+        </button>
+        <button
+          class="h-9 px-3 text-xs transition-colors"
+          :class="
+            sortBy === 'size'
+              ? 'bg-primary text-primary-foreground'
+              : 'hover:bg-accent'
+          "
+          @click="toggleSort('size')"
+        >
+          Size
         </button>
         <button
           class="h-9 px-3 text-xs rounded-r-md transition-colors"
@@ -530,10 +931,13 @@ onMounted(() => loadMods());
       <ModGrid
         :mods="filteredMods"
         :selected-ids="selectedModIds"
+        :favorite-ids="favoriteMods"
+        :duplicate-ids="duplicateModIds"
         @delete="confirmDelete"
         @edit="openEditDialog"
         @toggle-select="toggleSelection"
         @show-details="showModDetails"
+        @toggle-favorite="toggleFavorite"
       />
     </div>
 
@@ -708,6 +1112,24 @@ onMounted(() => loadMods());
         variant="secondary"
         size="sm"
         class="gap-2"
+        @click="showMoveToFolderDialog = true"
+      >
+        <FolderInput class="w-4 h-4" />
+        Move to Folder
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        class="gap-2"
+        @click="exportToGame"
+      >
+        <HardDrive class="w-4 h-4" />
+        Export to Game
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        class="gap-2"
         @click="showCreateModpackDialog = true"
       >
         <PackagePlus class="w-4 h-4" />
@@ -758,6 +1180,47 @@ onMounted(() => loadMods());
       @close="showAddToModpackDialog = false"
       @select="addSelectionToModpack"
     />
+
+    <!-- Move to Folder Dialog -->
+    <Dialog
+      :open="showMoveToFolderDialog"
+      title="Move to Folder"
+      :description="`Move ${selectedModIds.size} mod(s) to a folder`"
+    >
+      <div class="space-y-2 max-h-64 overflow-auto">
+        <!-- Root option (no folder) -->
+        <button
+          class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
+          @click="moveSelectedToFolder(null)"
+        >
+          <Folder class="w-4 h-4 text-muted-foreground" />
+          <span class="text-sm">No folder (root)</span>
+        </button>
+        
+        <!-- Folders list -->
+        <button
+          v-for="folder in folders"
+          :key="folder.id"
+          class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
+          @click="moveSelectedToFolder(folder.id)"
+        >
+          <Folder class="w-4 h-4" :style="{ color: folder.color }" />
+          <span class="text-sm">{{ folder.name }}</span>
+        </button>
+        
+        <p v-if="folders.length === 0" class="text-sm text-muted-foreground text-center py-4">
+          No folders yet. Create one in the Organize view.
+        </p>
+      </div>
+      
+      <template #footer>
+        <Button variant="outline" @click="showMoveToFolderDialog = false">Cancel</Button>
+        <Button variant="outline" @click="router.push('/organize')">
+          <FolderPlus class="w-4 h-4 mr-2" />
+          New Folder
+        </Button>
+      </template>
+    </Dialog>
 
     <ProgressDialog
       :open="showProgress"

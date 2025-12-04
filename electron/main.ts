@@ -231,6 +231,51 @@ async function initializeBackend() {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  // Select game mods folder
+  ipcMain.handle("scanner:selectGameFolder", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openDirectory"],
+      title: "Select Minecraft Mods Folder",
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  // Export mods to game folder
+  ipcMain.handle("scanner:exportToGameFolder", async (_, modIds: string[], targetFolder: string) => {
+    try {
+      let exported = 0;
+      for (const modId of modIds) {
+        const mod = await fsManager.getModById(modId);
+        if (mod) {
+          const targetPath = path.join(targetFolder, mod.filename);
+          await fs.copy(mod.path, targetPath);
+          exported++;
+        }
+      }
+      return { success: true, count: exported };
+    } catch (error: any) {
+      console.error("Export error:", error);
+      throw new Error(error.message);
+    }
+  });
+
+  // Export modpack to game folder
+  ipcMain.handle("scanner:exportModpackToGameFolder", async (_, modpackId: string, targetFolder: string) => {
+    try {
+      const mods = await fsManager.getModpackMods(modpackId);
+      let exported = 0;
+      for (const mod of mods) {
+        const targetPath = path.join(targetFolder, mod.filename);
+        await fs.copy(mod.path, targetPath);
+        exported++;
+      }
+      return { success: true, count: exported };
+    } catch (error: any) {
+      console.error("Export error:", error);
+      throw new Error(error.message);
+    }
+  });
+
   ipcMain.handle("scanner:openInExplorer", async (_, folderPath: string) => {
     shell.showItemInFolder(folderPath);
   });
@@ -295,31 +340,109 @@ async function initializeBackend() {
       await fs.ensureDir(tempDir);
 
       // 1. Extract ZIP
+      console.log("Extracting ZIP to:", tempDir);
       await JarScanner.extractZip(zipPath, tempDir);
 
-      // 2. Find JAR files
-      const jarFiles: string[] = [];
-      const findJars = async (dir: string) => {
-        const files = await fs.readdir(dir);
-        for (const file of files) {
-          const fullPath = path.join(dir, file);
+      // Log extracted contents for debugging
+      const listDir = async (dir: string, indent: string = "") => {
+        const items = await fs.readdir(dir);
+        for (const item of items) {
+          const fullPath = path.join(dir, item);
           const stat = await fs.stat(fullPath);
-          if (stat.isDirectory()) {
-            await findJars(fullPath);
-          } else if (file.endsWith(".jar")) {
-            jarFiles.push(fullPath);
+          console.log(`${indent}${stat.isDirectory() ? "[DIR]" : "[FILE]"} ${item}`);
+          if (stat.isDirectory() && indent.length < 6) {
+            await listDir(fullPath, indent + "  ");
           }
         }
       };
-      await findJars(tempDir);
+      console.log("Extracted contents:");
+      await listDir(tempDir);
 
-      // 3. Create modpack
-      const modpackId = await fsManager.createModpack({ name: modpackName });
+      // 2. Check for CurseForge manifest.json for better name/version
+      let finalName = modpackName;
+      let version = "1.0.0";
+      let description = "";
+      
+      const manifestPath = path.join(tempDir, "manifest.json");
+      if (await fs.pathExists(manifestPath)) {
+        try {
+          const manifest = await fs.readJson(manifestPath);
+          console.log("Found CurseForge manifest:", manifest.name);
+          if (manifest.name) finalName = manifest.name;
+          if (manifest.version) version = manifest.version;
+          if (manifest.author) description = `By ${manifest.author}`;
+        } catch (e) {
+          console.warn("Failed to parse manifest.json:", e);
+        }
+      }
 
-      // 4. Import mods to library and add to modpack
+      // 3. Check for ModEx modpack.json
+      const modexManifestPath = path.join(tempDir, "modpack.json");
+      if (await fs.pathExists(modexManifestPath)) {
+        try {
+          const manifest = await fs.readJson(modexManifestPath);
+          console.log("Found ModEx manifest:", manifest.name);
+          if (manifest.name) finalName = manifest.name;
+          if (manifest.version) version = manifest.version;
+          if (manifest.description) description = manifest.description;
+        } catch (e) {
+          console.warn("Failed to parse modpack.json:", e);
+        }
+      }
+
+      // 4. Find JAR files recursively in all directories
+      const jarFiles: string[] = [];
+      
+      const findJarsRecursive = async (dir: string) => {
+        try {
+          const items = await fs.readdir(dir);
+          for (const item of items) {
+            const fullPath = path.join(dir, item);
+            try {
+              const stat = await fs.stat(fullPath);
+              if (stat.isDirectory()) {
+                await findJarsRecursive(fullPath);
+              } else if (item.toLowerCase().endsWith(".jar")) {
+                console.log("Found JAR:", fullPath);
+                jarFiles.push(fullPath);
+              }
+            } catch (e) {
+              // Skip files we can't access
+            }
+          }
+        } catch (e) {
+          console.warn("Cannot read directory:", dir);
+        }
+      };
+
+      await findJarsRecursive(tempDir);
+      console.log(`Total JARs found: ${jarFiles.length}`);
+
+      if (jarFiles.length === 0) {
+        throw new Error("No mod files (.jar) found in the modpack. Make sure your ZIP contains .jar files in a 'mods' or 'overrides/mods' folder.");
+      }
+
+      // 5. Create modpack with extracted metadata
+      const modpackId = await fsManager.createModpack({ 
+        name: finalName, 
+        version,
+        description 
+      });
+
+      // 6. Import mods to library and add to modpack
       const importedMods = await fsManager.importMods(jarFiles);
       for (const mod of importedMods) {
         await fsManager.addModToModpack(modpackId, mod.id);
+      }
+
+      // 7. Copy cover image if exists
+      const coverExtensions = ["png", "jpg", "jpeg", "gif", "webp"];
+      for (const ext of coverExtensions) {
+        const coverPath = path.join(tempDir, `cover.${ext}`);
+        if (await fs.pathExists(coverPath)) {
+          await fsManager.setModpackImage(modpackId, coverPath);
+          break;
+        }
       }
 
       return { modpackId, modCount: importedMods.length };
@@ -373,7 +496,7 @@ async function initializeBackend() {
           }
         });
 
-        // Create manifest.json
+        // Create CurseForge-compatible manifest.json
         const manifest = {
           minecraft: {
             version: mostCommonVersion,
@@ -393,15 +516,38 @@ async function initializeBackend() {
           overrides: "overrides",
         };
 
+        // Create ModEx modpack.json for reimport
+        const modexManifest = {
+          name: modpack.name,
+          version: modpack.version,
+          description: modpack.description || "",
+          created_at: modpack.created_at,
+          exported_at: new Date().toISOString(),
+          mod_count: mods.length,
+        };
+
         // Create ZIP
         const AdmZip = (await import("adm-zip")).default;
         const zip = new AdmZip();
 
-        // Add manifest
+        // Add CurseForge manifest
         zip.addFile(
           "manifest.json",
           Buffer.from(JSON.stringify(manifest, null, 2))
         );
+
+        // Add ModEx manifest
+        zip.addFile(
+          "modpack.json",
+          Buffer.from(JSON.stringify(modexManifest, null, 2))
+        );
+
+        // Add cover image if exists
+        if (modpack.image_path && await fs.pathExists(modpack.image_path)) {
+          const ext = path.extname(modpack.image_path);
+          const coverBuffer = await fs.readFile(modpack.image_path);
+          zip.addFile(`cover${ext}`, coverBuffer);
+        }
 
         // Add mods to overrides/mods/
         for (const mod of mods) {

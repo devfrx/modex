@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import ModpackCard from "@/components/modpacks/ModpackCard.vue";
 import ModpackEditor from "@/components/modpacks/ModpackEditor.vue";
 import ModpackCompareDialog from "@/components/modpacks/ModpackCompareDialog.vue";
@@ -14,8 +15,12 @@ import {
   Trash2,
   ArrowLeftRight,
   BarChart3,
+  Star,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
+
+const route = useRoute();
+const router = useRouter();
 
 interface ModpackWithCount extends Modpack {
   modCount: number;
@@ -27,6 +32,12 @@ const error = ref<string | null>(null);
 
 // Selection State
 const selectedModpackIds = ref<Set<string>>(new Set());
+
+// Favorites
+const favoriteModpacks = ref<Set<string>>(new Set());
+
+// Quick filter
+const quickFilter = ref<"all" | "favorites">("all");
 
 // Editor State
 const showEditor = ref(false);
@@ -146,7 +157,7 @@ async function createModpack(data: {
   }
 }
 
-// Export Modpack
+// Export Modpack as ZIP
 async function exportModpack(modpackId: string) {
   const pack = modpacks.value.find((p) => p.id === modpackId);
   if (!pack) return;
@@ -161,6 +172,29 @@ async function exportModpack(modpackId: string) {
   try {
     await window.api.scanner.exportModpack(modpackId, path);
     alert(`Exported to: ${path}`);
+  } catch (err) {
+    alert("Export failed: " + (err as Error).message);
+  } finally {
+    showProgress.value = false;
+  }
+}
+
+// Export Modpack to Game Folder
+async function exportModpackToGame(modpackId: string) {
+  const targetFolder = await window.api.scanner.selectGameFolder();
+  if (!targetFolder) return;
+
+  showProgress.value = true;
+  progressTitle.value = "Exporting to Game";
+  progressMessage.value = "Copying mods to game folder...";
+
+  try {
+    const result = await window.api.scanner.exportModpackToGameFolder(modpackId, targetFolder);
+    if (result.success) {
+      alert(`Successfully exported ${result.count} mods to:\n${targetFolder}`);
+    } else {
+      alert("Export failed. Please check the target folder and try again.");
+    }
   } catch (err) {
     alert("Export failed: " + (err as Error).message);
   } finally {
@@ -258,11 +292,144 @@ async function deleteModpack() {
   }
 }
 
-onMounted(() => loadModpacks());
+// Drag & Drop support for ZIP files
+const isDragging = ref(false);
+const dragCounter = ref(0);
+
+function handleDragEnter(event: DragEvent) {
+  event.preventDefault();
+  dragCounter.value++;
+  isDragging.value = true;
+}
+
+function handleDragOver(event: DragEvent) {
+  event.preventDefault();
+}
+
+function handleDragLeave(event: DragEvent) {
+  event.preventDefault();
+  dragCounter.value--;
+  if (dragCounter.value === 0) {
+    isDragging.value = false;
+  }
+}
+
+async function handleDrop(event: DragEvent) {
+  event.preventDefault();
+  isDragging.value = false;
+  dragCounter.value = 0;
+  
+  if (!event.dataTransfer?.files.length) return;
+  
+  const file = event.dataTransfer.files[0];
+  if (!file.name.endsWith('.zip')) {
+    alert("Please drop a .zip modpack file.");
+    return;
+  }
+  
+  // Use electronUtils to get the file path safely
+  const zipPath = window.electronUtils?.getPathForFile(file) || (file as any).path;
+  if (!zipPath) {
+    alert("Could not read file path. Please try importing via the button.");
+    return;
+  }
+  
+  const zipName = file.name.replace(".zip", "");
+  
+  showProgress.value = true;
+  progressTitle.value = "Importing Modpack";
+  progressMessage.value = "Extracting and importing mods...";
+  
+  try {
+    const result = await window.api.scanner.importModpack(zipPath, zipName);
+    showProgress.value = false;
+    alert(`Imported modpack "${zipName}" with ${result.modCount} mods!`);
+    await loadModpacks();
+  } catch (err) {
+    alert("Import failed: " + (err as Error).message);
+    showProgress.value = false;
+  }
+}
+
+// Favorites system
+function loadFavoriteModpacks() {
+  const stored = localStorage.getItem("modex:favorites:modpacks");
+  if (stored) {
+    favoriteModpacks.value = new Set(JSON.parse(stored));
+  }
+}
+
+function saveFavoriteModpacks() {
+  localStorage.setItem("modex:favorites:modpacks", JSON.stringify([...favoriteModpacks.value]));
+  window.dispatchEvent(new Event("storage"));
+}
+
+function toggleFavoriteModpack(id: string) {
+  if (favoriteModpacks.value.has(id)) {
+    favoriteModpacks.value.delete(id);
+  } else {
+    favoriteModpacks.value.add(id);
+  }
+  saveFavoriteModpacks();
+}
+
+// Sort and filter modpacks
+const sortedModpacks = computed(() => {
+  let result = [...modpacks.value];
+  
+  // Apply quick filter
+  if (quickFilter.value === "favorites") {
+    result = result.filter(p => favoriteModpacks.value.has(p.id));
+  }
+  
+  // Sort - favorites first, then by name
+  return result.sort((a, b) => {
+    const aFav = favoriteModpacks.value.has(a.id) ? 0 : 1;
+    const bFav = favoriteModpacks.value.has(b.id) ? 0 : 1;
+    if (aFav !== bFav) return aFav - bFav;
+    return a.name.localeCompare(b.name);
+  });
+});
+
+// Handle URL filter parameter
+watch(
+  () => route.query.filter,
+  (filter) => {
+    if (filter === "favorites") {
+      quickFilter.value = "favorites";
+    } else {
+      quickFilter.value = "all";
+    }
+  },
+  { immediate: true }
+);
+
+onMounted(() => {
+  loadFavoriteModpacks();
+  loadModpacks();
+});
 </script>
 
 <template>
-  <div class="p-6 h-full flex flex-col space-y-6 relative">
+  <div 
+    class="p-6 h-full flex flex-col space-y-6 relative"
+    @dragenter="handleDragEnter"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
+    <!-- Drag & Drop Overlay -->
+    <div 
+      v-if="isDragging"
+      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none"
+    >
+      <div class="text-center">
+        <Download class="w-16 h-16 mx-auto text-primary mb-4" />
+        <p class="text-xl font-semibold">Drop modpack .zip here</p>
+        <p class="text-muted-foreground">The modpack will be imported</p>
+      </div>
+    </div>
+
     <!-- Header -->
     <div
       class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
@@ -301,6 +468,26 @@ onMounted(() => loadModpacks());
           Create
         </Button>
       </div>
+    </div>
+
+    <!-- Quick Filters -->
+    <div class="flex items-center gap-2">
+      <button
+        class="px-3 py-1.5 text-sm rounded-full transition-colors"
+        :class="quickFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'"
+        @click="quickFilter = 'all'; router.push('/modpacks')"
+      >
+        All
+      </button>
+      <button
+        class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5"
+        :class="quickFilter === 'favorites' ? 'bg-yellow-500 text-white' : 'bg-muted hover:bg-accent'"
+        @click="quickFilter = 'favorites'; router.push('/modpacks?filter=favorites')"
+      >
+        <Star class="w-3.5 h-3.5" />
+        Favorites
+        <span v-if="favoriteModpacks.size > 0" class="text-xs opacity-80">({{ favoriteModpacks.size }})</span>
+      </button>
     </div>
 
     <!-- Content -->
@@ -343,15 +530,17 @@ onMounted(() => loadModpacks());
       class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1 pb-20 overflow-auto"
     >
       <ModpackCard
-        v-for="pack in modpacks"
+        v-for="pack in sortedModpacks"
         :key="pack.id"
         :modpack="pack"
         :selected="selectedModpackIds.has(pack.id)"
+        :favorite="favoriteModpacks.has(pack.id)"
         @delete="confirmDelete"
         @edit="openEditor"
         @toggle-select="toggleSelection"
         @clone="cloneModpack"
         @open-folder="openInExplorer"
+        @toggle-favorite="toggleFavoriteModpack"
       />
     </div>
 
@@ -381,6 +570,7 @@ onMounted(() => loadModpacks());
       @close="showEditor = false"
       @update="loadModpacks"
       @export="exportModpack(selectedModpackId || '')"
+      @exportToGame="exportModpackToGame(selectedModpackId || '')"
     />
 
     <!-- Compare Dialog -->

@@ -1,3 +1,6 @@
+var __defProp = Object.defineProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 import { app, protocol, BrowserWindow, net, ipcMain, dialog, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path$d from "node:path";
@@ -4667,6 +4670,9 @@ class JarScanner {
 }
 class FileSystemManager {
   constructor() {
+    __publicField(this, "baseDir");
+    __publicField(this, "libraryDir");
+    __publicField(this, "modpacksDir");
     this.baseDir = path$c.join(app.getPath("userData"), "modex");
     this.libraryDir = path$c.join(this.baseDir, "library");
     this.modpacksDir = path$c.join(this.baseDir, "modpacks");
@@ -5256,6 +5262,45 @@ async function initializeBackend() {
     });
     return result.canceled ? null : result.filePaths[0];
   });
+  ipcMain.handle("scanner:selectGameFolder", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openDirectory"],
+      title: "Select Minecraft Mods Folder"
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle("scanner:exportToGameFolder", async (_, modIds, targetFolder) => {
+    try {
+      let exported = 0;
+      for (const modId of modIds) {
+        const mod = await fsManager.getModById(modId);
+        if (mod) {
+          const targetPath = path$d.join(targetFolder, mod.filename);
+          await fs.copy(mod.path, targetPath);
+          exported++;
+        }
+      }
+      return { success: true, count: exported };
+    } catch (error) {
+      console.error("Export error:", error);
+      throw new Error(error.message);
+    }
+  });
+  ipcMain.handle("scanner:exportModpackToGameFolder", async (_, modpackId, targetFolder) => {
+    try {
+      const mods = await fsManager.getModpackMods(modpackId);
+      let exported = 0;
+      for (const mod of mods) {
+        const targetPath = path$d.join(targetFolder, mod.filename);
+        await fs.copy(mod.path, targetPath);
+        exported++;
+      }
+      return { success: true, count: exported };
+    } catch (error) {
+      console.error("Export error:", error);
+      throw new Error(error.message);
+    }
+  });
   ipcMain.handle("scanner:openInExplorer", async (_, folderPath) => {
     shell.showItemInFolder(folderPath);
   });
@@ -5307,25 +5352,90 @@ async function initializeBackend() {
     );
     try {
       await fs.ensureDir(tempDir);
+      console.log("Extracting ZIP to:", tempDir);
       await JarScanner.extractZip(zipPath, tempDir);
-      const jarFiles = [];
-      const findJars = async (dir) => {
-        const files = await fs.readdir(dir);
-        for (const file2 of files) {
-          const fullPath = path$d.join(dir, file2);
+      const listDir = async (dir, indent = "") => {
+        const items = await fs.readdir(dir);
+        for (const item of items) {
+          const fullPath = path$d.join(dir, item);
           const stat2 = await fs.stat(fullPath);
-          if (stat2.isDirectory()) {
-            await findJars(fullPath);
-          } else if (file2.endsWith(".jar")) {
-            jarFiles.push(fullPath);
+          console.log(`${indent}${stat2.isDirectory() ? "[DIR]" : "[FILE]"} ${item}`);
+          if (stat2.isDirectory() && indent.length < 6) {
+            await listDir(fullPath, indent + "  ");
           }
         }
       };
-      await findJars(tempDir);
-      const modpackId = await fsManager.createModpack({ name: modpackName });
+      console.log("Extracted contents:");
+      await listDir(tempDir);
+      let finalName = modpackName;
+      let version2 = "1.0.0";
+      let description = "";
+      const manifestPath = path$d.join(tempDir, "manifest.json");
+      if (await fs.pathExists(manifestPath)) {
+        try {
+          const manifest = await fs.readJson(manifestPath);
+          console.log("Found CurseForge manifest:", manifest.name);
+          if (manifest.name) finalName = manifest.name;
+          if (manifest.version) version2 = manifest.version;
+          if (manifest.author) description = `By ${manifest.author}`;
+        } catch (e) {
+          console.warn("Failed to parse manifest.json:", e);
+        }
+      }
+      const modexManifestPath = path$d.join(tempDir, "modpack.json");
+      if (await fs.pathExists(modexManifestPath)) {
+        try {
+          const manifest = await fs.readJson(modexManifestPath);
+          console.log("Found ModEx manifest:", manifest.name);
+          if (manifest.name) finalName = manifest.name;
+          if (manifest.version) version2 = manifest.version;
+          if (manifest.description) description = manifest.description;
+        } catch (e) {
+          console.warn("Failed to parse modpack.json:", e);
+        }
+      }
+      const jarFiles = [];
+      const findJarsRecursive = async (dir) => {
+        try {
+          const items = await fs.readdir(dir);
+          for (const item of items) {
+            const fullPath = path$d.join(dir, item);
+            try {
+              const stat2 = await fs.stat(fullPath);
+              if (stat2.isDirectory()) {
+                await findJarsRecursive(fullPath);
+              } else if (item.toLowerCase().endsWith(".jar")) {
+                console.log("Found JAR:", fullPath);
+                jarFiles.push(fullPath);
+              }
+            } catch (e) {
+            }
+          }
+        } catch (e) {
+          console.warn("Cannot read directory:", dir);
+        }
+      };
+      await findJarsRecursive(tempDir);
+      console.log(`Total JARs found: ${jarFiles.length}`);
+      if (jarFiles.length === 0) {
+        throw new Error("No mod files (.jar) found in the modpack. Make sure your ZIP contains .jar files in a 'mods' or 'overrides/mods' folder.");
+      }
+      const modpackId = await fsManager.createModpack({
+        name: finalName,
+        version: version2,
+        description
+      });
       const importedMods = await fsManager.importMods(jarFiles);
       for (const mod of importedMods) {
         await fsManager.addModToModpack(modpackId, mod.id);
+      }
+      const coverExtensions = ["png", "jpg", "jpeg", "gif", "webp"];
+      for (const ext of coverExtensions) {
+        const coverPath = path$d.join(tempDir, `cover.${ext}`);
+        if (await fs.pathExists(coverPath)) {
+          await fsManager.setModpackImage(modpackId, coverPath);
+          break;
+        }
       }
       return { modpackId, modCount: importedMods.length };
     } catch (error) {
@@ -5388,12 +5498,29 @@ async function initializeBackend() {
           files: [],
           overrides: "overrides"
         };
+        const modexManifest = {
+          name: modpack.name,
+          version: modpack.version,
+          description: modpack.description || "",
+          created_at: modpack.created_at,
+          exported_at: (/* @__PURE__ */ new Date()).toISOString(),
+          mod_count: mods.length
+        };
         const AdmZip2 = (await Promise.resolve().then(() => admZip$1)).default;
         const zip = new AdmZip2();
         zip.addFile(
           "manifest.json",
           Buffer.from(JSON.stringify(manifest, null, 2))
         );
+        zip.addFile(
+          "modpack.json",
+          Buffer.from(JSON.stringify(modexManifest, null, 2))
+        );
+        if (modpack.image_path && await fs.pathExists(modpack.image_path)) {
+          const ext = path$d.extname(modpack.image_path);
+          const coverBuffer = await fs.readFile(modpack.image_path);
+          zip.addFile(`cover${ext}`, coverBuffer);
+        }
         for (const mod of mods) {
           if (await fs.pathExists(mod.path)) {
             const modBuffer = await fs.readFile(mod.path);

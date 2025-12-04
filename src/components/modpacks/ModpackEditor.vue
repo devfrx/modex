@@ -106,29 +106,43 @@ async function removeMod(modId: string) {
 }
 
 async function removeSelectedMods() {
-  for (const id of selectedModIds.value) {
-    await window.api.modpacks.removeMod(props.modpackId, id);
+  if (selectedModIds.value.size === 0) return;
+  
+  // Copy the Set to an array before iterating to avoid mutation issues
+  const idsToRemove: string[] = Array.from(selectedModIds.value);
+  
+  try {
+    for (const id of idsToRemove) {
+      await window.api.modpacks.removeMod(props.modpackId, id);
+    }
+    selectedModIds.value = new Set(); // Clear selection reactively
+    await loadData();
+    emit("update");
+  } catch (err) {
+    console.error("Failed to remove mods:", err);
   }
-  await loadData();
-  emit("update");
 }
 
 function toggleSelect(modId: string) {
-  if (selectedModIds.value.has(modId)) {
-    selectedModIds.value.delete(modId);
+  const newSet = new Set(selectedModIds.value);
+  if (newSet.has(modId)) {
+    newSet.delete(modId);
   } else {
-    selectedModIds.value.add(modId);
+    newSet.add(modId);
   }
+  selectedModIds.value = newSet;
 }
 
 function selectAll() {
+  const newSet = new Set(selectedModIds.value);
   for (const mod of filteredInstalledMods.value) {
-    selectedModIds.value.add(mod.id!);
+    newSet.add(mod.id!);
   }
+  selectedModIds.value = newSet;
 }
 
 function clearSelection() {
-  selectedModIds.value.clear();
+  selectedModIds.value = new Set();
 }
 
 function toggleSort(field: "name" | "loader" | "version") {

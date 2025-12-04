@@ -186,9 +186,12 @@ async function cloneModpack(modpackId: string) {
       name: `${original.name} (Copy)`,
       version: original.version,
       description: original.description,
+      image_path: original.image_path,
     });
 
     const mods = await window.api.modpacks.getMods(modpackId);
+    progressMessage.value = `Copying ${mods.length} mods...`;
+    
     for (const mod of mods) {
       await window.api.modpacks.addMod(newPackId, mod.id!);
     }

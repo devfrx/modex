@@ -5038,8 +5038,16 @@ function createWindow() {
 async function initializeBackend() {
   db = new ModDatabase();
   protocol.handle("atom", (request) => {
-    const filePath = request.url.replace("atom:///", "");
-    return net.fetch("file:///" + filePath);
+    const filePath = decodeURIComponent(request.url.replace("atom:///", ""));
+    const normalizedPath = path$c.normalize(filePath);
+    if (normalizedPath.includes("..") || !path$c.isAbsolute(normalizedPath)) {
+      console.error("Blocked potentially unsafe path:", filePath);
+      return new Response("Forbidden", { status: 403 });
+    }
+    if (!fs.existsSync(normalizedPath)) {
+      return new Response("Not Found", { status: 404 });
+    }
+    return net.fetch("file:///" + normalizedPath);
   });
   ipcMain.handle("mods:getAll", async () => {
     return db.getAllMods();
@@ -5051,10 +5059,19 @@ async function initializeBackend() {
     return db.addMod(mod);
   });
   ipcMain.handle("mods:update", async (_, id, mod) => {
+    if (!id || typeof id !== "string") {
+      throw new Error("Invalid mod ID");
+    }
+    if (!mod || typeof mod !== "object") {
+      throw new Error("Invalid mod data");
+    }
     db.updateMod(id, mod);
     return true;
   });
   ipcMain.handle("mods:delete", async (_, id) => {
+    if (!id || typeof id !== "string") {
+      throw new Error("Invalid mod ID");
+    }
     db.deleteMod(id);
     return true;
   });
@@ -5073,11 +5090,20 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:update",
     async (_, id, modpack) => {
+      if (!id || typeof id !== "string") {
+        throw new Error("Invalid modpack ID");
+      }
+      if (!modpack || typeof modpack !== "object") {
+        throw new Error("Invalid modpack data");
+      }
       db.updateModpack(id, modpack);
       return true;
     }
   );
   ipcMain.handle("modpacks:delete", async (_, id) => {
+    if (!id || typeof id !== "string") {
+      throw new Error("Invalid modpack ID");
+    }
     db.deleteModpack(id);
     return true;
   });
@@ -5176,35 +5202,63 @@ async function initializeBackend() {
     }
   );
   ipcMain.handle("scanner:importModpack", async (_, zipPath) => {
+    const tempDir = path$c.join(
+      app.getPath("temp"),
+      "modex-import-" + Date.now()
+    );
     try {
-      const tempDir = path$c.join(
-        app.getPath("temp"),
-        "modex-import-" + Date.now()
-      );
       await fs.ensureDir(tempDir);
       await JarScanner.extractZip(zipPath, tempDir);
       const metadata = await JarScanner.scanDirectory(tempDir);
-      await fs.remove(tempDir);
       return metadata;
     } catch (error) {
       console.error("Modpack import error:", error);
       throw new Error(error.message);
+    } finally {
+      try {
+        await fs.remove(tempDir);
+      } catch (cleanupError) {
+        console.error("Failed to cleanup temp directory:", cleanupError);
+      }
     }
   });
   ipcMain.handle(
     "scanner:exportModpack",
     async (_, modpackId, exportPath) => {
-      var _a, _b;
+      var _a;
       try {
+        if (!modpackId || typeof modpackId !== "string") {
+          throw new Error("Invalid modpack ID");
+        }
+        if (!exportPath || typeof exportPath !== "string") {
+          throw new Error("Invalid export path");
+        }
         const modpack = await db.getModpackById(modpackId);
         if (!modpack) throw new Error("Modpack not found");
         const mods = await db.getModsInModpack(modpackId);
+        if (mods.length === 0) {
+          throw new Error("Cannot export empty modpack - add mods first");
+        }
+        const versionCounts = /* @__PURE__ */ new Map();
+        for (const mod of mods) {
+          if (mod.game_version) {
+            versionCounts.set(mod.game_version, (versionCounts.get(mod.game_version) || 0) + 1);
+          }
+        }
+        let mostCommonVersion = "1.20.1";
+        let maxCount = 0;
+        Array.from(versionCounts.entries()).forEach(([version2, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            mostCommonVersion = version2;
+          }
+        });
         const manifest = {
           minecraft: {
-            version: ((_a = mods[0]) == null ? void 0 : _a.game_version) || "1.20.1",
+            version: mostCommonVersion,
             modLoaders: [
               {
-                id: `${((_b = mods[0]) == null ? void 0 : _b.loader) || "forge"}-0.0.0`,
+                id: `${((_a = mods[0]) == null ? void 0 : _a.loader) || "forge"}-0.0.0`,
                 primary: true
               }
             ]

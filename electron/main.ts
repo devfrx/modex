@@ -71,10 +71,23 @@ async function initializeBackend() {
   // Note: db.init() is called in constructor but is async,
   // operations will wait for ensureDb() internally
 
-  // Register atom:// protocol to serve local files
+  // Register atom:// protocol to serve local files with security validation
   protocol.handle("atom", (request) => {
-    const filePath = request.url.replace("atom:///", "");
-    return net.fetch("file:///" + filePath);
+    const filePath = decodeURIComponent(request.url.replace("atom:///", ""));
+    
+    // Security: validate path to prevent path traversal attacks
+    const normalizedPath = path.normalize(filePath);
+    if (normalizedPath.includes("..") || !path.isAbsolute(normalizedPath)) {
+      console.error("Blocked potentially unsafe path:", filePath);
+      return new Response("Forbidden", { status: 403 });
+    }
+    
+    // Check if file exists
+    if (!fs.existsSync(normalizedPath)) {
+      return new Response("Not Found", { status: 404 });
+    }
+    
+    return net.fetch("file:///" + normalizedPath);
   });
 
   // ========== MOD IPC HANDLERS ==========
@@ -92,11 +105,20 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("mods:update", async (_, id: string, mod: Partial<Mod>) => {
+    if (!id || typeof id !== "string") {
+      throw new Error("Invalid mod ID");
+    }
+    if (!mod || typeof mod !== "object") {
+      throw new Error("Invalid mod data");
+    }
     db.updateMod(id, mod);
     return true;
   });
 
   ipcMain.handle("mods:delete", async (_, id: string) => {
+    if (!id || typeof id !== "string") {
+      throw new Error("Invalid mod ID");
+    }
     db.deleteMod(id);
     return true;
   });
@@ -121,12 +143,21 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:update",
     async (_, id: string, modpack: Partial<Modpack>) => {
+      if (!id || typeof id !== "string") {
+        throw new Error("Invalid modpack ID");
+      }
+      if (!modpack || typeof modpack !== "object") {
+        throw new Error("Invalid modpack data");
+      }
       db.updateModpack(id, modpack);
       return true;
     }
   );
 
   ipcMain.handle("modpacks:delete", async (_, id: string) => {
+    if (!id || typeof id !== "string") {
+      throw new Error("Invalid modpack ID");
+    }
     db.deleteModpack(id);
     return true;
   });
@@ -244,11 +275,12 @@ async function initializeBackend() {
   );
 
   ipcMain.handle("scanner:importModpack", async (_, zipPath: string) => {
+    const tempDir = path.join(
+      app.getPath("temp"),
+      "modex-import-" + Date.now()
+    );
+    
     try {
-      const tempDir = path.join(
-        app.getPath("temp"),
-        "modex-import-" + Date.now()
-      );
       await fs.ensureDir(tempDir);
 
       // 1. Extract ZIP
@@ -257,13 +289,17 @@ async function initializeBackend() {
       // 2. Scan for JARs
       const metadata = await JarScanner.scanDirectory(tempDir);
 
-      // 3. Clean up temp dir
-      await fs.remove(tempDir);
-
       return metadata;
     } catch (error: any) {
       console.error("Modpack import error:", error);
       throw new Error(error.message);
+    } finally {
+      // Cleanup garantito anche in caso di errore
+      try {
+        await fs.remove(tempDir);
+      } catch (cleanupError) {
+        console.error("Failed to cleanup temp directory:", cleanupError);
+      }
     }
   });
 
@@ -271,15 +307,43 @@ async function initializeBackend() {
     "scanner:exportModpack",
     async (_, modpackId: string, exportPath: string) => {
       try {
+        if (!modpackId || typeof modpackId !== "string") {
+          throw new Error("Invalid modpack ID");
+        }
+        if (!exportPath || typeof exportPath !== "string") {
+          throw new Error("Invalid export path");
+        }
+
         const modpack = await db.getModpackById(modpackId);
         if (!modpack) throw new Error("Modpack not found");
 
         const mods = await db.getModsInModpack(modpackId);
 
+        // Validate: check if there are mods to export
+        if (mods.length === 0) {
+          throw new Error("Cannot export empty modpack - add mods first");
+        }
+
+        // Get the most common game version from mods
+        const versionCounts = new Map<string, number>();
+        for (const mod of mods) {
+          if (mod.game_version) {
+            versionCounts.set(mod.game_version, (versionCounts.get(mod.game_version) || 0) + 1);
+          }
+        }
+        let mostCommonVersion = "1.20.1";
+        let maxCount = 0;
+        Array.from(versionCounts.entries()).forEach(([version, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            mostCommonVersion = version;
+          }
+        });
+
         // Create manifest.json
         const manifest = {
           minecraft: {
-            version: mods[0]?.game_version || "1.20.1",
+            version: mostCommonVersion,
             modLoaders: [
               {
                 id: `${mods[0]?.loader || "forge"}-0.0.0`,

@@ -3,7 +3,7 @@
     "target": "ESNext",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "strict": true,
     "jsx": "preserve",
     "resolveJsonModule": true,
@@ -15,14 +15,15 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "types": ["vite/client"]
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.d.ts",
     "src/**/*.tsx",
-    "src/**/*.vue",
-    "electron"
+    "src/**/*.vue"
   ],
+  "exclude": ["node_modules", "dist", "dist-electron", "electron"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -10,7 +10,11 @@ import {
   Info,
   Trash2,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-vue-next";
+
+// App version from package.json
+const appVersion = __APP_VERSION__;
 
 // Settings State
 const gameDirectory = ref("");
@@ -22,10 +26,15 @@ const dbSize = ref("");
 const modCount = ref(0);
 const modpackCount = ref(0);
 const isClearingData = ref(false);
+const apiAvailable = ref(true);
 
 // Load settings
 async function loadSettings() {
-  if (!window.api) return;
+  if (!window.api) {
+    apiAvailable.value = false;
+    console.error("Backend API not available");
+    return;
+  }
 
   try {
     const mods = await window.api.mods.getAll();
@@ -108,6 +117,18 @@ onMounted(() => {
 
 <template>
   <div class="p-6 h-full flex flex-col space-y-6 overflow-auto">
+    <!-- API Warning Banner -->
+    <div
+      v-if="!apiAvailable"
+      class="bg-destructive/10 border border-destructive text-destructive rounded-lg p-4 flex items-center gap-3"
+    >
+      <AlertTriangle class="w-5 h-5 flex-shrink-0" />
+      <div>
+        <p class="font-medium">Backend API not available</p>
+        <p class="text-sm opacity-80">Please restart the application to restore functionality.</p>
+      </div>
+    </div>
+
     <!-- Header -->
     <div>
       <h1 class="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -242,7 +263,7 @@ onMounted(() => {
           </div>
           <div class="flex justify-between">
             <span class="text-muted-foreground">Version</span>
-            <span class="font-medium">1.0.0</span>
+            <span class="font-medium">{{ appVersion }}</span>
           </div>
           <div class="flex justify-between">
             <span class="text-muted-foreground">Framework</span>

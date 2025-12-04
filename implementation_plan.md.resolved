@@ -1,0 +1,52 @@
+# Implementation Plan - ModEx
+
+ModEx is a modern, desktop-based Minecraft mod manager focused on organization, bulk importing, and modpack management.
+
+## User Review Required
+> [!IMPORTANT]
+> **Tech Stack Change**: Switched from React to **Vue.js** as requested.
+> **UI Library**: Will use **Shadcn-vue** (or compatible Vue equivalent like Radix-Vue + Tailwind) to maintain the requested premium aesthetic.
+
+## Proposed Changes
+
+### Project Structure
+#### [NEW] [Project Root](file:///c:/Users/zagor/Desktop/modex)
+- Initialize Electron + Vite + Vue project.
+- Configure TailwindCSS.
+- Set up SQLite database connection.
+
+### Backend (Electron/Node)
+#### [NEW] [Background Services](file:///c:/Users/zagor/Desktop/modex/electron/main)
+- `main.ts`: Entry point, window creation.
+- `preload.ts`: IPC bridge for safe communication.
+- `database.ts`: SQLite connection and schema management using `better-sqlite3` or `drizzle-orm`.
+- `scanner.ts`: Logic to recursively scan directories for `.jar` files and extract metadata (using `adm-zip` to read `mcmod.info` or `fabric.mod.json`).
+
+### Frontend (Vue.js)
+#### [NEW] [UI Components](file:///c:/Users/zagor/Desktop/modex/src/components)
+- **Layout**: Sidebar navigation, top bar with search.
+- **ModGrid**: Grid view of mod cards with images/icons.
+- **Filters**: Faceted search (Game Version, Loader, Genre).
+- **Importer**: Drag & drop zone or file picker for bulk import.
+
+#### [NEW] [Views](file:///c:/Users/zagor/Desktop/modex/src/views)
+- `LibraryView.vue`: Main list of all imported mods.
+- `ModpackView.vue`: Management of modpacks (create, edit, assign mods).
+- `SettingsView.vue`: Path configurations.
+
+### Database Schema
+- **Mods**: `id`, `filename`, `name`, `version`, `game_version`, `loader`, `path`, `hash`.
+- **Modpacks**: `id`, `name`, `version`, `description`.
+- **Modpack_Mods**: Join table `modpack_id`, `mod_id`.
+- **Tags/Categories**: Dynamic categorization.
+
+## Verification Plan
+
+### Automated Tests
+- Unit tests for the `scanner` logic (parsing sample jars).
+- Component tests for Vue components.
+
+### Manual Verification
+- **Import Flow**: Drag 10+ jar files -> Verify they appear in DB with correct metadata.
+- **Organization**: Create a "Survival" modpack -> Add mods -> Verify association.
+- **UI Check**: Verify "premium" feel (animations, dark mode, responsiveness).

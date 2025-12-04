@@ -604,6 +604,295 @@ export class FileSystemManager {
     return newId;
   }
 
+  // ==================== MODEX SHARE ====================
+
+  /**
+   * Genera un codice univoco breve per il modpack (random, unico globalmente)
+   */
+  generateShareCode(): string {
+    // Usa randomUUID per garantire unicità globale
+    const uuid = crypto.randomUUID();
+    const hash = crypto.createHash("sha256")
+      .update(uuid)
+      .digest("hex")
+      .substring(0, 8)
+      .toUpperCase();
+    return `MDX-${hash}`;
+  }
+
+  /**
+   * Ottiene o genera il codice share per un modpack (lo salva se non esiste)
+   */
+  async getOrCreateShareCode(modpackId: string): Promise<string> {
+    const manifestPath = path.join(this.getModpackPath(modpackId), "modpack.json");
+    
+    if (await fs.pathExists(manifestPath)) {
+      const manifest = await fs.readJson(manifestPath);
+      if (manifest.share_code) {
+        return manifest.share_code;
+      }
+      
+      // Genera e salva il codice (random, unico)
+      const code = this.generateShareCode();
+      manifest.share_code = code;
+      await fs.writeJson(manifestPath, manifest, { spaces: 2 });
+      return code;
+    }
+    
+    return this.generateShareCode();
+  }
+
+  /**
+   * Crea il manifest per MODEX Share
+   */
+  async createShareManifest(modpackId: string): Promise<{
+    code: string;
+    manifest: any;
+    checksum: string;
+  }> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) throw new Error("Modpack not found");
+
+    const mods = await this.getModsInModpack(modpackId);
+    
+    // Calcola checksum di tutti i mod
+    const modHashes = mods.map(m => m.hash).sort().join("");
+    const checksum = crypto.createHash("sha256")
+      .update(modHashes)
+      .digest("hex")
+      .substring(0, 16);
+
+    // Usa sempre lo stesso codice per questo modpack
+    const code = await this.getOrCreateShareCode(modpackId);
+
+    const manifest = {
+      modex_version: "1.0",
+      share_code: code,
+      checksum: checksum,
+      exported_at: new Date().toISOString(),
+      modpack: {
+        name: modpack.name,
+        version: modpack.version,
+        description: modpack.description || "",
+      },
+      mods: mods.map(m => ({
+        filename: m.filename,
+        name: m.name,
+        version: m.version,
+        hash: m.hash,
+        size: m.size,
+        loader: m.loader,
+        game_version: m.game_version,
+      })),
+      stats: {
+        mod_count: mods.length,
+        total_size: mods.reduce((acc, m) => acc + m.size, 0),
+      }
+    };
+
+    return { code, manifest, checksum };
+  }
+
+  /**
+   * Esporta modpack come .modex (formato proprietario)
+   */
+  async exportAsModex(modpackId: string, exportPath: string): Promise<{
+    success: boolean;
+    code: string;
+    path: string;
+  }> {
+    const AdmZip = (await import("adm-zip")).default;
+    
+    const { code, manifest, checksum } = await this.createShareManifest(modpackId);
+    const mods = await this.getModsInModpack(modpackId);
+
+    const zip = new AdmZip();
+
+    // Aggiungi manifest
+    zip.addFile("modex.json", Buffer.from(JSON.stringify(manifest, null, 2)));
+
+    // Aggiungi mods
+    for (const mod of mods) {
+      if (await fs.pathExists(mod.path)) {
+        const modBuffer = await fs.readFile(mod.path);
+        zip.addFile(`mods/${mod.filename}`, modBuffer);
+      }
+    }
+
+    // Aggiungi cover se esiste
+    const modpackPath = this.getModpackPath(modpackId);
+    const coverExtensions = ["png", "jpg", "jpeg", "gif", "webp"];
+    for (const ext of coverExtensions) {
+      const coverPath = path.join(modpackPath, `cover.${ext}`);
+      if (await fs.pathExists(coverPath)) {
+        const coverBuffer = await fs.readFile(coverPath);
+        zip.addFile(`cover.${ext}`, coverBuffer);
+        break;
+      }
+    }
+
+    zip.writeZip(exportPath);
+
+    return { success: true, code, path: exportPath };
+  }
+
+  /**
+   * Importa un file .modex
+   */
+  async importModex(modexPath: string): Promise<{
+    success: boolean;
+    modpackId: string;
+    code: string;
+    isUpdate: boolean;
+    changes?: { added: number; removed: number; unchanged: number };
+  }> {
+    const AdmZip = (await import("adm-zip")).default;
+    
+    const zip = new AdmZip(modexPath);
+    const manifestEntry = zip.getEntry("modex.json");
+    
+    if (!manifestEntry) {
+      throw new Error("Invalid .modex file: missing manifest");
+    }
+
+    const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+    
+    if (!manifest.modex_version || !manifest.share_code) {
+      throw new Error("Invalid .modex manifest");
+    }
+
+    // Controlla se esiste già un modpack con lo stesso codice
+    const existingModpack = await this.findModpackByShareCode(manifest.share_code);
+    const isUpdate = !!existingModpack;
+
+    let modpackId: string;
+    let changes = { added: 0, removed: 0, unchanged: 0 };
+
+    if (isUpdate && existingModpack) {
+      // Update esistente
+      modpackId = existingModpack.id;
+      const existingMods = await this.getModsInModpack(modpackId);
+      const existingHashes = new Set(existingMods.map(m => m.hash));
+      const newHashes = new Set(manifest.mods.map((m: any) => m.hash));
+
+      // Calcola changes
+      for (const hash of newHashes) {
+        if (existingHashes.has(hash)) {
+          changes.unchanged++;
+        } else {
+          changes.added++;
+        }
+      }
+      for (const hash of existingHashes) {
+        if (!newHashes.has(hash)) {
+          changes.removed++;
+        }
+      }
+
+      // Rimuovi mods non più presenti
+      const modsDir = path.join(this.getModpackPath(modpackId), "mods");
+      for (const mod of existingMods) {
+        if (!newHashes.has(mod.hash)) {
+          const modPath = path.join(modsDir, mod.filename);
+          if (await fs.pathExists(modPath)) {
+            await fs.remove(modPath);
+          }
+        }
+      }
+    } else {
+      // Nuovo modpack
+      modpackId = await this.createModpack({
+        name: manifest.modpack.name,
+        version: manifest.modpack.version,
+        description: manifest.modpack.description,
+      });
+      changes.added = manifest.mods.length;
+    }
+
+    // Estrai mods
+    const modsDir = path.join(this.getModpackPath(modpackId), "mods");
+    await fs.ensureDir(modsDir);
+
+    const modEntries = zip.getEntries().filter(e => e.entryName.startsWith("mods/"));
+    for (const entry of modEntries) {
+      const filename = path.basename(entry.entryName);
+      const destPath = path.join(modsDir, filename);
+      
+      // Salta se già esiste con stesso nome (potrebbe avere stesso hash)
+      if (!await fs.pathExists(destPath)) {
+        await fs.writeFile(destPath, entry.getData());
+      }
+    }
+
+    // Estrai cover se presente
+    const coverEntry = zip.getEntries().find(e => e.entryName.startsWith("cover."));
+    if (coverEntry) {
+      const coverDest = path.join(this.getModpackPath(modpackId), coverEntry.entryName);
+      await fs.writeFile(coverDest, coverEntry.getData());
+    }
+
+    // Salva il codice share nel manifest del modpack
+    const manifestPath = path.join(this.getModpackPath(modpackId), "modpack.json");
+    const modpackManifest = await fs.readJson(manifestPath);
+    modpackManifest.share_code = manifest.share_code;
+    modpackManifest.last_sync = new Date().toISOString();
+    await fs.writeJson(manifestPath, modpackManifest, { spaces: 2 });
+
+    return {
+      success: true,
+      modpackId,
+      code: manifest.share_code,
+      isUpdate,
+      changes: isUpdate ? changes : undefined,
+    };
+  }
+
+  /**
+   * Trova modpack per share code
+   */
+  async findModpackByShareCode(code: string): Promise<Modpack | null> {
+    const modpacks = await this.getAllModpacks();
+    
+    for (const modpack of modpacks) {
+      const manifestPath = path.join(this.getModpackPath(modpack.id), "modpack.json");
+      if (await fs.pathExists(manifestPath)) {
+        const manifest = await fs.readJson(manifestPath);
+        if (manifest.share_code === code) {
+          return modpack;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Verifica se un modpack ha updates disponibili
+   */
+  async verifyModexChecksum(modexPath: string, modpackId: string): Promise<{
+    match: boolean;
+    localChecksum: string;
+    remoteChecksum: string;
+  }> {
+    const AdmZip = (await import("adm-zip")).default;
+    
+    const zip = new AdmZip(modexPath);
+    const manifestEntry = zip.getEntry("modex.json");
+    
+    if (!manifestEntry) {
+      throw new Error("Invalid .modex file");
+    }
+
+    const remoteManifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+    const { checksum: localChecksum } = await this.createShareManifest(modpackId);
+
+    return {
+      match: localChecksum === remoteManifest.checksum,
+      localChecksum,
+      remoteChecksum: remoteManifest.checksum,
+    };
+  }
+
   /**
    * Apre la cartella nel file explorer
    */

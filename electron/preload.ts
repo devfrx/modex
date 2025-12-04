@@ -95,6 +95,23 @@ contextBridge.exposeInMainWorld("api", {
     getLibraryPath: (): Promise<string> => ipcRenderer.invoke("scanner:getLibraryPath"),
   },
 
+  // MODEX Share
+  share: {
+    exportModex: (modpackId: string): Promise<{ success: boolean; code: string; path: string } | null> =>
+      ipcRenderer.invoke("share:exportModex", modpackId),
+    importModex: (): Promise<{
+      success: boolean;
+      modpackId: string;
+      code: string;
+      isUpdate: boolean;
+      changes?: { added: number; removed: number; unchanged: number };
+    } | null> => ipcRenderer.invoke("share:importModex"),
+    getInfo: (modpackId: string): Promise<{ shareCode: string | null; lastSync: string | null }> =>
+      ipcRenderer.invoke("share:getInfo", modpackId),
+    generateCode: (modpackId: string): Promise<{ code: string; checksum: string }> =>
+      ipcRenderer.invoke("share:generateCode", modpackId),
+  },
+
   // Events
   on: (channel: string, callback: (data: any) => void) => {
     ipcRenderer.on(channel, (_event, data) => callback(data));

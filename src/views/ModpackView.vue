@@ -5,6 +5,7 @@ import ModpackCard from "@/components/modpacks/ModpackCard.vue";
 import ModpackEditor from "@/components/modpacks/ModpackEditor.vue";
 import ModpackCompareDialog from "@/components/modpacks/ModpackCompareDialog.vue";
 import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
+import ShareDialog from "@/components/modpacks/ShareDialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ProgressDialog from "@/components/ui/ProgressDialog.vue";
@@ -16,6 +17,7 @@ import {
   ArrowLeftRight,
   BarChart3,
   Star,
+  Share2,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
 
@@ -52,6 +54,11 @@ const modpackToDelete = ref<string | null>(null);
 
 // Create State
 const showCreateDialog = ref(false);
+
+// Share State
+const showShareDialog = ref(false);
+const shareModpackId = ref<string | null>(null);
+const shareModpackName = ref<string>("");
 
 // Import State
 const showProgress = ref(false);
@@ -274,6 +281,19 @@ function openEditor(id: string) {
   showEditor.value = true;
 }
 
+// Share
+function openShareExport(id: string, name: string) {
+  shareModpackId.value = id;
+  shareModpackName.value = name;
+  showShareDialog.value = true;
+}
+
+function openShareImport() {
+  shareModpackId.value = null;
+  shareModpackName.value = "";
+  showShareDialog.value = true;
+}
+
 // Delete Single
 function confirmDelete(id: string) {
   modpackToDelete.value = id;
@@ -451,6 +471,15 @@ onMounted(() => {
           Compare
         </Button>
         <Button
+          @click="openShareImport"
+          :disabled="!isElectron()"
+          variant="outline"
+          class="gap-2"
+        >
+          <Share2 class="w-4 h-4" />
+          Import .modex
+        </Button>
+        <Button
           @click="importModpack"
           :disabled="!isElectron()"
           variant="secondary"
@@ -541,6 +570,7 @@ onMounted(() => {
         @clone="cloneModpack"
         @open-folder="openInExplorer"
         @toggle-favorite="toggleFavoriteModpack"
+        @share="openShareExport"
       />
     </div>
 
@@ -601,6 +631,15 @@ onMounted(() => {
       :open="showProgress"
       :title="progressTitle"
       :message="progressMessage"
+    />
+
+    <!-- Share Dialog -->
+    <ShareDialog
+      :open="showShareDialog"
+      :modpack-id="shareModpackId"
+      :modpack-name="shareModpackName"
+      @close="showShareDialog = false"
+      @refresh="loadModpacks"
     />
   </div>
 </template>

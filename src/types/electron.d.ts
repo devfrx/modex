@@ -93,6 +93,18 @@ export interface ElectronAPI {
     getBasePath: () => Promise<string>;
     getLibraryPath: () => Promise<string>;
   };
+  share: {
+    exportModex: (modpackId: string) => Promise<{ success: boolean; code: string; path: string } | null>;
+    importModex: () => Promise<{
+      success: boolean;
+      modpackId: string;
+      code: string;
+      isUpdate: boolean;
+      changes?: { added: number; removed: number; unchanged: number };
+    } | null>;
+    getInfo: (modpackId: string) => Promise<{ shareCode: string | null; lastSync: string | null }>;
+    generateCode: (modpackId: string) => Promise<{ code: string; checksum: string }>;
+  };
   on: (channel: string, callback: (data: any) => void) => void;
 }
 

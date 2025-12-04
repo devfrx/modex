@@ -46,6 +46,13 @@ electron.contextBridge.exposeInMainWorld("api", {
     getBasePath: () => electron.ipcRenderer.invoke("scanner:getBasePath"),
     getLibraryPath: () => electron.ipcRenderer.invoke("scanner:getLibraryPath")
   },
+  // MODEX Share
+  share: {
+    exportModex: (modpackId) => electron.ipcRenderer.invoke("share:exportModex", modpackId),
+    importModex: () => electron.ipcRenderer.invoke("share:importModex"),
+    getInfo: (modpackId) => electron.ipcRenderer.invoke("share:getInfo", modpackId),
+    generateCode: (modpackId) => electron.ipcRenderer.invoke("share:generateCode", modpackId)
+  },
   // Events
   on: (channel, callback) => {
     electron.ipcRenderer.on(channel, (_event, data) => callback(data));

@@ -5097,6 +5097,210 @@ class FileSystemManager {
     }
     return newId;
   }
+  // ==================== MODEX SHARE ====================
+  /**
+   * Genera un codice univoco breve per il modpack (random, unico globalmente)
+   */
+  generateShareCode() {
+    const uuid = crypto.randomUUID();
+    const hash = crypto.createHash("sha256").update(uuid).digest("hex").substring(0, 8).toUpperCase();
+    return `MDX-${hash}`;
+  }
+  /**
+   * Ottiene o genera il codice share per un modpack (lo salva se non esiste)
+   */
+  async getOrCreateShareCode(modpackId) {
+    const manifestPath = path$c.join(this.getModpackPath(modpackId), "modpack.json");
+    if (await fs.pathExists(manifestPath)) {
+      const manifest = await fs.readJson(manifestPath);
+      if (manifest.share_code) {
+        return manifest.share_code;
+      }
+      const code = this.generateShareCode();
+      manifest.share_code = code;
+      await fs.writeJson(manifestPath, manifest, { spaces: 2 });
+      return code;
+    }
+    return this.generateShareCode();
+  }
+  /**
+   * Crea il manifest per MODEX Share
+   */
+  async createShareManifest(modpackId) {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) throw new Error("Modpack not found");
+    const mods = await this.getModsInModpack(modpackId);
+    const modHashes = mods.map((m) => m.hash).sort().join("");
+    const checksum = crypto.createHash("sha256").update(modHashes).digest("hex").substring(0, 16);
+    const code = await this.getOrCreateShareCode(modpackId);
+    const manifest = {
+      modex_version: "1.0",
+      share_code: code,
+      checksum,
+      exported_at: (/* @__PURE__ */ new Date()).toISOString(),
+      modpack: {
+        name: modpack.name,
+        version: modpack.version,
+        description: modpack.description || ""
+      },
+      mods: mods.map((m) => ({
+        filename: m.filename,
+        name: m.name,
+        version: m.version,
+        hash: m.hash,
+        size: m.size,
+        loader: m.loader,
+        game_version: m.game_version
+      })),
+      stats: {
+        mod_count: mods.length,
+        total_size: mods.reduce((acc, m) => acc + m.size, 0)
+      }
+    };
+    return { code, manifest, checksum };
+  }
+  /**
+   * Esporta modpack come .modex (formato proprietario)
+   */
+  async exportAsModex(modpackId, exportPath) {
+    const AdmZip2 = (await Promise.resolve().then(() => admZip$1)).default;
+    const { code, manifest, checksum } = await this.createShareManifest(modpackId);
+    const mods = await this.getModsInModpack(modpackId);
+    const zip = new AdmZip2();
+    zip.addFile("modex.json", Buffer.from(JSON.stringify(manifest, null, 2)));
+    for (const mod of mods) {
+      if (await fs.pathExists(mod.path)) {
+        const modBuffer = await fs.readFile(mod.path);
+        zip.addFile(`mods/${mod.filename}`, modBuffer);
+      }
+    }
+    const modpackPath = this.getModpackPath(modpackId);
+    const coverExtensions = ["png", "jpg", "jpeg", "gif", "webp"];
+    for (const ext of coverExtensions) {
+      const coverPath = path$c.join(modpackPath, `cover.${ext}`);
+      if (await fs.pathExists(coverPath)) {
+        const coverBuffer = await fs.readFile(coverPath);
+        zip.addFile(`cover.${ext}`, coverBuffer);
+        break;
+      }
+    }
+    zip.writeZip(exportPath);
+    return { success: true, code, path: exportPath };
+  }
+  /**
+   * Importa un file .modex
+   */
+  async importModex(modexPath) {
+    const AdmZip2 = (await Promise.resolve().then(() => admZip$1)).default;
+    const zip = new AdmZip2(modexPath);
+    const manifestEntry = zip.getEntry("modex.json");
+    if (!manifestEntry) {
+      throw new Error("Invalid .modex file: missing manifest");
+    }
+    const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+    if (!manifest.modex_version || !manifest.share_code) {
+      throw new Error("Invalid .modex manifest");
+    }
+    const existingModpack = await this.findModpackByShareCode(manifest.share_code);
+    const isUpdate = !!existingModpack;
+    let modpackId;
+    let changes = { added: 0, removed: 0, unchanged: 0 };
+    if (isUpdate && existingModpack) {
+      modpackId = existingModpack.id;
+      const existingMods = await this.getModsInModpack(modpackId);
+      const existingHashes = new Set(existingMods.map((m) => m.hash));
+      const newHashes = new Set(manifest.mods.map((m) => m.hash));
+      for (const hash of newHashes) {
+        if (existingHashes.has(hash)) {
+          changes.unchanged++;
+        } else {
+          changes.added++;
+        }
+      }
+      for (const hash of existingHashes) {
+        if (!newHashes.has(hash)) {
+          changes.removed++;
+        }
+      }
+      const modsDir2 = path$c.join(this.getModpackPath(modpackId), "mods");
+      for (const mod of existingMods) {
+        if (!newHashes.has(mod.hash)) {
+          const modPath = path$c.join(modsDir2, mod.filename);
+          if (await fs.pathExists(modPath)) {
+            await fs.remove(modPath);
+          }
+        }
+      }
+    } else {
+      modpackId = await this.createModpack({
+        name: manifest.modpack.name,
+        version: manifest.modpack.version,
+        description: manifest.modpack.description
+      });
+      changes.added = manifest.mods.length;
+    }
+    const modsDir = path$c.join(this.getModpackPath(modpackId), "mods");
+    await fs.ensureDir(modsDir);
+    const modEntries = zip.getEntries().filter((e) => e.entryName.startsWith("mods/"));
+    for (const entry of modEntries) {
+      const filename = path$c.basename(entry.entryName);
+      const destPath = path$c.join(modsDir, filename);
+      if (!await fs.pathExists(destPath)) {
+        await fs.writeFile(destPath, entry.getData());
+      }
+    }
+    const coverEntry = zip.getEntries().find((e) => e.entryName.startsWith("cover."));
+    if (coverEntry) {
+      const coverDest = path$c.join(this.getModpackPath(modpackId), coverEntry.entryName);
+      await fs.writeFile(coverDest, coverEntry.getData());
+    }
+    const manifestPath = path$c.join(this.getModpackPath(modpackId), "modpack.json");
+    const modpackManifest = await fs.readJson(manifestPath);
+    modpackManifest.share_code = manifest.share_code;
+    modpackManifest.last_sync = (/* @__PURE__ */ new Date()).toISOString();
+    await fs.writeJson(manifestPath, modpackManifest, { spaces: 2 });
+    return {
+      success: true,
+      modpackId,
+      code: manifest.share_code,
+      isUpdate,
+      changes: isUpdate ? changes : void 0
+    };
+  }
+  /**
+   * Trova modpack per share code
+   */
+  async findModpackByShareCode(code) {
+    const modpacks = await this.getAllModpacks();
+    for (const modpack of modpacks) {
+      const manifestPath = path$c.join(this.getModpackPath(modpack.id), "modpack.json");
+      if (await fs.pathExists(manifestPath)) {
+        const manifest = await fs.readJson(manifestPath);
+        if (manifest.share_code === code) {
+          return modpack;
+        }
+      }
+    }
+    return null;
+  }
+  /**
+   * Verifica se un modpack ha updates disponibili
+   */
+  async verifyModexChecksum(modexPath, modpackId) {
+    const AdmZip2 = (await Promise.resolve().then(() => admZip$1)).default;
+    const zip = new AdmZip2(modexPath);
+    const manifestEntry = zip.getEntry("modex.json");
+    if (!manifestEntry) {
+      throw new Error("Invalid .modex file");
+    }
+    const remoteManifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+    const { checksum: localChecksum } = await this.createShareManifest(modpackId);
+    return {
+      match: localChecksum === remoteManifest.checksum,
+      localChecksum,
+      remoteChecksum: remoteManifest.checksum
+    };
+  }
   /**
    * Apre la cartella nel file explorer
    */
@@ -5549,6 +5753,41 @@ async function initializeBackend() {
       filters: [{ name: "ZIP Files", extensions: ["zip"] }]
     });
     return result.canceled ? null : result.filePath;
+  });
+  ipcMain.handle("share:exportModex", async (_, modpackId) => {
+    if (!win) return null;
+    const modpack = await fsManager.getModpackById(modpackId);
+    if (!modpack) throw new Error("Modpack not found");
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: `${modpack.name}.modex`,
+      filters: [{ name: "MODEX Package", extensions: ["modex"] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    return fsManager.exportAsModex(modpackId, result.filePath);
+  });
+  ipcMain.handle("share:importModex", async () => {
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      filters: [{ name: "MODEX Package", extensions: ["modex"] }],
+      properties: ["openFile"]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return fsManager.importModex(result.filePaths[0]);
+  });
+  ipcMain.handle("share:getInfo", async (_, modpackId) => {
+    const manifestPath = path$d.join(fsManager.getModpackPath(modpackId), "modpack.json");
+    if (await fs.pathExists(manifestPath)) {
+      const manifest = await fs.readJson(manifestPath);
+      return {
+        shareCode: manifest.share_code || null,
+        lastSync: manifest.last_sync || null
+      };
+    }
+    return { shareCode: null, lastSync: null };
+  });
+  ipcMain.handle("share:generateCode", async (_, modpackId) => {
+    const { code, checksum } = await fsManager.createShareManifest(modpackId);
+    return { code, checksum };
   });
 }
 app.on("window-all-closed", () => {

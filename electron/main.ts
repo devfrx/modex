@@ -576,6 +576,58 @@ async function initializeBackend() {
     });
     return result.canceled ? null : result.filePath;
   });
+
+  // ==================== MODEX SHARE ====================
+
+  // Export as .modex
+  ipcMain.handle("share:exportModex", async (_, modpackId: string) => {
+    if (!win) return null;
+    
+    const modpack = await fsManager.getModpackById(modpackId);
+    if (!modpack) throw new Error("Modpack not found");
+
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: `${modpack.name}.modex`,
+      filters: [{ name: "MODEX Package", extensions: ["modex"] }],
+    });
+
+    if (result.canceled || !result.filePath) return null;
+
+    return fsManager.exportAsModex(modpackId, result.filePath);
+  });
+
+  // Import .modex
+  ipcMain.handle("share:importModex", async () => {
+    if (!win) return null;
+
+    const result = await dialog.showOpenDialog(win, {
+      filters: [{ name: "MODEX Package", extensions: ["modex"] }],
+      properties: ["openFile"],
+    });
+
+    if (result.canceled || !result.filePaths[0]) return null;
+
+    return fsManager.importModex(result.filePaths[0]);
+  });
+
+  // Get share info for a modpack
+  ipcMain.handle("share:getInfo", async (_, modpackId: string) => {
+    const manifestPath = path.join(fsManager.getModpackPath(modpackId), "modpack.json");
+    if (await fs.pathExists(manifestPath)) {
+      const manifest = await fs.readJson(manifestPath);
+      return {
+        shareCode: manifest.share_code || null,
+        lastSync: manifest.last_sync || null,
+      };
+    }
+    return { shareCode: null, lastSync: null };
+  });
+
+  // Generate share code preview
+  ipcMain.handle("share:generateCode", async (_, modpackId: string) => {
+    const { code, checksum } = await fsManager.createShareManifest(modpackId);
+    return { code, checksum };
+  });
 }
 
 // Quit when all windows are closed, except on macOS

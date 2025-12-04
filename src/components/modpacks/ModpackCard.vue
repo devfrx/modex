@@ -8,6 +8,7 @@ import {
   Copy,
   FolderOpen,
   Star,
+  Share2,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 
@@ -34,6 +35,7 @@ defineEmits<{
   (e: "clone", id: string): void;
   (e: "open-folder", id: string): void;
   (e: "toggle-favorite", id: string): void;
+  (e: "share", id: string, name: string): void;
 }>();
 
 function handleImageError(event: Event) {
@@ -151,6 +153,15 @@ function handleImageError(event: Event) {
             title="Clone"
           >
             <Copy class="w-3 h-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-6 w-6 text-muted-foreground hover:text-green-500"
+            @click.stop="$emit('share', modpack.id, modpack.name)"
+            title="Share (.modex)"
+          >
+            <Share2 class="w-3 h-3" />
           </Button>
           <Button
             variant="ghost"

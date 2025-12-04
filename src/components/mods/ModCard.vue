@@ -95,9 +95,15 @@ const emit = defineEmits<{
       <div
         class="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-white/5"
       >
-        <div class="flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-primary/50" />
-          <span>{{ mod.loader }}</span>
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-primary/50" />
+            <span>{{ mod.loader || 'Unknown' }}</span>
+          </div>
+          <div v-if="mod.game_version && mod.game_version !== 'unknown'" class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-green-500/50" />
+            <span>{{ mod.game_version }}</span>
+          </div>
         </div>
 
         <!-- Actions -->

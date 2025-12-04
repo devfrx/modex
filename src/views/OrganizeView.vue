@@ -12,6 +12,11 @@ import {
   Package,
   Folder,
   Trash2,
+  Check,
+  X,
+  Move,
+  FolderInput,
+  MoreVertical,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
@@ -48,6 +53,15 @@ const draggedNodeId = ref<string | null>(null);
 const draggedNodeType = ref<"folder" | "mod" | null>(null);
 const dropTargetId = ref<string | null>(null);
 
+// Bulk selection state
+const selectedModIds = ref<Set<string>>(new Set());
+const isSelectionMode = ref(false);
+
+// Context menu state
+const contextMenu = ref<{ x: number; y: number; modId?: string; folderId?: string } | null>(null);
+const showMoveDialog = ref(false);
+const moveTargetFolderId = ref<string | null>(null);
+
 // Current folder navigation
 const currentFolderId = ref<string | null>(null);
 const viewMode = ref<"tree" | "grid">("tree");
@@ -71,6 +85,14 @@ const currentFolder = computed(() => {
 const breadcrumbs = computed(() => {
   if (!currentFolderId.value) return [];
   return getFolderPath(currentFolderId.value);
+});
+
+// Mods that are not in any folder
+const unorganizedMods = computed(() => {
+  return mods.value.filter(mod => {
+    const modFolderId = getModFolder(mod.id);
+    return modFolderId === null;
+  });
 });
 
 const currentFolderMods = computed(() => {
@@ -252,6 +274,98 @@ function openCreateSubfolder(parentId: string) {
   showCreateFolderDialog.value = true;
 }
 
+// Bulk selection functions
+function toggleModSelection(modId: string) {
+  if (selectedModIds.value.has(modId)) {
+    selectedModIds.value.delete(modId);
+  } else {
+    selectedModIds.value.add(modId);
+  }
+  selectedModIds.value = new Set(selectedModIds.value);
+}
+
+function selectAllMods() {
+  mods.value.forEach(mod => selectedModIds.value.add(mod.id));
+  selectedModIds.value = new Set(selectedModIds.value);
+}
+
+function clearSelection() {
+  selectedModIds.value.clear();
+  selectedModIds.value = new Set(selectedModIds.value);
+  isSelectionMode.value = false;
+}
+
+function toggleSelectionMode() {
+  isSelectionMode.value = !isSelectionMode.value;
+  if (!isSelectionMode.value) {
+    clearSelection();
+  }
+}
+
+// Context menu functions
+function openContextMenu(event: MouseEvent, modId?: string, folderId?: string) {
+  event.preventDefault();
+  contextMenu.value = {
+    x: event.clientX,
+    y: event.clientY,
+    modId,
+    folderId,
+  };
+}
+
+function closeContextMenu() {
+  contextMenu.value = null;
+}
+
+function openMoveDialog() {
+  moveTargetFolderId.value = null;
+  showMoveDialog.value = true;
+  closeContextMenu();
+}
+
+function handleBulkMove() {
+  if (selectedModIds.value.size === 0) return;
+  
+  const modIdsArray = Array.from(selectedModIds.value);
+  moveModsToFolder(modIdsArray, moveTargetFolderId.value);
+  
+  clearSelection();
+  showMoveDialog.value = false;
+  rebuildTree();
+}
+
+function handleContextMenuMove(targetFolderId: string | null) {
+  if (contextMenu.value?.modId) {
+    // Single mod from context menu
+    moveModToFolder(contextMenu.value.modId, targetFolderId);
+  } else if (selectedModIds.value.size > 0) {
+    // Bulk move
+    const modIdsArray = Array.from(selectedModIds.value);
+    moveModsToFolder(modIdsArray, targetFolderId);
+    clearSelection();
+  }
+  
+  closeContextMenu();
+  rebuildTree();
+}
+
+// Close context menu when clicking outside
+function handleGlobalClick(event: MouseEvent) {
+  if (contextMenu.value) {
+    closeContextMenu();
+  }
+}
+
+onMounted(() => {
+  loadMods();
+  document.addEventListener('click', handleGlobalClick);
+});
+
+import { onUnmounted } from 'vue';
+onUnmounted(() => {
+  document.removeEventListener('click', handleGlobalClick);
+});
+
 function openRenameDialog(nodeId: string, type: "folder" | "mod") {
   if (type === "folder") {
     const folder = getFolderById(nodeId);
@@ -284,10 +398,6 @@ function navigateUp() {
   }
 }
 
-onMounted(() => {
-  loadMods();
-});
-
 watch(folders, () => {
   rebuildTree();
 }, { deep: true });
@@ -316,6 +426,29 @@ const colorOptions = [
         </div>
         
         <div class="flex items-center gap-2">
+          <!-- Selection Mode Toggle -->
+          <Button 
+            variant="outline" 
+            size="sm" 
+            class="gap-2"
+            :class="isSelectionMode ? 'bg-primary text-primary-foreground' : ''"
+            @click="toggleSelectionMode"
+          >
+            <Check class="w-4 h-4" />
+            {{ isSelectionMode ? 'Exit Selection' : 'Select' }}
+          </Button>
+          
+          <!-- Bulk actions when selection mode is active -->
+          <template v-if="isSelectionMode && selectedModIds.size > 0">
+            <Button variant="secondary" size="sm" class="gap-2" @click="openMoveDialog">
+              <Move class="w-4 h-4" />
+              Move ({{ selectedModIds.size }})
+            </Button>
+            <Button variant="ghost" size="sm" @click="clearSelection">
+              <X class="w-4 h-4" />
+            </Button>
+          </template>
+          
           <!-- View Mode Toggle -->
           <div class="flex items-center bg-muted rounded-md p-1">
             <button
@@ -432,6 +565,46 @@ const colorOptions = [
             @delete="openDeleteDialog"
             @create-subfolder="openCreateSubfolder"
           />
+          
+          <!-- Unorganized Mods Section -->
+          <div v-if="unorganizedMods.length > 0" class="mt-6 pt-4 border-t border-border">
+            <h3 class="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+              <Package class="w-4 h-4" />
+              Unorganized Mods ({{ unorganizedMods.length }})
+            </h3>
+            <div class="space-y-1">
+              <div
+                v-for="mod in unorganizedMods"
+                :key="mod.id"
+                class="flex items-center gap-2 p-2 rounded-md border transition-colors cursor-pointer group"
+                :class="selectedModIds.has(mod.id) ? 'border-primary bg-primary/5' : 'hover:bg-muted'"
+                draggable="true"
+                @dragstart="handleDragStart(mod.id, 'mod')"
+                @dragend="handleDragEnd"
+                @click="isSelectionMode ? toggleModSelection(mod.id) : null"
+                @contextmenu="openContextMenu($event, mod.id)"
+              >
+                <!-- Selection checkbox -->
+                <div
+                  v-if="isSelectionMode"
+                  class="w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0"
+                  :class="selectedModIds.has(mod.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'"
+                >
+                  <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3" />
+                </div>
+                <Package class="w-4 h-4 text-muted-foreground shrink-0" />
+                <span class="flex-1 truncate text-sm">{{ mod.name }}</span>
+                <span class="text-xs text-muted-foreground">{{ mod.version }}</span>
+                <button
+                  class="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted"
+                  title="Move to folder"
+                  @click.stop="openContextMenu($event, mod.id)"
+                >
+                  <FolderInput class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -474,9 +647,24 @@ const colorOptions = [
             <div
               v-for="mod in currentFolderMods"
               :key="mod.id"
-              class="group relative bg-card border rounded-lg p-4 hover:border-primary/50 transition-colors"
+              class="group relative bg-card border rounded-lg p-4 transition-colors cursor-pointer"
+              :class="[
+                selectedModIds.has(mod.id) ? 'border-primary bg-primary/5' : 'hover:border-primary/50',
+                isSelectionMode ? 'cursor-pointer' : ''
+              ]"
+              @click="isSelectionMode ? toggleModSelection(mod.id) : null"
+              @contextmenu="openContextMenu($event, mod.id)"
             >
-              <div class="flex items-start gap-3">
+              <!-- Selection checkbox -->
+              <div
+                v-if="isSelectionMode"
+                class="absolute top-2 left-2 w-5 h-5 rounded border flex items-center justify-center transition-colors"
+                :class="selectedModIds.has(mod.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'"
+              >
+                <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3" />
+              </div>
+              
+              <div class="flex items-start gap-3" :class="isSelectionMode ? 'ml-6' : ''">
                 <Package class="w-10 h-10 text-muted-foreground shrink-0" />
                 <div class="flex-1 min-w-0">
                   <h4 class="font-medium truncate">{{ mod.name }}</h4>
@@ -484,14 +672,23 @@ const colorOptions = [
                   <p class="text-xs text-muted-foreground mt-1">{{ mod.loader }}</p>
                 </div>
               </div>
-              <!-- Remove from folder button -->
-              <button
-                class="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-destructive hover:text-destructive-foreground transition-all"
-                title="Remove from folder"
-                @click="moveModToFolder(mod.id, null); rebuildTree()"
-              >
-                <Trash2 class="w-4 h-4" />
-              </button>
+              <!-- Action buttons -->
+              <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                <button
+                  class="p-1.5 rounded-md hover:bg-muted"
+                  title="Move to folder"
+                  @click.stop="openContextMenu($event, mod.id)"
+                >
+                  <FolderInput class="w-4 h-4" />
+                </button>
+                <button
+                  class="p-1.5 rounded-md hover:bg-destructive hover:text-destructive-foreground"
+                  title="Remove from folder"
+                  @click.stop="moveModToFolder(mod.id, null); rebuildTree()"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -597,5 +794,65 @@ const colorOptions = [
         </Button>
       </template>
     </Dialog>
+
+    <!-- Move Dialog -->
+    <Dialog
+      :open="showMoveDialog"
+      title="Move Mods to Folder"
+      :description="`Moving ${selectedModIds.size} mod(s) to a folder`"
+      @close="showMoveDialog = false"
+    >
+      <div class="space-y-2 max-h-60 overflow-auto">
+        <button
+          class="w-full flex items-center gap-2 p-2 rounded-md text-left transition-colors"
+          :class="moveTargetFolderId === null ? 'bg-primary/10 border border-primary' : 'hover:bg-muted'"
+          @click="moveTargetFolderId = null"
+        >
+          <Home class="w-4 h-4" />
+          <span>Root (No Folder)</span>
+        </button>
+        <button
+          v-for="folder in folders"
+          :key="folder.id"
+          class="w-full flex items-center gap-2 p-2 rounded-md text-left transition-colors"
+          :class="moveTargetFolderId === folder.id ? 'bg-primary/10 border border-primary' : 'hover:bg-muted'"
+          @click="moveTargetFolderId = folder.id"
+        >
+          <Folder class="w-4 h-4" :style="{ color: folder.color }" />
+          <span>{{ folder.name }}</span>
+        </button>
+      </div>
+      
+      <template #footer>
+        <Button variant="outline" @click="showMoveDialog = false">Cancel</Button>
+        <Button @click="handleBulkMove">Move</Button>
+      </template>
+    </Dialog>
+
+    <!-- Context Menu -->
+    <div
+      v-if="contextMenu"
+      class="fixed z-50 min-w-48 bg-popover border rounded-md shadow-md py-1"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="px-2 py-1.5 text-xs text-muted-foreground font-medium">Move to</div>
+      <button
+        class="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+        @click="handleContextMenuMove(null)"
+      >
+        <Home class="w-4 h-4" />
+        Root (No Folder)
+      </button>
+      <button
+        v-for="folder in folders"
+        :key="folder.id"
+        class="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+        @click="handleContextMenuMove(folder.id)"
+      >
+        <Folder class="w-4 h-4" :style="{ color: folder.color }" />
+        {{ folder.name }}
+      </button>
+    </div>
   </div>
 </template>

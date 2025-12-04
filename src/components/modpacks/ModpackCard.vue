@@ -13,9 +13,11 @@ import {
 import Button from "@/components/ui/Button.vue";
 
 interface ModpackWithCount {
-  id?: string;
+  id: string;
   name: string;
   version: string;
+  minecraft_version?: string;
+  loader?: string;
   description?: string;
   image_path?: string;
   created_at?: string;
@@ -116,72 +118,75 @@ function handleImageError(event: Event) {
         {{ modpack.name }}
       </h3>
 
-      <p class="text-sm text-muted-foreground line-clamp-2 mb-4 min-h-[2.5rem]">
+      <p class="text-sm text-muted-foreground line-clamp-2 mb-3 min-h-[2.5rem]">
         {{ modpack.description || "No description available" }}
       </p>
 
-      <div
-        class="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-white/5"
-      >
-        <div class="flex items-center gap-1.5">
+      <!-- Info Row: Mod count + Version/Loader badges -->
+      <div class="flex items-center gap-2 flex-wrap text-xs mb-3">
+        <div class="flex items-center gap-1.5 text-muted-foreground">
           <span class="w-1.5 h-1.5 rounded-full bg-primary/50" />
-          <span class="text-foreground font-medium">{{
-            modpack.modCount
-          }}</span>
+          <span class="text-foreground font-medium">{{ modpack.modCount }}</span>
           mods
         </div>
+        <span v-if="modpack.minecraft_version" class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-medium">
+          {{ modpack.minecraft_version }}
+        </span>
+        <span v-if="modpack.loader" class="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[10px] font-medium capitalize">
+          {{ modpack.loader }}
+        </span>
+      </div>
 
-        <!-- Actions -->
-        <div
-          class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          @click.stop
+      <!-- Actions Row -->
+      <div
+        class="flex items-center justify-end gap-1 pt-3 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-opacity"
+        @click.stop
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-7 w-7 text-muted-foreground hover:text-primary"
+          @click.stop="$emit('edit', modpack.id)"
+          title="Edit"
         >
-          <Button
-            variant="ghost"
-            size="icon"
-            class="h-6 w-6 text-muted-foreground hover:text-primary"
-            @click.stop="$emit('edit', modpack.id)"
-            title="Edit"
-          >
-            <Edit class="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="h-6 w-6 text-muted-foreground hover:text-blue-400"
-            @click.stop="$emit('clone', modpack.id)"
-            title="Clone"
-          >
-            <Copy class="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="h-6 w-6 text-muted-foreground hover:text-green-500"
-            @click.stop="$emit('share', modpack.id, modpack.name)"
-            title="Share (.modex)"
-          >
-            <Share2 class="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="h-6 w-6 text-muted-foreground hover:text-yellow-500"
-            @click.stop="$emit('open-folder', modpack.id)"
-            title="Open in Explorer"
-          >
-            <FolderOpen class="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="h-6 w-6 text-muted-foreground hover:text-destructive"
-            @click.stop="$emit('delete', modpack.id)"
-            title="Delete"
-          >
-            <Trash2 class="w-3 h-3" />
-          </Button>
-        </div>
+          <Edit class="w-3.5 h-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-7 w-7 text-muted-foreground hover:text-blue-400"
+          @click.stop="$emit('clone', modpack.id)"
+          title="Clone"
+        >
+          <Copy class="w-3.5 h-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-7 w-7 text-muted-foreground hover:text-green-500"
+          @click.stop="$emit('share', modpack.id, modpack.name)"
+          title="Share (.modex)"
+        >
+          <Share2 class="w-3.5 h-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-7 w-7 text-muted-foreground hover:text-yellow-500"
+          @click.stop="$emit('open-folder', modpack.id)"
+          title="Open in Explorer"
+        >
+          <FolderOpen class="w-3.5 h-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-7 w-7 text-muted-foreground hover:text-destructive"
+          @click.stop="$emit('delete', modpack.id)"
+          title="Delete"
+        >
+          <Trash2 class="w-3.5 h-3.5" />
+        </Button>
       </div>
     </div>
   </div>

@@ -18,15 +18,38 @@ const emit = defineEmits<{
     data: {
       name: string;
       version: string;
+      minecraft_version: string;
+      loader: string;
       description: string;
       image_path?: string;
     }
   ): void;
 }>();
 
+// Common Minecraft versions
+const minecraftVersions = [
+  "1.21.4", "1.21.3", "1.21.1", "1.21",
+  "1.20.6", "1.20.4", "1.20.2", "1.20.1", "1.20",
+  "1.19.4", "1.19.3", "1.19.2", "1.19.1", "1.19",
+  "1.18.2", "1.18.1", "1.18",
+  "1.17.1", "1.17",
+  "1.16.5", "1.16.4", "1.16.3", "1.16.2", "1.16.1",
+  "1.12.2", "1.12.1", "1.12",
+  "1.7.10"
+];
+
+const loaders = [
+  { value: "forge", label: "Forge" },
+  { value: "fabric", label: "Fabric" },
+  { value: "neoforge", label: "NeoForge" },
+  { value: "quilt", label: "Quilt" },
+];
+
 const form = ref({
   name: "",
   version: "1.0.0",
+  minecraft_version: "1.20.1",
+  loader: "forge",
   description: "",
   image_path: "" as string | undefined,
 });
@@ -59,6 +82,8 @@ watch(
     if (isOpen) {
       form.value.name = props.initialName || "";
       form.value.version = "1.0.0";
+      form.value.minecraft_version = "1.20.1";
+      form.value.loader = "forge";
       form.value.description = "";
       form.value.image_path = undefined;
       nameError.value = "";
@@ -131,15 +156,37 @@ function create() {
           v-model="form.name" 
           placeholder="My Awesome Modpack" 
           autofocus 
-          :class="{ 'border-red-500 focus-visible:ring-red-500': nameError }"
+          :class="nameError ? 'border-red-500 focus-visible:ring-red-500' : ''"
           @input="nameError = ''"
         />
         <p v-if="nameError" class="text-xs text-red-500">{{ nameError }}</p>
       </div>
 
       <div class="space-y-2">
-        <label class="text-sm font-medium">Version</label>
+        <label class="text-sm font-medium">Modpack Version</label>
         <Input v-model="form.version" placeholder="1.0.0" />
+      </div>
+
+      <!-- Minecraft Version -->
+      <div class="space-y-2">
+        <label class="text-sm font-medium">Minecraft Version</label>
+        <select
+          v-model="form.minecraft_version"
+          class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <option v-for="v in minecraftVersions" :key="v" :value="v">{{ v }}</option>
+        </select>
+      </div>
+
+      <!-- Loader -->
+      <div class="space-y-2">
+        <label class="text-sm font-medium">Mod Loader</label>
+        <select
+          v-model="form.loader"
+          class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <option v-for="l in loaders" :key="l.value" :value="l.value">{{ l.label }}</option>
+        </select>
       </div>
 
       <div class="space-y-2">

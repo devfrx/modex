@@ -243,34 +243,52 @@ async function openInExplorer(modpackId: string) {
   }
 }
 
-// Import Modpack
-async function importModpack() {
+// Import CurseForge Modpack
+const importProgress = ref({ current: 0, total: 0, modName: '' });
+
+async function importCurseForgeModpack() {
   if (!isElectron()) return;
-
+  
+  showProgress.value = true;
+  progressTitle.value = "Importing CurseForge Modpack";
+  progressMessage.value = "Select a modpack ZIP file...";
+  importProgress.value = { current: 0, total: 0, modName: '' };
+  
+  // Listen for progress updates
+  const progressHandler = (data: { current: number; total: number; modName: string }) => {
+    importProgress.value = data;
+    progressMessage.value = `Downloading mod ${data.current}/${data.total}: ${data.modName}`;
+  };
+  
+  window.api.on('cf-import-progress', progressHandler);
+  
   try {
-    const zipPath = await window.api.scanner.selectZipFile();
-    if (!zipPath) return;
-
-    const zipName = zipPath.split(/[\\/]/).pop()?.replace(".zip", "") || "Imported Modpack";
-    importZipName.value = zipName;
-
-    showProgress.value = true;
-    progressTitle.value = "Importing Modpack";
-    progressMessage.value = "Extracting and importing mods...";
-
-    try {
-      // New API handles everything: extract, import mods, create modpack
-      const result = await window.api.scanner.importModpack(zipPath, zipName);
-      
+    const result = await window.api.share.importCurseForgeZip();
+    
+    if (!result) {
       showProgress.value = false;
-      alert(`Imported modpack "${zipName}" with ${result.modCount} mods!`);
+      return; // User cancelled
+    }
+    
+    if (result.success) {
+      let message = `Successfully imported ${result.modsImported} mods.`;
+      if (result.modsSkipped > 0) {
+        message += ` ${result.modsSkipped} mods were skipped.`;
+      }
+      if (result.errors.length > 0) {
+        message += `\n\nErrors:\n${result.errors.slice(0, 5).join('\n')}`;
+        if (result.errors.length > 5) {
+          message += `\n... and ${result.errors.length - 5} more errors`;
+        }
+      }
+      alert(message);
       await loadModpacks();
-    } catch (err) {
-      alert("Import failed: " + (err as Error).message);
-      showProgress.value = false;
+    } else {
+      alert("Import failed: " + (result.errors[0] || "Unknown error"));
     }
   } catch (err) {
     alert("Import failed: " + (err as Error).message);
+  } finally {
     showProgress.value = false;
   }
 }
@@ -480,13 +498,13 @@ onMounted(() => {
           Import .modex
         </Button>
         <Button
-          @click="importModpack"
+          @click="importCurseForgeModpack"
           :disabled="!isElectron()"
           variant="secondary"
           class="gap-2"
         >
           <Download class="w-4 h-4" />
-          Import ZIP
+          Import CF Modpack
         </Button>
         <Button
           @click="showCreateDialog = true"
@@ -548,7 +566,7 @@ onMounted(() => {
           Create or import a modpack to get started.
         </p>
         <div class="flex justify-center gap-2">
-          <Button @click="importModpack" variant="secondary">Import ZIP</Button>
+          <Button @click="importCurseForgeModpack" variant="secondary">Import CF Modpack</Button>
           <Button @click="showCreateDialog = true">Create</Button>
         </div>
       </div>
@@ -636,7 +654,7 @@ onMounted(() => {
     <!-- Share Dialog -->
     <ShareDialog
       :open="showShareDialog"
-      :modpack-id="shareModpackId"
+      :modpack-id="shareModpackId ?? undefined"
       :modpack-name="shareModpackName"
       @close="showShareDialog = false"
       @refresh="loadModpacks"

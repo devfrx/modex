@@ -19,6 +19,8 @@ export interface Modpack {
   id: string; // Folder name
   name: string;
   version: string;
+  minecraft_version?: string;
+  loader?: string;
   description?: string;
   image_path?: string;
   created_at: string;
@@ -37,16 +39,43 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("mods:update", id, updates),
     delete: (id: string): Promise<boolean> => ipcRenderer.invoke("mods:delete", id),
     bulkDelete: (ids: string[]): Promise<number> => ipcRenderer.invoke("mods:bulkDelete", ids),
+    refreshMetadata: (id: string): Promise<{ success: boolean; updates?: Partial<Mod>; error?: string }> =>
+      ipcRenderer.invoke("mods:refreshMetadata", id),
+    refreshAllMetadata: (): Promise<{ updated: number; failed: number; total: number }> =>
+      ipcRenderer.invoke("mods:refreshAllMetadata"),
+    addFromCurseForge: (projectId: number, fileId: number, preferredLoader?: string): Promise<Mod | null> =>
+      ipcRenderer.invoke("mods:addFromCurseForge", projectId, fileId, preferredLoader),
+  },
+
+  // CurseForge API
+  curseforge: {
+    hasApiKey: (): Promise<boolean> => ipcRenderer.invoke("curseforge:hasApiKey"),
+    search: (options: {
+      query?: string;
+      gameVersion?: string;
+      modLoader?: string;
+      categoryId?: number;
+      pageSize?: number;
+      index?: number;
+    }): Promise<{ mods: any[]; pagination: any }> => ipcRenderer.invoke("curseforge:search", options),
+    getMod: (modId: number): Promise<any | null> => ipcRenderer.invoke("curseforge:getMod", modId),
+    getModFiles: (modId: number, options?: { gameVersion?: string; modLoader?: string }): Promise<any[]> =>
+      ipcRenderer.invoke("curseforge:getModFiles", modId, options),
+    getCategories: (): Promise<any[]> => ipcRenderer.invoke("curseforge:getCategories"),
+    getPopular: (gameVersion?: string, modLoader?: string): Promise<any[]> =>
+      ipcRenderer.invoke("curseforge:getPopular", gameVersion, modLoader),
+    downloadMod: (modId: number, fileId: number, destPath: string): Promise<{ success: boolean; filePath: string; error?: string }> =>
+      ipcRenderer.invoke("curseforge:downloadMod", modId, fileId, destPath),
   },
 
   // Modpacks API
   modpacks: {
     getAll: (): Promise<Modpack[]> => ipcRenderer.invoke("modpacks:getAll"),
     getById: (id: string): Promise<Modpack | undefined> => ipcRenderer.invoke("modpacks:getById", id),
-    create: (data: { name: string; version?: string; description?: string }): Promise<string> =>
+    create: (data: { name: string; version?: string; minecraft_version?: string; loader?: string; description?: string }): Promise<string> =>
       ipcRenderer.invoke("modpacks:create", data),
     // Backward compatibility
-    add: (data: { name: string; version?: string; description?: string }): Promise<string> =>
+    add: (data: { name: string; version?: string; minecraft_version?: string; loader?: string; description?: string }): Promise<string> =>
       ipcRenderer.invoke("modpacks:add", data),
     update: (id: string, updates: Partial<Modpack>): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:update", id, updates),
@@ -106,10 +135,61 @@ contextBridge.exposeInMainWorld("api", {
       isUpdate: boolean;
       changes?: { added: number; removed: number; unchanged: number };
     } | null> => ipcRenderer.invoke("share:importModex"),
+    importCurseForgeZip: (): Promise<{
+      success: boolean;
+      modpackId?: string;
+      modsImported: number;
+      modsSkipped: number;
+      errors: string[];
+    } | null> => ipcRenderer.invoke("share:importCurseForgeZip"),
     getInfo: (modpackId: string): Promise<{ shareCode: string | null; lastSync: string | null }> =>
       ipcRenderer.invoke("share:getInfo", modpackId),
     generateCode: (modpackId: string): Promise<{ code: string; checksum: string }> =>
       ipcRenderer.invoke("share:generateCode", modpackId),
+  },
+
+  // Mod Updates
+  updates: {
+    setApiKey: (source: "curseforge" | "modrinth", apiKey: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("updates:setApiKey", source, apiKey),
+    getApiKey: (source: "curseforge" | "modrinth"): Promise<string> =>
+      ipcRenderer.invoke("updates:getApiKey", source),
+    checkMod: (modId: string): Promise<{
+      modId: string;
+      currentVersion: string;
+      latestVersion: string | null;
+      hasUpdate: boolean;
+      updateUrl: string | null;
+      downloadUrl: string | null;
+      source: "curseforge" | "modrinth" | "unknown";
+      projectId: string | null;
+      projectName: string | null;
+      changelog: string | null;
+      releaseDate: string | null;
+    }> => ipcRenderer.invoke("updates:checkMod", modId),
+    checkAll: (): Promise<Array<{
+      modId: string;
+      hasUpdate: boolean;
+      latestVersion: string | null;
+      source: string;
+    }>> => ipcRenderer.invoke("updates:checkAll"),
+    checkModpack: (modpackId: string): Promise<Array<{
+      modId: string;
+      hasUpdate: boolean;
+      latestVersion: string | null;
+      downloadUrl: string | null;
+      source: string;
+    }>> => ipcRenderer.invoke("updates:checkModpack", modpackId),
+    applyUpdate: (modId: string, downloadUrl: string): Promise<{
+      success: boolean;
+      newPath: string | null;
+      error?: string;
+    }> => ipcRenderer.invoke("updates:applyUpdate", modId, downloadUrl),
+    applyModpackUpdate: (modpackId: string, modId: string, downloadUrl: string): Promise<{
+      success: boolean;
+      newPath: string | null;
+      error?: string;
+    }> => ipcRenderer.invoke("updates:applyModpackUpdate", modpackId, modId, downloadUrl),
   },
 
   // Events

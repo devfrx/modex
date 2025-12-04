@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import FileSystemManager, { Mod, Modpack } from "./services/FileSystemManager.js";
 import { JarScanner } from "./services/JarScanner.js";
+import ModUpdateService from "./services/ModUpdateService.js";
+import { CurseForgeService } from "./services/CurseForgeService.js";
 import fs from "fs-extra";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +31,8 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 let win: BrowserWindow | null;
 let fsManager: FileSystemManager;
+let updateService: ModUpdateService;
+let curseforgeService: CurseForgeService;
 
 // Register custom protocol for local file access
 protocol.registerSchemesAsPrivileged([
@@ -134,7 +138,7 @@ async function initializeBackend() {
 
   ipcMain.handle(
     "modpacks:create",
-    async (_, data: { name: string; version?: string; description?: string }) => {
+    async (_, data: { name: string; version?: string; minecraft_version?: string; loader?: string; description?: string }) => {
       return fsManager.createModpack(data);
     }
   );
@@ -142,7 +146,7 @@ async function initializeBackend() {
   // Backward compatibility: modpacks:add calls modpacks:create
   ipcMain.handle(
     "modpacks:add",
-    async (_, data: { name: string; version?: string; description?: string }) => {
+    async (_, data: { name: string; version?: string; minecraft_version?: string; loader?: string; description?: string }) => {
       return fsManager.createModpack(data);
     }
   );
@@ -171,7 +175,11 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:addMod",
     async (_, modpackId: string, modId: string) => {
-      return fsManager.addModToModpack(modpackId, modId);
+      const result = await fsManager.addModToModpack(modpackId, modId);
+      if (!result.success && result.error) {
+        throw new Error(result.error);
+      }
+      return result.success;
     }
   );
 
@@ -246,7 +254,7 @@ async function initializeBackend() {
       let exported = 0;
       for (const modId of modIds) {
         const mod = await fsManager.getModById(modId);
-        if (mod) {
+        if (mod && mod.path) {
           const targetPath = path.join(targetFolder, mod.filename);
           await fs.copy(mod.path, targetPath);
           exported++;
@@ -262,12 +270,14 @@ async function initializeBackend() {
   // Export modpack to game folder
   ipcMain.handle("scanner:exportModpackToGameFolder", async (_, modpackId: string, targetFolder: string) => {
     try {
-      const mods = await fsManager.getModpackMods(modpackId);
+      const mods = await fsManager.getModsInModpack(modpackId);
       let exported = 0;
       for (const mod of mods) {
-        const targetPath = path.join(targetFolder, mod.filename);
-        await fs.copy(mod.path, targetPath);
-        exported++;
+        if (mod.path) {
+          const targetPath = path.join(targetFolder, mod.filename);
+          await fs.copy(mod.path, targetPath);
+          exported++;
+        }
       }
       return { success: true, count: exported };
     } catch (error: any) {
@@ -551,7 +561,7 @@ async function initializeBackend() {
 
         // Add mods to overrides/mods/
         for (const mod of mods) {
-          if (await fs.pathExists(mod.path)) {
+          if (mod.path && await fs.pathExists(mod.path)) {
             const modBuffer = await fs.readFile(mod.path);
             zip.addFile(`overrides/mods/${mod.filename}`, modBuffer);
           }
@@ -610,6 +620,25 @@ async function initializeBackend() {
     return fsManager.importModex(result.filePaths[0]);
   });
 
+  // Import CurseForge modpack ZIP
+  ipcMain.handle("share:importCurseForgeZip", async () => {
+    if (!win) return null;
+
+    const result = await dialog.showOpenDialog(win, {
+      filters: [{ name: "CurseForge Modpack", extensions: ["zip"] }],
+      properties: ["openFile"],
+    });
+
+    if (result.canceled || !result.filePaths[0]) return null;
+
+    return fsManager.importCurseForgeZip(result.filePaths[0], (progress) => {
+      // Send progress to renderer
+      if (win) {
+        win.webContents.send("cf-import-progress", progress);
+      }
+    });
+  });
+
   // Get share info for a modpack
   ipcMain.handle("share:getInfo", async (_, modpackId: string) => {
     const manifestPath = path.join(fsManager.getModpackPath(modpackId), "modpack.json");
@@ -627,6 +656,355 @@ async function initializeBackend() {
   ipcMain.handle("share:generateCode", async (_, modpackId: string) => {
     const { code, checksum } = await fsManager.createShareManifest(modpackId);
     return { code, checksum };
+  });
+
+  // ==================== MOD UPDATES ====================
+
+  // Initialize update service
+  updateService = new ModUpdateService(fsManager.getBasePath());
+  curseforgeService = new CurseForgeService(fsManager.getBasePath());
+  
+  // Connect CurseForge service to FileSystemManager for downloads
+  fsManager.setCurseForgeService(curseforgeService);
+
+  // Set API key
+  ipcMain.handle("updates:setApiKey", async (_, source: "curseforge" | "modrinth", apiKey: string) => {
+    await updateService.saveApiKey(source, apiKey);
+    // Also update CurseForge service
+    if (source === "curseforge") {
+      await curseforgeService.setApiKey(apiKey);
+    }
+    return { success: true };
+  });
+
+  // Get API key
+  ipcMain.handle("updates:getApiKey", async (_, source: "curseforge" | "modrinth") => {
+    return updateService.getApiKey(source);
+  });
+
+  // Check update for single mod
+  ipcMain.handle("updates:checkMod", async (_, modId: string) => {
+    const mod = await fsManager.getModById(modId);
+    if (!mod) throw new Error("Mod not found");
+    
+    // For CurseForge mods without local file, check via CF API
+    if (!mod.path && mod.cf_project_id && mod.cf_file_id) {
+      return updateService.checkCurseForgeModUpdate(
+        mod.id,
+        mod.cf_project_id,
+        mod.cf_file_id,
+        mod.version,
+        mod.game_version,
+        mod.loader
+      );
+    }
+    
+    if (!mod.path) throw new Error("Mod has no local file and no CurseForge info");
+    
+    return updateService.checkForUpdate(
+      mod.id,
+      mod.path,
+      mod.version,
+      mod.game_version,
+      mod.loader
+    );
+  });
+
+  // Check updates for all mods in library
+  // Each mod checks for updates compatible with ITS OWN game_version
+  ipcMain.handle("updates:checkAll", async () => {
+    const mods = await fsManager.getAllMods();
+    
+    // Separate local mods and CF mods
+    const localMods = mods.filter(m => m.path);
+    const cfMods = mods.filter(m => !m.path && m.cf_project_id && m.cf_file_id);
+    
+    // Check local mods via fingerprint - use each mod's own game_version
+    const localResults = await updateService.checkModpackUpdates(
+      localMods.map(m => ({
+        id: m.id,
+        path: m.path!,
+        version: m.version,
+        game_version: m.game_version, // Use mod's own version
+        loader: m.loader,
+      }))
+    );
+    
+    // Check CF mods via API - use each mod's own game_version
+    const cfResults = await Promise.all(
+      cfMods.map(m => updateService.checkCurseForgeModUpdate(
+        m.id,
+        m.cf_project_id!,
+        m.cf_file_id!,
+        m.version,
+        m.game_version, // Use mod's own version
+        m.loader
+      ))
+    );
+    
+    return [...localResults, ...cfResults];
+  });
+
+  // Check updates for mods in a modpack (uses modpack's MC version and loader)
+  ipcMain.handle("updates:checkModpack", async (_, modpackId: string) => {
+    const modpack = await fsManager.getModpackById(modpackId);
+    if (!modpack) throw new Error("Modpack not found");
+    
+    const mods = await fsManager.getModsInModpack(modpackId);
+    
+    // Use modpack's minecraft_version and loader - REQUIRED for modpack updates
+    const mcVersion = modpack.minecraft_version;
+    const loader = modpack.loader;
+    
+    if (!mcVersion || !loader) {
+      throw new Error("Modpack must have minecraft_version and loader set to check for updates");
+    }
+    
+    // Separate local mods and CF mods in the modpack
+    const localMods = mods.filter(m => m.path);
+    const cfMods = mods.filter(m => m.cf_project_id && m.cf_file_id);
+    
+    // Check local mods - override with modpack's version/loader
+    const localResults = await updateService.checkModpackUpdates(
+      localMods.map(m => ({
+        id: m.id,
+        path: m.path!,
+        version: m.version,
+        game_version: mcVersion,
+        loader: loader,
+      }))
+    );
+    
+    // Check CF mods - override with modpack's version/loader
+    const cfResults = await Promise.all(
+      cfMods.map(m => updateService.checkCurseForgeModUpdate(
+        m.id,
+        m.cf_project_id!,
+        m.cf_file_id!,
+        m.version,
+        mcVersion,
+        loader
+      ))
+    );
+    
+    return [...localResults, ...cfResults];
+  });
+
+  // Download and apply update
+  ipcMain.handle("updates:applyUpdate", async (_, modId: string, downloadUrl: string) => {
+    const mod = await fsManager.getModById(modId);
+    if (!mod) throw new Error("Mod not found");
+    if (!mod.path) throw new Error("Mod has no local file");
+
+    const modDir = path.dirname(mod.path);
+    const result = await updateService.downloadUpdate(downloadUrl, modDir, mod.path);
+
+    if (result.success && result.newPath) {
+      // Re-scan the new mod file to update metadata (use static method)
+      const newModInfo = await JarScanner.scanJarFile(result.newPath);
+      
+      if (newModInfo) {
+        // Update mod in database
+        await fsManager.updateMod(modId, {
+          filename: path.basename(result.newPath),
+          name: newModInfo.name,
+          version: newModInfo.version,
+          path: result.newPath,
+        });
+      }
+    }
+
+    return result;
+  });
+
+  // Update mod in modpack (for propagating updates)
+  ipcMain.handle("updates:applyModpackUpdate", async (_, modpackId: string, modId: string, downloadUrl: string) => {
+    const modpackPath = fsManager.getModpackPath(modpackId);
+    const modsDir = path.join(modpackPath, "mods");
+    
+    // Find the mod file in the modpack
+    const mods = await fsManager.getModsInModpack(modpackId);
+    const mod = mods.find(m => m.id === modId);
+    
+    if (!mod) throw new Error("Mod not found in modpack");
+
+    // The mod path in modpack is inside the modpack's mods folder
+    const modPath = path.join(modsDir, mod.filename);
+    
+    const result = await updateService.downloadUpdate(downloadUrl, modsDir, modPath);
+    
+    return result;
+  });
+
+  // Refresh mod metadata from CurseForge API
+  ipcMain.handle("mods:refreshMetadata", async (_, modId: string) => {
+    const mod = await fsManager.getModById(modId);
+    if (!mod) throw new Error("Mod not found");
+    if (!mod.path) throw new Error("Mod has no local file");
+
+    const apiMetadata = await updateService.getModMetadataFromApi(mod.path);
+    
+    if (apiMetadata) {
+      const updates: Partial<typeof mod> = {};
+      
+      if (apiMetadata.loader && apiMetadata.loader !== 'unknown') {
+        updates.loader = apiMetadata.loader;
+      }
+      if (apiMetadata.game_version && apiMetadata.game_version !== 'unknown') {
+        updates.game_version = apiMetadata.game_version;
+      }
+      if (apiMetadata.name && mod.name === mod.filename) {
+        updates.name = apiMetadata.name;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await fsManager.updateMod(modId, updates);
+        return { success: true, updates };
+      }
+    }
+    
+    return { success: false, error: "Could not get metadata from API" };
+  });
+
+  // Refresh all mods metadata
+  ipcMain.handle("mods:refreshAllMetadata", async () => {
+    const mods = await fsManager.getAllMods();
+    let updated = 0;
+    let failed = 0;
+
+    for (const mod of mods) {
+      // Skip mods that already have proper metadata or no local file
+      if (!mod.path || (mod.loader !== 'unknown' && mod.game_version !== 'unknown')) {
+        continue;
+      }
+
+      try {
+        const apiMetadata = await updateService.getModMetadataFromApi(mod.path);
+        
+        if (apiMetadata) {
+          const updates: Partial<typeof mod> = {};
+          
+          if (apiMetadata.loader && apiMetadata.loader !== 'unknown' && mod.loader === 'unknown') {
+            updates.loader = apiMetadata.loader;
+          }
+          if (apiMetadata.game_version && apiMetadata.game_version !== 'unknown' && mod.game_version === 'unknown') {
+            updates.game_version = apiMetadata.game_version;
+          }
+          if (apiMetadata.name && mod.name === mod.filename) {
+            updates.name = apiMetadata.name;
+          }
+          
+          if (Object.keys(updates).length > 0) {
+            await fsManager.updateMod(mod.id, updates);
+            updated++;
+          }
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
+
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    return { updated, failed, total: mods.length };
+  });
+
+  // ==================== CURSEFORGE API ====================
+
+  // Check if API key is set
+  ipcMain.handle("curseforge:hasApiKey", async () => {
+    return curseforgeService.hasApiKey();
+  });
+
+  // Search mods
+  ipcMain.handle("curseforge:search", async (_, options: {
+    query?: string;
+    gameVersion?: string;
+    modLoader?: string;
+    categoryId?: number;
+    pageSize?: number;
+    index?: number;
+  }) => {
+    return curseforgeService.searchMods(options);
+  });
+
+  // Get single mod
+  ipcMain.handle("curseforge:getMod", async (_, modId: number) => {
+    return curseforgeService.getMod(modId);
+  });
+
+  // Get mod files
+  ipcMain.handle("curseforge:getModFiles", async (_, modId: number, options?: {
+    gameVersion?: string;
+    modLoader?: string;
+  }) => {
+    return curseforgeService.getModFiles(modId, options);
+  });
+
+  // Get categories
+  ipcMain.handle("curseforge:getCategories", async () => {
+    return curseforgeService.getCategories();
+  });
+
+  // Get popular mods
+  ipcMain.handle("curseforge:getPopular", async (_, gameVersion?: string, modLoader?: string) => {
+    return curseforgeService.getPopularMods(gameVersion, modLoader);
+  });
+
+  // Download mod file
+  ipcMain.handle("curseforge:downloadMod", async (_, modId: number, fileId: number, destPath: string) => {
+    return curseforgeService.downloadFile(modId, fileId, destPath, (percent) => {
+      win?.webContents.send("download-progress", { modId, fileId, percent });
+    });
+  });
+
+  // Add mod from CurseForge to library
+  ipcMain.handle("mods:addFromCurseForge", async (_, projectId: number, fileId: number, preferredLoader?: string) => {
+    try {
+      // Get mod and file info from CurseForge
+      const cfMod = await curseforgeService.getMod(projectId);
+      if (!cfMod) throw new Error("Mod not found on CurseForge");
+
+      const cfFile = await curseforgeService.getFile(projectId, fileId);
+      if (!cfFile) throw new Error("File not found on CurseForge");
+
+      // Convert to our library format, passing the preferred loader
+      const modData = curseforgeService.modToLibraryFormat(cfMod, cfFile, preferredLoader);
+
+      // Create mod entry in database (without downloading the file)
+      const mod: Mod = {
+        id: `cf-${projectId}-${fileId}`, // Unique ID based on CF IDs
+        filename: modData.filename,
+        name: modData.name,
+        version: modData.version,
+        game_version: modData.game_version,
+        loader: modData.loader,
+        description: modData.description,
+        author: modData.author,
+        path: "", // No local path yet
+        hash: "",
+        created_at: new Date().toISOString(),
+        size: modData.file_size,
+        cf_project_id: projectId,
+        cf_file_id: fileId,
+        thumbnail_url: modData.thumbnail_url || undefined,
+        download_count: modData.download_count,
+        release_type: modData.release_type,
+        date_released: modData.date_released,
+        source: "curseforge",
+      };
+
+      // Add to database
+      await fsManager.addMod(mod);
+
+      return mod;
+    } catch (err) {
+      console.error("Failed to add mod from CurseForge:", err);
+      return null;
+    }
   });
 }
 

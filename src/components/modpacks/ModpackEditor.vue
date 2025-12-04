@@ -9,8 +9,12 @@ import {
   Check,
   ImagePlus,
   HardDrive,
+  ArrowUpCircle,
+  Lock,
+  RefreshCw,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
+import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import type { Mod, Modpack } from "@/types/electron";
 
 const props = defineProps<{
@@ -31,9 +35,54 @@ const availableMods = ref<Mod[]>([]);
 const searchQueryInstalled = ref("");
 const searchQueryAvailable = ref("");
 const isLoading = ref(true);
-const sortBy = ref<"name" | "loader" | "version">("name");
+const isRefreshingMetadata = ref(false);
+const sortBy = ref<"name" | "version">("name");
 const sortDir = ref<"asc" | "desc">("asc");
 const selectedModIds = ref<Set<string>>(new Set());
+const showUpdatesDialog = ref(false);
+
+// Check mod compatibility with modpack
+function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
+  if (!modpack.value) return { compatible: true };
+  
+  const packLoader = modpack.value.loader?.toLowerCase();
+  const packVersion = modpack.value.minecraft_version;
+  const modLoader = mod.loader?.toLowerCase();
+  const modVersion = mod.game_version;
+  
+  // Check loader compatibility
+  if (packLoader && modLoader && modLoader !== 'unknown') {
+    // NeoForge and Forge have some compatibility
+    const isNeoForgeForgeCompat = 
+      (packLoader === 'neoforge' && modLoader === 'forge') ||
+      (packLoader === 'forge' && modLoader === 'neoforge');
+    
+    if (modLoader !== packLoader && !isNeoForgeForgeCompat) {
+      return { 
+        compatible: false, 
+        reason: `Requires ${modLoader}, modpack uses ${packLoader}` 
+      };
+    }
+  }
+  
+  // Check MC version compatibility
+  if (packVersion && modVersion && modVersion !== 'unknown') {
+    const versionsMatch = 
+      modVersion === packVersion ||
+      modVersion.startsWith(packVersion) ||
+      packVersion.startsWith(modVersion) ||
+      modVersion.includes(packVersion);
+    
+    if (!versionsMatch) {
+      return { 
+        compatible: false, 
+        reason: `For MC ${modVersion}, modpack is ${packVersion}` 
+      };
+    }
+  }
+  
+  return { compatible: true };
+}
 
 // Stats
 const loaderStats = computed(() => {
@@ -58,14 +107,45 @@ const filteredInstalledMods = computed(() => {
   return mods;
 });
 
+// Mods with compatibility info
 const filteredAvailableMods = computed(() => {
   const currentIds = new Set(currentMods.value.map((m) => m.id));
-  return availableMods.value.filter(
-    (m) =>
-      !currentIds.has(m.id) &&
-      m.name.toLowerCase().includes(searchQueryAvailable.value.toLowerCase())
-  );
+  return availableMods.value
+    .filter(
+      (m) =>
+        !currentIds.has(m.id) &&
+        m.name.toLowerCase().includes(searchQueryAvailable.value.toLowerCase())
+    )
+    .map((mod) => {
+      const compatibility = isModCompatible(mod);
+      return {
+        ...mod,
+        isCompatible: compatibility.compatible,
+        incompatibilityReason: compatibility.reason,
+      };
+    })
+    // Sort: compatible mods first, then incompatible
+    .sort((a, b) => {
+      if (a.isCompatible && !b.isCompatible) return -1;
+      if (!a.isCompatible && b.isCompatible) return 1;
+      return a.name.localeCompare(b.name);
+    });
 });
+
+// Refresh metadata for mods with unknown loader/version
+async function refreshModsMetadata() {
+  isRefreshingMetadata.value = true;
+  try {
+    const result = await window.api.mods.refreshAllMetadata();
+    console.log(`Metadata refresh: ${result.updated} updated, ${result.failed} failed`);
+    await loadData();
+    emit("update");
+  } catch (err) {
+    console.error("Failed to refresh metadata:", err);
+  } finally {
+    isRefreshingMetadata.value = false;
+  }
+}
 
 async function loadData() {
   if (!props.modpackId) return;
@@ -93,6 +173,8 @@ async function addMod(modId: string) {
     await loadData();
     emit("update");
   } catch (err) {
+    const errorMsg = (err as Error).message;
+    alert(`Cannot add mod: ${errorMsg}`);
     console.error("Failed to add mod:", err);
   }
 }
@@ -147,7 +229,7 @@ function clearSelection() {
   selectedModIds.value = new Set();
 }
 
-function toggleSort(field: "name" | "loader" | "version") {
+function toggleSort(field: "name" | "version") {
   if (sortBy.value === field) {
     sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
   } else {
@@ -228,6 +310,17 @@ watch(
             variant="outline"
             size="sm"
             class="gap-2"
+            :disabled="!modpack?.minecraft_version || !modpack?.loader"
+            :title="!modpack?.minecraft_version || !modpack?.loader ? 'Set Minecraft version and loader first' : 'Check for mod updates'"
+            @click="showUpdatesDialog = true"
+          >
+            <ArrowUpCircle class="w-4 h-4" />
+            Updates
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="gap-2"
             @click="$emit('export')"
             title="Export as ZIP file"
           >
@@ -289,10 +382,10 @@ watch(
                 </button>
                 <button
                   class="h-7 text-xs px-2 rounded-md transition-colors hover:bg-accent"
-                  :class="sortBy === 'loader' ? 'bg-accent' : ''"
-                  @click="toggleSort('loader')"
+                  :class="sortBy === 'version' ? 'bg-accent' : ''"
+                  @click="toggleSort('version')"
                 >
-                  Loader
+                  Version
                 </button>
               </div>
             </div>
@@ -365,30 +458,63 @@ watch(
             class="p-3 border-b bg-muted/20 font-medium text-sm flex items-center justify-between gap-2"
           >
             <span>Available Mods</span>
-            <div class="relative w-44">
-              <Search
-                class="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground"
-              />
-              <input
-                v-model="searchQueryAvailable"
-                placeholder="Search library..."
-                class="w-full h-7 pl-7 pr-2 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-              />
+            <div class="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-7 text-xs"
+                :disabled="isRefreshingMetadata"
+                @click="refreshModsMetadata"
+                title="Refresh mod metadata from API"
+              >
+                <RefreshCw class="w-3.5 h-3.5 mr-1" :class="{ 'animate-spin': isRefreshingMetadata }" />
+                Refresh
+              </Button>
+              <div class="relative w-44">
+                <Search
+                  class="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground"
+                />
+                <input
+                  v-model="searchQueryAvailable"
+                  placeholder="Search library..."
+                  class="w-full h-7 pl-7 pr-2 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
             </div>
           </div>
           <div class="flex-1 overflow-y-auto p-2 space-y-1">
             <div
               v-for="mod in filteredAvailableMods"
               :key="mod.id"
-              class="flex items-center justify-between p-2 rounded-md border border-transparent hover:border-border hover:bg-accent/50 transition-colors group cursor-pointer"
+              class="flex items-center justify-between p-2 rounded-md border transition-colors relative"
+              :class="[
+                mod.isCompatible 
+                  ? 'border-transparent hover:border-border hover:bg-accent/50 cursor-pointer group' 
+                  : 'border-transparent bg-muted/30 opacity-50 cursor-not-allowed'
+              ]"
+              :title="mod.incompatibilityReason"
             >
+              <!-- Lock icon for incompatible mods -->
+              <div 
+                v-if="!mod.isCompatible" 
+                class="absolute inset-0 flex items-center justify-center pointer-events-none"
+              >
+                <div class="bg-background/80 rounded-full p-1">
+                  <Lock class="w-4 h-4 text-muted-foreground" />
+                </div>
+              </div>
+              
               <div class="min-w-0">
                 <div class="font-medium text-sm truncate">{{ mod.name }}</div>
                 <div class="text-xs text-muted-foreground truncate">
                   {{ mod.version }} • {{ mod.loader }}
+                  <span v-if="!mod.isCompatible" class="text-yellow-500 ml-1">
+                    ({{ mod.incompatibilityReason }})
+                  </span>
                 </div>
               </div>
               <Button
+                v-if="mod.isCompatible"
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7 text-primary opacity-0 group-hover:opacity-100 transition-opacity"
@@ -407,5 +533,13 @@ watch(
         </div>
       </div>
     </div>
+
+    <!-- Updates Dialog -->
+    <UpdatesDialog
+      :open="showUpdatesDialog"
+      :modpack-id="modpackId"
+      @close="showUpdatesDialog = false"
+      @updated="loadData"
+    />
   </div>
 </template>

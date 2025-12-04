@@ -8,6 +8,8 @@ import ModEditDialog from "@/components/mods/ModEditDialog.vue";
 import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import AddToModpackDialog from "@/components/modpacks/AddToModpackDialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
+import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
+import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 import { useFolderTree } from "@/composables/useFolderTree";
 import {
@@ -31,6 +33,8 @@ import {
   HardDrive,
   Folder,
   FolderInput,
+  ArrowUpCircle,
+  Globe,
 } from "lucide-vue-next";
 import { ref, onMounted, computed, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -51,6 +55,9 @@ const error = ref<string | null>(null);
 const searchQuery = ref("");
 const selectedLoader = ref<string>("all");
 const searchField = ref<"all" | "name" | "author" | "version" | "description">("all");
+
+// CurseForge search dialog
+const showCurseForgeSearch = ref(false);
 
 // Folder filter
 const selectedFolderId = ref<string | null>(null);
@@ -82,6 +89,7 @@ const showEditDialog = ref(false);
 const showCreateModpackDialog = ref(false);
 const showAddToModpackDialog = ref(false);
 const showMoveToFolderDialog = ref(false);
+const showUpdatesDialog = ref(false);
 const modToDelete = ref<string | null>(null);
 const modToEdit = ref<Mod | null>(null);
 
@@ -274,7 +282,7 @@ async function loadMods() {
 }
 
 // Sorting
-function toggleSort(field: "name" | "loader" | "created_at" | "version") {
+function toggleSort(field: "name" | "loader" | "created_at" | "version" | "size") {
   if (sortBy.value === field) {
     sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
   } else {
@@ -413,54 +421,15 @@ async function addSelectionToModpack(packId: string) {
 }
 
 // Import Functions
+// NOTE: Local file imports disabled - use CurseForge instead
 async function importFolder() {
-  if (!isElectron()) return;
-  const folder = await window.api.scanner.selectFolder();
-  if (!folder) return;
-
-  showProgress.value = true;
-  progressTitle.value = "Scanning Folder";
-  progressMessage.value = "Analyzing mod files...";
-
-  try {
-    // Scan to find JAR files
-    const metadata = await window.api.scanner.scanFolder(folder);
-    if (metadata.length === 0) {
-      alert("No mods found.");
-      showProgress.value = false;
-      return;
-    }
-
-    // Extract paths from metadata and import
-    const paths = metadata.map(m => m.path);
-    progressMessage.value = `Importing ${metadata.length} mods to library...`;
-    await window.api.scanner.importMods(paths);
-    await loadMods();
-  } catch (err) {
-    alert("Import failed: " + (err as Error).message);
-  } finally {
-    showProgress.value = false;
-  }
+  alert("Local folder import is temporarily disabled. Please use 'Browse CurseForge' to add mods, or go to Modpacks page to 'Import CF Modpack'.");
+  return;
 }
 
 async function importFiles() {
-  if (!isElectron()) return;
-  const files = await window.api.scanner.selectFiles();
-  if (files.length === 0) return;
-
-  showProgress.value = true;
-  progressTitle.value = "Importing Files";
-  progressMessage.value = `Importing ${files.length} mods to library...`;
-
-  try {
-    // Directly import selected files
-    await window.api.scanner.importMods(files);
-    await loadMods();
-  } catch (err) {
-    alert("Import failed: " + (err as Error).message);
-  } finally {
-    showProgress.value = false;
-  }
+  alert("Local file import is temporarily disabled. Please use 'Browse CurseForge' to add mods, or go to Modpacks page to 'Import CF Modpack'.");
+  return;
 }
 
 // Delete Single
@@ -531,36 +500,9 @@ async function handleDrop(event: DragEvent) {
   isDragging.value = false;
   dragCounter.value = 0;
   
-  if (!event.dataTransfer?.files.length) return;
-  
-  const jarFiles: string[] = [];
-  for (const file of Array.from(event.dataTransfer.files)) {
-    if (file.name.endsWith('.jar')) {
-      // Use electronUtils to get the file path safely
-      const filePath = window.electronUtils?.getPathForFile(file) || (file as any).path;
-      if (filePath) {
-        jarFiles.push(filePath);
-      }
-    }
-  }
-  
-  if (jarFiles.length === 0) {
-    alert("No .jar files found. Please drop Minecraft mod files.");
-    return;
-  }
-  
-  showProgress.value = true;
-  progressTitle.value = "Importing Mods";
-  progressMessage.value = `Importing ${jarFiles.length} mods...`;
-  
-  try {
-    await window.api.scanner.importMods(jarFiles);
-    await loadMods();
-  } catch (err) {
-    alert("Import failed: " + (err as Error).message);
-  } finally {
-    showProgress.value = false;
-  }
+  // Drag & drop import is temporarily disabled
+  alert("Drag & drop import is temporarily disabled. Please use 'Browse CurseForge' to add mods, or go to Modpacks page to 'Import CF Modpack'.");
+  return;
 }
 
 // Handle URL filter parameter
@@ -688,17 +630,22 @@ onMounted(() => {
       </div>
       <div class="flex gap-2">
         <Button
-          @click="importFiles"
+          @click="showUpdatesDialog = true"
           :disabled="!isElectron()"
-          variant="secondary"
+          variant="outline"
+          class="gap-2"
+          title="Controlla aggiornamenti mod"
+        >
+          <ArrowUpCircle class="w-4 h-4" />
+          Updates
+        </Button>
+        <Button
+          @click="showCurseForgeSearch = true"
+          variant="default"
           class="gap-2"
         >
-          <FilePlus class="w-4 h-4" />
-          Import Files
-        </Button>
-        <Button @click="importFolder" :disabled="!isElectron()" class="gap-2">
-          <FolderPlus class="w-4 h-4" />
-          Import Folder
+          <Globe class="w-4 h-4" />
+          Browse CurseForge
         </Button>
       </div>
     </div>
@@ -1226,6 +1173,20 @@ onMounted(() => {
       :open="showProgress"
       :title="progressTitle"
       :message="progressMessage"
+    />
+
+    <!-- Updates Dialog -->
+    <UpdatesDialog
+      :open="showUpdatesDialog"
+      @close="showUpdatesDialog = false"
+      @updated="loadMods"
+    />
+
+    <!-- CurseForge Search Dialog -->
+    <CurseForgeSearch
+      :open="showCurseForgeSearch"
+      @close="showCurseForgeSearch = false"
+      @added="loadMods"
     />
   </div>
 </template>

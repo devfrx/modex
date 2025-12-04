@@ -25,6 +25,94 @@ export class JarScanner {
   }
 
   /**
+   * Parse filename to extract mod name, version, loader, and game version
+   * Examples:
+   * - CrashAssistant-neoforge-1.21.9-1.21.10-1.10.24.jar
+   * - sodium-fabric-0.6.0+mc1.21.4.jar
+   * - jei-1.20.1-forge-15.2.0.27.jar
+   * - create-1.20.1-0.5.1.f.jar
+   */
+  private static parseFilename(filename: string): { 
+    name: string; 
+    version: string; 
+    loader: string; 
+    game_version: string 
+  } {
+    const baseName = filename.replace('.jar', '');
+    const loaders = ['neoforge', 'forge', 'fabric', 'quilt'];
+    
+    let loader = 'unknown';
+    let game_version = 'unknown';
+    let version = '1.0.0';
+    let name = baseName;
+    
+    // Find loader in filename
+    for (const l of loaders) {
+      if (baseName.toLowerCase().includes(`-${l}-`) || 
+          baseName.toLowerCase().includes(`-${l}+`) ||
+          baseName.toLowerCase().includes(`+${l}`)) {
+        loader = l;
+        break;
+      }
+    }
+    
+    // Find MC version pattern (1.XX or 1.XX.X)
+    const mcVersionPatterns = [
+      /[+-]?(1\.2[0-4](?:\.\d+)?)/g,  // 1.20, 1.20.1, 1.21, 1.21.4, etc.
+      /[+-]?(1\.1[6-9](?:\.\d+)?)/g,  // 1.16, 1.17, 1.18, 1.19
+    ];
+    
+    for (const pattern of mcVersionPatterns) {
+      const matches = [...baseName.matchAll(pattern)];
+      if (matches.length > 0) {
+        // Take the first MC version found
+        game_version = matches[0][1];
+        break;
+      }
+    }
+    
+    // Find mod version - usually comes after MC version or at end
+    // Pattern: semver like X.Y.Z or X.Y.Z.W
+    const versionPattern = /(\d+\.\d+\.\d+(?:\.\d+)?)/g;
+    const allVersions = [...baseName.matchAll(versionPattern)];
+    
+    if (allVersions.length > 0) {
+      // Filter out MC versions to find mod version
+      const modVersions = allVersions.filter(m => {
+        const v = m[1];
+        return !v.startsWith('1.20') && !v.startsWith('1.21') && 
+               !v.startsWith('1.19') && !v.startsWith('1.18') && 
+               !v.startsWith('1.17') && !v.startsWith('1.16');
+      });
+      
+      if (modVersions.length > 0) {
+        version = modVersions[modVersions.length - 1][1]; // Take last one (usually mod version)
+      } else if (allVersions.length > 1) {
+        // If all versions look like MC versions, take the last one as mod version
+        version = allVersions[allVersions.length - 1][1];
+      }
+    }
+    
+    // Extract clean name - remove loader, versions, and common separators
+    let cleanName = baseName;
+    // Remove loader
+    for (const l of loaders) {
+      cleanName = cleanName.replace(new RegExp(`[-+]${l}[-+]?`, 'gi'), '-');
+    }
+    // Remove version-like strings
+    cleanName = cleanName.replace(/[-+]?\d+\.\d+(?:\.\d+)*(?:\+[a-z0-9]+)?/gi, '');
+    // Clean up
+    cleanName = cleanName.replace(/[-+]+/g, ' ').trim();
+    cleanName = cleanName.replace(/\s+/g, ' ');
+    
+    if (cleanName) {
+      name = cleanName;
+    }
+    
+    return { name, version, loader, game_version };
+  }
+
+  /**
    * Extract metadata from a Fabric mod (fabric.mod.json)
    */
   private static extractFabricMetadata(
@@ -162,15 +250,17 @@ export class JarScanner {
         this.extractForgeMetadata(zip, filePath);
 
       if (!metadata) {
-        // Fallback: parse filename
+        // Fallback: parse filename intelligently
         console.warn(
           `Could not extract metadata from ${filename}, using filename`
         );
+        
+        const parsed = this.parseFilename(filename);
         metadata = {
-          name: filename.replace(".jar", ""),
-          version: "1.0.0",
-          loader: "unknown",
-          game_version: "unknown",
+          name: parsed.name,
+          version: parsed.version,
+          loader: parsed.loader,
+          game_version: parsed.game_version,
         };
       }
 

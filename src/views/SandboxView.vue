@@ -926,8 +926,9 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
         }
         setTimeout(() => { feedbackMessage.value = null; }, 2500);
       } catch (err) {
+        const errorMsg = (err as Error).message;
+        feedbackMessage.value = errorMsg.includes("Incompatible") ? errorMsg : `Error: ${errorMsg}`;
         console.error("Error adding mod to modpack:", err);
-        feedbackMessage.value = `Error adding mod`;
         setTimeout(() => { feedbackMessage.value = null; }, 3000);
       }
     }

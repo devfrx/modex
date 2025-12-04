@@ -3,9 +3,10 @@ import path from "path";
 import fs from "fs-extra";
 import crypto from "crypto";
 import { JarScanner, ModMetadata } from "./JarScanner.js";
+import { CurseForgeService } from "./CurseForgeService";
 
 export interface Mod {
-  id: string; // Hash del file (SHA256)
+  id: string; // CF project-file ID or hash for local mods
   filename: string;
   name: string;
   version: string;
@@ -13,16 +14,27 @@ export interface Mod {
   loader: string;
   description?: string;
   author?: string;
-  path: string; // Path assoluto nella library
-  hash: string;
+  path?: string; // Path assoluto nella library (optional for CF mods)
+  hash?: string;
   created_at: string;
   size: number; // Dimensione file in bytes
+  
+  // CurseForge specific fields
+  cf_project_id?: number;
+  cf_file_id?: number;
+  thumbnail_url?: string;
+  download_count?: number;
+  release_type?: 'release' | 'beta' | 'alpha';
+  date_released?: string;
+  source?: 'curseforge' | 'modrinth' | 'local';
 }
 
 export interface Modpack {
   id: string; // Nome cartella sanitizzato
   name: string;
   version: string;
+  minecraft_version?: string; // e.g. "1.20.1", "1.21.1"
+  loader?: string; // 'forge' | 'fabric' | 'quilt' | 'neoforge'
   description?: string;
   image_path?: string;
   created_at: string;
@@ -32,6 +44,8 @@ export interface Modpack {
 interface ModpackManifest {
   name: string;
   version: string;
+  minecraft_version?: string;
+  loader?: string;
   description?: string;
   created_at: string;
 }
@@ -52,6 +66,7 @@ export class FileSystemManager {
   private baseDir: string;
   private libraryDir: string;
   private modpacksDir: string;
+  private curseforgeService: CurseForgeService | null = null;
 
   constructor() {
     this.baseDir = path.join(app.getPath("userData"), "modex");
@@ -72,6 +87,10 @@ export class FileSystemManager {
     return this.libraryDir;
   }
 
+  setCurseForgeService(service: CurseForgeService): void {
+    this.curseforgeService = service;
+  }
+
   getModpacksPath(): string {
     return this.modpacksDir;
   }
@@ -82,30 +101,77 @@ export class FileSystemManager {
 
   // ==================== MODS (LIBRARY) ====================
 
+  private modsDbPath: string = "";
+
+  private async initModsDb() {
+    this.modsDbPath = path.join(this.baseDir, "mods.json");
+    if (!await fs.pathExists(this.modsDbPath)) {
+      await fs.writeJson(this.modsDbPath, { mods: [] }, { spaces: 2 });
+    }
+  }
+
+  private async loadModsDb(): Promise<{ mods: Mod[] }> {
+    await this.initModsDb();
+    try {
+      return await fs.readJson(this.modsDbPath);
+    } catch {
+      return { mods: [] };
+    }
+  }
+
+  private async saveModsDb(data: { mods: Mod[] }): Promise<void> {
+    await this.initModsDb();
+    await fs.writeJson(this.modsDbPath, data, { spaces: 2 });
+  }
+
   /**
-   * Ottiene tutte le mod dalla libreria
+   * Ottiene tutte le mod dalla libreria (database + filesystem per retrocompatibilità)
    */
   async getAllMods(): Promise<Mod[]> {
     await this.ensureDirectories();
-    const mods: Mod[] = [];
+    
+    // Load from database
+    const db = await this.loadModsDb();
+    const dbMods = db.mods || [];
+    const dbModIds = new Set(dbMods.map(m => m.id));
+    // Also track filenames to avoid duplicates from filesystem scan
+    const dbModFilenames = new Set(dbMods.map(m => m.filename.toLowerCase()));
 
-    if (!await fs.pathExists(this.libraryDir)) {
-      return mods;
-    }
-
-    const files = await fs.readdir(this.libraryDir);
-
-    for (const file of files) {
-      if (!file.endsWith(".jar")) continue;
-
-      const filePath = path.join(this.libraryDir, file);
-      const mod = await this.getModFromFile(filePath);
-      if (mod) {
-        mods.push(mod);
+    // Also scan library folder for local mods not in DB (retrocompatibility)
+    if (await fs.pathExists(this.libraryDir)) {
+      const files = await fs.readdir(this.libraryDir);
+      for (const file of files) {
+        if (!file.endsWith(".jar")) continue;
+        // Skip if we already have this file in DB (by filename)
+        if (dbModFilenames.has(file.toLowerCase())) continue;
+        
+        const filePath = path.join(this.libraryDir, file);
+        const mod = await this.getModFromFile(filePath);
+        if (mod && !dbModIds.has(mod.id)) {
+          dbMods.push({ ...mod, source: 'local' as const });
+        }
       }
     }
 
-    return mods.sort((a, b) => a.name.localeCompare(b.name));
+    return dbMods.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Aggiunge una mod al database (per mod da CurseForge)
+   */
+  async addMod(mod: Mod): Promise<void> {
+    const db = await this.loadModsDb();
+    
+    // Check if already exists
+    const existingIndex = db.mods.findIndex(m => m.id === mod.id);
+    if (existingIndex >= 0) {
+      // Update existing
+      db.mods[existingIndex] = mod;
+    } else {
+      db.mods.push(mod);
+    }
+    
+    await this.saveModsDb(db);
   }
 
   /**
@@ -207,14 +273,21 @@ export class FileSystemManager {
       await this.removeModFromModpack(modpack.id, modId);
     }
 
-    // Elimina il file
-    try {
-      await fs.remove(mod.path);
-      return true;
-    } catch (error) {
-      console.error(`Failed to delete mod ${mod.path}:`, error);
-      return false;
+    // Remove from database
+    const db = await this.loadModsDb();
+    db.mods = db.mods.filter(m => m.id !== modId);
+    await this.saveModsDb(db);
+
+    // Elimina il file locale se esiste
+    if (mod.path && await fs.pathExists(mod.path)) {
+      try {
+        await fs.remove(mod.path);
+      } catch (error) {
+        console.error(`Failed to delete mod file ${mod.path}:`, error);
+      }
     }
+    
+    return true;
   }
 
   /**
@@ -231,14 +304,25 @@ export class FileSystemManager {
   }
 
   /**
-   * Aggiorna i metadati di una mod (rinomina file se necessario)
+   * Aggiorna i metadati di una mod
    */
   async updateMod(modId: string, updates: Partial<Mod>): Promise<boolean> {
+    const db = await this.loadModsDb();
+    const modIndex = db.mods.findIndex(m => m.id === modId);
+    
+    if (modIndex >= 0) {
+      // Update in database
+      db.mods[modIndex] = { ...db.mods[modIndex], ...updates };
+      await this.saveModsDb(db);
+      return true;
+    }
+
+    // Fallback: mod might be local-only (not in DB yet)
     const mod = await this.getModById(modId);
     if (!mod) return false;
 
-    // Se si cambia il filename, rinomina il file
-    if (updates.filename && updates.filename !== mod.filename) {
+    // Se si cambia il filename e il file esiste, rinomina il file
+    if (updates.filename && updates.filename !== mod.filename && mod.path) {
       const newPath = path.join(this.libraryDir, updates.filename);
       
       // Aggiorna anche nei modpack
@@ -251,7 +335,9 @@ export class FileSystemManager {
         }
       }
 
-      await fs.rename(mod.path, newPath);
+      if (await fs.pathExists(mod.path)) {
+        await fs.rename(mod.path, newPath);
+      }
     }
 
     return true;
@@ -343,6 +429,8 @@ export class FileSystemManager {
         id: folderId,
         name: manifest.name,
         version: manifest.version,
+        minecraft_version: manifest.minecraft_version,
+        loader: manifest.loader,
         description: manifest.description,
         image_path: imagePath,
         created_at: manifest.created_at,
@@ -366,7 +454,13 @@ export class FileSystemManager {
   /**
    * Crea un nuovo modpack
    */
-  async createModpack(data: { name: string; version?: string; description?: string }): Promise<string> {
+  async createModpack(data: { 
+    name: string; 
+    version?: string; 
+    minecraft_version?: string;
+    loader?: string;
+    description?: string 
+  }): Promise<string> {
     await this.ensureDirectories();
 
     // Validate name
@@ -400,6 +494,8 @@ export class FileSystemManager {
     const manifest: ModpackManifest = {
       name: data.name,
       version: data.version || "1.0.0",
+      minecraft_version: data.minecraft_version,
+      loader: data.loader,
       description: data.description,
       created_at: new Date().toISOString(),
     };
@@ -422,6 +518,8 @@ export class FileSystemManager {
 
       if (updates.name !== undefined) manifest.name = updates.name;
       if (updates.version !== undefined) manifest.version = updates.version;
+      if (updates.minecraft_version !== undefined) manifest.minecraft_version = updates.minecraft_version;
+      if (updates.loader !== undefined) manifest.loader = updates.loader;
       if (updates.description !== undefined) manifest.description = updates.description;
 
       await fs.writeJson(manifestPath, manifest, { spaces: 2 });
@@ -492,12 +590,54 @@ export class FileSystemManager {
   // ==================== MODPACK-MOD RELATIONS ====================
 
   /**
+   * Gets the path to the modpack's mod manifest
+   */
+  private getModpackModsManifestPath(modpackId: string): string {
+    return path.join(this.getModpackPath(modpackId), "mods-manifest.json");
+  }
+
+  /**
+   * Loads the modpack's mod manifest (maps library mod IDs to filenames)
+   */
+  private async loadModpackModsManifest(modpackId: string): Promise<Record<string, string>> {
+    const manifestPath = this.getModpackModsManifestPath(modpackId);
+    if (await fs.pathExists(manifestPath)) {
+      try {
+        return await fs.readJson(manifestPath);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+
+  /**
+   * Saves the modpack's mod manifest
+   */
+  private async saveModpackModsManifest(modpackId: string, manifest: Record<string, string>): Promise<void> {
+    const manifestPath = this.getModpackModsManifestPath(modpackId);
+    await fs.writeJson(manifestPath, manifest, { spaces: 2 });
+  }
+
+  /**
    * Ottiene le mod di un modpack
+   * Usa il manifest per mantenere gli ID originali della libreria
    */
   async getModsInModpack(modpackId: string): Promise<Mod[]> {
     const modsDir = path.join(this.getModpackPath(modpackId), "mods");
     
     if (!await fs.pathExists(modsDir)) return [];
+
+    // Load manifest that maps library IDs to filenames
+    const manifest = await this.loadModpackModsManifest(modpackId);
+    const filenameToLibraryId = new Map<string, string>();
+    Object.entries(manifest).forEach(([libId, filename]) => {
+      filenameToLibraryId.set(filename, libId);
+    });
+
+    // Get all library mods for lookup
+    const allLibraryMods = await this.getAllMods();
+    const libraryModsById = new Map(allLibraryMods.map(m => [m.id, m]));
 
     const mods: Mod[] = [];
     const files = await fs.readdir(modsDir);
@@ -506,6 +646,19 @@ export class FileSystemManager {
       if (!file.endsWith(".jar")) continue;
 
       const filePath = path.join(modsDir, file);
+      
+      // Check if we have this file mapped to a library mod
+      const libraryModId = filenameToLibraryId.get(file);
+      if (libraryModId) {
+        const libraryMod = libraryModsById.get(libraryModId);
+        if (libraryMod) {
+          // Return the library mod with updated path
+          mods.push({ ...libraryMod, path: filePath });
+          continue;
+        }
+      }
+
+      // Fallback: scan the jar file
       const mod = await this.getModFromFile(filePath);
       if (mod) {
         mods.push(mod);
@@ -517,10 +670,56 @@ export class FileSystemManager {
 
   /**
    * Aggiunge una mod a un modpack (copia il file)
+   * Valida compatibilità loader e versione MC
    */
-  async addModToModpack(modpackId: string, modId: string): Promise<boolean> {
+  async addModToModpack(modpackId: string, modId: string): Promise<{ success: boolean; error?: string }> {
     const mod = await this.getModById(modId);
-    if (!mod) return false;
+    if (!mod) return { success: false, error: "Mod not found" };
+
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return { success: false, error: "Modpack not found" };
+
+    // Valida compatibilità loader
+    if (modpack.loader && mod.loader && mod.loader !== 'unknown') {
+      const modpackLoader = modpack.loader.toLowerCase();
+      const modLoader = mod.loader.toLowerCase();
+      
+      // Controlla se i loader sono compatibili
+      if (modLoader !== modpackLoader) {
+        // NeoForge può essere compatibile con Forge in alcuni casi, ma meglio avvisare
+        const isNeoForgeForgeCompat = 
+          (modpackLoader === 'neoforge' && modLoader === 'forge') ||
+          (modpackLoader === 'forge' && modLoader === 'neoforge');
+        
+        if (!isNeoForgeForgeCompat) {
+          return { 
+            success: false, 
+            error: `Incompatible loader: mod is for ${mod.loader}, but modpack uses ${modpack.loader}` 
+          };
+        }
+      }
+    }
+
+    // Valida compatibilità versione MC (se disponibile)
+    if (modpack.minecraft_version && mod.game_version && mod.game_version !== 'unknown') {
+      const modpackMcVersion = modpack.minecraft_version;
+      const modMcVersion = mod.game_version;
+      
+      // Controlla se le versioni sono compatibili (match esatto o prefisso)
+      const isVersionCompatible = 
+        modMcVersion === modpackMcVersion ||
+        modMcVersion.startsWith(modpackMcVersion) ||
+        modpackMcVersion.startsWith(modMcVersion) ||
+        // Gestisci versioni come ">=1.19" o range
+        modMcVersion.includes(modpackMcVersion);
+      
+      if (!isVersionCompatible) {
+        return { 
+          success: false, 
+          error: `Incompatible Minecraft version: mod is for ${mod.game_version}, but modpack is for ${modpack.minecraft_version}` 
+        };
+      }
+    }
 
     const modsDir = path.join(this.getModpackPath(modpackId), "mods");
     await fs.ensureDir(modsDir);
@@ -529,15 +728,52 @@ export class FileSystemManager {
 
     // Se esiste già, non copiare
     if (await fs.pathExists(destPath)) {
-      return true;
+      return { success: true };
+    }
+
+    // If mod has no local file (CF mod), download it first
+    if (!mod.path || mod.path === "") {
+      if (mod.cf_project_id && mod.cf_file_id && this.curseforgeService) {
+        console.log(`[FSManager] Downloading mod from CurseForge: ${mod.name}`);
+        try {
+          const result = await this.curseforgeService.downloadFile(
+            mod.cf_project_id,
+            mod.cf_file_id,
+            modsDir
+          );
+          
+          if (result.success) {
+            console.log(`[FSManager] Downloaded mod to: ${result.filePath}`);
+            // Save to manifest with library mod ID
+            const manifest = await this.loadModpackModsManifest(modpackId);
+            manifest[modId] = mod.filename;
+            await this.saveModpackModsManifest(modpackId, manifest);
+            return { success: true };
+          } else {
+            return { success: false, error: result.error || "Download failed" };
+          }
+        } catch (err) {
+          console.error(`[FSManager] Failed to download mod:`, err);
+          return { success: false, error: `Download failed: ${(err as Error).message}` };
+        }
+      } else {
+        return { 
+          success: false, 
+          error: "Mod has no local file and CurseForge download info is missing" 
+        };
+      }
     }
 
     try {
       await fs.copy(mod.path, destPath);
-      return true;
+      // Save to manifest with library mod ID
+      const manifest = await this.loadModpackModsManifest(modpackId);
+      manifest[modId] = mod.filename;
+      await this.saveModpackModsManifest(modpackId, manifest);
+      return { success: true };
     } catch (error) {
       console.error(`Failed to add mod to modpack:`, error);
-      return false;
+      return { success: false, error: "Failed to copy mod file" };
     }
   }
 
@@ -549,7 +785,21 @@ export class FileSystemManager {
     
     if (!await fs.pathExists(modsDir)) return false;
 
-    // Trova il file per hash
+    // First check manifest for library mod ID
+    const manifest = await this.loadModpackModsManifest(modpackId);
+    const filename = manifest[modId];
+    
+    if (filename) {
+      const filePath = path.join(modsDir, filename);
+      if (await fs.pathExists(filePath)) {
+        await fs.remove(filePath);
+        delete manifest[modId];
+        await this.saveModpackModsManifest(modpackId, manifest);
+        return true;
+      }
+    }
+
+    // Fallback: find file by hash (for older modpacks)
     const files = await fs.readdir(modsDir);
     for (const file of files) {
       if (!file.endsWith(".jar")) continue;
@@ -589,6 +839,12 @@ export class FileSystemManager {
     
     if (await fs.pathExists(sourceModsDir)) {
       await fs.copy(sourceModsDir, destModsDir);
+    }
+
+    // Copia mods-manifest.json se esiste
+    const sourceManifest = this.getModpackModsManifestPath(modpackId);
+    if (await fs.pathExists(sourceManifest)) {
+      await fs.copy(sourceManifest, this.getModpackModsManifestPath(newId));
     }
 
     // Copia cover se esiste
@@ -713,7 +969,7 @@ export class FileSystemManager {
 
     // Aggiungi mods
     for (const mod of mods) {
-      if (await fs.pathExists(mod.path)) {
+      if (mod.path && await fs.pathExists(mod.path)) {
         const modBuffer = await fs.readFile(mod.path);
         zip.addFile(`mods/${mod.filename}`, modBuffer);
       }
@@ -772,8 +1028,8 @@ export class FileSystemManager {
       // Update esistente
       modpackId = existingModpack.id;
       const existingMods = await this.getModsInModpack(modpackId);
-      const existingHashes = new Set(existingMods.map(m => m.hash));
-      const newHashes = new Set(manifest.mods.map((m: any) => m.hash));
+      const existingHashes = new Set<string>(existingMods.map(m => m.hash).filter((h): h is string => !!h));
+      const newHashes = new Set<string>(manifest.mods.map((m: any) => m.hash as string));
 
       // Calcola changes
       for (const hash of newHashes) {
@@ -784,7 +1040,7 @@ export class FileSystemManager {
         }
       }
       for (const hash of existingHashes) {
-        if (!newHashes.has(hash)) {
+        if (!newHashes.has(hash as string)) {
           changes.removed++;
         }
       }
@@ -792,7 +1048,7 @@ export class FileSystemManager {
       // Rimuovi mods non più presenti
       const modsDir = path.join(this.getModpackPath(modpackId), "mods");
       for (const mod of existingMods) {
-        if (!newHashes.has(mod.hash)) {
+        if (mod.hash && !newHashes.has(mod.hash)) {
           const modPath = path.join(modsDir, mod.filename);
           if (await fs.pathExists(modPath)) {
             await fs.remove(modPath);
@@ -844,6 +1100,317 @@ export class FileSystemManager {
       code: manifest.share_code,
       isUpdate,
       changes: isUpdate ? changes : undefined,
+    };
+  }
+
+  /**
+   * Import a CurseForge modpack ZIP (containing manifest.json)
+   * Downloads all mods from CurseForge API
+   */
+  async importCurseForgeZip(
+    zipPath: string,
+    onProgress?: (progress: { current: number; total: number; modName: string }) => void
+  ): Promise<{
+    success: boolean;
+    modpackId?: string;
+    modsImported: number;
+    modsSkipped: number;
+    errors: string[];
+  }> {
+    const AdmZip = (await import("adm-zip")).default;
+    const zip = new AdmZip(zipPath);
+    
+    // Find and parse manifest.json
+    const manifestEntry = zip.getEntry("manifest.json");
+    if (!manifestEntry) {
+      return {
+        success: false,
+        modsImported: 0,
+        modsSkipped: 0,
+        errors: ["Invalid CurseForge modpack: manifest.json not found"],
+      };
+    }
+
+    let manifest: {
+      minecraft: {
+        version: string;
+        modLoaders: { id: string; primary: boolean }[];
+      };
+      manifestType: string;
+      name: string;
+      version: string;
+      author: string;
+      files: { projectID: number; fileID: number; required: boolean }[];
+      overrides?: string;
+    };
+
+    try {
+      manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+    } catch (e) {
+      return {
+        success: false,
+        modsImported: 0,
+        modsSkipped: 0,
+        errors: ["Failed to parse manifest.json"],
+      };
+    }
+
+    // Extract loader from modLoaders
+    let loader = "unknown";
+    const primaryLoader = manifest.minecraft.modLoaders?.find((l) => l.primary);
+    if (primaryLoader) {
+      // Format is like "forge-47.2.0" or "fabric-0.15.3"
+      const loaderMatch = primaryLoader.id.match(/^(forge|fabric|quilt|neoforge)/i);
+      if (loaderMatch) {
+        loader = loaderMatch[1].toLowerCase();
+      }
+    }
+
+    const mcVersion = manifest.minecraft.version;
+
+    // Create the modpack
+    const modpackId = await this.createModpack({
+      name: manifest.name,
+      version: manifest.version || "1.0.0",
+      minecraft_version: mcVersion,
+      loader,
+      description: `Imported from CurseForge. Author: ${manifest.author || "Unknown"}`,
+    });
+
+    const errors: string[] = [];
+    let modsImported = 0;
+    let modsSkipped = 0;
+    const total = manifest.files.length;
+
+    // Check if CurseForge service is available
+    if (!this.curseforgeService) {
+      return {
+        success: false,
+        modpackId,
+        modsImported: 0,
+        modsSkipped: total,
+        errors: ["CurseForge API not configured. Please set API key in settings."],
+      };
+    }
+
+    // Cache existing mods to avoid repeated full library scans
+    const existingMods = await this.getAllMods();
+    const existingModsMap = new Map<string, Mod>();
+    for (const mod of existingMods) {
+      if (mod.cf_project_id && mod.cf_file_id) {
+        existingModsMap.set(`${mod.cf_project_id}-${mod.cf_file_id}`, mod);
+      }
+    }
+
+    // Download each mod
+    for (let i = 0; i < manifest.files.length; i++) {
+      const file = manifest.files[i];
+      const { projectID, fileID } = file;
+
+      try {
+        // Report progress
+        if (onProgress) {
+          onProgress({ current: i + 1, total, modName: `Mod ${projectID}` });
+        }
+
+        // Get mod info from CF
+        const cfMod = await this.curseforgeService.getMod(projectID);
+        if (!cfMod) {
+          errors.push(`Mod ${projectID} not found on CurseForge`);
+          modsSkipped++;
+          continue;
+        }
+
+        // Update progress with actual mod name
+        if (onProgress) {
+          onProgress({ current: i + 1, total, modName: cfMod.name });
+        }
+
+        // Get file info
+        const cfFile = await this.curseforgeService.getFile(projectID, fileID);
+        if (!cfFile) {
+          errors.push(`File ${fileID} not found for mod ${cfMod.name}`);
+          modsSkipped++;
+          continue;
+        }
+
+        // Log full file info for debugging
+        console.log(`[CF Import] ${cfMod.name}: fileName=${cfFile.fileName}, gameVersions=${JSON.stringify(cfFile.gameVersions)}`);
+
+        // Verify game version compatibility - EXACT MATCH ONLY
+        // The file must specifically support the modpack's MC version
+        const fileGameVersions = cfFile.gameVersions.filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v));
+        const isVersionCompatible = fileGameVersions.includes(mcVersion);
+        
+        console.log(`[CF Import] ${cfMod.name}: filtered MC versions=[${fileGameVersions.join(',')}], modpack=${mcVersion}, compatible=${isVersionCompatible}`);
+
+        // If file doesn't support exact version, try to find correct file
+        if (!isVersionCompatible) {
+          console.log(`[CF Import] ${cfMod.name}: File ${fileID} doesn't support ${mcVersion}, searching for correct file...`);
+          const correctFile = await this.curseforgeService!.findFileForVersion(projectID, mcVersion, loader);
+          
+          if (correctFile) {
+            console.log(`[CF Import] ${cfMod.name}: Found correct file ${correctFile.fileName} (ID: ${correctFile.id})`);
+            // Use the correct version file instead
+            const correctCfFile = await this.curseforgeService!.getFile(projectID, correctFile.id);
+            if (correctCfFile) {
+              // Check if this correct version already exists
+              const existingCorrectMod = existingModsMap.get(`${projectID}-${correctFile.id}`);
+              if (existingCorrectMod) {
+                // Already have the correct version, add to modpack
+                await this.addModToModpack(modpackId, existingCorrectMod.id);
+                modsImported++;
+                continue;
+              }
+              
+              // Download the correct version instead
+              const tempDir = path.join(app.getPath("temp"), "modex-cf-import");
+              await fs.ensureDir(tempDir);
+
+              const downloadResult = await this.curseforgeService!.downloadFile(
+                projectID,
+                correctFile.id,
+                tempDir
+              );
+
+              if (downloadResult.success) {
+                const modData = this.curseforgeService!.modToLibraryFormat(cfMod, correctCfFile, loader, mcVersion);
+                const modId = `cf-${projectID}-${correctFile.id}`;
+                const modPath = path.join(this.libraryDir, modData.filename);
+
+                await fs.move(downloadResult.filePath, modPath, { overwrite: true });
+
+                const newMod: Mod = {
+                  id: modId,
+                  filename: modData.filename,
+                  name: modData.name,
+                  version: modData.version,
+                  game_version: modData.game_version,
+                  loader: modData.loader,
+                  description: modData.description,
+                  author: modData.author,
+                  path: modPath,
+                  created_at: new Date().toISOString(),
+                  size: modData.file_size,
+                  cf_project_id: projectID,
+                  cf_file_id: correctFile.id,
+                  thumbnail_url: modData.thumbnail_url || undefined,
+                  download_count: modData.download_count,
+                  release_type: modData.release_type,
+                  date_released: modData.date_released,
+                  source: "curseforge",
+                };
+
+                await this.addMod(newMod);
+                existingModsMap.set(`${projectID}-${correctFile.id}`, newMod);
+                await this.addModToModpack(modpackId, newMod.id);
+                modsImported++;
+                continue;
+              }
+            }
+          }
+          
+          // Could not find compatible version - DO NOT download the incompatible one
+          console.log(`[CF Import] ${cfMod.name}: SKIPPED - no file found for ${mcVersion}`);
+          errors.push(`${cfMod.name}: no file available for MC ${mcVersion}`);
+          modsSkipped++;
+          continue;
+        }
+
+        // File is compatible with exact version, proceed with download
+        console.log(`[CF Import] ${cfMod.name}: File supports ${mcVersion}, downloading...`);
+        
+        // Check if mod already exists in library by cf_project_id and cf_file_id (use cached map)
+        let existingMod = existingModsMap.get(`${projectID}-${fileID}`);
+
+        if (!existingMod) {
+          // Download to temp, then import to library
+          const tempDir = path.join(app.getPath("temp"), "modex-cf-import");
+          await fs.ensureDir(tempDir);
+
+          const downloadResult = await this.curseforgeService.downloadFile(
+            projectID,
+            fileID,
+            tempDir
+          );
+
+          if (!downloadResult.success) {
+            errors.push(`Failed to download ${cfMod.name}: ${downloadResult.error}`);
+            modsSkipped++;
+            continue;
+          }
+
+          // Convert to library format
+          const modData = this.curseforgeService.modToLibraryFormat(cfMod, cfFile, loader, mcVersion);
+
+          // Create mod entry
+          const modId = `cf-${projectID}-${fileID}`;
+          const modPath = path.join(this.libraryDir, modData.filename);
+
+          // Move file to library
+          await fs.move(downloadResult.filePath, modPath, { overwrite: true });
+
+          const newMod: Mod = {
+            id: modId,
+            filename: modData.filename,
+            name: modData.name,
+            version: modData.version,
+            game_version: modData.game_version,
+            loader: modData.loader,
+            description: modData.description,
+            author: modData.author,
+            path: modPath,
+            created_at: new Date().toISOString(),
+            size: modData.file_size,
+            cf_project_id: projectID,
+            cf_file_id: fileID,
+            thumbnail_url: modData.thumbnail_url || undefined,
+            download_count: modData.download_count,
+            release_type: modData.release_type,
+            date_released: modData.date_released,
+            source: "curseforge",
+          };
+
+          // Add to database
+          await this.addMod(newMod);
+          
+          // Also add to cache for future lookups in this import
+          existingModsMap.set(`${projectID}-${fileID}`, newMod);
+
+          existingMod = newMod;
+        }
+
+        // Add to modpack
+        await this.addModToModpack(modpackId, existingMod!.id);
+        modsImported++;
+      } catch (err) {
+        errors.push(`Error processing mod ${projectID}: ${(err as Error).message}`);
+        modsSkipped++;
+      }
+    }
+
+    // Extract overrides if present
+    const overridesFolder = manifest.overrides || "overrides";
+    const modpackPath = this.getModpackPath(modpackId);
+    
+    for (const entry of zip.getEntries()) {
+      if (entry.entryName.startsWith(`${overridesFolder}/`) && !entry.isDirectory) {
+        // Remove the overrides prefix
+        const relativePath = entry.entryName.substring(overridesFolder.length + 1);
+        if (relativePath) {
+          const destPath = path.join(modpackPath, "overrides", relativePath);
+          await fs.ensureDir(path.dirname(destPath));
+          await fs.writeFile(destPath, entry.getData());
+        }
+      }
+    }
+
+    return {
+      success: modsImported > 0,
+      modpackId,
+      modsImported,
+      modsSkipped,
+      errors,
     };
   }
 

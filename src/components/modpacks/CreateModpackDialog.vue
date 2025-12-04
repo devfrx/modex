@@ -31,6 +31,28 @@ const form = ref({
   image_path: "" as string | undefined,
 });
 
+const nameError = ref("");
+
+// Validate name - not empty or whitespace only
+function validateName(): boolean {
+  const trimmedName = form.value.name.trim();
+  if (!trimmedName) {
+    nameError.value = "Name cannot be empty";
+    return false;
+  }
+  if (trimmedName.length < 2) {
+    nameError.value = "Name must be at least 2 characters";
+    return false;
+  }
+  // Check for invalid characters (filesystem safe)
+  if (/[<>:"/\\|?*]/.test(trimmedName)) {
+    nameError.value = "Name contains invalid characters";
+    return false;
+  }
+  nameError.value = "";
+  return true;
+}
+
 watch(
   () => props.open,
   (isOpen) => {
@@ -39,6 +61,7 @@ watch(
       form.value.version = "1.0.0";
       form.value.description = "";
       form.value.image_path = undefined;
+      nameError.value = "";
     }
   }
 );
@@ -56,8 +79,11 @@ function removeImage() {
 }
 
 function create() {
-  if (!form.value.name) return;
-  emit("create", { ...form.value });
+  if (!validateName()) return;
+  emit("create", { 
+    ...form.value, 
+    name: form.value.name.trim() 
+  });
 }
 </script>
 
@@ -101,7 +127,14 @@ function create() {
 
       <div class="space-y-2">
         <label class="text-sm font-medium">Name</label>
-        <Input v-model="form.name" placeholder="My Awesome Modpack" autofocus />
+        <Input 
+          v-model="form.name" 
+          placeholder="My Awesome Modpack" 
+          autofocus 
+          :class="{ 'border-red-500 focus-visible:ring-red-500': nameError }"
+          @input="nameError = ''"
+        />
+        <p v-if="nameError" class="text-xs text-red-500">{{ nameError }}</p>
       </div>
 
       <div class="space-y-2">
@@ -121,7 +154,7 @@ function create() {
 
     <template #footer>
       <Button variant="outline" @click="$emit('close')">Cancel</Button>
-      <Button @click="create" :disabled="!form.name">Create</Button>
+      <Button @click="create" :disabled="!form.name.trim()">Create</Button>
     </template>
   </Dialog>
 </template>

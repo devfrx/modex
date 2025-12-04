@@ -4923,7 +4923,14 @@ class FileSystemManager {
    */
   async createModpack(data) {
     await this.ensureDirectories();
-    let folderId = this.sanitizeFolderName(data.name);
+    const trimmedName = (data.name || "").trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      throw new Error("Modpack name must be at least 2 characters");
+    }
+    let folderId = this.sanitizeFolderName(trimmedName);
+    if (!folderId) {
+      folderId = `modpack_${Date.now()}`;
+    }
     let folderPath = this.getModpackPath(folderId);
     let counter = 1;
     while (await fs.pathExists(folderPath)) {

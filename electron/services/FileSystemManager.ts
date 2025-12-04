@@ -369,7 +369,19 @@ export class FileSystemManager {
   async createModpack(data: { name: string; version?: string; description?: string }): Promise<string> {
     await this.ensureDirectories();
 
-    let folderId = this.sanitizeFolderName(data.name);
+    // Validate name
+    const trimmedName = (data.name || "").trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      throw new Error("Modpack name must be at least 2 characters");
+    }
+
+    let folderId = this.sanitizeFolderName(trimmedName);
+    
+    // If sanitized name is empty, use a default
+    if (!folderId) {
+      folderId = `modpack_${Date.now()}`;
+    }
+    
     let folderPath = this.getModpackPath(folderId);
 
     // Assicurati che il nome sia unico

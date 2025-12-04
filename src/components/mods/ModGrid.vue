@@ -23,7 +23,7 @@ defineEmits<{
       v-for="mod in mods"
       :key="mod.id"
       :mod="mod"
-      :selected="selectedIds.has(mod.id!)"
+      :selected="selectedIds.has(mod.id)"
       @delete="$emit('delete', $event)"
       @edit="$emit('edit', $event)"
       @toggle-select="$emit('toggle-select', $event)"

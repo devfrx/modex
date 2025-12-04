@@ -11,18 +11,15 @@ import {
   Trash2,
   RefreshCw,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-vue-next";
 
 // App version from package.json
 const appVersion = __APP_VERSION__;
 
 // Settings State
-const gameDirectory = ref("");
-const modsDirectory = ref("");
+const libraryPath = ref("");
 const theme = ref("dark");
-const autoScan = ref(true);
-const dbPath = ref("");
-const dbSize = ref("");
 const modCount = ref(0);
 const modpackCount = ref(0);
 const isClearingData = ref(false);
@@ -41,28 +38,17 @@ async function loadSettings() {
     const modpacks = await window.api.modpacks.getAll();
     modCount.value = mods.length;
     modpackCount.value = modpacks.length;
+    
+    // Get library path
+    libraryPath.value = await window.api.scanner.getLibraryPath();
   } catch (err) {
     console.error("Failed to load stats:", err);
   }
 }
 
-async function selectGameDirectory() {
+async function openLibraryFolder() {
   if (!window.api) return;
-  const folder = await window.api.scanner.selectFolder();
-  if (folder) {
-    gameDirectory.value = folder;
-    // Save to localStorage
-    localStorage.setItem("modex:gameDirectory", folder);
-  }
-}
-
-async function selectModsDirectory() {
-  if (!window.api) return;
-  const folder = await window.api.scanner.selectFolder();
-  if (folder) {
-    modsDirectory.value = folder;
-    localStorage.setItem("modex:modsDirectory", folder);
-  }
+  await window.api.scanner.openLibrary();
 }
 
 function saveTheme(newTheme: string) {
@@ -74,7 +60,7 @@ function saveTheme(newTheme: string) {
 async function clearAllData() {
   if (
     !confirm(
-      "This will delete ALL mods and modpacks from the database. Are you sure?"
+      "This will delete ALL mods and modpacks. This action cannot be undone. Are you sure?"
     )
   ) {
     return;
@@ -86,13 +72,13 @@ async function clearAllData() {
     // Delete all modpacks first
     const modpacks = await window.api.modpacks.getAll();
     for (const pack of modpacks) {
-      await window.api.modpacks.delete(pack.id!);
+      await window.api.modpacks.delete(pack.id);
     }
 
     // Then delete all mods
     const mods = await window.api.mods.getAll();
     for (const mod of mods) {
-      await window.api.mods.delete(mod.id!);
+      await window.api.mods.delete(mod.id);
     }
 
     await loadSettings();
@@ -105,11 +91,8 @@ async function clearAllData() {
 }
 
 onMounted(() => {
-  // Load settings from localStorage
-  gameDirectory.value = localStorage.getItem("modex:gameDirectory") || "";
-  modsDirectory.value = localStorage.getItem("modex:modsDirectory") || "";
+  // Load theme from localStorage
   theme.value = localStorage.getItem("modex:theme") || "dark";
-  autoScan.value = localStorage.getItem("modex:autoScan") !== "false";
 
   loadSettings();
 });
@@ -142,46 +125,28 @@ onMounted(() => {
 
     <!-- Settings Sections -->
     <div class="grid gap-6 max-w-2xl">
-      <!-- Directories -->
+      <!-- Library Location -->
       <div class="glass-card rounded-lg p-4 space-y-4">
         <h2 class="text-lg font-semibold flex items-center gap-2">
           <FolderOpen class="w-5 h-5 text-primary" />
-          Directories
+          Storage Location
         </h2>
 
         <div class="space-y-2">
-          <label class="text-sm font-medium">Game Directory</label>
+          <label class="text-sm font-medium">Mod Library</label>
           <div class="flex gap-2">
             <Input
-              v-model="gameDirectory"
-              placeholder="Select Minecraft directory..."
+              v-model="libraryPath"
               readonly
-              class="flex-1"
+              class="flex-1 font-mono text-xs"
             />
-            <Button variant="outline" @click="selectGameDirectory">
-              Browse
+            <Button variant="outline" @click="openLibraryFolder" class="gap-2">
+              <ExternalLink class="w-4 h-4" />
+              Open
             </Button>
           </div>
           <p class="text-xs text-muted-foreground">
-            The main Minecraft installation folder (.minecraft)
-          </p>
-        </div>
-
-        <div class="space-y-2">
-          <label class="text-sm font-medium">Mods Directory</label>
-          <div class="flex gap-2">
-            <Input
-              v-model="modsDirectory"
-              placeholder="Select mods folder..."
-              readonly
-              class="flex-1"
-            />
-            <Button variant="outline" @click="selectModsDirectory">
-              Browse
-            </Button>
-          </div>
-          <p class="text-xs text-muted-foreground">
-            Default folder to scan for mods
+            All mods are stored here. Modpacks are in the "modpacks" subfolder.
           </p>
         </div>
       </div>

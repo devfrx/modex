@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol, net } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, protocol, net, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import ModDatabase, { Mod, Modpack } from "./database/ModDatabase.js";
+import FileSystemManager, { Mod, Modpack } from "./services/FileSystemManager.js";
 import { JarScanner } from "./services/JarScanner.js";
 import fs from "fs-extra";
 
@@ -28,7 +28,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   : RENDERER_DIST;
 
 let win: BrowserWindow | null;
-let db: ModDatabase;
+let fsManager: FileSystemManager;
 
 // Register custom protocol for local file access
 protocol.registerSchemesAsPrivileged([
@@ -60,16 +60,13 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
   } else {
-    // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, "index.html"));
   }
 }
 
-// Initialize database and IPC handlers
+// Initialize file system manager and IPC handlers
 async function initializeBackend() {
-  db = new ModDatabase();
-  // Note: db.init() is called in constructor but is async,
-  // operations will wait for ensureDb() internally
+  fsManager = new FileSystemManager();
 
   // Register atom:// protocol to serve local files with security validation
   protocol.handle("atom", (request) => {
@@ -93,64 +90,70 @@ async function initializeBackend() {
   // ========== MOD IPC HANDLERS ==========
 
   ipcMain.handle("mods:getAll", async () => {
-    return db.getAllMods();
+    return fsManager.getAllMods();
   });
 
   ipcMain.handle("mods:getById", async (_, id: string) => {
-    return db.getModById(id);
+    return fsManager.getModById(id);
   });
 
-  ipcMain.handle("mods:add", async (_, mod: Omit<Mod, "id" | "created_at">) => {
-    return db.addMod(mod);
+  ipcMain.handle("mods:import", async (_, sourcePaths: string[]) => {
+    return fsManager.importMods(sourcePaths);
   });
 
-  ipcMain.handle("mods:update", async (_, id: string, mod: Partial<Mod>) => {
+  ipcMain.handle("mods:update", async (_, id: string, updates: Partial<Mod>) => {
     if (!id || typeof id !== "string") {
       throw new Error("Invalid mod ID");
     }
-    if (!mod || typeof mod !== "object") {
-      throw new Error("Invalid mod data");
-    }
-    db.updateMod(id, mod);
-    return true;
+    return fsManager.updateMod(id, updates);
   });
 
   ipcMain.handle("mods:delete", async (_, id: string) => {
     if (!id || typeof id !== "string") {
       throw new Error("Invalid mod ID");
     }
-    db.deleteMod(id);
-    return true;
+    return fsManager.deleteMod(id);
+  });
+
+  ipcMain.handle("mods:bulkDelete", async (_, ids: string[]) => {
+    if (!Array.isArray(ids)) {
+      throw new Error("Invalid mod IDs");
+    }
+    return fsManager.deleteMods(ids);
   });
 
   // ========== MODPACK IPC HANDLERS ==========
 
   ipcMain.handle("modpacks:getAll", async () => {
-    return db.getAllModpacks();
+    return fsManager.getAllModpacks();
   });
 
   ipcMain.handle("modpacks:getById", async (_, id: string) => {
-    return db.getModpackById(id);
+    return fsManager.getModpackById(id);
   });
 
   ipcMain.handle(
+    "modpacks:create",
+    async (_, data: { name: string; version?: string; description?: string }) => {
+      return fsManager.createModpack(data);
+    }
+  );
+
+  // Backward compatibility: modpacks:add calls modpacks:create
+  ipcMain.handle(
     "modpacks:add",
-    async (_, modpack: Omit<Modpack, "id" | "created_at">) => {
-      return db.addModpack(modpack);
+    async (_, data: { name: string; version?: string; description?: string }) => {
+      return fsManager.createModpack(data);
     }
   );
 
   ipcMain.handle(
     "modpacks:update",
-    async (_, id: string, modpack: Partial<Modpack>) => {
+    async (_, id: string, updates: Partial<Modpack>) => {
       if (!id || typeof id !== "string") {
         throw new Error("Invalid modpack ID");
       }
-      if (!modpack || typeof modpack !== "object") {
-        throw new Error("Invalid modpack data");
-      }
-      db.updateModpack(id, modpack);
-      return true;
+      return fsManager.updateModpack(id, updates);
     }
   );
 
@@ -158,29 +161,30 @@ async function initializeBackend() {
     if (!id || typeof id !== "string") {
       throw new Error("Invalid modpack ID");
     }
-    db.deleteModpack(id);
-    return true;
+    return fsManager.deleteModpack(id);
   });
 
   ipcMain.handle("modpacks:getMods", async (_, modpackId: string) => {
-    return db.getModsInModpack(modpackId);
+    return fsManager.getModsInModpack(modpackId);
   });
 
   ipcMain.handle(
     "modpacks:addMod",
     async (_, modpackId: string, modId: string) => {
-      db.addModToModpack(modpackId, modId);
-      return true;
+      return fsManager.addModToModpack(modpackId, modId);
     }
   );
 
   ipcMain.handle(
     "modpacks:removeMod",
     async (_, modpackId: string, modId: string) => {
-      db.removeModFromModpack(modpackId, modId);
-      return true;
+      return fsManager.removeModFromModpack(modpackId, modId);
     }
   );
+
+  ipcMain.handle("modpacks:clone", async (_, modpackId: string, newName: string) => {
+    return fsManager.cloneModpack(modpackId, newName);
+  });
 
   // Image selection for modpacks
   ipcMain.handle("modpacks:selectImage", async () => {
@@ -192,18 +196,11 @@ async function initializeBackend() {
       ],
     });
     if (result.canceled) return null;
+    return result.filePaths[0];
+  });
 
-    // Copy image to userData folder
-    const sourcePath = result.filePaths[0];
-    const userDataPath = app.getPath("userData");
-    const imagesDir = path.join(userDataPath, "modpack-images");
-    await fs.ensureDir(imagesDir);
-
-    const filename = `${crypto.randomUUID()}${path.extname(sourcePath)}`;
-    const destPath = path.join(imagesDir, filename);
-    await fs.copy(sourcePath, destPath);
-
-    return destPath;
+  ipcMain.handle("modpacks:setImage", async (_, modpackId: string, imagePath: string) => {
+    return fsManager.setModpackImage(modpackId, imagePath);
   });
 
   // ========== FILE/SCANNER IPC HANDLERS ==========
@@ -235,8 +232,23 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("scanner:openInExplorer", async (_, folderPath: string) => {
-    const { shell } = await import("electron");
     shell.showItemInFolder(folderPath);
+  });
+
+  ipcMain.handle("scanner:openLibrary", async () => {
+    shell.openPath(fsManager.getLibraryPath());
+  });
+
+  ipcMain.handle("scanner:openModpackFolder", async (_, modpackId: string) => {
+    shell.openPath(fsManager.getModpackPath(modpackId));
+  });
+
+  ipcMain.handle("scanner:getBasePath", async () => {
+    return fsManager.getBasePath();
+  });
+
+  ipcMain.handle("scanner:getLibraryPath", async () => {
+    return fsManager.getLibraryPath();
   });
 
   ipcMain.handle("scanner:scanFolder", async (_, folderPath: string) => {
@@ -261,20 +273,19 @@ async function initializeBackend() {
     }
   });
 
-  ipcMain.handle(
-    "scanner:importMods",
-    async (_, metadata: Omit<Mod, "id" | "created_at">[]) => {
-      try {
-        const ids = await Promise.all(metadata.map((mod) => db.addMod(mod)));
-        return ids;
-      } catch (error: any) {
-        console.error("Import error:", error);
-        throw new Error(error.message);
-      }
+  // Import mods from paths (copies to library)
+  ipcMain.handle("scanner:importMods", async (_, filePaths: string[]) => {
+    try {
+      const mods = await fsManager.importMods(filePaths);
+      return mods;
+    } catch (error: any) {
+      console.error("Import error:", error);
+      throw new Error(error.message);
     }
-  );
+  });
 
-  ipcMain.handle("scanner:importModpack", async (_, zipPath: string) => {
+  // Import modpack from ZIP
+  ipcMain.handle("scanner:importModpack", async (_, zipPath: string, modpackName: string) => {
     const tempDir = path.join(
       app.getPath("temp"),
       "modex-import-" + Date.now()
@@ -286,15 +297,37 @@ async function initializeBackend() {
       // 1. Extract ZIP
       await JarScanner.extractZip(zipPath, tempDir);
 
-      // 2. Scan for JARs
-      const metadata = await JarScanner.scanDirectory(tempDir);
+      // 2. Find JAR files
+      const jarFiles: string[] = [];
+      const findJars = async (dir: string) => {
+        const files = await fs.readdir(dir);
+        for (const file of files) {
+          const fullPath = path.join(dir, file);
+          const stat = await fs.stat(fullPath);
+          if (stat.isDirectory()) {
+            await findJars(fullPath);
+          } else if (file.endsWith(".jar")) {
+            jarFiles.push(fullPath);
+          }
+        }
+      };
+      await findJars(tempDir);
 
-      return metadata;
+      // 3. Create modpack
+      const modpackId = await fsManager.createModpack({ name: modpackName });
+
+      // 4. Import mods to library and add to modpack
+      const importedMods = await fsManager.importMods(jarFiles);
+      for (const mod of importedMods) {
+        await fsManager.addModToModpack(modpackId, mod.id);
+      }
+
+      return { modpackId, modCount: importedMods.length };
     } catch (error: any) {
       console.error("Modpack import error:", error);
       throw new Error(error.message);
     } finally {
-      // Cleanup garantito anche in caso di errore
+      // Cleanup
       try {
         await fs.remove(tempDir);
       } catch (cleanupError) {
@@ -303,6 +336,7 @@ async function initializeBackend() {
     }
   });
 
+  // Export modpack as ZIP
   ipcMain.handle(
     "scanner:exportModpack",
     async (_, modpackId: string, exportPath: string) => {
@@ -314,12 +348,11 @@ async function initializeBackend() {
           throw new Error("Invalid export path");
         }
 
-        const modpack = await db.getModpackById(modpackId);
+        const modpack = await fsManager.getModpackById(modpackId);
         if (!modpack) throw new Error("Modpack not found");
 
-        const mods = await db.getModsInModpack(modpackId);
+        const mods = await fsManager.getModsInModpack(modpackId);
 
-        // Validate: check if there are mods to export
         if (mods.length === 0) {
           throw new Error("Cannot export empty modpack - add mods first");
         }
@@ -360,7 +393,7 @@ async function initializeBackend() {
           overrides: "overrides",
         };
 
-        // Create ZIP with manifest and overrides/mods/
+        // Create ZIP
         const AdmZip = (await import("adm-zip")).default;
         const zip = new AdmZip();
 
@@ -399,20 +432,15 @@ async function initializeBackend() {
   });
 }
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// Quit when all windows are closed, except on macOS
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    db?.close();
     app.quit();
     win = null;
   }
 });
 
 app.on("activate", () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }

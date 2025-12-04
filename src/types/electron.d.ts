@@ -1,5 +1,5 @@
 export interface Mod {
-  id?: string;
+  id: string; // Hash SHA256
   filename: string;
   name: string;
   version: string;
@@ -9,59 +9,58 @@ export interface Mod {
   author?: string;
   path: string;
   hash: string;
-  created_at?: string;
+  created_at: string;
+  size: number;
 }
 
 export interface Modpack {
-  id?: string;
+  id: string; // Folder name
   name: string;
   version: string;
   description?: string;
   image_path?: string;
-  created_at?: string;
+  created_at: string;
+  mod_count?: number;
 }
 
 export interface ElectronAPI {
   mods: {
     getAll: () => Promise<Mod[]>;
     getById: (id: string) => Promise<Mod | undefined>;
-    add: (mod: Omit<Mod, "id" | "created_at">) => Promise<string>;
-    update: (id: string, mod: Partial<Mod>) => Promise<boolean>;
+    import: (sourcePaths: string[]) => Promise<Mod[]>;
+    update: (id: string, updates: Partial<Mod>) => Promise<boolean>;
     delete: (id: string) => Promise<boolean>;
+    bulkDelete: (ids: string[]) => Promise<number>;
   };
   modpacks: {
     getAll: () => Promise<Modpack[]>;
     getById: (id: string) => Promise<Modpack | undefined>;
-    add: (modpack: Omit<Modpack, "id" | "created_at">) => Promise<string>;
-    update: (id: string, modpack: Partial<Modpack>) => Promise<boolean>;
+    create: (data: { name: string; version?: string; description?: string }) => Promise<string>;
+    add: (data: { name: string; version?: string; description?: string }) => Promise<string>;
+    update: (id: string, updates: Partial<Modpack>) => Promise<boolean>;
     delete: (id: string) => Promise<boolean>;
     getMods: (modpackId: string) => Promise<Mod[]>;
     addMod: (modpackId: string, modId: string) => Promise<boolean>;
     removeMod: (modpackId: string, modId: string) => Promise<boolean>;
+    clone: (modpackId: string, newName: string) => Promise<string | null>;
     selectImage: () => Promise<string | null>;
+    setImage: (modpackId: string, imagePath: string) => Promise<string | null>;
   };
   scanner: {
     selectFolder: () => Promise<string | null>;
     selectFiles: () => Promise<string[]>;
-    scanFolder: (
-      folderPath: string
-    ) => Promise<Omit<Mod, "id" | "created_at">[]>;
-    scanFiles: (
-      filePaths: string[]
-    ) => Promise<Omit<Mod, "id" | "created_at">[]>;
-    importMods: (
-      metadata: Omit<Mod, "id" | "created_at">[]
-    ) => Promise<string[]>;
-    importModpack: (
-      zipPath: string
-    ) => Promise<Omit<Mod, "id" | "created_at">[]>;
-    exportModpack: (
-      modpackId: string,
-      exportPath: string
-    ) => Promise<{ success: boolean; path: string }>;
-    selectExportPath: (defaultName: string) => Promise<string | null>;
     selectZipFile: () => Promise<string | null>;
+    scanFolder: (folderPath: string) => Promise<Omit<Mod, "id" | "created_at" | "size">[]>;
+    scanFiles: (filePaths: string[]) => Promise<Omit<Mod, "id" | "created_at" | "size">[]>;
+    importMods: (filePaths: string[]) => Promise<Mod[]>;
+    importModpack: (zipPath: string, modpackName: string) => Promise<{ modpackId: string; modCount: number }>;
+    exportModpack: (modpackId: string, exportPath: string) => Promise<{ success: boolean; path: string }>;
+    selectExportPath: (defaultName: string) => Promise<string | null>;
     openInExplorer: (path: string) => Promise<void>;
+    openLibrary: () => Promise<void>;
+    openModpackFolder: (modpackId: string) => Promise<void>;
+    getBasePath: () => Promise<string>;
+    getLibraryPath: () => Promise<string>;
   };
   on: (channel: string, callback: (data: any) => void) => void;
 }

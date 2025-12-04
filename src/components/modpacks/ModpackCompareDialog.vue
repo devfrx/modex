@@ -208,7 +208,7 @@ const packBName = computed(
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7 opacity-0 group-hover:opacity-100"
-                @click="copyToB(mod.id!)"
+                @click="copyToB(mod.id)"
               >
                 <ArrowRight class="w-4 h-4" />
               </Button>
@@ -276,7 +276,7 @@ const packBName = computed(
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7 opacity-0 group-hover:opacity-100"
-                @click="copyToA(mod.id!)"
+                @click="copyToA(mod.id)"
               >
                 <ArrowRight class="w-4 h-4 rotate-180" />
               </Button>

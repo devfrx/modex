@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 export interface Mod {
-  id?: number;
+  id: string; // Hash SHA256
   filename: string;
   name: string;
   version: string;
@@ -11,15 +11,18 @@ export interface Mod {
   author?: string;
   path: string;
   hash: string;
-  created_at?: string;
+  created_at: string;
+  size: number;
 }
 
 export interface Modpack {
-  id?: number;
+  id: string; // Folder name
   name: string;
   version: string;
   description?: string;
-  created_at?: string;
+  image_path?: string;
+  created_at: string;
+  mod_count?: number;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -27,52 +30,64 @@ export interface Modpack {
 contextBridge.exposeInMainWorld("api", {
   // Mods API
   mods: {
-    getAll: () => ipcRenderer.invoke("mods:getAll"),
-    getById: (id: number) => ipcRenderer.invoke("mods:getById", id),
-    add: (mod: Omit<Mod, "id" | "created_at">) =>
-      ipcRenderer.invoke("mods:add", mod),
-    update: (id: number, mod: Partial<Mod>) =>
-      ipcRenderer.invoke("mods:update", id, mod),
-    delete: (id: number) => ipcRenderer.invoke("mods:delete", id),
+    getAll: (): Promise<Mod[]> => ipcRenderer.invoke("mods:getAll"),
+    getById: (id: string): Promise<Mod | undefined> => ipcRenderer.invoke("mods:getById", id),
+    import: (sourcePaths: string[]): Promise<Mod[]> => ipcRenderer.invoke("mods:import", sourcePaths),
+    update: (id: string, updates: Partial<Mod>): Promise<boolean> =>
+      ipcRenderer.invoke("mods:update", id, updates),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke("mods:delete", id),
+    bulkDelete: (ids: string[]): Promise<number> => ipcRenderer.invoke("mods:bulkDelete", ids),
   },
 
   // Modpacks API
   modpacks: {
-    getAll: () => ipcRenderer.invoke("modpacks:getAll"),
-    getById: (id: number) => ipcRenderer.invoke("modpacks:getById", id),
-    add: (modpack: Omit<Modpack, "id" | "created_at">) =>
-      ipcRenderer.invoke("modpacks:add", modpack),
-    update: (id: number, modpack: Partial<Modpack>) =>
-      ipcRenderer.invoke("modpacks:update", id, modpack),
-    delete: (id: number) => ipcRenderer.invoke("modpacks:delete", id),
-    getMods: (modpackId: number) =>
+    getAll: (): Promise<Modpack[]> => ipcRenderer.invoke("modpacks:getAll"),
+    getById: (id: string): Promise<Modpack | undefined> => ipcRenderer.invoke("modpacks:getById", id),
+    create: (data: { name: string; version?: string; description?: string }): Promise<string> =>
+      ipcRenderer.invoke("modpacks:create", data),
+    // Backward compatibility
+    add: (data: { name: string; version?: string; description?: string }): Promise<string> =>
+      ipcRenderer.invoke("modpacks:add", data),
+    update: (id: string, updates: Partial<Modpack>): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:update", id, updates),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke("modpacks:delete", id),
+    getMods: (modpackId: string): Promise<Mod[]> =>
       ipcRenderer.invoke("modpacks:getMods", modpackId),
-    addMod: (modpackId: number, modId: number) =>
+    addMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:addMod", modpackId, modId),
-    removeMod: (modpackId: number, modId: number) =>
+    removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
-    selectImage: () => ipcRenderer.invoke("modpacks:selectImage"),
+    clone: (modpackId: string, newName: string): Promise<string | null> =>
+      ipcRenderer.invoke("modpacks:clone", modpackId, newName),
+    selectImage: (): Promise<string | null> => ipcRenderer.invoke("modpacks:selectImage"),
+    setImage: (modpackId: string, imagePath: string): Promise<string | null> =>
+      ipcRenderer.invoke("modpacks:setImage", modpackId, imagePath),
   },
 
   // Scanner API
   scanner: {
-    selectFolder: () => ipcRenderer.invoke("scanner:selectFolder"),
-    selectFiles: () => ipcRenderer.invoke("scanner:selectFiles"),
+    selectFolder: (): Promise<string | null> => ipcRenderer.invoke("scanner:selectFolder"),
+    selectFiles: (): Promise<string[]> => ipcRenderer.invoke("scanner:selectFiles"),
+    selectZipFile: (): Promise<string | null> => ipcRenderer.invoke("scanner:selectZipFile"),
     scanFolder: (folderPath: string) =>
       ipcRenderer.invoke("scanner:scanFolder", folderPath),
     scanFiles: (filePaths: string[]) =>
       ipcRenderer.invoke("scanner:scanFiles", filePaths),
-    importMods: (metadata: Omit<Mod, "id" | "created_at">[]) =>
-      ipcRenderer.invoke("scanner:importMods", metadata),
-    importModpack: (zipPath: string) =>
-      ipcRenderer.invoke("scanner:importModpack", zipPath),
-    exportModpack: (modpackId: string, exportPath: string) =>
+    importMods: (filePaths: string[]): Promise<Mod[]> =>
+      ipcRenderer.invoke("scanner:importMods", filePaths),
+    importModpack: (zipPath: string, modpackName: string): Promise<{ modpackId: string; modCount: number }> =>
+      ipcRenderer.invoke("scanner:importModpack", zipPath, modpackName),
+    exportModpack: (modpackId: string, exportPath: string): Promise<{ success: boolean; path: string }> =>
       ipcRenderer.invoke("scanner:exportModpack", modpackId, exportPath),
-    selectExportPath: (defaultName: string) =>
+    selectExportPath: (defaultName: string): Promise<string | null> =>
       ipcRenderer.invoke("scanner:selectExportPath", defaultName),
-    selectZipFile: () => ipcRenderer.invoke("scanner:selectZipFile"),
-    openInExplorer: (path: string) =>
+    openInExplorer: (path: string): Promise<void> =>
       ipcRenderer.invoke("scanner:openInExplorer", path),
+    openLibrary: (): Promise<void> => ipcRenderer.invoke("scanner:openLibrary"),
+    openModpackFolder: (modpackId: string): Promise<void> =>
+      ipcRenderer.invoke("scanner:openModpackFolder", modpackId),
+    getBasePath: (): Promise<string> => ipcRenderer.invoke("scanner:getBasePath"),
+    getLibraryPath: (): Promise<string> => ipcRenderer.invoke("scanner:getLibraryPath"),
   },
 
   // Events

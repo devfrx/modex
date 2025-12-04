@@ -79,7 +79,7 @@ function add() {
               ? 'bg-primary/20 border-primary'
               : 'hover:bg-accent'
           "
-          @click="selectedModpackId = pack.id!"
+          @click="selectedModpackId = pack.id"
         >
           <div class="flex-1">
             <div class="font-medium">{{ pack.name }}</div>

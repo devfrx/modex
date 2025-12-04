@@ -32,13 +32,18 @@ defineEmits<{
   (e: "clone", id: string): void;
   (e: "open-folder", id: string): void;
 }>();
+
+function handleImageError(event: Event) {
+  const target = event.target as HTMLImageElement;
+  target.style.display = 'none';
+}
 </script>
 
 <template>
   <div
     class="glass-card relative rounded-lg overflow-hidden group transition-all duration-200"
     :class="{ 'ring-2 ring-primary bg-primary/5': selected }"
-    @click="$emit('toggle-select', modpack.id!)"
+    @click="$emit('toggle-select', modpack.id)"
   >
     <!-- Image Background -->
     <div v-if="modpack.image_path" class="absolute inset-0 z-0">
@@ -46,7 +51,7 @@ defineEmits<{
         :src="'atom:///' + modpack.image_path.replace(/\\\\/g, '/')"
         class="w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity"
         alt=""
-        @error="(e: any) => e.target.style.display = 'none'"
+        @error="handleImageError"
       />
       <div
         class="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent"
@@ -117,7 +122,7 @@ defineEmits<{
             variant="ghost"
             size="icon"
             class="h-6 w-6 text-muted-foreground hover:text-primary"
-            @click.stop="$emit('edit', modpack.id!)"
+            @click.stop="$emit('edit', modpack.id)"
             title="Edit"
           >
             <Edit class="w-3 h-3" />
@@ -126,7 +131,7 @@ defineEmits<{
             variant="ghost"
             size="icon"
             class="h-6 w-6 text-muted-foreground hover:text-blue-400"
-            @click.stop="$emit('clone', modpack.id!)"
+            @click.stop="$emit('clone', modpack.id)"
             title="Clone"
           >
             <Copy class="w-3 h-3" />
@@ -135,7 +140,7 @@ defineEmits<{
             variant="ghost"
             size="icon"
             class="h-6 w-6 text-muted-foreground hover:text-yellow-500"
-            @click.stop="$emit('open-folder', modpack.id!)"
+            @click.stop="$emit('open-folder', modpack.id)"
             title="Open in Explorer"
           >
             <FolderOpen class="w-3 h-3" />
@@ -144,7 +149,7 @@ defineEmits<{
             variant="ghost"
             size="icon"
             class="h-6 w-6 text-muted-foreground hover:text-destructive"
-            @click.stop="$emit('delete', modpack.id!)"
+            @click.stop="$emit('delete', modpack.id)"
             title="Delete"
           >
             <Trash2 class="w-3 h-3" />

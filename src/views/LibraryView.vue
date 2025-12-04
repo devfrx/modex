@@ -241,6 +241,7 @@ async function importFolder() {
   progressMessage.value = "Analyzing mod files...";
 
   try {
+    // Scan to find JAR files
     const metadata = await window.api.scanner.scanFolder(folder);
     if (metadata.length === 0) {
       alert("No mods found.");
@@ -248,8 +249,10 @@ async function importFolder() {
       return;
     }
 
-    progressMessage.value = `Importing ${metadata.length} mods...`;
-    await window.api.scanner.importMods(metadata);
+    // Extract paths from metadata and import
+    const paths = metadata.map(m => m.path);
+    progressMessage.value = `Importing ${metadata.length} mods to library...`;
+    await window.api.scanner.importMods(paths);
     await loadMods();
   } catch (err) {
     alert("Import failed: " + (err as Error).message);
@@ -264,19 +267,12 @@ async function importFiles() {
   if (files.length === 0) return;
 
   showProgress.value = true;
-  progressTitle.value = "Scanning Files";
-  progressMessage.value = "Analyzing...";
+  progressTitle.value = "Importing Files";
+  progressMessage.value = `Importing ${files.length} mods to library...`;
 
   try {
-    const metadata = await window.api.scanner.scanFiles(files);
-    if (metadata.length === 0) {
-      alert("No valid mods found.");
-      showProgress.value = false;
-      return;
-    }
-
-    progressMessage.value = `Importing ${metadata.length} mods...`;
-    await window.api.scanner.importMods(metadata);
+    // Directly import selected files
+    await window.api.scanner.importMods(files);
     await loadMods();
   } catch (err) {
     alert("Import failed: " + (err as Error).message);
@@ -559,8 +555,8 @@ onMounted(() => loadMods());
               v-for="mod in filteredMods"
               :key="mod.id"
               class="border-b last:border-0 hover:bg-accent/50 cursor-pointer transition-colors"
-              :class="{ 'bg-primary/10': selectedModIds.has(mod.id!) }"
-              @click="toggleSelection(mod.id!)"
+              :class="{ 'bg-primary/10': selectedModIds.has(mod.id) }"
+              @click="toggleSelection(mod.id)"
             >
               <td class="p-3 font-medium">{{ mod.name }}</td>
               <td class="p-3 text-muted-foreground">{{ mod.version }}</td>
@@ -584,7 +580,7 @@ onMounted(() => loadMods());
                     variant="ghost"
                     size="icon"
                     class="h-7 w-7"
-                    @click="openEditDialog(mod.id!)"
+                    @click="openEditDialog(mod.id)"
                   >
                     <FilePlus class="w-3.5 h-3.5" />
                   </Button>
@@ -592,7 +588,7 @@ onMounted(() => loadMods());
                     variant="ghost"
                     size="icon"
                     class="h-7 w-7 hover:text-destructive"
-                    @click="confirmDelete(mod.id!)"
+                    @click="confirmDelete(mod.id)"
                   >
                     <Trash2 class="w-3.5 h-3.5" />
                   </Button>
@@ -613,8 +609,8 @@ onMounted(() => loadMods());
           v-for="mod in filteredMods"
           :key="mod.id"
           class="p-2 rounded-md border cursor-pointer transition-colors hover:bg-accent/50 group"
-          :class="{ 'ring-2 ring-primary bg-primary/5': selectedModIds.has(mod.id!) }"
-          @click="toggleSelection(mod.id!)"
+          :class="{ 'ring-2 ring-primary bg-primary/5': selectedModIds.has(mod.id) }"
+          @click="toggleSelection(mod.id)"
           @dblclick="showModDetails(mod)"
         >
           <div class="font-medium text-xs truncate">{{ mod.name }}</div>
@@ -680,13 +676,13 @@ onMounted(() => loadMods());
         <Button
           variant="outline"
           class="flex-1"
-          @click="openEditDialog(detailsMod.id!)"
+          @click="openEditDialog(detailsMod.id)"
           >Edit</Button
         >
         <Button
           variant="destructive"
           class="flex-1"
-          @click="confirmDelete(detailsMod.id!)"
+          @click="confirmDelete(detailsMod.id)"
           >Delete</Button
         >
       </div>

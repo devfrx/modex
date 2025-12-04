@@ -46,10 +46,6 @@ const showCreateDialog = ref(false);
 const showProgress = ref(false);
 const progressTitle = ref("");
 const progressMessage = ref("");
-const showImportConfirm = ref(false);
-const importMetadata = ref<Omit<Mod, "id" | "created_at">[]>([]);
-const newModsToImport = ref<Omit<Mod, "id" | "created_at">[]>([]);
-const existingModsToLink = ref<Mod[]>([]);
 const importZipName = ref("");
 
 // Stats
@@ -182,18 +178,11 @@ async function cloneModpack(modpackId: string) {
   progressMessage.value = "Creating copy...";
 
   try {
-    const newPackId = await window.api.modpacks.add({
-      name: `${original.name} (Copy)`,
-      version: original.version,
-      description: original.description,
-      image_path: original.image_path,
-    });
-
-    const mods = await window.api.modpacks.getMods(modpackId);
-    progressMessage.value = `Copying ${mods.length} mods...`;
+    // Use the new clone API that handles everything
+    const newPackId = await window.api.modpacks.clone(modpackId, `${original.name} (Copy)`);
     
-    for (const mod of mods) {
-      await window.api.modpacks.addMod(newPackId, mod.id!);
+    if (!newPackId) {
+      throw new Error("Clone failed");
     }
 
     await loadModpacks();
@@ -204,15 +193,10 @@ async function cloneModpack(modpackId: string) {
   }
 }
 
-// Open in Explorer (using first mod's path as reference)
+// Open modpack folder in Explorer
 async function openInExplorer(modpackId: string) {
   try {
-    const mods = await window.api.modpacks.getMods(modpackId);
-    if (mods.length > 0 && mods[0].path) {
-      await window.api.scanner.openInExplorer(mods[0].path);
-    } else {
-      alert("No mods in this modpack to locate.");
-    }
+    await window.api.scanner.openModpackFolder(modpackId);
   } catch (err) {
     console.error("Failed to open in explorer:", err);
   }
@@ -226,68 +210,26 @@ async function importModpack() {
     const zipPath = await window.api.scanner.selectZipFile();
     if (!zipPath) return;
 
-    importZipName.value =
-      zipPath.split(/[\\/]/).pop()?.replace(".zip", "") || "Imported Modpack";
+    const zipName = zipPath.split(/[\\/]/).pop()?.replace(".zip", "") || "Imported Modpack";
+    importZipName.value = zipName;
 
     showProgress.value = true;
-    progressTitle.value = "Scanning Modpack";
-    progressMessage.value = "Extracting and analyzing...";
+    progressTitle.value = "Importing Modpack";
+    progressMessage.value = "Extracting and importing mods...";
 
-    const metadata = await window.api.scanner.importModpack(zipPath);
-    importMetadata.value = metadata;
-
-    const allMods = await window.api.mods.getAll();
-    const existingHashes = new Map(allMods.map((m) => [m.hash, m]));
-
-    newModsToImport.value = [];
-    existingModsToLink.value = [];
-
-    for (const mod of metadata) {
-      if (existingHashes.has(mod.hash)) {
-        existingModsToLink.value.push(existingHashes.get(mod.hash)!);
-      } else {
-        newModsToImport.value.push(mod);
-      }
+    try {
+      // New API handles everything: extract, import mods, create modpack
+      const result = await window.api.scanner.importModpack(zipPath, zipName);
+      
+      showProgress.value = false;
+      alert(`Imported modpack "${zipName}" with ${result.modCount} mods!`);
+      await loadModpacks();
+    } catch (err) {
+      alert("Import failed: " + (err as Error).message);
+      showProgress.value = false;
     }
-
-    showProgress.value = false;
-    showImportConfirm.value = true;
   } catch (err) {
     alert("Import failed: " + (err as Error).message);
-    showProgress.value = false;
-  }
-}
-
-async function confirmImport() {
-  showImportConfirm.value = false;
-  showProgress.value = true;
-  progressTitle.value = "Creating Modpack";
-  progressMessage.value = "Importing mods...";
-
-  try {
-    const newModIds = await window.api.scanner.importMods(
-      newModsToImport.value
-    );
-
-    const modpackId = await window.api.modpacks.add({
-      name: importZipName.value,
-      version: "1.0.0",
-      description: `Imported from ${importZipName.value}.zip`,
-    });
-
-    const allModIds = [
-      ...newModIds,
-      ...existingModsToLink.value.map((m) => m.id!),
-    ];
-
-    for (const modId of allModIds) {
-      await window.api.modpacks.addMod(modpackId, modId);
-    }
-
-    await loadModpacks();
-  } catch (err) {
-    alert("Import failed: " + (err as Error).message);
-  } finally {
     showProgress.value = false;
   }
 }
@@ -404,7 +346,7 @@ onMounted(() => loadModpacks());
         v-for="pack in modpacks"
         :key="pack.id"
         :modpack="pack"
-        :selected="selectedModpackIds.has(pack.id!)"
+        :selected="selectedModpackIds.has(pack.id)"
         @delete="confirmDelete"
         @edit="openEditor"
         @toggle-select="toggleSelection"
@@ -438,7 +380,7 @@ onMounted(() => loadModpacks());
       :is-open="showEditor"
       @close="showEditor = false"
       @update="loadModpacks"
-      @export="exportModpack(selectedModpackId!)"
+      @export="exportModpack(selectedModpackId || '')"
     />
 
     <!-- Compare Dialog -->
@@ -462,30 +404,6 @@ onMounted(() => loadModpacks());
           >Cancel</Button
         >
         <Button variant="destructive" @click="deleteModpack">Delete</Button>
-      </template>
-    </Dialog>
-
-    <!-- Import Confirmation -->
-    <Dialog
-      :open="showImportConfirm"
-      title="Import Modpack"
-      :description="`Found ${importMetadata.length} mods.`"
-    >
-      <div class="py-4 space-y-2 text-sm">
-        <div class="flex justify-between p-2 bg-secondary/50 rounded">
-          <span>New Mods:</span>
-          <span class="font-bold">{{ newModsToImport.length }}</span>
-        </div>
-        <div class="flex justify-between p-2 bg-secondary/50 rounded">
-          <span>Existing:</span>
-          <span class="font-bold">{{ existingModsToLink.length }}</span>
-        </div>
-      </div>
-      <template #footer>
-        <Button variant="outline" @click="showImportConfirm = false"
-          >Cancel</Button
-        >
-        <Button @click="confirmImport">Import</Button>
       </template>
     </Dialog>
 

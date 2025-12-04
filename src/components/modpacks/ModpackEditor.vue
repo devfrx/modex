@@ -157,11 +157,12 @@ function toggleSort(field: "name" | "loader" | "version") {
 async function selectImage() {
   const imagePath = await window.api.modpacks.selectImage();
   if (imagePath && modpack.value) {
-    await window.api.modpacks.update(props.modpackId, {
-      image_path: imagePath,
-    });
-    modpack.value.image_path = imagePath;
-    emit("update");
+    // Use the new setImage API that copies the image to the modpack folder
+    const newImagePath = await window.api.modpacks.setImage(props.modpackId, imagePath);
+    if (newImagePath) {
+      modpack.value.image_path = newImagePath;
+      emit("update");
+    }
   }
 }
 
@@ -289,15 +290,15 @@ watch(
               v-for="mod in filteredInstalledMods"
               :key="mod.id"
               class="flex items-center gap-2 p-2 rounded-md border transition-colors group cursor-pointer"
-              :class="selectedModIds.has(mod.id!) ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-accent/50'"
-              @click="toggleSelect(mod.id!)"
+              :class="selectedModIds.has(mod.id) ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-accent/50'"
+              @click="toggleSelect(mod.id)"
             >
               <div
                 class="w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors"
-                :class="selectedModIds.has(mod.id!) ? 'bg-primary border-primary' : 'border-muted-foreground/30'"
+                :class="selectedModIds.has(mod.id) ? 'bg-primary border-primary' : 'border-muted-foreground/30'"
               >
                 <Check
-                  v-if="selectedModIds.has(mod.id!)"
+                  v-if="selectedModIds.has(mod.id)"
                   class="w-3 h-3 text-primary-foreground"
                 />
               </div>
@@ -311,7 +312,7 @@ watch(
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                @click.stop="removeMod(mod.id!)"
+                @click.stop="removeMod(mod.id)"
               >
                 <Trash2 class="w-3.5 h-3.5" />
               </Button>
@@ -378,7 +379,7 @@ watch(
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7 text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                @click.stop="addMod(mod.id!)"
+                @click.stop="addMod(mod.id)"
               >
                 <Plus class="w-4 h-4" />
               </Button>

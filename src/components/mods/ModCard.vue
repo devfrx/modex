@@ -20,7 +20,7 @@ const emit = defineEmits<{
   <div
     class="glass-card relative rounded-lg p-4 group overflow-hidden transition-all duration-200"
     :class="{ 'ring-2 ring-primary bg-primary/5': selected }"
-    @click="$emit('toggle-select', mod.id!)"
+    @click="$emit('toggle-select', mod.id)"
     @dblclick.stop="$emit('show-details', mod)"
   >
     <!-- Hover Gradient Effect -->
@@ -90,7 +90,7 @@ const emit = defineEmits<{
             variant="ghost"
             size="icon"
             class="h-6 w-6 text-muted-foreground hover:text-primary"
-            @click.stop="$emit('edit', mod.id!)"
+            @click.stop="$emit('edit', mod.id)"
           >
             <Edit class="w-3 h-3" />
           </Button>
@@ -98,7 +98,7 @@ const emit = defineEmits<{
             variant="ghost"
             size="icon"
             class="h-6 w-6 text-muted-foreground hover:text-destructive"
-            @click.stop="$emit('delete', mod.id!)"
+            @click.stop="$emit('delete', mod.id)"
           >
             <Trash2 class="w-3 h-3" />
           </Button>

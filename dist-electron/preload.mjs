@@ -5,34 +5,43 @@ electron.contextBridge.exposeInMainWorld("api", {
   mods: {
     getAll: () => electron.ipcRenderer.invoke("mods:getAll"),
     getById: (id) => electron.ipcRenderer.invoke("mods:getById", id),
-    add: (mod) => electron.ipcRenderer.invoke("mods:add", mod),
-    update: (id, mod) => electron.ipcRenderer.invoke("mods:update", id, mod),
-    delete: (id) => electron.ipcRenderer.invoke("mods:delete", id)
+    import: (sourcePaths) => electron.ipcRenderer.invoke("mods:import", sourcePaths),
+    update: (id, updates) => electron.ipcRenderer.invoke("mods:update", id, updates),
+    delete: (id) => electron.ipcRenderer.invoke("mods:delete", id),
+    bulkDelete: (ids) => electron.ipcRenderer.invoke("mods:bulkDelete", ids)
   },
   // Modpacks API
   modpacks: {
     getAll: () => electron.ipcRenderer.invoke("modpacks:getAll"),
     getById: (id) => electron.ipcRenderer.invoke("modpacks:getById", id),
-    add: (modpack) => electron.ipcRenderer.invoke("modpacks:add", modpack),
-    update: (id, modpack) => electron.ipcRenderer.invoke("modpacks:update", id, modpack),
+    create: (data) => electron.ipcRenderer.invoke("modpacks:create", data),
+    // Backward compatibility
+    add: (data) => electron.ipcRenderer.invoke("modpacks:add", data),
+    update: (id, updates) => electron.ipcRenderer.invoke("modpacks:update", id, updates),
     delete: (id) => electron.ipcRenderer.invoke("modpacks:delete", id),
     getMods: (modpackId) => electron.ipcRenderer.invoke("modpacks:getMods", modpackId),
     addMod: (modpackId, modId) => electron.ipcRenderer.invoke("modpacks:addMod", modpackId, modId),
     removeMod: (modpackId, modId) => electron.ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
-    selectImage: () => electron.ipcRenderer.invoke("modpacks:selectImage")
+    clone: (modpackId, newName) => electron.ipcRenderer.invoke("modpacks:clone", modpackId, newName),
+    selectImage: () => electron.ipcRenderer.invoke("modpacks:selectImage"),
+    setImage: (modpackId, imagePath) => electron.ipcRenderer.invoke("modpacks:setImage", modpackId, imagePath)
   },
   // Scanner API
   scanner: {
     selectFolder: () => electron.ipcRenderer.invoke("scanner:selectFolder"),
     selectFiles: () => electron.ipcRenderer.invoke("scanner:selectFiles"),
+    selectZipFile: () => electron.ipcRenderer.invoke("scanner:selectZipFile"),
     scanFolder: (folderPath) => electron.ipcRenderer.invoke("scanner:scanFolder", folderPath),
     scanFiles: (filePaths) => electron.ipcRenderer.invoke("scanner:scanFiles", filePaths),
-    importMods: (metadata) => electron.ipcRenderer.invoke("scanner:importMods", metadata),
-    importModpack: (zipPath) => electron.ipcRenderer.invoke("scanner:importModpack", zipPath),
+    importMods: (filePaths) => electron.ipcRenderer.invoke("scanner:importMods", filePaths),
+    importModpack: (zipPath, modpackName) => electron.ipcRenderer.invoke("scanner:importModpack", zipPath, modpackName),
     exportModpack: (modpackId, exportPath) => electron.ipcRenderer.invoke("scanner:exportModpack", modpackId, exportPath),
     selectExportPath: (defaultName) => electron.ipcRenderer.invoke("scanner:selectExportPath", defaultName),
-    selectZipFile: () => electron.ipcRenderer.invoke("scanner:selectZipFile"),
-    openInExplorer: (path) => electron.ipcRenderer.invoke("scanner:openInExplorer", path)
+    openInExplorer: (path) => electron.ipcRenderer.invoke("scanner:openInExplorer", path),
+    openLibrary: () => electron.ipcRenderer.invoke("scanner:openLibrary"),
+    openModpackFolder: (modpackId) => electron.ipcRenderer.invoke("scanner:openModpackFolder", modpackId),
+    getBasePath: () => electron.ipcRenderer.invoke("scanner:getBasePath"),
+    getLibraryPath: () => electron.ipcRenderer.invoke("scanner:getLibraryPath")
   },
   // Events
   on: (channel, callback) => {

@@ -1,7 +1,12 @@
+/**
+ * CurseForge API Service - Metadata Only
+ *
+ * Simplified version without download functionality.
+ * Used for searching, fetching mod info, and converting to library format.
+ */
+
 import * as fs from "fs-extra";
 import * as path from "path";
-import * as https from "https";
-import * as http from "http";
 
 // ==================== TYPES ====================
 
@@ -38,6 +43,14 @@ export interface CFAuthor {
   url: string;
 }
 
+export interface CFSortableGameVersion {
+  gameVersionName: string;
+  gameVersionPadded: string;
+  gameVersion: string;
+  gameVersionReleaseDate: string;
+  gameVersionTypeId: number;
+}
+
 export interface CFFile {
   id: number;
   modId: number;
@@ -49,6 +62,7 @@ export interface CFFile {
   downloadCount: number;
   downloadUrl: string | null;
   gameVersions: string[];
+  sortableGameVersions?: CFSortableGameVersion[];
   dependencies: CFDependency[];
   fileFingerprint: number;
 }
@@ -105,28 +119,53 @@ export class CurseForgeService {
   private readonly MINECRAFT_GAME_ID = 432;
   private readonly MODS_CLASS_ID = 6; // Mods category
 
+  // Simple in-memory cache
+  private cache = new Map<string, { data: any; expires: number }>();
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
   constructor(private configPath: string) {
     this.loadConfig();
   }
 
+  // ==================== CACHE ====================
+
+  private getCached<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (entry && Date.now() < entry.expires) {
+      return entry.data as T;
+    }
+    this.cache.delete(key);
+    return null;
+  }
+
+  private setCache(key: string, data: any): void {
+    this.cache.set(key, { data, expires: Date.now() + this.CACHE_TTL });
+  }
+
+  clearCache(): void {
+    this.cache.clear();
+  }
+
+  // ==================== CONFIG ====================
+
   private async loadConfig() {
-    const configFile = path.join(this.configPath, "update-config.json");
+    const configFile = path.join(this.configPath, "config.json");
     if (await fs.pathExists(configFile)) {
       const config = await fs.readJson(configFile);
-      this.apiKey = config.curseforgeApiKey || "";
+      this.apiKey = config.curseforge_api_key || "";
     }
   }
 
   async setApiKey(apiKey: string): Promise<void> {
     this.apiKey = apiKey;
-    const configFile = path.join(this.configPath, "update-config.json");
+    const configFile = path.join(this.configPath, "config.json");
     let config: any = {};
 
     if (await fs.pathExists(configFile)) {
       config = await fs.readJson(configFile);
     }
 
-    config.curseforgeApiKey = apiKey;
+    config.curseforge_api_key = apiKey;
     await fs.writeJson(configFile, config, { spaces: 2 });
   }
 
@@ -138,11 +177,144 @@ export class CurseForgeService {
     return !!this.apiKey;
   }
 
-  // ==================== SEARCH ====================
+  // ==================== BATCH OPERATIONS ====================
 
   /**
-   * Search mods on CurseForge
+   * Fetch multiple mods by their IDs in a single request
+   * Much more efficient than fetching one-by-one
    */
+  async getModsByIds(modIds: number[]): Promise<CFMod[]> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    if (modIds.length === 0) return [];
+
+    // Check cache first
+    const cacheKey = `mods:${modIds.sort().join(",")}`;
+    const cached = this.getCached<CFMod[]>(cacheKey);
+    if (cached) return cached;
+
+    console.log(`[CurseForge] Batch fetching ${modIds.length} mods`);
+
+    const response = await fetch(`${this.apiUrl}/mods`, {
+      method: "POST",
+      headers: {
+        "x-api-key": this.apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ modIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`CurseForge API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const mods = data.data || [];
+    this.setCache(cacheKey, mods);
+    return mods;
+  }
+
+  /**
+   * Fetch multiple files by their IDs in a single request
+   * Useful for update checking
+   */
+  async getFilesByIds(fileIds: number[]): Promise<CFFile[]> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    if (fileIds.length === 0) return [];
+
+    console.log(`[CurseForge] Batch fetching ${fileIds.length} files`);
+
+    const response = await fetch(`${this.apiUrl}/mods/files`, {
+      method: "POST",
+      headers: {
+        "x-api-key": this.apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ fileIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`CurseForge API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  }
+
+  /**
+   * Get full mod description (HTML)
+   */
+  async getModDescription(
+    modId: number,
+    options?: { stripped?: boolean }
+  ): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    const cacheKey = `desc:${modId}:${options?.stripped || false}`;
+    const cached = this.getCached<string>(cacheKey);
+    if (cached) return cached;
+
+    const params = new URLSearchParams();
+    if (options?.stripped) params.append("stripped", "true");
+
+    const url = `${this.apiUrl}/mods/${modId}/description${
+      params.toString() ? "?" + params : ""
+    }`;
+    const response = await fetch(url, {
+      headers: {
+        "x-api-key": this.apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`CurseForge API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const description = data.data || "";
+    this.setCache(cacheKey, description);
+    return description;
+  }
+
+  /**
+   * Get a single file by mod ID and file ID
+   */
+  async getModFile(modId: number, fileId: number): Promise<CFFile | null> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    const response = await fetch(
+      `${this.apiUrl}/mods/${modId}/files/${fileId}`,
+      {
+        headers: {
+          "x-api-key": this.apiKey,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(`CurseForge API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || null;
+  }
+
+  // ==================== SEARCH ====================
+
   async searchMods(options: {
     query?: string;
     gameVersion?: string;
@@ -150,7 +322,7 @@ export class CurseForgeService {
     categoryId?: number;
     pageSize?: number;
     index?: number;
-    sortField?: number; // 1=featured, 2=popularity, 3=lastUpdated, 4=name, 5=author, 6=totalDownloads
+    sortField?: number;
     sortOrder?: "asc" | "desc";
   }): Promise<CFSearchResult> {
     if (!this.apiKey) {
@@ -162,7 +334,7 @@ export class CurseForgeService {
       classId: this.MODS_CLASS_ID.toString(),
       pageSize: (options.pageSize || 20).toString(),
       index: (options.index || 0).toString(),
-      sortField: (options.sortField || 2).toString(), // Default: popularity
+      sortField: (options.sortField || 2).toString(),
       sortOrder: options.sortOrder || "desc",
     });
 
@@ -212,9 +384,6 @@ export class CurseForgeService {
     };
   }
 
-  /**
-   * Get a single mod by ID
-   */
   async getMod(modId: number): Promise<CFMod | null> {
     if (!this.apiKey) {
       throw new Error("CurseForge API key not set");
@@ -236,9 +405,6 @@ export class CurseForgeService {
     return data.data || null;
   }
 
-  /**
-   * Get files for a mod
-   */
   async getModFiles(
     modId: number,
     options?: {
@@ -286,9 +452,6 @@ export class CurseForgeService {
     return data.data || [];
   }
 
-  /**
-   * Get a specific file
-   */
   async getFile(modId: number, fileId: number): Promise<CFFile | null> {
     if (!this.apiKey) {
       throw new Error("CurseForge API key not set");
@@ -313,253 +476,43 @@ export class CurseForgeService {
     return data.data || null;
   }
 
-  /**
-   * Get download URL for a file
-   */
-  async getDownloadUrl(modId: number, fileId: number): Promise<string | null> {
-    if (!this.apiKey) {
-      throw new Error("CurseForge API key not set");
-    }
-
-    const response = await fetch(
-      `${this.apiUrl}/mods/${modId}/files/${fileId}/download-url`,
-      {
-        headers: {
-          "x-api-key": this.apiKey,
-          Accept: "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      // Some mods don't allow direct download, try to construct URL
-      const file = await this.getFile(modId, fileId);
-      if (file?.downloadUrl) {
-        return file.downloadUrl;
-      }
-      return null;
-    }
-
-    const data = await response.json();
-    return data.data || null;
-  }
-
-  // ==================== DOWNLOAD ====================
-
-  /**
-   * Download a mod file to a destination
-   */
-  async downloadFile(
-    modId: number,
-    fileId: number,
-    destPath: string,
-    onProgress?: (percent: number) => void
-  ): Promise<{ success: boolean; filePath: string; error?: string }> {
-    try {
-      const downloadUrl = await this.getDownloadUrl(modId, fileId);
-
-      if (!downloadUrl) {
-        return {
-          success: false,
-          filePath: "",
-          error: "Could not get download URL. Mod author may have disabled direct downloads.",
-        };
-      }
-
-      // Get file info for filename
-      const file = await this.getFile(modId, fileId);
-      if (!file) {
-        return { success: false, filePath: "", error: "File not found" };
-      }
-
-      const filePath = path.join(destPath, file.fileName);
-
-      // Ensure directory exists
-      await fs.ensureDir(destPath);
-
-      // Download file
-      await this.downloadFromUrl(downloadUrl, filePath, onProgress);
-
-      return { success: true, filePath };
-    } catch (err) {
-      return {
-        success: false,
-        filePath: "",
-        error: (err as Error).message,
-      };
-    }
-  }
-
-  /**
-   * Download file from URL
-   */
-  private downloadFromUrl(
-    url: string,
-    destPath: string,
-    onProgress?: (percent: number) => void
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const protocol = url.startsWith("https") ? https : http;
-
-      const request = protocol.get(url, (response) => {
-        // Handle redirects
-        if (
-          response.statusCode &&
-          response.statusCode >= 300 &&
-          response.statusCode < 400 &&
-          response.headers.location
-        ) {
-          this.downloadFromUrl(response.headers.location, destPath, onProgress)
-            .then(resolve)
-            .catch(reject);
-          return;
-        }
-
-        if (response.statusCode !== 200) {
-          reject(new Error(`HTTP ${response.statusCode}`));
-          return;
-        }
-
-        const totalSize = parseInt(
-          response.headers["content-length"] || "0",
-          10
-        );
-        let downloadedSize = 0;
-
-        const file = fs.createWriteStream(destPath);
-
-        response.on("data", (chunk) => {
-          downloadedSize += chunk.length;
-          if (onProgress && totalSize > 0) {
-            onProgress(Math.round((downloadedSize / totalSize) * 100));
-          }
-        });
-
-        response.pipe(file);
-
-        file.on("finish", () => {
-          file.close();
-          resolve();
-        });
-
-        file.on("error", (err) => {
-          fs.unlink(destPath).catch(() => {});
-          reject(err);
-        });
-      });
-
-      request.on("error", reject);
-    });
-  }
-
   // ==================== HELPERS ====================
 
-  /**
-   * Get the best file for a mod given version and loader
-   */
   async getBestFile(
     modId: number,
     gameVersion: string,
     modLoader: string
   ): Promise<CFFile | null> {
+    // First try exact match with version and loader
     const files = await this.getModFiles(modId, {
       gameVersion,
       modLoader,
     });
 
     if (files.length === 0) {
-      // Try without loader filter
+      // Fallback: try same version with any loader that matches
       const allFiles = await this.getModFiles(modId, { gameVersion });
       if (allFiles.length > 0) {
-        // Find one that matches the loader
         const loaderLower = modLoader.toLowerCase();
         const matching = allFiles.find((f) =>
           f.gameVersions.some((gv) => gv.toLowerCase() === loaderLower)
         );
-        return matching || allFiles[0];
+        return matching || null; // Return null if no matching loader found
       }
       return null;
     }
 
-    // Return the first (most recent) release file, or first file
+    // Prefer release files over beta/alpha
     const releaseFile = files.find((f) => f.releaseType === 1);
     return releaseFile || files[0];
   }
 
   /**
-   * Find a file that matches EXACTLY the given game version
-   * Used when the manifest references a file with wrong version
-   */
-  async findFileForVersion(
-    modId: number,
-    gameVersion: string,
-    modLoader: string
-  ): Promise<{ id: number; fileName: string } | null> {
-    try {
-      console.log(`[CF findFile] Searching mod ${modId} for version ${gameVersion} + ${modLoader}`);
-      
-      // Get all files for this exact game version
-      const files = await this.getModFiles(modId, {
-        gameVersion: gameVersion,
-        modLoader: modLoader,
-        pageSize: 50,
-      });
-      
-      console.log(`[CF findFile] Found ${files.length} files with version+loader filter`);
-
-      // Find a file that has EXACTLY this game version
-      for (const file of files) {
-        const mcVersions = file.gameVersions.filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v));
-        if (mcVersions.includes(gameVersion)) {
-          // Prefer release files
-          if (file.releaseType === 1) {
-            console.log(`[CF findFile] Found release: ${file.fileName}`);
-            return { id: file.id, fileName: file.fileName };
-          }
-        }
-      }
-
-      // If no release found, accept beta/alpha
-      for (const file of files) {
-        const mcVersions = file.gameVersions.filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v));
-        if (mcVersions.includes(gameVersion)) {
-          console.log(`[CF findFile] Found beta/alpha: ${file.fileName}`);
-          return { id: file.id, fileName: file.fileName };
-        }
-      }
-
-      // Try without loader filter as last resort
-      console.log(`[CF findFile] Trying without loader filter...`);
-      const allFiles = await this.getModFiles(modId, {
-        gameVersion: gameVersion,
-        pageSize: 100,
-      });
-      
-      console.log(`[CF findFile] Found ${allFiles.length} files with version-only filter`);
-
-      for (const file of allFiles) {
-        const mcVersions = file.gameVersions.filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v));
-        const loaders = file.gameVersions.map(v => v.toLowerCase());
-        
-        // Check if version matches exactly AND loader is compatible
-        if (mcVersions.includes(gameVersion) && loaders.includes(modLoader.toLowerCase())) {
-          console.log(`[CF findFile] Found with compatible loader: ${file.fileName}`);
-          return { id: file.id, fileName: file.fileName };
-        }
-      }
-
-      console.log(`[CF findFile] No file found for ${gameVersion}`);
-      return null;
-    } catch (error) {
-      console.error(`[CF findFile] Error:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Convert CF mod to our internal format
-   * @param preferredLoader - The loader the user selected in search, to prioritize
-   * @param targetGameVersion - The specific MC version to use (from modpack)
+   * Convert CF mod+file to library format (metadata only, no file operations)
+   * 
+   * IMPORTANT: 
+   * - game_version comes from CF API's sortableGameVersions or gameVersions array
+   * - version (mod version) uses file.displayName directly - no parsing
    */
   modToLibraryFormat(
     mod: CFMod,
@@ -578,48 +531,78 @@ export class CurseForgeService {
     description: string;
     author: string;
     thumbnail_url: string | null;
+    logo_url: string | null;
     download_count: number;
-    file_size: number;
     release_type: "release" | "beta" | "alpha";
     date_released: string;
     dependencies: { modId: number; type: string }[];
+    categories: string[];
+    file_size: number;
+    date_created: string;
+    date_modified: string;
+    website_url: string;
   } {
-    // Extract loader and game version from file
     let loader = "unknown";
     let game_version = "unknown";
     const foundLoaders: string[] = [];
     const foundVersions: string[] = [];
 
+    // PRIORITY 1: Use sortableGameVersions from CF API (most reliable)
+    // These are properly structured game version entries from CurseForge
+    if (file.sortableGameVersions && file.sortableGameVersions.length > 0) {
+      for (const sgv of file.sortableGameVersions) {
+        // gameVersion field contains the actual MC version like "1.20.1"
+        if (sgv.gameVersion && /^1\.\d+(\.\d+)?$/.test(sgv.gameVersion)) {
+          foundVersions.push(sgv.gameVersion);
+        }
+      }
+    }
+
+    // PRIORITY 2: Fallback to gameVersions array if sortableGameVersions empty
+    if (foundVersions.length === 0) {
+      for (const gv of file.gameVersions) {
+        if (/^1\.\d+(\.\d+)?$/.test(gv)) {
+          foundVersions.push(gv);
+        }
+      }
+    }
+
+    // Parse loaders from gameVersions array (loaders are always in gameVersions)
     for (const gv of file.gameVersions) {
       const lower = gv.toLowerCase();
       if (["forge", "fabric", "quilt", "neoforge"].includes(lower)) {
         foundLoaders.push(lower);
-      } else if (/^1\.\d+(\.\d+)?$/.test(gv)) {
-        foundVersions.push(gv);
       }
     }
 
-    // Use target game version if specified and available, otherwise use the first found
+    // Determine game_version - prefer target if specified and available
     if (targetGameVersion && foundVersions.includes(targetGameVersion)) {
       game_version = targetGameVersion;
     } else if (foundVersions.length > 0) {
+      // Sort versions and pick the most recent (highest)
+      foundVersions.sort((a, b) => {
+        const aParts = a.split('.').map(Number);
+        const bParts = b.split('.').map(Number);
+        for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+          const aVal = aParts[i] || 0;
+          const bVal = bParts[i] || 0;
+          if (aVal !== bVal) return bVal - aVal;
+        }
+        return 0;
+      });
       game_version = foundVersions[0];
     }
 
-    // Prioritize the preferred loader if specified and found
+    // Determine loader - prefer specified if available
     if (preferredLoader && foundLoaders.includes(preferredLoader.toLowerCase())) {
       loader = preferredLoader.toLowerCase();
     } else if (foundLoaders.length > 0) {
       loader = foundLoaders[0];
     }
 
-    // Extract version from display name or filename
-    let version = file.displayName || file.fileName;
-    // Try to extract version number
-    const versionMatch = version.match(/(\d+\.\d+\.\d+(?:\.\d+)?)/);
-    if (versionMatch) {
-      version = versionMatch[1];
-    }
+    // MOD VERSION: Use displayName directly from CF API - no parsing!
+    // This is the actual mod version as set by the mod author
+    const version = file.displayName;
 
     const releaseTypes: Record<number, "release" | "beta" | "alpha"> = {
       1: "release",
@@ -648,20 +631,22 @@ export class CurseForgeService {
       description: mod.summary,
       author: mod.authors.map((a) => a.name).join(", "),
       thumbnail_url: mod.logo?.thumbnailUrl || null,
+      logo_url: mod.logo?.url || null,
       download_count: mod.downloadCount,
-      file_size: file.fileLength,
       release_type: releaseTypes[file.releaseType] || "release",
       date_released: file.fileDate,
       dependencies: file.dependencies.map((d) => ({
         modId: d.modId,
         type: dependencyTypes[d.relationType] || "unknown",
       })),
+      categories: Array.from(new Set(mod.categories.map((c) => c.name))),
+      file_size: file.fileLength,
+      date_created: mod.dateCreated,
+      date_modified: mod.dateModified,
+      website_url: `https://www.curseforge.com/minecraft/mc-mods/${mod.slug}`,
     };
   }
 
-  /**
-   * Get popular/featured mods
-   */
   async getPopularMods(
     gameVersion?: string,
     modLoader?: string,
@@ -671,15 +656,12 @@ export class CurseForgeService {
       gameVersion,
       modLoader,
       pageSize,
-      sortField: 2, // Popularity
+      sortField: 2,
       sortOrder: "desc",
     });
     return result.mods;
   }
 
-  /**
-   * Get categories
-   */
   async getCategories(): Promise<CFCategory[]> {
     if (!this.apiKey) {
       throw new Error("CurseForge API key not set");

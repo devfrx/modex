@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Star,
   Share2,
+  RefreshCw,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 
@@ -38,6 +39,7 @@ defineEmits<{
   (e: "open-folder", id: string): void;
   (e: "toggle-favorite", id: string): void;
   (e: "share", id: string, name: string): void;
+  (e: "convert", id: string): void;
 }>();
 
 function handleImageError(event: Event) {
@@ -73,8 +75,8 @@ function handleImageError(event: Event) {
     <div class="absolute top-3 right-3 z-20 transition-all duration-200"
       :class="selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
       <div class="w-5 h-5 rounded border flex items-center justify-center transition-colors" :class="selected
-          ? 'bg-primary border-primary'
-          : 'bg-background/50 border-white/20 hover:border-primary'
+        ? 'bg-primary border-primary'
+        : 'bg-background/50 border-white/20 hover:border-primary'
         ">
         <Check v-if="selected" class="w-3.5 h-3.5 text-primary-foreground" />
       </div>
@@ -127,6 +129,10 @@ function handleImageError(event: Event) {
         <Button variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-blue-400"
           @click.stop="$emit('clone', modpack.id)" title="Clone">
           <Copy class="w-3.5 h-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-purple-500"
+          @click.stop="$emit('convert', modpack.id)" title="Convert to different version">
+          <RefreshCw class="w-3.5 h-3.5" />
         </Button>
         <Button variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-green-500"
           @click.stop="$emit('share', modpack.id, modpack.name)" title="Share (.modex)">

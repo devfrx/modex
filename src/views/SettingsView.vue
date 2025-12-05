@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import { useToast } from "@/composables/useToast";
+import { useDialog } from "@/composables/useDialog";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import {
@@ -21,6 +23,8 @@ import {
 
 // App version from package.json
 const appVersion = __APP_VERSION__;
+const toast = useToast();
+const { confirm } = useDialog();
 
 // Settings State
 const libraryPath = ref("");
@@ -73,47 +77,54 @@ async function loadSettings() {
     const modpacks = await window.api.modpacks.getAll();
     modCount.value = mods.length;
     modpackCount.value = modpacks.length;
-    
-    // Calculate total size
-    const totalBytes = mods.reduce((sum, mod) => sum + (mod.size || 0), 0);
-    totalSize.value = formatBytes(totalBytes);
-    
-    // Get library path
-    libraryPath.value = await window.api.scanner.getLibraryPath();
+
+    // Metadata-only mode: no local file storage
+    totalSize.value = "N/A (metadata only)";
+    libraryPath.value = "Mods are stored as metadata references only";
   } catch (err) {
     console.error("Failed to load stats:", err);
   }
 }
 
 async function openLibraryFolder() {
-  if (!window.api) return;
-  await window.api.scanner.openLibrary();
+  // Not available in metadata-only mode
+  toast.info(
+    "Not Available",
+    "Open Library is not available. Mods are stored as API references only, not as local files."
+  );
 }
 
 function applyTheme(newTheme: "dark" | "light" | "system") {
   theme.value = newTheme;
   localStorage.setItem("modex:theme", newTheme);
-  
+
   if (newTheme === "system") {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
     document.documentElement.classList.toggle("light", !prefersDark);
   } else {
     document.documentElement.classList.toggle("light", newTheme === "light");
   }
 }
 
-function applyAccentColor(color: typeof accentColors[0]) {
+function applyAccentColor(color: (typeof accentColors)[0]) {
   accentColor.value = color.name;
   localStorage.setItem("modex:accent", color.name);
   document.documentElement.style.setProperty("--primary", color.value);
 }
 
 async function clearAllData() {
-  if (
-    !confirm(
-      "⚠️ This will delete ALL mods and modpacks permanently.\n\nThis action cannot be undone. Are you sure?"
-    )
-  ) {
+  const confirmed = await confirm({
+    title: "Clear All Data",
+    message: "This will delete ALL mods and modpacks permanently.\n\nThis action cannot be undone. Are you sure?",
+    variant: "danger",
+    icon: "warning",
+    confirmText: "Delete Everything",
+    cancelText: "Cancel"
+  });
+
+  if (!confirmed) {
     return;
   }
 
@@ -131,9 +142,9 @@ async function clearAllData() {
     }
 
     await loadSettings();
-    alert("All data cleared successfully!");
+    toast.success("Data Cleared", "All data cleared successfully!");
   } catch (err) {
-    alert("Failed to clear data: " + (err as Error).message);
+    toast.error("Clear Failed", "Failed to clear data: " + (err as Error).message);
   } finally {
     isClearingData.value = false;
   }
@@ -145,24 +156,28 @@ async function refreshLibrary() {
 
 onMounted(() => {
   // Load theme
-  const savedTheme = localStorage.getItem("modex:theme") as "dark" | "light" | "system" || "dark";
+  const savedTheme =
+    (localStorage.getItem("modex:theme") as "dark" | "light" | "system") ||
+    "dark";
   theme.value = savedTheme;
   applyTheme(savedTheme);
-  
+
   // Load accent color
   const savedAccent = localStorage.getItem("modex:accent") || "purple";
   accentColor.value = savedAccent;
-  const color = accentColors.find(c => c.name === savedAccent);
+  const color = accentColors.find((c) => c.name === savedAccent);
   if (color) {
     document.documentElement.style.setProperty("--primary", color.value);
   }
 
   // Listen for system theme changes
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
-    if (theme.value === "system") {
-      document.documentElement.classList.toggle("light", !e.matches);
-    }
-  });
+  window
+    .matchMedia("(prefers-color-scheme: dark)")
+    .addEventListener("change", (e) => {
+      if (theme.value === "system") {
+        document.documentElement.classList.toggle("light", !e.matches);
+      }
+    });
 
   loadSettings();
 });
@@ -171,10 +186,8 @@ onMounted(() => {
 <template>
   <div class="p-6 h-full flex flex-col space-y-6 overflow-auto">
     <!-- API Warning Banner -->
-    <div
-      v-if="!apiAvailable"
-      class="bg-destructive/10 border border-destructive text-destructive rounded-lg p-4 flex items-center gap-3"
-    >
+    <div v-if="!apiAvailable"
+      class="bg-destructive/10 border border-destructive text-destructive rounded-lg p-4 flex items-center gap-3">
       <AlertTriangle class="w-5 h-5 flex-shrink-0" />
       <div>
         <p class="font-medium">Backend API not available</p>
@@ -206,30 +219,18 @@ onMounted(() => {
         <div class="space-y-3">
           <label class="text-sm font-medium">Theme</label>
           <div class="flex gap-2">
-            <Button
-              :variant="theme === 'dark' ? 'default' : 'outline'"
-              size="sm"
-              class="gap-2"
-              @click="applyTheme('dark')"
-            >
+            <Button :variant="theme === 'dark' ? 'default' : 'outline'" size="sm" class="gap-2"
+              @click="applyTheme('dark')">
               <Moon class="w-4 h-4" />
               Dark
             </Button>
-            <Button
-              :variant="theme === 'light' ? 'default' : 'outline'"
-              size="sm"
-              class="gap-2"
-              @click="applyTheme('light')"
-            >
+            <Button :variant="theme === 'light' ? 'default' : 'outline'" size="sm" class="gap-2"
+              @click="applyTheme('light')">
               <Sun class="w-4 h-4" />
               Light
             </Button>
-            <Button
-              :variant="theme === 'system' ? 'default' : 'outline'"
-              size="sm"
-              class="gap-2"
-              @click="applyTheme('system')"
-            >
+            <Button :variant="theme === 'system' ? 'default' : 'outline'" size="sm" class="gap-2"
+              @click="applyTheme('system')">
               <Monitor class="w-4 h-4" />
               System
             </Button>
@@ -240,17 +241,13 @@ onMounted(() => {
         <div class="space-y-3">
           <label class="text-sm font-medium">Accent Color</label>
           <div class="flex gap-2">
-            <button
-              v-for="color in accentColors"
-              :key="color.name"
-              :class="[
-                color.class,
-                'w-8 h-8 rounded-full transition-all hover:scale-110',
-                accentColor === color.name ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground' : ''
-              ]"
-              :title="color.name"
-              @click="applyAccentColor(color)"
-            />
+            <button v-for="color in accentColors" :key="color.name" :class="[
+              color.class,
+              'w-8 h-8 rounded-full transition-all hover:scale-110',
+              accentColor === color.name
+                ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground'
+                : '',
+            ]" :title="color.name" @click="applyAccentColor(color)" />
           </div>
         </div>
       </div>
@@ -265,11 +262,7 @@ onMounted(() => {
         <div class="space-y-2">
           <label class="text-sm font-medium">Mod Library Path</label>
           <div class="flex gap-2">
-            <Input
-              v-model="libraryPath"
-              readonly
-              class="flex-1 font-mono text-xs"
-            />
+            <Input v-model="libraryPath" readonly class="flex-1 font-mono text-xs" />
             <Button variant="outline" @click="openLibraryFolder" class="gap-2">
               <ExternalLink class="w-4 h-4" />
               Open
@@ -297,7 +290,9 @@ onMounted(() => {
             <div class="text-xs text-muted-foreground mt-1">Total Mods</div>
           </div>
           <div class="p-4 bg-secondary/30 rounded-lg text-center">
-            <div class="text-3xl font-bold text-primary">{{ modpackCount }}</div>
+            <div class="text-3xl font-bold text-primary">
+              {{ modpackCount }}
+            </div>
             <div class="text-xs text-muted-foreground mt-1">Modpacks</div>
           </div>
           <div class="p-4 bg-secondary/30 rounded-lg text-center">
@@ -315,13 +310,14 @@ onMounted(() => {
         </h2>
 
         <div class="grid grid-cols-2 gap-2">
-          <div
-            v-for="shortcut in shortcuts"
-            :key="shortcut.keys"
-            class="flex items-center justify-between p-2 bg-secondary/20 rounded"
-          >
-            <span class="text-sm text-muted-foreground">{{ shortcut.action }}</span>
-            <kbd class="px-2 py-1 bg-secondary text-xs rounded font-mono">{{ shortcut.keys }}</kbd>
+          <div v-for="shortcut in shortcuts" :key="shortcut.keys"
+            class="flex items-center justify-between p-2 bg-secondary/20 rounded">
+            <span class="text-sm text-muted-foreground">{{
+              shortcut.action
+            }}</span>
+            <kbd class="px-2 py-1 bg-secondary text-xs rounded font-mono">{{
+              shortcut.keys
+            }}</kbd>
           </div>
         </div>
       </div>
@@ -340,12 +336,7 @@ onMounted(() => {
               Permanently delete all mods and modpacks.
             </p>
           </div>
-          <Button
-            variant="destructive"
-            class="gap-2"
-            @click="clearAllData"
-            :disabled="isClearingData"
-          >
+          <Button variant="destructive" class="gap-2" @click="clearAllData" :disabled="isClearingData">
             <Trash2 class="w-4 h-4" />
             {{ isClearingData ? "Clearing..." : "Clear All" }}
           </Button>
@@ -382,7 +373,9 @@ onMounted(() => {
           </div>
 
           <p class="text-xs text-muted-foreground pt-2 flex items-center gap-1">
-            Made with <Heart class="w-3 h-3 text-red-500 fill-red-500" /> for Minecraft modders
+            Made with
+            <Heart class="w-3 h-3 text-red-500 fill-red-500" /> for
+            Minecraft modders
           </p>
         </div>
       </div>

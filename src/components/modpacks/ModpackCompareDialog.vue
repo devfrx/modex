@@ -20,6 +20,19 @@ const packAMods = ref<Mod[]>([]);
 const packBMods = ref<Mod[]>([]);
 const isLoading = ref(false);
 
+// Get selected modpacks
+const packA = computed(() => modpacks.value.find((p) => p.id === packAId.value));
+const packB = computed(() => modpacks.value.find((p) => p.id === packBId.value));
+
+// Check if versions/loaders are compatible
+const areCompatible = computed(() => {
+  if (!packA.value || !packB.value) return true;
+  return (
+    packA.value.minecraft_version === packB.value.minecraft_version &&
+    packA.value.loader === packB.value.loader
+  );
+});
+
 // Computed comparisons
 const onlyInA = computed(() => {
   const bIds = new Set(packBMods.value.map((m) => m.id));
@@ -59,19 +72,19 @@ async function loadComparison() {
 }
 
 async function copyToB(modId: string) {
-  if (!packBId.value) return;
+  if (!packBId.value || !areCompatible.value) return;
   await window.api.modpacks.addMod(packBId.value, modId);
   await loadComparison();
 }
 
 async function copyToA(modId: string) {
-  if (!packAId.value) return;
+  if (!packAId.value || !areCompatible.value) return;
   await window.api.modpacks.addMod(packAId.value, modId);
   await loadComparison();
 }
 
 async function copyAllToB() {
-  if (!packBId.value) return;
+  if (!packBId.value || !areCompatible.value) return;
   for (const mod of onlyInA.value) {
     await window.api.modpacks.addMod(packBId.value, mod.id!);
   }
@@ -79,7 +92,7 @@ async function copyAllToB() {
 }
 
 async function copyAllToA() {
-  if (!packAId.value) return;
+  if (!packAId.value || !areCompatible.value) return;
   for (const mod of onlyInB.value) {
     await window.api.modpacks.addMod(packAId.value, mod.id!);
   }
@@ -114,13 +127,10 @@ const packBName = computed(
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-  >
+  <div v-if="open"
+    class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
     <div
-      class="bg-background border rounded-lg shadow-lg w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
-    >
+      class="bg-background border rounded-lg shadow-lg w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
       <!-- Header -->
       <div class="p-4 border-b flex items-center justify-between bg-card/50">
         <div class="flex items-center gap-3">
@@ -136,17 +146,9 @@ const packBName = computed(
       <div class="p-4 border-b flex items-center gap-4">
         <div class="flex-1">
           <label class="text-sm font-medium mb-1 block">Pack A</label>
-          <select
-            v-model="packAId"
-            class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          >
+          <select v-model="packAId" class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
             <option :value="null" disabled>Select modpack...</option>
-            <option
-              v-for="pack in modpacks"
-              :key="pack.id"
-              :value="pack.id"
-              :disabled="pack.id === packBId"
-            >
+            <option v-for="pack in modpacks" :key="pack.id" :value="pack.id" :disabled="pack.id === packBId">
               {{ pack.name }}
             </option>
           </select>
@@ -154,20 +156,34 @@ const packBName = computed(
         <ArrowLeftRight class="w-5 h-5 text-muted-foreground mt-6" />
         <div class="flex-1">
           <label class="text-sm font-medium mb-1 block">Pack B</label>
-          <select
-            v-model="packBId"
-            class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          >
+          <select v-model="packBId" class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
             <option :value="null" disabled>Select modpack...</option>
-            <option
-              v-for="pack in modpacks"
-              :key="pack.id"
-              :value="pack.id"
-              :disabled="pack.id === packAId"
-            >
+            <option v-for="pack in modpacks" :key="pack.id" :value="pack.id" :disabled="pack.id === packAId">
               {{ pack.name }}
             </option>
           </select>
+        </div>
+      </div>
+
+      <!-- Incompatibility Warning -->
+      <div v-if="packAId && packBId && !areCompatible" class="p-3 border-b bg-yellow-500/10 border-yellow-500/30">
+        <div class="flex items-start gap-2 text-sm">
+          <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" fill="none"
+            stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <div class="font-medium text-yellow-700 dark:text-yellow-400">Incompatible Modpacks</div>
+            <div class="text-yellow-600 dark:text-yellow-500 mt-0.5">
+              These modpacks have different Minecraft versions or mod loaders.
+              <span class="font-semibold">Mod transfer is disabled</span> - you can only view differences.
+            </div>
+            <div class="mt-1 text-xs text-yellow-600/80 dark:text-yellow-500/80">
+              Pack A: {{ packA?.minecraft_version }} {{ packA?.loader }} | Pack B: {{ packB?.minecraft_version }} {{
+                packB?.loader }}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -175,48 +191,34 @@ const packBName = computed(
       <div v-if="packAId && packBId" class="flex-1 flex overflow-hidden">
         <!-- Only in A -->
         <div class="flex-1 border-r flex flex-col">
-          <div
-            class="p-2 border-b bg-red-500/10 flex items-center justify-between"
-          >
-            <span class="text-sm font-medium"
-              >Only in {{ packAName }} ({{ onlyInA.length }})</span
-            >
-            <Button
-              v-if="onlyInA.length > 0"
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs gap-1"
-              @click="copyAllToB"
-            >
+          <div class="p-2 border-b bg-red-500/10 flex items-center justify-between">
+            <span class="text-sm font-medium">Only in {{ packAName }} ({{ onlyInA.length }})</span>
+            <Button v-if="onlyInA.length > 0" variant="ghost" size="sm" class="h-7 text-xs gap-1"
+              :disabled="!areCompatible" @click="copyAllToB">
               Copy all to B
               <ArrowRight class="w-3 h-3" />
             </Button>
           </div>
           <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div
-              v-for="mod in onlyInA"
-              :key="mod.id"
-              class="flex items-center justify-between p-2 rounded-md border bg-background hover:bg-accent/50 group"
-            >
-              <div class="min-w-0">
+            <div v-for="mod in onlyInA" :key="mod.id"
+              class="flex items-center justify-between p-2 rounded-md border bg-background hover:bg-accent/50 group">
+              <div class="min-w-0 flex-1">
                 <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-                <div class="text-xs text-muted-foreground">
-                  {{ mod.loader }}
+                <div class="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                  <span v-if="mod.game_version" class="text-emerald-500">{{ mod.game_version }}</span>
+                  <span class="capitalize">{{ mod.loader }}</span>
+                  <span v-if="mod.version" class="text-purple-400 truncate max-w-[100px]" :title="mod.version">{{
+                    mod.version }}</span>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 opacity-0 group-hover:opacity-100"
-                @click="copyToB(mod.id)"
-              >
+              <Button variant="ghost" size="icon" class="h-7 w-7 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                :class="!areCompatible ? 'cursor-not-allowed' : ''" :disabled="!areCompatible"
+                :title="areCompatible ? 'Copy to Pack B' : 'Cannot transfer - incompatible versions'"
+                @click="copyToB(mod.id)">
                 <ArrowRight class="w-4 h-4" />
               </Button>
             </div>
-            <div
-              v-if="onlyInA.length === 0"
-              class="p-4 text-center text-muted-foreground text-sm"
-            >
+            <div v-if="onlyInA.length === 0" class="p-4 text-center text-muted-foreground text-sm">
               No unique mods
             </div>
           </div>
@@ -225,23 +227,19 @@ const packBName = computed(
         <!-- Common -->
         <div class="flex-1 border-r flex flex-col">
           <div class="p-2 border-b bg-green-500/10">
-            <span class="text-sm font-medium"
-              >Common ({{ common.length }})</span
-            >
+            <span class="text-sm font-medium">Common ({{ common.length }})</span>
           </div>
           <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div
-              v-for="mod in common"
-              :key="mod.id"
-              class="p-2 rounded-md border bg-background"
-            >
+            <div v-for="mod in common" :key="mod.id" class="p-2 rounded-md border bg-background">
               <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-              <div class="text-xs text-muted-foreground">{{ mod.loader }}</div>
+              <div class="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                <span v-if="mod.game_version" class="text-emerald-500">{{ mod.game_version }}</span>
+                <span class="capitalize">{{ mod.loader }}</span>
+                <span v-if="mod.version" class="text-purple-400 truncate max-w-[100px]" :title="mod.version">{{
+                  mod.version }}</span>
+              </div>
             </div>
-            <div
-              v-if="common.length === 0"
-              class="p-4 text-center text-muted-foreground text-sm"
-            >
+            <div v-if="common.length === 0" class="p-4 text-center text-muted-foreground text-sm">
               No common mods
             </div>
           </div>
@@ -249,48 +247,34 @@ const packBName = computed(
 
         <!-- Only in B -->
         <div class="flex-1 flex flex-col">
-          <div
-            class="p-2 border-b bg-blue-500/10 flex items-center justify-between"
-          >
-            <span class="text-sm font-medium"
-              >Only in {{ packBName }} ({{ onlyInB.length }})</span
-            >
-            <Button
-              v-if="onlyInB.length > 0"
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs gap-1"
-              @click="copyAllToA"
-            >
+          <div class="p-2 border-b bg-blue-500/10 flex items-center justify-between">
+            <span class="text-sm font-medium">Only in {{ packBName }} ({{ onlyInB.length }})</span>
+            <Button v-if="onlyInB.length > 0" variant="ghost" size="sm" class="h-7 text-xs gap-1"
+              :disabled="!areCompatible" @click="copyAllToA">
               <ArrowRight class="w-3 h-3 rotate-180" />
               Copy all to A
             </Button>
           </div>
           <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div
-              v-for="mod in onlyInB"
-              :key="mod.id"
-              class="flex items-center justify-between p-2 rounded-md border bg-background hover:bg-accent/50 group"
-            >
-              <Button
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 opacity-0 group-hover:opacity-100"
-                @click="copyToA(mod.id)"
-              >
+            <div v-for="mod in onlyInB" :key="mod.id"
+              class="flex items-center justify-between p-2 rounded-md border bg-background hover:bg-accent/50 group">
+              <Button variant="ghost" size="icon" class="h-7 w-7 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                :class="!areCompatible ? 'cursor-not-allowed' : ''" :disabled="!areCompatible"
+                :title="areCompatible ? 'Copy to Pack A' : 'Cannot transfer - incompatible versions'"
+                @click="copyToA(mod.id)">
                 <ArrowRight class="w-4 h-4 rotate-180" />
               </Button>
               <div class="min-w-0 flex-1 text-right">
                 <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-                <div class="text-xs text-muted-foreground">
-                  {{ mod.loader }}
+                <div class="flex items-center justify-end gap-2 text-xs text-muted-foreground mt-0.5">
+                  <span v-if="mod.version" class="text-purple-400 truncate max-w-[100px]" :title="mod.version">{{
+                    mod.version }}</span>
+                  <span class="capitalize">{{ mod.loader }}</span>
+                  <span v-if="mod.game_version" class="text-emerald-500">{{ mod.game_version }}</span>
                 </div>
               </div>
             </div>
-            <div
-              v-if="onlyInB.length === 0"
-              class="p-4 text-center text-muted-foreground text-sm"
-            >
+            <div v-if="onlyInB.length === 0" class="p-4 text-center text-muted-foreground text-sm">
               No unique mods
             </div>
           </div>
@@ -298,10 +282,7 @@ const packBName = computed(
       </div>
 
       <!-- Empty State -->
-      <div
-        v-else
-        class="flex-1 flex items-center justify-center text-muted-foreground"
-      >
+      <div v-else class="flex-1 flex items-center justify-center text-muted-foreground">
         Select two modpacks to compare
       </div>
     </div>

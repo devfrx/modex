@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, computed } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
-import { ImagePlus, X } from "lucide-vue-next";
+import { ImagePlus, X, Lock } from "lucide-vue-next";
 
 const props = defineProps<{
   open: boolean;
   initialName?: string;
   initialModsCount?: number;
+  // Forced values - when provided, these fields are locked
+  forcedMinecraftVersion?: string;
+  forcedLoader?: string;
 }>();
 
 const emit = defineEmits<{
@@ -28,14 +31,34 @@ const emit = defineEmits<{
 
 // Common Minecraft versions
 const minecraftVersions = [
-  "1.21.4", "1.21.3", "1.21.1", "1.21",
-  "1.20.6", "1.20.4", "1.20.2", "1.20.1", "1.20",
-  "1.19.4", "1.19.3", "1.19.2", "1.19.1", "1.19",
-  "1.18.2", "1.18.1", "1.18",
-  "1.17.1", "1.17",
-  "1.16.5", "1.16.4", "1.16.3", "1.16.2", "1.16.1",
-  "1.12.2", "1.12.1", "1.12",
-  "1.7.10"
+  "1.21.4",
+  "1.21.3",
+  "1.21.1",
+  "1.21",
+  "1.20.6",
+  "1.20.4",
+  "1.20.2",
+  "1.20.1",
+  "1.20",
+  "1.19.4",
+  "1.19.3",
+  "1.19.2",
+  "1.19.1",
+  "1.19",
+  "1.18.2",
+  "1.18.1",
+  "1.18",
+  "1.17.1",
+  "1.17",
+  "1.16.5",
+  "1.16.4",
+  "1.16.3",
+  "1.16.2",
+  "1.16.1",
+  "1.12.2",
+  "1.12.1",
+  "1.12",
+  "1.7.10",
 ];
 
 const loaders = [
@@ -55,6 +78,10 @@ const form = ref({
 });
 
 const nameError = ref("");
+
+// Computed props for locked fields
+const isVersionLocked = computed(() => !!props.forcedMinecraftVersion);
+const isLoaderLocked = computed(() => !!props.forcedLoader);
 
 // Validate name - not empty or whitespace only
 function validateName(): boolean {
@@ -82,8 +109,8 @@ watch(
     if (isOpen) {
       form.value.name = props.initialName || "";
       form.value.version = "1.0.0";
-      form.value.minecraft_version = "1.20.1";
-      form.value.loader = "forge";
+      form.value.minecraft_version = props.forcedMinecraftVersion || "1.20.1";
+      form.value.loader = props.forcedLoader || "forge";
       form.value.description = "";
       form.value.image_path = undefined;
       nameError.value = "";
@@ -93,7 +120,7 @@ watch(
 
 async function selectImage() {
   if (!window.api) return;
-  const imagePath = await window.api.modpacks.selectImage();
+  const imagePath = await window.api.dialogs.selectImage();
   if (imagePath) {
     form.value.image_path = imagePath;
   }
@@ -105,9 +132,9 @@ function removeImage() {
 
 function create() {
   if (!validateName()) return;
-  emit("create", { 
-    ...form.value, 
-    name: form.value.name.trim() 
+  emit("create", {
+    ...form.value,
+    name: form.value.name.trim(),
   });
 }
 </script>
@@ -122,29 +149,19 @@ function create() {
       <!-- Image Picker -->
       <div class="space-y-2">
         <label class="text-sm font-medium">Cover Image (Optional)</label>
-        <div
-          v-if="!form.image_path"
+        <div v-if="!form.image_path"
           class="flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
-          @click="selectImage"
-        >
+          @click="selectImage">
           <div class="flex flex-col items-center text-muted-foreground">
             <ImagePlus class="w-6 h-6 mb-1" />
             <span class="text-xs">Click to select</span>
           </div>
         </div>
-        <div
-          v-else
-          class="relative w-full h-24 rounded-lg overflow-hidden border"
-        >
-          <img
-            :src="'atom:///' + form.image_path.replace(/\\\\/g, '/')"
-            class="w-full h-full object-cover"
-            alt=""
-          />
+        <div v-else class="relative w-full h-24 rounded-lg overflow-hidden border">
+          <img :src="'atom:///' + form.image_path.replace(/\\\\/g, '/')" class="w-full h-full object-cover" alt="" />
           <button
             class="absolute top-1 right-1 p-1 bg-background/80 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
-            @click="removeImage"
-          >
+            @click="removeImage">
             <X class="w-4 h-4" />
           </button>
         </div>
@@ -152,13 +169,8 @@ function create() {
 
       <div class="space-y-2">
         <label class="text-sm font-medium">Name</label>
-        <Input 
-          v-model="form.name" 
-          placeholder="My Awesome Modpack" 
-          autofocus 
-          :class="nameError ? 'border-red-500 focus-visible:ring-red-500' : ''"
-          @input="nameError = ''"
-        />
+        <Input v-model="form.name" placeholder="My Awesome Modpack" autofocus
+          :class="nameError ? 'border-red-500 focus-visible:ring-red-500' : ''" @input="nameError = ''" />
         <p v-if="nameError" class="text-xs text-red-500">{{ nameError }}</p>
       </div>
 
@@ -169,33 +181,43 @@ function create() {
 
       <!-- Minecraft Version -->
       <div class="space-y-2">
-        <label class="text-sm font-medium">Minecraft Version</label>
-        <select
-          v-model="form.minecraft_version"
-          class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
-          <option v-for="v in minecraftVersions" :key="v" :value="v">{{ v }}</option>
+        <label class="text-sm font-medium flex items-center gap-2">
+          Minecraft Version
+          <Lock v-if="isVersionLocked" class="w-3 h-3 text-muted-foreground" />
+        </label>
+        <select v-model="form.minecraft_version" :disabled="isVersionLocked"
+          class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+          <option v-for="v in minecraftVersions" :key="v" :value="v">
+            {{ v }}
+          </option>
         </select>
+        <p v-if="isVersionLocked" class="text-xs text-muted-foreground">
+          Locked to match selected mods
+        </p>
       </div>
 
       <!-- Loader -->
       <div class="space-y-2">
-        <label class="text-sm font-medium">Mod Loader</label>
-        <select
-          v-model="form.loader"
-          class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
-          <option v-for="l in loaders" :key="l.value" :value="l.value">{{ l.label }}</option>
+        <label class="text-sm font-medium flex items-center gap-2">
+          Mod Loader
+          <Lock v-if="isLoaderLocked" class="w-3 h-3 text-muted-foreground" />
+        </label>
+        <select v-model="form.loader" :disabled="isLoaderLocked"
+          class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+          <option v-for="l in loaders" :key="l.value" :value="l.value">
+            {{ l.label }}
+          </option>
         </select>
+        <p v-if="isLoaderLocked" class="text-xs text-muted-foreground">
+          Locked to match selected mods
+        </p>
       </div>
 
       <div class="space-y-2">
         <label class="text-sm font-medium">Description</label>
-        <textarea
-          v-model="form.description"
+        <textarea v-model="form.description"
           class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder="Optional description..."
-        ></textarea>
+          placeholder="Optional description..."></textarea>
       </div>
     </div>
 

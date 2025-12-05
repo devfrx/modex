@@ -7,8 +7,10 @@ import ModpackEditor from "@/components/modpacks/ModpackEditor.vue";
 import ModpackCompareDialog from "@/components/modpacks/ModpackCompareDialog.vue";
 import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import ShareDialog from "@/components/modpacks/ShareDialog.vue";
+import ConvertModpackDialog from "@/components/modpacks/ConvertModpackDialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
+import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ProgressDialog from "@/components/ui/ProgressDialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
 import {
@@ -19,6 +21,7 @@ import {
   BarChart3,
   Star,
   Share2,
+  RefreshCw,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
 
@@ -52,6 +55,7 @@ const showCompare = ref(false);
 
 // Delete State
 const showDeleteDialog = ref(false);
+const showBulkDeleteDialog = ref(false);
 const modpackToDelete = ref<string | null>(null);
 
 // Create State
@@ -62,11 +66,38 @@ const showShareDialog = ref(false);
 const shareModpackId = ref<string | null>(null);
 const shareModpackName = ref<string>("");
 
+// Convert State
+const showConvertDialog = ref(false);
+const convertModpack = ref<Modpack | null>(null);
+
 // Import State
 const showProgress = ref(false);
 const progressTitle = ref("");
 const progressMessage = ref("");
 const importZipName = ref("");
+
+// CF Import Conflicts
+const showCFConflictDialog = ref(false);
+const pendingCFConflicts = ref<{
+  conflicts: Array<{
+    modName: string;
+    existingVersion: string;
+    existingGameVersion: string;
+    newVersion: string;
+    newGameVersion: string;
+    projectID: number;
+    fileID: number;
+    existingFileId: number;
+    existingMod: {
+      id: string;
+      name: string;
+      version: string;
+      game_version: string;
+    };
+    resolution?: 'use_existing' | 'use_new';
+  }>;
+  modpackId: string;
+} | null>(null);
 
 // Stats
 const totalMods = computed(() =>
@@ -127,8 +158,12 @@ function clearSelection() {
 }
 
 // Bulk Actions
+function confirmBulkDelete() {
+  showBulkDeleteDialog.value = true;
+}
+
 async function deleteSelectedModpacks() {
-  if (!confirm(`Delete ${selectedModpackIds.value.size} modpacks?`)) return;
+  showBulkDeleteDialog.value = false;
 
   showProgress.value = true;
   progressTitle.value = "Deleting Modpacks";
@@ -144,7 +179,7 @@ async function deleteSelectedModpacks() {
     await loadModpacks();
     clearSelection();
   } catch (err) {
-    alert("Delete failed: " + (err as Error).message);
+    toast.error("Delete Failed", (err as Error).message);
   } finally {
     showProgress.value = false;
   }
@@ -159,56 +194,37 @@ async function createModpack(data: {
 }) {
   showCreateDialog.value = false;
   try {
-    await window.api.modpacks.add(data);
+    await window.api.modpacks.create(data);
     await loadModpacks();
   } catch (err) {
-    alert("Failed to create: " + (err as Error).message);
+    toast.error("Create Failed", (err as Error).message);
   }
 }
 
-// Export Modpack as ZIP
+// Export Modpack as CurseForge ZIP
 async function exportModpack(modpackId: string) {
-  const pack = modpacks.value.find((p) => p.id === modpackId);
-  if (!pack) return;
-
-  const path = await window.api.scanner.selectExportPath(pack.name);
-  if (!path) return;
-
   showProgress.value = true;
   progressTitle.value = "Exporting Modpack";
-  progressMessage.value = "Creating ZIP file...";
+  progressMessage.value = "Creating CurseForge manifest...";
 
   try {
-    await window.api.scanner.exportModpack(modpackId, path);
-    alert(`Exported to: ${path}`);
+    const result = await window.api.export.curseforge(modpackId);
+    if (result) {
+      toast.success("Export Complete", `Exported to: ${result.path}`);
+    }
   } catch (err) {
-    alert("Export failed: " + (err as Error).message);
+    toast.error("Export Failed", (err as Error).message);
   } finally {
     showProgress.value = false;
   }
 }
 
-// Export Modpack to Game Folder
-async function exportModpackToGame(modpackId: string) {
-  const targetFolder = await window.api.scanner.selectGameFolder();
-  if (!targetFolder) return;
-
-  showProgress.value = true;
-  progressTitle.value = "Exporting to Game";
-  progressMessage.value = "Copying mods to game folder...";
-
-  try {
-    const result = await window.api.scanner.exportModpackToGameFolder(modpackId, targetFolder);
-    if (result.success) {
-      alert(`Successfully exported ${result.count} mods to:\n${targetFolder}`);
-    } else {
-      alert("Export failed. Please check the target folder and try again.");
-    }
-  } catch (err) {
-    alert("Export failed: " + (err as Error).message);
-  } finally {
-    showProgress.value = false;
-  }
+// Export to Game Folder - Not available in metadata-only mode
+async function exportModpackToGame(_modpackId: string) {
+  toast.info(
+    "Not Available",
+    "Export to game folder is not available in this version. Mods are stored as references only. Export as CurseForge format and import in your launcher."
+  );
 }
 
 // Clone Modpack
@@ -222,7 +238,10 @@ async function cloneModpack(modpackId: string) {
 
   try {
     // Use the new clone API that handles everything
-    const newPackId = await window.api.modpacks.clone(modpackId, `${original.name} (Copy)`);
+    const newPackId = await window.api.modpacks.clone(
+      modpackId,
+      `${original.name} (Copy)`
+    );
 
     if (!newPackId) {
       throw new Error("Clone failed");
@@ -230,23 +249,23 @@ async function cloneModpack(modpackId: string) {
 
     await loadModpacks();
   } catch (err) {
-    alert("Clone failed: " + (err as Error).message);
+    toast.error("Clone Failed", (err as Error).message);
   } finally {
     showProgress.value = false;
   }
 }
 
-// Open modpack folder in Explorer
+// Open modpack folder in explorer
 async function openInExplorer(modpackId: string) {
   try {
-    await window.api.scanner.openModpackFolder(modpackId);
+    await window.api.modpacks.openFolder(modpackId);
   } catch (err) {
-    console.error("Failed to open in explorer:", err);
+    console.error("Failed to open folder:", err);
   }
 }
 
 // Import CurseForge Modpack
-const importProgress = ref({ current: 0, total: 0, modName: '' });
+const importProgress = ref({ current: 0, total: 0, modName: "" });
 
 async function importCurseForgeModpack() {
   if (!isElectron()) return;
@@ -254,23 +273,48 @@ async function importCurseForgeModpack() {
   showProgress.value = true;
   progressTitle.value = "Importing CurseForge Modpack";
   progressMessage.value = "Select a modpack ZIP file...";
-  importProgress.value = { current: 0, total: 0, modName: '' };
+  importProgress.value = { current: 0, total: 0, modName: "" };
 
   // Listen for progress updates
-  const progressHandler = (data: { current: number; total: number; modName: string }) => {
+  const progressHandler = (data: {
+    current: number;
+    total: number;
+    modName: string;
+  }) => {
     importProgress.value = data;
     progressMessage.value = `Downloading mod ${data.current}/${data.total}: ${data.modName}`;
   };
 
-  window.api.on('cf-import-progress', progressHandler);
+  window.api.on("cf-import-progress", progressHandler);
 
   try {
-    const result = await window.api.share.importCurseForgeZip();
+    const result = await window.api.import.curseforge();
+    console.log('[CF Import] Result:', result);
 
     if (!result) {
       // User cancelled - cleanup and return
-      window.ipcRenderer.off('cf-import-progress', progressHandler as any);
+      window.ipcRenderer.off("cf-import-progress", progressHandler as any);
       showProgress.value = false;
+      return;
+    }
+
+    // Check if conflicts need resolution
+    if (result.requiresResolution && result.conflicts) {
+      console.log(`[CF Import] ${result.conflicts.length} conflicts detected, showing dialog`);
+      window.ipcRenderer.off("cf-import-progress", progressHandler as any);
+      showProgress.value = false;
+
+      pendingCFConflicts.value = {
+        conflicts: result.conflicts.map((c: any) => ({
+          ...c,
+          resolution: 'use_existing' as const,
+          existingGameVersion: c.existingGameVersion || c.existingMod?.game_version || 'unknown',
+          newGameVersion: c.newGameVersion || 'unknown',
+          existingFileId: c.existingFileId || c.existingMod?.cf_file_id || 0,
+        })),
+        modpackId: result.modpackId || '',
+      };
+      showCFConflictDialog.value = true;
       return;
     }
 
@@ -280,30 +324,75 @@ async function importCurseForgeModpack() {
         message += ` ${result.modsSkipped} mods were skipped.`;
       }
       if (result.errors.length > 0) {
-        message += `\n\nErrors:\n${result.errors.slice(0, 5).join('\n')}`;
+        message += `\n\nErrors:\n${result.errors.slice(0, 5).join("\n")}`;
         if (result.errors.length > 5) {
           message += `\n... and ${result.errors.length - 5} more errors`;
         }
       }
-      toast.success('Import Successful', message, 7000);
+      toast.success("Import Successful", message, 7000);
       await loadModpacks();
     } else {
-      toast.error('Import Failed', result.errors[0] || "Unknown error", 7000);
+      toast.error("Import Failed", result.errors[0] || "Unknown error", 7000);
     }
   } catch (err) {
-    toast.error('Import Error', (err as Error).message, 7000);
+    toast.error("Import Error", (err as Error).message, 7000);
   } finally {
-    window.ipcRenderer.off('cf-import-progress', progressHandler as any);
+    window.ipcRenderer.off("cf-import-progress", progressHandler as any);
     showProgress.value = false;
     // Ensure DOM update completes
     await nextTick();
-    // Force focus restore - sometimes Electron loses focus after alert()
+    // Force focus restore
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
     document.body.focus();
     document.body.blur();
-    console.log('[ModpackView] Progress dialog closed, showProgress =', showProgress.value);
+    console.log(
+      "[ModpackView] Progress dialog closed, showProgress =",
+      showProgress.value
+    );
+  }
+}
+
+async function resolveCFConflicts() {
+  if (!pendingCFConflicts.value) return;
+
+  showProgress.value = true;
+  progressTitle.value = "Resolving conflicts...";
+  progressMessage.value = "Applying your choices";
+
+  try {
+    const result = await window.api.import.resolveCFConflicts({
+      modpackId: pendingCFConflicts.value.modpackId,
+      conflicts: pendingCFConflicts.value.conflicts.map(c => ({
+        projectID: c.projectID,
+        fileID: c.fileID,
+        existingModId: c.existingMod.id,
+        resolution: c.resolution || 'use_existing',
+      })),
+    });
+
+    if (result.success) {
+      showCFConflictDialog.value = false;
+      pendingCFConflicts.value = null;
+
+      let message = `Successfully imported ${result.modsImported} mods.`;
+      if (result.modsSkipped > 0) {
+        message += ` ${result.modsSkipped} mods were skipped.`;
+      }
+      if (result.errors.length > 0) {
+        message += `\n\nErrors:\n${result.errors.slice(0, 3).join("\n")}`;
+      }
+      toast.success("Import Successful", message, 7000);
+      await loadModpacks();
+    } else {
+      toast.error("Import Failed", result.errors[0] || "Unknown error");
+    }
+  } catch (err) {
+    console.error('[CF Conflicts] Resolution failed:', err);
+    toast.error("Resolution Failed", (err as Error).message);
+  } finally {
+    showProgress.value = false;
   }
 }
 
@@ -340,8 +429,28 @@ async function deleteModpack() {
     showDeleteDialog.value = false;
     modpackToDelete.value = null;
   } catch (err) {
-    alert("Delete failed: " + (err as Error).message);
+    toast.error("Delete Failed", (err as Error).message);
   }
+}
+
+// Convert Modpack
+function openConvertDialog(id: string) {
+  const pack = modpacks.value.find((p) => p.id === id);
+  if (pack) {
+    convertModpack.value = pack;
+    showConvertDialog.value = true;
+  }
+}
+
+function closeConvertDialog() {
+  showConvertDialog.value = false;
+  convertModpack.value = null;
+}
+
+async function handleConvertSuccess() {
+  await loadModpacks();
+  closeConvertDialog();
+  toast.success("Conversion Complete", "Your converted modpack is ready!");
 }
 
 // Drag & Drop support for ZIP files
@@ -371,36 +480,11 @@ async function handleDrop(event: DragEvent) {
   isDragging.value = false;
   dragCounter.value = 0;
 
-  if (!event.dataTransfer?.files.length) return;
-
-  const file = event.dataTransfer.files[0];
-  if (!file.name.endsWith('.zip')) {
-    alert("Please drop a .zip modpack file.");
-    return;
-  }
-
-  // Use electronUtils to get the file path safely
-  const zipPath = window.electronUtils?.getPathForFile(file) || (file as any).path;
-  if (!zipPath) {
-    alert("Could not read file path. Please try importing via the button.");
-    return;
-  }
-
-  const zipName = file.name.replace(".zip", "");
-
-  showProgress.value = true;
-  progressTitle.value = "Importing Modpack";
-  progressMessage.value = "Extracting and importing mods...";
-
-  try {
-    const result = await window.api.scanner.importModpack(zipPath, zipName);
-    showProgress.value = false;
-    alert(`Imported modpack "${zipName}" with ${result.modCount} mods!`);
-    await loadModpacks();
-  } catch (err) {
-    alert("Import failed: " + (err as Error).message);
-    showProgress.value = false;
-  }
+  // Drag and drop import not supported in metadata-only mode
+  toast.info(
+    "Not Available",
+    "Drag and drop import is not available. Please use the 'Import CF Modpack' button instead."
+  );
 }
 
 // Favorites system
@@ -412,7 +496,10 @@ function loadFavoriteModpacks() {
 }
 
 function saveFavoriteModpacks() {
-  localStorage.setItem("modex:favorites:modpacks", JSON.stringify([...favoriteModpacks.value]));
+  localStorage.setItem(
+    "modex:favorites:modpacks",
+    JSON.stringify([...favoriteModpacks.value])
+  );
   window.dispatchEvent(new Event("storage"));
 }
 
@@ -431,7 +518,7 @@ const sortedModpacks = computed(() => {
 
   // Apply quick filter
   if (quickFilter.value === "favorites") {
-    result = result.filter(p => favoriteModpacks.value.has(p.id));
+    result = result.filter((p) => favoriteModpacks.value.has(p.id));
   }
 
   // Sort - favorites first, then by name
@@ -505,14 +592,22 @@ onMounted(() => {
 
     <!-- Quick Filters -->
     <div class="flex items-center gap-2">
-      <button class="px-3 py-1.5 text-sm rounded-full transition-colors"
-        :class="quickFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'"
-        @click="quickFilter = 'all'; router.push('/modpacks')">
+      <button class="px-3 py-1.5 text-sm rounded-full transition-colors" :class="quickFilter === 'all'
+        ? 'bg-primary text-primary-foreground'
+        : 'bg-muted hover:bg-accent'
+        " @click="
+          quickFilter = 'all';
+        router.push('/modpacks');
+        ">
         All
       </button>
-      <button class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5"
-        :class="quickFilter === 'favorites' ? 'bg-yellow-500 text-white' : 'bg-muted hover:bg-accent'"
-        @click="quickFilter = 'favorites'; router.push('/modpacks?filter=favorites')">
+      <button class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5" :class="quickFilter === 'favorites'
+        ? 'bg-yellow-500 text-white'
+        : 'bg-muted hover:bg-accent'
+        " @click="
+          quickFilter = 'favorites';
+        router.push('/modpacks?filter=favorites');
+        ">
         <Star class="w-3.5 h-3.5" />
         Favorites
         <span v-if="favoriteModpacks.size > 0" class="text-xs opacity-80">({{ favoriteModpacks.size }})</span>
@@ -551,13 +646,13 @@ onMounted(() => {
       <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
         :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete"
         @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
-        @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" />
+        @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog" />
     </div>
 
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModpackIds.size > 0" :count="selectedModpackIds.size" label="modpacks"
       @clear="clearSelection">
-      <Button variant="destructive" size="sm" class="gap-2" @click="deleteSelectedModpacks">
+      <Button variant="destructive" size="sm" class="gap-2" @click="confirmBulkDelete">
         <Trash2 class="w-4 h-4" />
         Delete
       </Button>
@@ -582,10 +677,99 @@ onMounted(() => {
       </template>
     </Dialog>
 
+    <ConfirmDialog :open="showBulkDeleteDialog" title="Delete Selected Modpacks"
+      :message="`Are you sure you want to delete ${selectedModpackIds.size} selected modpack${selectedModpackIds.size > 1 ? 's' : ''}? This will not delete the mods inside.`"
+      confirm-text="Delete" variant="danger" icon="trash" @confirm="deleteSelectedModpacks"
+      @cancel="showBulkDeleteDialog = false" @close="showBulkDeleteDialog = false" />
+
     <ProgressDialog :open="showProgress" :title="progressTitle" :message="progressMessage" />
 
     <!-- Share Dialog -->
     <ShareDialog :open="showShareDialog" :modpack-id="shareModpackId ?? undefined" :modpack-name="shareModpackName"
       @close="showShareDialog = false" @refresh="loadModpacks" />
+
+    <!-- Convert Dialog -->
+    <ConvertModpackDialog :open="showConvertDialog" :modpack="convertModpack" @close="closeConvertDialog"
+      @success="handleConvertSuccess" />
+
+    <!-- CF Import Conflict Resolution Dialog -->
+    <Dialog :open="showCFConflictDialog" @close="showCFConflictDialog = false">
+      <template #header>
+        <h2 class="text-xl font-bold">Version Conflicts Detected</h2>
+      </template>
+
+      <div class="space-y-4">
+        <p class="text-sm text-muted-foreground">
+          Some mods already exist in your library with different versions. Choose which version to use:
+        </p>
+
+        <div v-if="pendingCFConflicts" class="space-y-3 max-h-96 overflow-y-auto">
+          <div v-for="(conflict, idx) in pendingCFConflicts.conflicts" :key="idx"
+            class="p-4 rounded-lg border bg-card space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="font-semibold">{{ conflict.modName }}</div>
+              <div class="text-xs text-muted-foreground">
+                File ID: {{ conflict.existingFileId }} → {{ conflict.fileID }}
+              </div>
+            </div>
+
+            <!-- Use Existing Version -->
+            <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all" :class="conflict.resolution === 'use_existing'
+              ? 'bg-primary/10 border-primary'
+              : 'bg-muted/50 border-border hover:bg-muted'
+              ">
+              <input type="radio" :name="`cf-conflict-${idx}`" value="use_existing" v-model="conflict.resolution"
+                class="mt-1" />
+              <div class="flex-1">
+                <div class="font-medium text-sm">Keep existing version</div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{
+                    conflict.existingGameVersion || 'unknown' }}</span>
+                  <span class="text-xs text-muted-foreground truncate max-w-[200px]"
+                    :title="conflict.existingVersion">{{
+                      conflict.existingVersion }}</span>
+                </div>
+                <div class="text-xs text-muted-foreground mt-1">
+                  Already in your library
+                </div>
+              </div>
+            </label>
+
+            <!-- Use New Version -->
+            <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all" :class="conflict.resolution === 'use_new'
+              ? 'bg-primary/10 border-primary'
+              : 'bg-muted/50 border-border hover:bg-muted'
+              ">
+              <input type="radio" :name="`cf-conflict-${idx}`" value="use_new" v-model="conflict.resolution"
+                class="mt-1" />
+              <div class="flex-1">
+                <div class="font-medium text-sm">Download new version</div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{
+                    conflict.newGameVersion
+                    || 'unknown' }}</span>
+                  <span class="text-xs text-muted-foreground truncate max-w-[200px]" :title="conflict.newVersion">{{
+                    conflict.newVersion }}</span>
+                </div>
+                <div class="text-xs text-muted-foreground mt-1">
+                  From the imported modpack
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex gap-2">
+          <Button variant="outline" @click="showCFConflictDialog = false; pendingCFConflicts = null">
+            Cancel
+          </Button>
+          <Button @click="resolveCFConflicts">
+            Apply Choices
+          </Button>
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>

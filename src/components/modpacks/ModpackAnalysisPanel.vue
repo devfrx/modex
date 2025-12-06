@@ -23,6 +23,7 @@ import type { ModpackAnalysis, DependencyInfo, ConflictInfo, PerformanceStats } 
 
 const props = defineProps<{
     modpackId: string;
+    isLinked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -236,9 +237,10 @@ watch(
                                         <ExternalLink class="w-4 h-4 text-muted-foreground" />
                                     </a>
                                     <Button variant="default" size="sm" class="h-7 text-xs gap-1"
-                                        @click="addDependency(dep)">
-                                        <Package class="w-3 h-3" />
-                                        Add
+                                        @click="addDependency(dep)" :disabled="isLinked">
+                                        <Package v-if="!isLinked" class="w-3 h-3" />
+                                        <Lock v-else class="w-3 h-3" />
+                                        {{ isLinked ? 'Locked' : 'Add' }}
                                     </Button>
                                 </div>
                             </div>

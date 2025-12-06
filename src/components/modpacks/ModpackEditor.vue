@@ -102,6 +102,11 @@ const isExistingModpack = computed(() => {
   return modpack.value !== null && modpack.value.id !== undefined;
 });
 
+// Check if modpack is linked to a remote source (Read-Only mode)
+const isLinked = computed(() => {
+  return !!modpack.value?.remote_source?.url;
+});
+
 // Check mod compatibility with modpack
 function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
   if (!modpack.value) return { compatible: true };
@@ -273,6 +278,10 @@ async function saveModpackInfo() {
 }
 
 async function addMod(modId: string) {
+  if (isLinked.value) {
+    toast.error("Action Restricted", "Cannot add mods to a linked modpack. Manage mods from the remote source.");
+    return;
+  }
   try {
     await window.api.modpacks.addMod(props.modpackId, modId);
     await loadData();
@@ -285,6 +294,10 @@ async function addMod(modId: string) {
 }
 
 async function removeMod(modId: string) {
+  if (isLinked.value) {
+    toast.error("Action Restricted", "Cannot remove mods from a linked modpack. Manage mods from the remote source.");
+    return;
+  }
   try {
     await window.api.modpacks.removeMod(props.modpackId, modId);
     await loadData();
@@ -404,6 +417,11 @@ watch(() => editForm.value.remote_url, () => {
 // Add mod from analysis (CurseForge project ID)
 async function handleAddModFromAnalysis(cfProjectId: number) {
   if (!modpack.value) return;
+
+  if (isLinked.value) {
+    toast.error("Action Restricted", "Cannot add mods to a linked modpack. Manage mods from the remote source.");
+    return;
+  }
 
   try {
     // Get the mod from CurseForge
@@ -635,9 +653,9 @@ watch(
             <!-- Thumbnail -->
             <div v-if="modpack?.image_url" class="w-10 h-10 rounded-lg overflow-hidden ring-2 ring-primary/20 shrink-0">
               <img :src="modpack.image_url.startsWith('http') ||
-                  modpack.image_url.startsWith('file:')
-                  ? modpack.image_url
-                  : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
+                modpack.image_url.startsWith('file:')
+                ? modpack.image_url
+                : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
                 " class="w-full h-full object-cover" />
             </div>
             <div v-else
@@ -652,7 +670,7 @@ watch(
                   {{ modpack?.name || "Loading..." }}
                 </h2>
                 <span v-if="modpack?.version" class="text-xs text-muted-foreground font-mono">v{{ modpack.version
-                  }}</span>
+                }}</span>
                 <span v-if="modpack?.remote_source?.url"
                   class="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-500 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
                   title="This modpack is linked to a remote source">
@@ -684,8 +702,8 @@ watch(
             </Button>
             <Button variant="ghost" size="sm" class="h-8 px-2.5 gap-1.5"
               :disabled="!modpack?.minecraft_version || !modpack?.loader" :title="!modpack?.minecraft_version || !modpack?.loader
-                  ? 'Set version and loader first'
-                  : 'Check updates'
+                ? 'Set version and loader first'
+                : 'Check updates'
                 " @click="showUpdatesDialog = true">
               <ArrowUpCircle class="w-4 h-4" />
             </Button>
@@ -709,8 +727,8 @@ watch(
         <!-- Tab Navigation -->
         <div class="px-5 flex items-center gap-1">
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'mods'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'mods'">
             <div class="flex items-center gap-1.5">
               <Layers class="w-4 h-4" />
@@ -719,8 +737,8 @@ watch(
             <div v-if="activeTab === 'mods'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'analysis'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'analysis'">
             <div class="flex items-center gap-1.5">
               <AlertCircle class="w-4 h-4" />
@@ -730,8 +748,8 @@ watch(
               class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'versions'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'versions'">
             <div class="flex items-center gap-1.5">
               <GitBranch class="w-4 h-4" />
@@ -741,8 +759,8 @@ watch(
               class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'remote'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'remote'">
             <div class="flex items-center gap-1.5">
               <Globe class="w-4 h-4" />
@@ -751,8 +769,8 @@ watch(
             <div v-if="activeTab === 'remote'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'settings'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'settings'">
             <div class="flex items-center gap-1.5">
               <Settings class="w-4 h-4" />
@@ -797,14 +815,14 @@ watch(
                 </div>
                 <div class="flex rounded-lg border border-border/50 overflow-hidden">
                   <button class="h-8 text-xs px-3 transition-colors" :class="sortBy === 'name'
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'hover:bg-muted'
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'hover:bg-muted'
                     " @click="toggleSort('name')">
                     Name
                   </button>
                   <button class="h-8 text-xs px-3 border-l border-border/50 transition-colors" :class="sortBy === 'version'
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'hover:bg-muted'
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'hover:bg-muted'
                     " @click="toggleSort('version')">
                     Version
                   </button>
@@ -820,24 +838,28 @@ watch(
                     ? 'bg-primary/10 border-primary/50 shadow-sm'
                     : 'border-transparent hover:bg-accent/50 hover:border-border/50',
                   disabledModIds.has(mod.id) ? 'opacity-50' : '',
-                ]" @click="toggleSelect(mod.id)">
+                  isLinked ? 'cursor-default' : 'cursor-pointer'
+                ]" @click="!isLinked && toggleSelect(mod.id)">
                 <!-- Checkbox -->
-                <div class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
-                  :class="selectedModIds.has(mod.id)
-                      ? 'bg-primary border-primary'
-                      : 'border-muted-foreground/30 group-hover:border-muted-foreground/50'
+                <div v-if="!isLinked"
+                  class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors" :class="selectedModIds.has(mod.id)
+                    ? 'bg-primary border-primary'
+                    : 'border-muted-foreground/30 group-hover:border-muted-foreground/50'
                     ">
                   <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3 text-primary-foreground" />
                 </div>
+                <div v-else class="w-4 h-4 flex items-center justify-center shrink-0">
+                  <div class="w-1.5 h-1.5 rounded-full bg-muted-foreground/30"></div>
+                </div>
 
                 <!-- Enable/Disable Toggle -->
-                <button class="w-8 h-4 rounded-full relative shrink-0 transition-colors" :class="disabledModIds.has(mod.id)
-                    ? 'bg-muted-foreground/30'
-                    : 'bg-emerald-500'
-                  " @click.stop="toggleModEnabled(mod.id)" :title="disabledModIds.has(mod.id)
-                      ? 'Click to enable mod'
-                      : 'Click to disable mod'
-                    ">
+                <button class="w-8 h-4 rounded-full relative shrink-0 transition-colors" :class="[
+                  disabledModIds.has(mod.id) ? 'bg-muted-foreground/30' : 'bg-emerald-500',
+                  isLinked ? 'opacity-50 cursor-not-allowed' : ''
+                ]" @click.stop="!isLinked && toggleModEnabled(mod.id)" :title="isLinked
+                    ? 'Managed by remote source'
+                    : (disabledModIds.has(mod.id) ? 'Click to enable mod' : 'Click to disable mod')"
+                  :disabled="isLinked">
                   <span class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all"
                     :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-4'" />
                 </button>
@@ -868,11 +890,16 @@ watch(
                 </div>
 
                 <!-- Remove Button -->
-                <Button variant="ghost" size="icon"
+                <Button v-if="!isLinked" variant="ghost" size="icon"
                   class="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all shrink-0"
                   @click.stop="removeMod(mod.id)">
                   <Trash2 class="w-3.5 h-3.5" />
                 </Button>
+                <div v-else
+                  class="h-7 w-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                  title="Managed by remote source">
+                  <Lock class="w-3.5 h-3.5 text-muted-foreground/50" />
+                </div>
               </div>
 
               <!-- Empty State -->
@@ -889,7 +916,7 @@ watch(
             </div>
 
             <!-- Selection Footer -->
-            <div v-if="currentMods.length > 0"
+            <div v-if="currentMods.length > 0 && !isLinked"
               class="shrink-0 px-3 py-2 border-t border-border/30 bg-muted/10 flex items-center justify-between text-xs">
               <span class="text-muted-foreground">{{ selectedModIds.size }} of
                 {{ currentMods.length }} selected</span>
@@ -926,8 +953,8 @@ watch(
             <div class="flex-1 overflow-y-auto p-2 space-y-1">
               <div v-for="mod in filteredAvailableMods" :key="mod.id"
                 class="flex items-center justify-between p-2.5 rounded-lg transition-all relative" :class="mod.isCompatible
-                    ? 'hover:bg-accent/50 cursor-pointer group'
-                    : 'opacity-40'
+                  ? 'hover:bg-accent/50 cursor-pointer group'
+                  : 'opacity-40'
                   ">
                 <!-- Mod Info -->
                 <div class="min-w-0 flex-1">
@@ -957,12 +984,13 @@ watch(
                 </div>
 
                 <!-- Add Button -->
-                <Button v-if="mod.isCompatible" variant="ghost" size="icon"
+                <Button v-if="mod.isCompatible && !isLinked" variant="ghost" size="icon"
                   class="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0 hover:bg-primary/10"
                   @click.stop="addMod(mod.id)">
                   <Plus class="w-4 h-4" />
                 </Button>
-                <Lock v-else class="w-4 h-4 text-muted-foreground/50 shrink-0 mr-2" />
+                <Lock v-else class="w-4 h-4 text-muted-foreground/50 shrink-0 mr-2"
+                  :title="isLinked ? 'Managed by remote source' : 'Incompatible'" />
               </div>
 
               <!-- Empty State -->
@@ -978,7 +1006,8 @@ watch(
 
         <!-- Analysis Tab -->
         <div v-else-if="activeTab === 'analysis'" class="flex-1 overflow-hidden">
-          <ModpackAnalysisPanel :modpack-id="modpackId" @add-mod="handleAddModFromAnalysis" @refresh="loadData" />
+          <ModpackAnalysisPanel :modpack-id="modpackId" :is-linked="isLinked" @add-mod="handleAddModFromAnalysis"
+            @refresh="loadData" />
         </div>
 
         <!-- Version History Tab -->
@@ -996,16 +1025,22 @@ watch(
               <div class="space-y-4">
                 <!-- Name -->
                 <div class="space-y-2">
-                  <label class="text-sm font-medium">Name</label>
-                  <input v-model="editForm.name" type="text"
-                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50" />
+                  <label class="text-sm font-medium flex items-center gap-1.5">
+                    Name
+                    <Lock v-if="isLinked" class="w-3 h-3 text-muted-foreground" />
+                  </label>
+                  <input v-model="editForm.name" type="text" :disabled="isLinked"
+                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed" />
                 </div>
 
                 <!-- Version -->
                 <div class="space-y-2">
-                  <label class="text-sm font-medium">Version</label>
-                  <input v-model="editForm.version" type="text"
-                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+                  <label class="text-sm font-medium flex items-center gap-1.5">
+                    Version
+                    <Lock v-if="isLinked" class="w-3 h-3 text-muted-foreground" />
+                  </label>
+                  <input v-model="editForm.version" type="text" :disabled="isLinked"
+                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="1.0.0" />
                 </div>
 
@@ -1047,18 +1082,24 @@ watch(
 
                 <!-- Description -->
                 <div class="space-y-2">
-                  <label class="text-sm font-medium">Description</label>
-                  <textarea v-model="editForm.description" rows="3"
-                    class="w-full px-3 py-2 rounded-lg border border-border/50 bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+                  <label class="text-sm font-medium flex items-center gap-1.5">
+                    Description
+                    <Lock v-if="isLinked" class="w-3 h-3 text-muted-foreground" />
+                  </label>
+                  <textarea v-model="editForm.description" rows="3" :disabled="isLinked"
+                    class="w-full px-3 py-2 rounded-lg border border-border/50 bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="Describe your modpack..."></textarea>
                 </div>
 
                 <!-- Save Button -->
                 <div class="pt-2">
-                  <Button @click="saveModpackInfo" :disabled="isSaving" class="gap-2">
+                  <Button @click="saveModpackInfo" :disabled="isSaving || isLinked" class="gap-2">
                     <Save class="w-4 h-4" />
                     {{ isSaving ? "Saving..." : "Save Changes" }}
                   </Button>
+                  <p v-if="isLinked" class="text-xs text-muted-foreground mt-2">
+                    This modpack is managed by a remote source. Settings cannot be changed locally.
+                  </p>
                 </div>
               </div>
             </div>

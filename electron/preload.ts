@@ -358,9 +358,11 @@ contextBridge.exposeInMainWorld("api", {
         added: number;
         removed: number;
         updated: number;
-        addedMods: string[];
+        addedMods: { name: string; version: string }[];
         removedMods: string[];
         updatedMods: string[];
+        enabledMods?: string[];
+        disabledMods?: string[];
       };
     }> => ipcRenderer.invoke("remote:checkUpdate", modpackId),
   },

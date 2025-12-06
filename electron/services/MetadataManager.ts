@@ -520,11 +520,55 @@ export class MetadataManager {
     if (!modpack) return false;
 
     // Check mod exists
-    const mod = await this.getModById(modId);
-    if (!mod) return false;
+    const modToAdd = await this.getModById(modId);
+    if (!modToAdd) return false;
 
     // Already in modpack?
     if (modpack.mod_ids.includes(modId)) return true;
+
+    // Check for conflicts (same project, different version)
+    const currentMods = await this.getModsInModpack(modpackId);
+    const modsToRemove: string[] = [];
+
+    for (const existingMod of currentMods) {
+      // Check CurseForge conflict
+      if (
+        modToAdd.source === "curseforge" &&
+        existingMod.source === "curseforge" &&
+        modToAdd.cf_project_id &&
+        existingMod.cf_project_id === modToAdd.cf_project_id
+      ) {
+        console.log(
+          `[MetadataManager] Replacing existing version of ${existingMod.name} (ID: ${existingMod.id}) with new version (ID: ${modId})`
+        );
+        modsToRemove.push(existingMod.id);
+      }
+      // Check Modrinth conflict
+      else if (
+        modToAdd.source === "modrinth" &&
+        existingMod.source === "modrinth" &&
+        modToAdd.mr_project_id &&
+        existingMod.mr_project_id === modToAdd.mr_project_id
+      ) {
+        console.log(
+          `[MetadataManager] Replacing existing version of ${existingMod.name} (ID: ${existingMod.id}) with new version (ID: ${modId})`
+        );
+        modsToRemove.push(existingMod.id);
+      }
+    }
+
+    // Remove conflicting mods
+    if (modsToRemove.length > 0) {
+      modpack.mod_ids = modpack.mod_ids.filter(
+        (id) => !modsToRemove.includes(id)
+      );
+      // Also clean up disabled list
+      if (modpack.disabled_mod_ids) {
+        modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
+          (id) => !modsToRemove.includes(id)
+        );
+      }
+    }
 
     modpack.mod_ids.push(modId);
     modpack.updated_at = new Date().toISOString();

@@ -2,7 +2,7 @@
 import { ref, computed, watch } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import { AlertTriangle, Check, X } from "lucide-vue-next";
+import { AlertTriangle, Check, X, Lock } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
 
 const props = defineProps<{
@@ -41,7 +41,8 @@ const modpacksWithCompatibility = computed(() => {
       compatible,
       incompatible,
       allCompatible: incompatible.length === 0,
-      noneCompatible: compatible.length === 0
+      noneCompatible: compatible.length === 0,
+      isLinked: !!pack.remote_source?.url
     };
   });
 });
@@ -76,6 +77,7 @@ watch(
 
 function add() {
   if (!selectedModpackId.value || !selectedPack.value) return;
+  if (selectedPack.value.isLinked) return; // Block if linked
   const compatibleIds = selectedPack.value.compatible.map(m => m.id);
   emit("select", selectedModpackId.value, compatibleIds);
 }
@@ -98,18 +100,22 @@ function add() {
 
       <div v-else class="max-h-[200px] overflow-y-auto space-y-2 border rounded-md p-2">
         <div v-for="pack in modpacksWithCompatibility" :key="pack.id"
-          class="flex items-center p-2 rounded-md cursor-pointer transition-colors" :class="[
+          class="flex items-center p-2 rounded-md transition-colors" :class="[
             selectedModpackId === pack.id
               ? 'bg-primary/20 border border-primary'
               : 'hover:bg-accent border border-transparent',
-            pack.noneCompatible ? 'opacity-50' : ''
-          ]" @click="selectedModpackId = pack.id">
+            (pack.noneCompatible || pack.isLinked) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+          ]" @click="!pack.isLinked && (selectedModpackId = pack.id)">
           <div class="flex-1">
-            <div class="font-medium">{{ pack.name }}</div>
+            <div class="font-medium flex items-center gap-2">
+              {{ pack.name }}
+              <Lock v-if="pack.isLinked" class="w-3 h-3 text-muted-foreground" />
+            </div>
             <div class="text-xs text-muted-foreground flex items-center gap-2">
               <span>{{ pack.minecraft_version }}</span>
               <span class="text-muted-foreground/50">•</span>
               <span class="capitalize">{{ pack.loader }}</span>
+              <span v-if="pack.isLinked" class="text-purple-500 ml-1">Read-Only</span>
             </div>
           </div>
 
@@ -168,8 +174,12 @@ function add() {
 
     <template #footer>
       <Button variant="outline" @click="$emit('close')">Cancel</Button>
-      <Button @click="add" :disabled="!selectedModpackId || (selectedPack?.noneCompatible)">
-        <template v-if="selectedPack">
+      <Button @click="add" :disabled="!selectedModpackId || (selectedPack?.noneCompatible) || (selectedPack?.isLinked)">
+        <template v-if="selectedPack?.isLinked">
+          <Lock class="w-4 h-4 mr-2" />
+          Read-Only Modpack
+        </template>
+        <template v-else-if="selectedPack">
           Add {{ selectedPack.compatible.length }} Mod(s)
         </template>
         <template v-else>

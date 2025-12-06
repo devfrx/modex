@@ -1333,7 +1333,6 @@ ${modLinks}
       const match = urlToFetch.match(gistRegex);
       if (match) {
         urlToFetch = `${match[1]}/${match[2]}`;
-        console.log(`[MetadataManager] Sanitized Gist URL to: ${urlToFetch}`);
       }
 
       // For Gist URLs, use the GitHub API to get the latest content (bypasses caching)
@@ -1347,8 +1346,6 @@ ${modLinks}
         const gistId = apiMatch[2];
         const filename = apiMatch[3];
         const apiUrl = `https://api.github.com/gists/${gistId}`;
-        
-        console.log(`[RemoteUpdate] Using GitHub API for fresh content: ${apiUrl}`);
         
         const apiResponse = await fetch(apiUrl, {
           headers: {
@@ -1372,7 +1369,6 @@ ${modLinks}
         
         // Parse the content
         remoteManifest = JSON.parse(file.content);
-        console.log(`[RemoteUpdate] Got fresh manifest from GitHub API, version: ${remoteManifest.modpack?.version}`);
       } else {
         // Non-Gist URL: use regular fetch with cache busting
         const urlObj = new URL(urlToFetch);
@@ -1394,8 +1390,6 @@ ${modLinks}
         throw new Error("Invalid remote manifest format");
       }
       
-      console.log(`[RemoteUpdate] Remote manifest version: ${remoteManifest.modpack.version}, mods: ${remoteManifest.mods.length}`);
-
       // Let's calculate the diff to be precise
       const currentMods = await this.getModsInModpack(modpackId);
       
@@ -1407,14 +1401,11 @@ ${modLinks}
       const currentMap = new Map<string, Mod>(); // Key: exact mod id (source-projectId-fileId)
       const currentProjectMap = new Map<string, Mod>(); // Key: project-id only (to detect updates)
       
-      console.log(`[RemoteUpdate] Local modpack has ${currentMods.length} mods`);
-      
       for (const mod of currentMods) {
         const key = mod.source === 'curseforge' 
           ? `cf-${mod.cf_project_id}-${mod.cf_file_id}`
           : `mr-${mod.mr_project_id}-${mod.mr_version_id}`;
         currentMap.set(key, mod);
-        console.log(`[RemoteUpdate] Local mod: ${mod.name} -> key: ${key}`);
         
         const projectKey = mod.source === 'curseforge'
           ? `cf-${mod.cf_project_id}`
@@ -1424,8 +1415,6 @@ ${modLinks}
       
       const remoteMods = remoteManifest.mods;
       const remoteProjectKeys = new Set<string>();
-      
-      console.log(`[RemoteUpdate] Remote manifest has ${remoteMods.length} mods`);
       
       for (const rMod of remoteMods) {
         const key = rMod.source === 'curseforge'
@@ -1438,20 +1427,16 @@ ${modLinks}
           
         remoteProjectKeys.add(projectKey);
         
-        console.log(`[RemoteUpdate] Remote mod: ${rMod.name} -> key: ${key}, hasLocal: ${currentMap.has(key)}`);
-        
         if (!currentMap.has(key)) {
           // Not an exact match
           if (currentProjectMap.has(projectKey)) {
             // Same project, different file -> Update
             const oldMod = currentProjectMap.get(projectKey)!;
-            console.log(`[RemoteUpdate] UPDATE detected: ${oldMod.name} (local file: ${oldMod.cf_file_id}, remote file: ${rMod.cf_file_id})`);
             // Only report update if version string is different or file ID is different
             // This prevents "phantom" updates if IDs match but something else differs
             updatedMods.push(`${oldMod.name} (${oldMod.version} → ${rMod.version})`);
           } else {
             // New project -> Add
-            console.log(`[RemoteUpdate] ADD detected: ${rMod.name}`);
             addedMods.push({ name: rMod.name, version: rMod.version });
           }
         }

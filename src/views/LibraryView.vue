@@ -636,7 +636,7 @@ onMounted(() => {
     </div>
 
     <!-- Compact Header -->
-    <div class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-white/5 bg-[#0a0a0a]">
+    <div class="shrink-0 px-3 sm:px-8 py-3 sm:py-4 border-b border-white/5 bg-[#0a0a0a]">
       <!-- Mobile: Stack vertically, Desktop: Row -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
         <!-- Left: Title & Stats -->
@@ -661,9 +661,9 @@ onMounted(() => {
           <div class="hidden sm:block h-8 w-px bg-white/10" />
 
           <!-- Quick Filters -->
-          <div class="flex items-center gap-1 sm:gap-1.5">
+          <div class="flex items-center gap-1 sm:gap-1.5 py-0.5">
             <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
-              ? 'bg-primary text-primary-foreground shadow-sm'
+              ? 'bg-primary text-primary-foreground shadow-md'
               : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
               @click="quickFilter = 'all'; router.push('/library');">
               All
@@ -671,14 +671,14 @@ onMounted(() => {
             <button
               class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
               :class="quickFilter === 'favorites'
-                ? 'bg-yellow-500/20 text-yellow-400 shadow-sm'
+                ? 'bg-yellow-500/20 text-yellow-400 shadow-md'
                 : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
               @click="quickFilter = 'favorites'; router.push('/library?filter=favorites');">
               <Star class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-yellow-400' : ''" />
               <span v-if="favoriteMods.size > 0" class="hidden xs:inline">({{ favoriteMods.size }})</span>
             </button>
             <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'recent'
-              ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+              ? 'bg-blue-500/20 text-blue-400 shadow-md'
               : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
               @click="quickFilter = 'recent'; router.push('/library?filter=recent');">
               Recent
@@ -711,7 +711,7 @@ onMounted(() => {
       </div>
 
       <!-- Search & Filters Bar - Scrollable on mobile -->
-      <div class="flex items-center gap-2 sm:gap-3 mt-3 sm:mt-4 overflow-x-auto pb-1 -mb-1 scrollbar-thin">
+      <div class="flex items-center gap-2 sm:gap-3 mt-3 sm:mt-4 overflow-x-auto pb-1 px-2 py-1 -mb-1 scrollbar-thin">
         <!-- Search -->
         <div class="relative flex-shrink-0 w-40 sm:w-auto sm:flex-1 sm:max-w-sm">
           <Search
@@ -857,7 +857,7 @@ onMounted(() => {
               </td>
               <td class="p-2 sm:p-3">
                 <span class="px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] sm:text-xs bg-white/10">{{ mod.loader
-                  }}</span>
+                }}</span>
               </td>
               <td class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs hidden md:table-cell">{{ mod.author ||
                 "-" }}</td>

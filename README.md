@@ -1,18 +1,56 @@
-# Vue 3 + TypeScript + Vite
+# ModEx - Modern Mod Manager
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+A modern, feature-rich mod manager built with Electron, Vue 3, and TypeScript.
 
-## Recommended IDE Setup
+## Features
 
-- [VS Code](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
+- 📦 **Mod Library Management** - Import, organize, and manage your Minecraft mods
+- 🎯 **CurseForge Integration** - Search and download mods directly from CurseForge
+- 📋 **Modpack Creation** - Create, edit, and export custom modpacks
+- 🔄 **Version Control** - Track modpack changes with built-in version history
+- 📁 **Folder Organization** - Organize mods with custom folders and tags
+- 🎨 **Sandbox Visualization** - Interactive graph view of mods, modpacks, and relationships
+- 🔍 **Advanced Search** - Filter by loader, version, author, and more
+- ⭐ **Favorites** - Mark favorite mods and modpacks for quick access
+- 🔄 **Mod Updates** - Check for mod updates from CurseForge
+- 📤 **Import/Export** - Share modpacks with .modex files
+- 🎨 **Modern UI** - Clean, dark-themed interface with responsive design
 
-## Type Support For `.vue` Imports in TS
+## Tech Stack
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin) to make the TypeScript language service aware of `.vue` types.
+- **Electron** - Desktop application framework
+- **Vue 3** - Progressive JavaScript framework
+- **TypeScript** - Type-safe development
+- **Vite** - Fast build tool
+- **Tailwind CSS** - Utility-first CSS framework
+- **D3.js** - Data visualization for sandbox view
+- **LowDB** - Local JSON database
 
-If the standalone TypeScript plugin doesn't feel fast enough to you, Volar has also implemented a [Take Over Mode](https://github.com/johnsoncodehk/volar/discussions/471#discussioncomment-1361669) that is more performant. You can enable it by the following steps:
+## Development
 
-1. Disable the built-in TypeScript Extension
-   1. Run `Extensions: Show Built-in Extensions` from VSCode's command palette
-   2. Find `TypeScript and JavaScript Language Features`, right click and select `Disable (Workspace)`
-2. Reload the VSCode window by running `Developer: Reload Window` from the command palette.
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev
+
+# Build for production
+npm run build
+```
+
+## Building
+
+The app builds for Windows by default. The installer will be created in `release/1.0.0/`.
+
+After building, you can find:
+- The installer: `release/1.0.0/ModEx-Windows-1.0.0-Setup.exe`
+- Unpacked files: `release/1.0.0/win-unpacked/`
+
+## Author
+
+**devfrx**
+
+## License
+
+Copyright © 2025 devfrx

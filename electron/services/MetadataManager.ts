@@ -111,6 +111,13 @@ export interface ModpackVersion {
   changes: ModpackChange[];
   mod_ids: string[];
   parent_id?: string;
+  /** Snapshots of CF mods for rollback restoration */
+  mod_snapshots?: Array<{
+    id: string;
+    name: string;
+    cf_project_id: number;
+    cf_file_id: number;
+  }>;
 }
 
 export interface ModpackVersionHistory {
@@ -624,6 +631,23 @@ export class MetadataManager {
     // Generate tag if not provided
     const versionTag = tag || this.generateNextTag(currentVersion.tag);
 
+    // Create snapshots of CF mods for potential rollback restoration
+    const library = await this.loadLibrary();
+    const modSnapshots = modpack.mod_ids
+      .map(modId => {
+        const mod = library.mods.find(m => m.id === modId);
+        if (mod && mod.source === 'curseforge' && mod.cf_project_id && mod.cf_file_id) {
+          return {
+            id: mod.id,
+            name: mod.name,
+            cf_project_id: mod.cf_project_id,
+            cf_file_id: mod.cf_file_id,
+          };
+        }
+        return null;
+      })
+      .filter((s): s is NonNullable<typeof s> => s !== null);
+
     const newVersion: ModpackVersion = {
       id: versionId,
       tag: versionTag,
@@ -632,6 +656,7 @@ export class MetadataManager {
       changes,
       mod_ids: [...modpack.mod_ids],
       parent_id: currentVersion.id,
+      mod_snapshots: modSnapshots,
     };
 
     history.versions.push(newVersion);
@@ -935,7 +960,8 @@ ${modLinks}
    */
   async importFromCurseForge(
     manifest: any,
-    cfService: any
+    cfService: any,
+    onProgress?: (current: number, total: number, modName: string) => void
   ): Promise<{
     modpackId: string;
     modsImported: number;
@@ -977,9 +1003,13 @@ ${modLinks}
       cfFile: any;
     }> = [];
 
+    const totalFiles = manifest.files?.length || 0;
+    let processedCount = 0;
+
     // Process each file entry
     for (const file of manifest.files || []) {
       const { projectID, fileID } = file;
+      processedCount++;
 
       try {
         console.log(`[CF Import] Processing mod: Project ${projectID}, File ${fileID}`);
@@ -987,9 +1017,13 @@ ${modLinks}
         // Get mod info from CF API
         const cfMod = await cfService.getMod(projectID);
         if (!cfMod) {
+          onProgress?.(processedCount, totalFiles, `Mod ${projectID} not found`);
           errors.push(`Mod ${projectID} not found`);
           continue;
         }
+        
+        // Send progress update
+        onProgress?.(processedCount, totalFiles, cfMod.name);
 
         const cfFile = await cfService.getFile(projectID, fileID);
         if (!cfFile) {
@@ -1104,7 +1138,11 @@ ${modLinks}
   /**
    * Import MODEX manifest
    */
-  async importFromModex(manifest: any, cfService: any): Promise<{
+  async importFromModex(
+    manifest: any, 
+    cfService: any,
+    onProgress?: (current: number, total: number, modName: string) => void
+  ): Promise<{
     modpackId: string;
     code: string;
     isUpdate: boolean;
@@ -1164,7 +1202,15 @@ ${modLinks}
     const downloadedModNames: string[] = []; // Mod scaricate in libreria (non le avevo)
     const updatedModNames: string[] = []; // Mod aggiornate (stessa mod, versione diversa)
 
+    const totalMods = manifest.mods?.length || 0;
+    let processedCount = 0;
+
     for (const modEntry of manifest.mods || []) {
+      processedCount++;
+      
+      // Send progress update
+      onProgress?.(processedCount, totalMods, modEntry.name || `Mod ${processedCount}`);
+      
       // Check if mod already exists in library by CF/MR ID, not by internal ID
       let existingMod: Mod | null = null;
       let conflictingMod: Mod | null = null;
@@ -1369,27 +1415,45 @@ ${modLinks}
       console.log(`[Import] Importing ${manifest.version_history.length} version history entries`);
       
       // Get existing history (if updating)
-      const existingHistory = await this.getVersionHistory(modpackId);
-      
-      // Create a map of existing version IDs to avoid duplicates
-      const existingVersionIds = new Set(existingHistory.entries.map(e => e.version_id));
-      
-      // Add only new entries from manifest
-      let importedCount = 0;
-      for (const entry of manifest.version_history) {
-        if (!existingVersionIds.has(entry.version_id)) {
-          existingHistory.entries.push(entry);
-          importedCount++;
-        }
+      let existingHistory = await this.getVersionHistory(modpackId);
+      if (!existingHistory) {
+        // Initialize if not existing
+        await this.initializeVersionControl(modpackId, 'Imported modpack');
+        existingHistory = await this.getVersionHistory(modpackId);
       }
       
-      // Sort by timestamp (oldest first)
-      existingHistory.entries.sort((a, b) => 
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-      
-      await this.saveVersionHistory(modpackId, existingHistory);
-      console.log(`[Import] Imported ${importedCount} new version history entries (${manifest.version_history.length - importedCount} duplicates skipped)`);
+      if (existingHistory) {
+        // Create a map of existing version IDs to avoid duplicates
+        const existingVersionIds = new Set(existingHistory.versions.map((v: ModpackVersion) => v.id));
+        
+        // Add only new entries from manifest
+        let importedCount = 0;
+        for (const entry of manifest.version_history) {
+          // Convert manifest entry to ModpackVersion format
+          const version: ModpackVersion = {
+            id: entry.version_id || entry.id,
+            tag: entry.tag || entry.version_id || 'imported',
+            message: entry.message || 'Imported version',
+            created_at: entry.timestamp || entry.created_at || new Date().toISOString(),
+            changes: entry.changes || [],
+            mod_ids: entry.mod_ids || [],
+            parent_id: entry.parent_id,
+          };
+          
+          if (!existingVersionIds.has(version.id)) {
+            existingHistory.versions.push(version);
+            importedCount++;
+          }
+        }
+        
+        // Sort by timestamp (oldest first)
+        existingHistory.versions.sort((a: ModpackVersion, b: ModpackVersion) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        
+        await this.saveVersionHistory(existingHistory);
+        console.log(`[Import] Imported ${importedCount} new version history entries (${manifest.version_history.length - importedCount} duplicates skipped)`);
+      }
     }
 
     // Calculate changes if update

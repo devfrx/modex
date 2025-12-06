@@ -19,6 +19,7 @@ import path from "node:path";
 import fs from "fs-extra";
 import MetadataManager, { Mod, Modpack } from "./services/MetadataManager.js";
 import { CurseForgeService } from "./services/CurseForgeService.js";
+import { ModAnalyzerService, AnalysisResult, DependencyInfo } from "./services/ModAnalyzerService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,6 +36,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 let win: BrowserWindow | null;
 let metadataManager: MetadataManager;
 let curseforgeService: CurseForgeService;
+let modAnalyzerService: ModAnalyzerService;
 
 // Register custom protocol for local file access (thumbnails cache)
 protocol.registerSchemesAsPrivileged([
@@ -72,6 +74,7 @@ function createWindow() {
 async function initializeBackend() {
   metadataManager = new MetadataManager();
   curseforgeService = new CurseForgeService(metadataManager.getBasePath());
+  modAnalyzerService = new ModAnalyzerService(curseforgeService);
 
   // Register atom:// protocol for cached images
   protocol.handle("atom", (request) => {
@@ -119,6 +122,44 @@ async function initializeBackend() {
 
   ipcMain.handle("mods:bulkDelete", async (_, ids: string[]) => {
     return metadataManager.deleteMods(ids);
+  });
+
+  // Check which modpacks use the specified mod(s)
+  ipcMain.handle("mods:checkUsage", async (_, modIds: string[]) => {
+    const allModpacks = await metadataManager.getAllModpacks();
+    const usage: Array<{ modId: string; modName: string; modpacks: Array<{ id: string; name: string }> }> = [];
+    
+    for (const modId of modIds) {
+      const mod = await metadataManager.getModById(modId);
+      if (!mod) continue;
+      
+      const usedInModpacks = allModpacks.filter(mp => mp.mod_ids.includes(modId));
+      if (usedInModpacks.length > 0) {
+        usage.push({
+          modId,
+          modName: mod.name,
+          modpacks: usedInModpacks.map(mp => ({ id: mp.id, name: mp.name })),
+        });
+      }
+    }
+    
+    // Return a plain JSON object to avoid cloning issues
+    return JSON.parse(JSON.stringify(usage));
+  });
+
+  // Delete mods and optionally remove from modpacks
+  ipcMain.handle("mods:deleteWithModpackCleanup", async (_, modIds: string[], removeFromModpacks: boolean) => {
+    if (removeFromModpacks) {
+      const allModpacks = await metadataManager.getAllModpacks();
+      for (const modId of modIds) {
+        for (const modpack of allModpacks) {
+          if (modpack.mod_ids.includes(modId)) {
+            await metadataManager.removeModFromModpack(modpack.id, modId);
+          }
+        }
+      }
+    }
+    return metadataManager.deleteMods(modIds);
   });
 
   // ========== CURSEFORGE IPC HANDLERS ==========
@@ -305,6 +346,70 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("versions:rollback", async (_, modpackId: string, versionId: string) => {
+    // Get the target version to check for missing mods
+    const version = await metadataManager.getVersion(modpackId, versionId);
+    if (!version) {
+      throw new Error("Version not found");
+    }
+    
+    // Check if all mods in the version still exist in library
+    const missingMods: Array<{ modId: string; cfProjectId?: number; cfFileId?: number }> = [];
+    
+    for (const modId of version.mod_ids) {
+      const mod = await metadataManager.getModById(modId);
+      if (!mod) {
+        // Mod is missing - check if we have CF info in the version snapshot
+        const snapshot = version.mod_snapshots?.find((s: any) => s.id === modId);
+        if (snapshot?.cf_project_id && snapshot?.cf_file_id) {
+          missingMods.push({
+            modId,
+            cfProjectId: snapshot.cf_project_id,
+            cfFileId: snapshot.cf_file_id,
+          });
+        }
+      }
+    }
+    
+    // Download missing mods from CurseForge
+    if (missingMods.length > 0 && win) {
+      let downloadedCount = 0;
+      
+      for (const missing of missingMods) {
+        if (!missing.cfProjectId || !missing.cfFileId) continue;
+        
+        try {
+          win.webContents.send("rollback:progress", {
+            current: ++downloadedCount,
+            total: missingMods.length,
+            modName: `Mod ${missing.cfProjectId}`,
+          });
+          
+          // Get mod info from CF
+          const cfMod = await curseforgeService.getMod(missing.cfProjectId);
+          if (!cfMod) continue;
+          
+          const cfFile = await curseforgeService.getFile(missing.cfProjectId, missing.cfFileId);
+          if (!cfFile) continue;
+          
+          // Add to library
+          const modpack = await metadataManager.getModpackById(modpackId);
+          const formattedMod = curseforgeService.modToLibraryFormat(
+            cfMod,
+            cfFile,
+            modpack?.loader || 'forge',
+            modpack?.minecraft_version || '1.20.1'
+          );
+          
+          // addMod will generate the same ID based on cf_project_id and cf_file_id
+          await metadataManager.addMod(formattedMod);
+          
+          console.log(`[Rollback] Downloaded missing mod: ${cfMod.name}`);
+        } catch (err) {
+          console.error(`[Rollback] Failed to download mod ${missing.cfProjectId}:`, err);
+        }
+      }
+    }
+    
     return metadataManager.rollbackToVersion(modpackId, versionId);
   });
 
@@ -423,9 +528,18 @@ async function initializeBackend() {
       }
 
       const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+      
+      // Progress callback that sends events to renderer
+      const onProgress = (current: number, total: number, modName: string) => {
+        if (win) {
+          win.webContents.send("import:progress", { current, total, modName });
+        }
+      };
+      
       const importResult = await metadataManager.importFromCurseForge(
         manifest,
-        curseforgeService
+        curseforgeService,
+        onProgress
       );
 
       return {
@@ -507,7 +621,15 @@ async function initializeBackend() {
       }
 
       const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
-      return metadataManager.importFromModex(manifest, curseforgeService);
+      
+      // Progress callback that sends events to renderer
+      const onProgress = (current: number, total: number, modName: string) => {
+        if (win) {
+          win.webContents.send("import:progress", { current, total, modName });
+        }
+      };
+      
+      return metadataManager.importFromModex(manifest, curseforgeService, onProgress);
     } catch (error: any) {
       console.log('[IPC] Import error:', error.message);
       throw new Error(error.message);
@@ -788,6 +910,151 @@ async function initializeBackend() {
 
         return { success: true };
       } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    }
+  );
+
+  // ========== MOD ANALYZER IPC HANDLERS ==========
+
+  ipcMain.handle("analyzer:analyzeModpack", async (_, modpackId: string) => {
+    try {
+      const modpack = await metadataManager.getModpackById(modpackId);
+      if (!modpack) {
+        throw new Error("Modpack not found");
+      }
+
+      const modIds = modpack.mod_ids || [];
+      const mods = await Promise.all(
+        modIds.map(async (modId) => {
+          const mod = await metadataManager.getModById(modId);
+          return mod;
+        })
+      );
+
+      const validMods = mods
+        .filter((m): m is NonNullable<typeof m> => m !== null && m !== undefined)
+        .map((m) => ({
+          id: m.id,
+          name: m.name,
+          curseforge_id: m.cf_project_id,
+          loader: m.loader,
+          game_version: m.game_version,
+          version: m.version,
+        }));
+
+      const result = await modAnalyzerService.analyzeModpack(validMods);
+      
+      // Transform to frontend format
+      return {
+        missingDependencies: result.dependencies.missing.map(dep => ({
+          modId: dep.modId,
+          modName: dep.modName,
+          requiredBy: dep.requiredBy,
+          slug: dep.modSlug,
+        })),
+        conflicts: result.conflicts.map(c => ({
+          mod1: { id: c.mod1.id, name: c.mod1.name },
+          mod2: { id: c.mod2.id, name: c.mod2.name },
+          reason: c.description,
+        })),
+        performanceStats: {
+          totalMods: result.modCount,
+          clientOnly: 0,
+          optimizationMods: result.performance.filter(p => p.type === 'add_mod').length,
+          resourceHeavy: result.performance.filter(p => p.severity === 'critical').length,
+          graphicsIntensive: 0,
+          worldGenMods: 0,
+        },
+        recommendations: result.performance.map(p => p.description),
+      };
+    } catch (error: any) {
+      console.error("[Main] Analyzer error:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("analyzer:analyzeLibrary", async () => {
+    try {
+      const allMods = await metadataManager.getAllMods();
+      const mods = allMods.map((m) => ({
+        id: m.id,
+        name: m.name,
+        curseforge_id: m.cf_project_id,
+        loader: m.loader,
+        game_version: m.game_version,
+        version: m.version,
+      }));
+
+      return await modAnalyzerService.analyzeModpack(mods);
+    } catch (error: any) {
+      console.error("[Main] Analyzer error:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle(
+    "analyzer:checkDependencies",
+    async (_, curseforgeId: number, loader: string, gameVersion: string) => {
+      try {
+        return await modAnalyzerService.checkModDependencies(
+          curseforgeId,
+          loader,
+          gameVersion
+        );
+      } catch (error: any) {
+        console.error("[Main] Dependency check error:", error);
+        return [];
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "analyzer:installDependency",
+    async (_, depInfo: DependencyInfo, modpackId?: string) => {
+      try {
+        if (!depInfo.suggestedFile) {
+          throw new Error("No suggested file for this dependency");
+        }
+
+        // Fetch the mod details from CurseForge
+        const cfMods = await curseforgeService.getModsByIds([depInfo.modId]);
+        if (cfMods.length === 0) {
+          throw new Error("Mod not found on CurseForge");
+        }
+
+        const cfMod = cfMods[0];
+        const cfFile = await curseforgeService.getFile(
+          depInfo.modId,
+          depInfo.suggestedFile.fileId
+        );
+        
+        if (!cfFile) {
+          throw new Error("File not found on CurseForge");
+        }
+
+        // Get modpack for loader/version info
+        const modpack = modpackId ? await metadataManager.getModpackById(modpackId) : null;
+        
+        // Convert to library format and save
+        const modData = curseforgeService.modToLibraryFormat(
+          cfMod, 
+          cfFile,
+          modpack?.loader || 'forge',
+          modpack?.minecraft_version || '1.20.1'
+        );
+        const savedMod = await metadataManager.addMod(modData);
+
+        // Add to modpack if specified
+        if (modpackId && modpack) {
+          if (!modpack.mod_ids.includes(savedMod.id)) {
+            await metadataManager.addModToModpack(modpackId, savedMod.id);
+          }
+        }
+
+        return { success: true, mod: savedMod };
+      } catch (error: any) {
+        console.error("[Main] Install dependency error:", error);
         return { success: false, error: error.message };
       }
     }

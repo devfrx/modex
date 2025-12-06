@@ -97,6 +97,11 @@ const showUpdatesDialog = ref(false);
 const modToDelete = ref<string | null>(null);
 const modToEdit = ref<Mod | null>(null);
 
+// Mod usage warning state
+const showUsageWarningDialog = ref(false);
+const modUsageInfo = ref<Array<{ modId: string; modName: string; modpacks: Array<{ id: string; name: string }> }>>([]);
+const pendingDeleteModIds = ref<string[]>([]);
+
 // Progress State
 const showProgress = ref(false);
 const progressTitle = ref("");
@@ -370,8 +375,24 @@ function closeDetails() {
 }
 
 // Bulk Actions
-function confirmBulkDelete() {
-  showBulkDeleteDialog.value = true;
+async function confirmBulkDelete() {
+  if (!isElectron()) return;
+
+  const ids = Array.from(selectedModIds.value);
+
+  // Check if any mods are used in modpacks
+  // Ensure we pass a plain array
+  const usage = await window.api.mods.checkUsage(JSON.parse(JSON.stringify(ids)));
+
+  if (usage.length > 0) {
+    // Show usage warning dialog
+    modUsageInfo.value = usage;
+    pendingDeleteModIds.value = ids;
+    showUsageWarningDialog.value = true;
+  } else {
+    // No usage, show simple bulk delete dialog
+    showBulkDeleteDialog.value = true;
+  }
 }
 
 async function deleteSelectedMods() {
@@ -458,9 +479,23 @@ async function addSelectionToModpack(packId: string, compatibleModIds: string[])
 // Import Functions - Removed: use CurseForge instead
 
 // Delete Single
-function confirmDelete(modId: string) {
-  modToDelete.value = modId;
-  showDeleteDialog.value = true;
+async function confirmDelete(modId: string) {
+  if (!isElectron()) return;
+
+  // Check if mod is used in any modpacks
+  // Ensure we pass a plain array
+  const usage = await window.api.mods.checkUsage(JSON.parse(JSON.stringify([modId])));
+
+  if (usage.length > 0) {
+    // Show usage warning dialog
+    modUsageInfo.value = usage;
+    pendingDeleteModIds.value = [modId];
+    showUsageWarningDialog.value = true;
+  } else {
+    // No usage, show simple delete dialog
+    modToDelete.value = modId;
+    showDeleteDialog.value = true;
+  }
 }
 
 async function deleteMod() {
@@ -476,6 +511,44 @@ async function deleteMod() {
   } catch (err) {
     toast.error("Delete Failed", (err as Error).message);
   }
+}
+
+// Delete mods with modpack cleanup
+async function deleteModsWithCleanup(removeFromModpacks: boolean) {
+  if (!isElectron() || pendingDeleteModIds.value.length === 0) return;
+
+  try {
+    // Ensure we pass a plain array, not a Proxy
+    const ids = JSON.parse(JSON.stringify(pendingDeleteModIds.value));
+
+    const count = await window.api.mods.deleteWithModpackCleanup(
+      ids,
+      removeFromModpacks
+    );
+
+    await loadMods();
+    showUsageWarningDialog.value = false;
+    pendingDeleteModIds.value = [];
+    modUsageInfo.value = [];
+    selectedModIds.value = new Set();
+
+    const message = removeFromModpacks
+      ? `Deleted ${count} mod(s) and removed from modpacks`
+      : `Deleted ${count} mod(s) from library`;
+    toast.success("Deleted", message);
+
+    if (showDetails.value && pendingDeleteModIds.value.includes(detailsMod.value?.id || "")) {
+      closeDetails();
+    }
+  } catch (err) {
+    toast.error("Delete Failed", (err as Error).message);
+  }
+}
+
+function cancelUsageWarning() {
+  showUsageWarningDialog.value = false;
+  pendingDeleteModIds.value = [];
+  modUsageInfo.value = [];
 }
 
 function openEditDialog(modId: string) {
@@ -1035,6 +1108,40 @@ onMounted(() => {
     </Dialog>
 
     <ProgressDialog :open="showProgress" :title="progressTitle" :message="progressMessage" />
+
+    <!-- Mod Usage Warning Dialog -->
+    <Dialog :open="showUsageWarningDialog" title="Mods Used in Modpacks"
+      description="The following mods are used in one or more modpacks:">
+      <div class="space-y-3 max-h-64 overflow-auto">
+        <div v-for="usage in modUsageInfo" :key="usage.modId"
+          class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <div class="font-medium text-sm text-amber-600 dark:text-amber-400">{{ usage.modName }}</div>
+          <div class="text-xs text-muted-foreground mt-1">
+            Used in: {{usage.modpacks.map(mp => mp.name).join(', ')}}
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
+        <div class="text-sm font-medium mb-2">Choose an action:</div>
+        <div class="text-xs text-muted-foreground space-y-1">
+          <div><strong>Delete & Remove from Modpacks:</strong> The mod will be removed from all modpacks before
+            deletion.
+          </div>
+          <div><strong>Delete Only:</strong> The mod references will remain in the modpacks (may cause issues).</div>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button variant="outline" @click="cancelUsageWarning">
+          Cancel
+        </Button>
+        <Button variant="destructive" @click="deleteModsWithCleanup(true)">
+          <Trash2 class="w-4 h-4 mr-2" />
+          Delete & Remove
+        </Button>
+      </template>
+    </Dialog>
 
     <!-- Updates Dialog -->
     <UpdatesDialog :open="showUpdatesDialog" @close="showUpdatesDialog = false" @updated="loadMods" />

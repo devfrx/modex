@@ -64,6 +64,13 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("mods:delete", id),
     bulkDelete: (ids: string[]): Promise<number> =>
       ipcRenderer.invoke("mods:bulkDelete", ids),
+    checkUsage: (modIds: string[]): Promise<Array<{
+      modId: string;
+      modName: string;
+      modpacks: Array<{ id: string; name: string }>;
+    }>> => ipcRenderer.invoke("mods:checkUsage", modIds),
+    deleteWithModpackCleanup: (modIds: string[], removeFromModpacks: boolean): Promise<number> =>
+      ipcRenderer.invoke("mods:deleteWithModpackCleanup", modIds, removeFromModpacks),
   },
 
   // ========== CURSEFORGE ==========
@@ -328,6 +335,50 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("dialogs:selectZipFile"),
     selectImage: (): Promise<string | null> =>
       ipcRenderer.invoke("dialogs:selectImage"),
+  },
+
+  // ========== ANALYZER ==========
+  analyzer: {
+    analyzeModpack: (modpackId: string): Promise<{
+      missingDependencies: Array<{
+        modId: number;
+        modName: string;
+        requiredBy: string[];
+        slug?: string;
+      }>;
+      conflicts: Array<{
+        mod1: { id: string; name: string };
+        mod2: { id: string; name: string };
+        reason: string;
+      }>;
+      performanceStats: {
+        totalMods: number;
+        clientOnly: number;
+        optimizationMods: number;
+        resourceHeavy: number;
+        graphicsIntensive: number;
+        worldGenMods: number;
+      };
+      recommendations: string[];
+    }> => ipcRenderer.invoke("analyzer:analyzeModpack", modpackId),
+    
+    checkDependencies: (modId: string): Promise<{
+      dependencies: Array<{
+        modId: number;
+        name: string;
+        type: 'required' | 'optional' | 'embedded' | 'incompatible';
+        slug?: string;
+      }>;
+      conflicts: Array<{
+        modId: number;
+        name: string;
+        reason: string;
+      }>;
+      performanceImpact: 'positive' | 'neutral' | 'negative' | 'unknown';
+    }> => ipcRenderer.invoke("analyzer:checkDependencies", modId),
+    
+    getPerformanceTips: (modpackId: string): Promise<string[]> =>
+      ipcRenderer.invoke("analyzer:getPerformanceTips", modpackId),
   },
 
   // ========== EVENTS ==========

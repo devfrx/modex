@@ -278,6 +278,13 @@ export interface ModpackVersion {
   mod_ids: string[];
   /** Parent version ID (for branching support in the future) */
   parent_id?: string;
+  /** Snapshots of CF mods for rollback restoration */
+  mod_snapshots?: Array<{
+    id: string;
+    name: string;
+    cf_project_id: number;
+    cf_file_id: number;
+  }>;
 }
 
 /** Version control history for a modpack */

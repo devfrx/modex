@@ -21,6 +21,7 @@ import {
 import Button from "@/components/ui/Button.vue";
 import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import VersionHistoryPanel from "@/components/modpacks/VersionHistoryPanel.vue";
+import ModpackAnalysisPanel from "@/components/modpacks/ModpackAnalysisPanel.vue";
 import type { Mod, Modpack } from "@/types/electron";
 
 const props = defineProps<{
@@ -47,7 +48,7 @@ const sortDir = ref<"asc" | "desc">("asc");
 const selectedModIds = ref<Set<string>>(new Set());
 const showUpdatesDialog = ref(false);
 const isSaving = ref(false);
-const activeTab = ref<"mods" | "versions" | "settings">("mods");
+const activeTab = ref<"mods" | "analysis" | "versions" | "settings">("mods");
 
 // Editable form fields
 const editForm = ref({
@@ -311,6 +312,49 @@ async function selectImage() {
   }
 }
 
+// Add mod from analysis (CurseForge project ID)
+async function handleAddModFromAnalysis(cfProjectId: number) {
+  if (!modpack.value) return;
+
+  try {
+    // Get the mod from CurseForge
+    const cfMod = await window.api.curseforge.getMod(cfProjectId);
+    if (!cfMod) {
+      toast.error("Mod not found", "Could not find the mod on CurseForge");
+      return;
+    }
+
+    // Find the best file for the modpack's MC version and loader
+    const files = await window.api.curseforge.getModFiles(cfProjectId, {
+      gameVersion: modpack.value.minecraft_version,
+      modLoader: modpack.value.loader,
+    });
+
+    if (files.length === 0) {
+      toast.error("No compatible files", "No files found for your MC version and loader");
+      return;
+    }
+
+    // Add to library first
+    const addedMod = await window.api.curseforge.addToLibrary(
+      cfProjectId,
+      files[0].id,
+      modpack.value.loader
+    );
+
+    if (addedMod) {
+      // Add to modpack
+      await window.api.modpacks.addMod(props.modpackId, addedMod.id);
+      await loadData();
+      emit("update");
+      toast.success("Mod added", `${cfMod.name} has been added`);
+    }
+  } catch (err) {
+    console.error("Failed to add mod from analysis:", err);
+    toast.error("Failed to add mod", (err as Error).message);
+  }
+}
+
 watch(
   () => props.isOpen,
   (newVal) => {
@@ -353,7 +397,7 @@ watch(
               <div class="flex items-center gap-2">
                 <h2 class="text-lg font-bold truncate">{{ modpack?.name || "Loading..." }}</h2>
                 <span v-if="modpack?.version" class="text-xs text-muted-foreground font-mono">v{{ modpack.version
-                  }}</span>
+                }}</span>
               </div>
               <div class="flex items-center gap-2 text-xs">
                 <span v-if="modpack?.minecraft_version"
@@ -403,6 +447,16 @@ watch(
               Mods
             </div>
             <div v-if="activeTab === 'mods'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          </button>
+          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'analysis'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'" @click="activeTab = 'analysis'">
+            <div class="flex items-center gap-1.5">
+              <AlertCircle class="w-4 h-4" />
+              Analysis
+            </div>
+            <div v-if="activeTab === 'analysis'"
+              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'versions'
             ? 'text-primary'
@@ -599,6 +653,11 @@ watch(
             </div>
           </div>
         </template>
+
+        <!-- Analysis Tab -->
+        <div v-else-if="activeTab === 'analysis'" class="flex-1 overflow-hidden">
+          <ModpackAnalysisPanel :modpack-id="modpackId" @add-mod="handleAddModFromAnalysis" @refresh="loadData" />
+        </div>
 
         <!-- Version History Tab -->
         <div v-else-if="activeTab === 'versions'" class="flex-1 p-6 overflow-auto">

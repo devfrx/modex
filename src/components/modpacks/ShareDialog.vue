@@ -38,6 +38,7 @@ const copied = ref(false);
 
 // Import state
 const isImporting = ref(false);
+const importProgress = ref<{ current: number; total: number; modName: string } | null>(null);
 const importResult = ref<{
   success: boolean;
   modpackId: string;
@@ -128,6 +129,13 @@ const pendingConflicts = ref<{
 async function importModex() {
   isImporting.value = true;
   importResult.value = null;
+  importProgress.value = { current: 0, total: 0, modName: "" };
+
+  // Listen for progress updates
+  const progressHandler = (data: { current: number; total: number; modName: string }) => {
+    importProgress.value = data;
+  };
+  window.api.on("import:progress", progressHandler);
 
   try {
     const result = await window.api.import.modex();
@@ -145,6 +153,8 @@ async function importModex() {
         };
         showConflictDialog.value = true;
         isImporting.value = false;
+        importProgress.value = null;
+        window.ipcRenderer.off("import:progress", progressHandler as any);
         return;
       }
 
@@ -179,7 +189,9 @@ async function importModex() {
     console.error("Import failed:", err);
     toast.error("Import Failed", (err as Error).message);
   } finally {
+    window.ipcRenderer.off("import:progress", progressHandler as any);
     isImporting.value = false;
+    importProgress.value = null;
   }
 }
 
@@ -345,6 +357,26 @@ function formatBytes(bytes: number): string {
           <Download v-else class="w-4 h-4 mr-2" />
           {{ isImporting ? "Importing..." : "Select .modex file" }}
         </Button>
+
+        <!-- Import Progress -->
+        <div v-if="isImporting && importProgress && importProgress.total > 0"
+          class="p-4 rounded-lg bg-muted/50 border border-border space-y-3">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-muted-foreground">Processing mods...</span>
+            <span class="font-mono text-primary">{{ importProgress.current }}/{{ importProgress.total }}</span>
+          </div>
+
+          <!-- Progress bar -->
+          <div class="h-2 bg-muted rounded-full overflow-hidden">
+            <div class="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+              :style="{ width: `${(importProgress.current / importProgress.total) * 100}%` }" />
+          </div>
+
+          <!-- Current mod name -->
+          <div class="text-xs text-muted-foreground truncate">
+            {{ importProgress.modName }}
+          </div>
+        </div>
 
         <!-- Import Result -->
         <div v-if="importResult" class="p-4 rounded-lg border text-sm space-y-2" :class="importResult.isUpdate

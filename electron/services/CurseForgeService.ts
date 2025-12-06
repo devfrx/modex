@@ -520,6 +520,7 @@ export class CurseForgeService {
     preferredLoader?: string,
     targetGameVersion?: string
   ): {
+    source: "curseforge";
     cf_project_id: number;
     cf_file_id: number;
     name: string;
@@ -530,8 +531,8 @@ export class CurseForgeService {
     loader: string;
     description: string;
     author: string;
-    thumbnail_url: string | null;
-    logo_url: string | null;
+    thumbnail_url?: string;
+    logo_url?: string;
     download_count: number;
     release_type: "release" | "beta" | "alpha";
     date_released: string;
@@ -620,6 +621,7 @@ export class CurseForgeService {
     };
 
     return {
+      source: "curseforge",
       cf_project_id: mod.id,
       cf_file_id: file.id,
       name: mod.name,
@@ -630,8 +632,8 @@ export class CurseForgeService {
       loader,
       description: mod.summary,
       author: mod.authors.map((a) => a.name).join(", "),
-      thumbnail_url: mod.logo?.thumbnailUrl || null,
-      logo_url: mod.logo?.url || null,
+      thumbnail_url: mod.logo?.thumbnailUrl || undefined,
+      logo_url: mod.logo?.url || undefined,
       download_count: mod.downloadCount,
       release_type: releaseTypes[file.releaseType] || "release",
       date_released: file.fileDate,

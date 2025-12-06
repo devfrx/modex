@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from "@/components/ui/Button.vue";
-import { X } from "lucide-vue-next";
+import { X, CheckSquare } from "lucide-vue-next";
 
 defineProps<{
   count: number;
@@ -14,24 +14,33 @@ defineEmits<{
 
 <template>
   <div
-    class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-foreground/90 text-background backdrop-blur-md px-4 py-3 rounded-lg shadow-xl flex items-center gap-4 animate-in slide-in-from-bottom-10 fade-in duration-300"
-  >
-    <div class="flex items-center gap-3 border-r border-background/20 pr-4">
-      <div class="font-bold text-lg">{{ count }}</div>
-      <div class="text-sm font-medium">{{ label }} selected</div>
-    </div>
+    class="fixed bottom-6 left-1/2 sm:left-[calc(50%+8rem)] -translate-x-1/2 z-[60] animate-in slide-in-from-bottom-10 fade-in duration-300">
+    <div
+      class="bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 border border-white/10 backdrop-blur-xl px-5 py-3 rounded-2xl shadow-2xl shadow-black/50 flex items-center gap-4">
+      <!-- Selection count badge -->
+      <div class="flex items-center gap-2.5 pr-4 border-r border-white/10">
+        <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/20">
+          <CheckSquare class="w-4 h-4 text-primary" />
+        </div>
+        <div>
+          <div class="text-lg font-bold text-white leading-tight">{{ count }}</div>
+          <div class="text-[10px] text-white/50 uppercase tracking-wider font-medium">{{ label }}</div>
+        </div>
+      </div>
 
-    <div class="flex items-center gap-2">
-      <slot />
-    </div>
+      <!-- Action buttons slot -->
+      <div class="flex items-center gap-2">
+        <slot />
+      </div>
 
-    <Button
-      variant="ghost"
-      size="icon"
-      class="ml-2 h-8 w-8 text-background/70 hover:text-background hover:bg-background/20"
-      @click="$emit('clear')"
-    >
-      <X class="w-4 h-4" />
-    </Button>
+      <!-- Close button -->
+      <div class="pl-2 border-l border-white/10">
+        <button
+          class="flex items-center justify-center w-8 h-8 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all duration-200"
+          @click="$emit('clear')" title="Clear selection">
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+    </div>
   </div>
 </template>

@@ -29,6 +29,14 @@ export type {
   ModpackChange,
 };
 
+// ==================== MOD USAGE ====================
+
+export interface ModUsageInfo {
+  modId: string;
+  modName: string;
+  modpacks: Array<{ id: string; name: string }>;
+}
+
 // ==================== ELECTRON API ====================
 
 export interface ElectronAPI {
@@ -40,6 +48,8 @@ export interface ElectronAPI {
     update: (id: string, updates: Partial<Mod>) => Promise<boolean>;
     delete: (id: string) => Promise<boolean>;
     bulkDelete: (ids: string[]) => Promise<number>;
+    checkUsage: (modIds: string[]) => Promise<ModUsageInfo[]>;
+    deleteWithModpackCleanup: (modIds: string[], removeFromModpacks: boolean) => Promise<number>;
   };
 
   // ========== CURSEFORGE ==========
@@ -244,6 +254,13 @@ export interface ElectronAPI {
     selectImage: () => Promise<string | null>;
   };
 
+  // ========== ANALYZER ==========
+  analyzer: {
+    analyzeModpack: (modpackId: string) => Promise<ModpackAnalysis>;
+    checkDependencies: (modId: string) => Promise<ModAnalysis>;
+    getPerformanceTips: (modpackId: string) => Promise<string[]>;
+  };
+
   // ========== EVENTS ==========
   on: (channel: string, callback: (data: any) => void) => void;
 }
@@ -316,6 +333,52 @@ export interface CFPagination {
   pageSize: number;
   resultCount: number;
   totalCount: number;
+}
+
+// ==================== ANALYZER TYPES ====================
+
+export interface ModpackAnalysis {
+  missingDependencies: DependencyInfo[];
+  conflicts: ConflictInfo[];
+  performanceStats: PerformanceStats;
+  recommendations: string[];
+}
+
+export interface ModAnalysis {
+  dependencies: Array<{
+    modId: number;
+    name: string;
+    type: 'required' | 'optional' | 'embedded' | 'incompatible';
+    slug?: string;
+  }>;
+  conflicts: Array<{
+    modId: number;
+    name: string;
+    reason: string;
+  }>;
+  performanceImpact: 'positive' | 'neutral' | 'negative' | 'unknown';
+}
+
+export interface DependencyInfo {
+  modId: number;
+  modName: string;
+  requiredBy: string[];
+  slug?: string;
+}
+
+export interface ConflictInfo {
+  mod1: { id: string; name: string };
+  mod2: { id: string; name: string };
+  reason: string;
+}
+
+export interface PerformanceStats {
+  totalMods: number;
+  clientOnly: number;
+  optimizationMods: number;
+  resourceHeavy: number;
+  graphicsIntensive: number;
+  worldGenMods: number;
 }
 
 // ==================== GLOBAL WINDOW ====================

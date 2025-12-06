@@ -160,6 +160,16 @@ export interface Modpack {
 
   /** Disabled mod IDs (mods that are in the pack but temporarily disabled) */
   disabled_mod_ids?: string[];
+
+  /** Remote source configuration for collaboration/updates */
+  remote_source?: {
+    /** URL to the remote manifest JSON (e.g. GitHub Gist Raw URL) */
+    url: string;
+    /** Whether to automatically check for updates on startup */
+    auto_check: boolean;
+    /** Last time updates were checked */
+    last_checked?: string;
+  };
 }
 
 // ==================== MODPACK CREATION ====================

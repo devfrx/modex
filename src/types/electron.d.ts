@@ -207,6 +207,21 @@ export interface ElectronAPI {
         disabledMods: string[];
       };
     } | null>;
+    /** Import MODEX modpack from manifest data */
+    modexFromData: (
+      manifest: any,
+      modpackId?: string
+    ) => Promise<{
+      success: boolean;
+      modpackId?: string;
+      modsImported?: number;
+      modsSkipped?: number;
+      errors?: string[];
+      requiresResolution?: boolean;
+      conflicts?: any[];
+      isUpdate?: boolean;
+      changes?: any;
+    } | null>;
     /** Resolve version conflicts during import */
     resolveConflicts: (data: {
       modpackId: string;
@@ -253,6 +268,22 @@ export interface ElectronAPI {
       modsImported: number;
       modsSkipped: number;
       errors: string[];
+    }>;
+  };
+
+  remote: {
+    exportManifest: (modpackId: string) => Promise<string>;
+    checkUpdate: (modpackId: string) => Promise<{
+      hasUpdate: boolean;
+      remoteManifest?: any;
+      changes?: {
+        added: number;
+        removed: number;
+        updated: number;
+        addedMods: string[];
+        removedMods: string[];
+        updatedMods: string[];
+      };
     }>;
   };
 

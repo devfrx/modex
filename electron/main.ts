@@ -220,7 +220,7 @@ async function initializeBackend() {
         );
         if (existingMod) {
           console.log(
-            `[IPC] Mod cf-${projectId}-${fileId} already exists, reusing`
+            `[IPC] Mod cf-${projectId}-${fileId} already exists in library, reusing. (Existing ID: ${existingMod.id})`
           );
           return existingMod;
         }
@@ -583,6 +583,16 @@ async function initializeBackend() {
     }
   );
 
+  // ========== REMOTE UPDATES IPC HANDLERS ==========
+
+  ipcMain.handle("remote:exportManifest", async (_, modpackId: string) => {
+    return metadataManager.exportRemoteManifest(modpackId);
+  });
+
+  ipcMain.handle("remote:checkUpdate", async (_, modpackId: string) => {
+    return metadataManager.checkForRemoteUpdate(modpackId);
+  });
+
   // ========== EXPORT IPC HANDLERS ==========
 
   ipcMain.handle("export:curseforge", async (_, modpackId: string) => {
@@ -641,6 +651,31 @@ async function initializeBackend() {
       return { success: true, code, path: result.filePath };
     } catch (error: any) {
       console.error("Export error:", error);
+      throw new Error(error.message);
+    }
+  });
+
+  ipcMain.handle("export:manifest", async (_, modpackId: string) => {
+    if (!win) return null;
+
+    try {
+      const modpack = await metadataManager.getModpackById(modpackId);
+      if (!modpack) throw new Error("Modpack not found");
+
+      const result = await dialog.showSaveDialog(win, {
+        defaultPath: `${modpack.name}.json`,
+        filters: [{ name: "JSON Manifest", extensions: ["json"] }],
+      });
+
+      if (result.canceled || !result.filePath) return null;
+
+      const { manifest } = await metadataManager.exportToModex(modpackId);
+
+      await fs.writeJson(result.filePath, manifest, { spaces: 2 });
+
+      return { success: true, path: result.filePath };
+    } catch (error: any) {
+      console.error("Export manifest error:", error);
       throw new Error(error.message);
     }
   });
@@ -843,6 +878,29 @@ async function initializeBackend() {
       );
     } catch (error: any) {
       console.log("[IPC] Import error:", error.message);
+      throw new Error(error.message);
+    }
+  });
+
+  ipcMain.handle("import:modex:manifest", async (_, manifest: any, modpackId?: string) => {
+    if (!win) return null;
+
+    try {
+      // Progress callback that sends events to renderer
+      const onProgress = (current: number, total: number, modName: string) => {
+        if (win) {
+          win.webContents.send("import:progress", { current, total, modName });
+        }
+      };
+
+      return metadataManager.importFromModex(
+        manifest,
+        curseforgeService,
+        onProgress,
+        modpackId
+      );
+    } catch (error: any) {
+      console.log("[IPC] Import manifest error:", error.message);
       throw new Error(error.message);
     }
   });

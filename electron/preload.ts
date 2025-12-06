@@ -64,13 +64,24 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("mods:delete", id),
     bulkDelete: (ids: string[]): Promise<number> =>
       ipcRenderer.invoke("mods:bulkDelete", ids),
-    checkUsage: (modIds: string[]): Promise<Array<{
-      modId: string;
-      modName: string;
-      modpacks: Array<{ id: string; name: string }>;
-    }>> => ipcRenderer.invoke("mods:checkUsage", modIds),
-    deleteWithModpackCleanup: (modIds: string[], removeFromModpacks: boolean): Promise<number> =>
-      ipcRenderer.invoke("mods:deleteWithModpackCleanup", modIds, removeFromModpacks),
+    checkUsage: (
+      modIds: string[]
+    ): Promise<
+      Array<{
+        modId: string;
+        modName: string;
+        modpacks: Array<{ id: string; name: string }>;
+      }>
+    > => ipcRenderer.invoke("mods:checkUsage", modIds),
+    deleteWithModpackCleanup: (
+      modIds: string[],
+      removeFromModpacks: boolean
+    ): Promise<number> =>
+      ipcRenderer.invoke(
+        "mods:deleteWithModpackCleanup",
+        modIds,
+        removeFromModpacks
+      ),
   },
 
   // ========== CURSEFORGE ==========
@@ -141,9 +152,16 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:addMod", modpackId, modId),
     removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
-    toggleMod: (modpackId: string, modId: string): Promise<{ enabled: boolean } | null> =>
+    toggleMod: (
+      modpackId: string,
+      modId: string
+    ): Promise<{ enabled: boolean } | null> =>
       ipcRenderer.invoke("modpacks:toggleMod", modpackId, modId),
-    setModEnabled: (modpackId: string, modId: string, enabled: boolean): Promise<boolean> =>
+    setModEnabled: (
+      modpackId: string,
+      modId: string,
+      enabled: boolean
+    ): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:setModEnabled", modpackId, modId, enabled),
     getDisabledMods: (modpackId: string): Promise<string[]> =>
       ipcRenderer.invoke("modpacks:getDisabledMods", modpackId),
@@ -161,12 +179,25 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("versions:getHistory", modpackId),
     initialize: (modpackId: string, message?: string): Promise<any | null> =>
       ipcRenderer.invoke("versions:initialize", modpackId, message),
-    create: (modpackId: string, message: string, tag?: string): Promise<any | null> =>
+    create: (
+      modpackId: string,
+      message: string,
+      tag?: string
+    ): Promise<any | null> =>
       ipcRenderer.invoke("versions:create", modpackId, message, tag),
     rollback: (modpackId: string, versionId: string): Promise<boolean> =>
       ipcRenderer.invoke("versions:rollback", modpackId, versionId),
-    compare: (modpackId: string, fromVersionId: string, toVersionId: string): Promise<any[] | null> =>
-      ipcRenderer.invoke("versions:compare", modpackId, fromVersionId, toVersionId),
+    compare: (
+      modpackId: string,
+      fromVersionId: string,
+      toVersionId: string
+    ): Promise<any[] | null> =>
+      ipcRenderer.invoke(
+        "versions:compare",
+        modpackId,
+        fromVersionId,
+        toVersionId
+      ),
     get: (modpackId: string, versionId: string): Promise<any | null> =>
       ipcRenderer.invoke("versions:get", modpackId, versionId),
   },
@@ -186,6 +217,10 @@ contextBridge.exposeInMainWorld("api", {
       extension: string
     ): Promise<string | null> =>
       ipcRenderer.invoke("export:selectPath", defaultName, extension),
+    manifest: (
+      modpackId: string
+    ): Promise<{ success: boolean; path: string } | null> =>
+      ipcRenderer.invoke("export:manifest", modpackId),
   },
 
   // ========== IMPORT ==========
@@ -235,9 +270,9 @@ contextBridge.exposeInMainWorld("api", {
       }>;
       partialData?: any;
       manifest?: any;
-      changes?: { 
-        added: number; 
-        removed: number; 
+      changes?: {
+        added: number;
+        removed: number;
         unchanged: number;
         updated: number;
         downloaded: number;
@@ -251,12 +286,26 @@ contextBridge.exposeInMainWorld("api", {
         disabledMods: string[];
       };
     } | null> => ipcRenderer.invoke("import:modex"),
+    modexFromData: (
+      manifest: any,
+      modpackId?: string
+    ): Promise<{
+      success: boolean;
+      modpackId?: string;
+      modsImported?: number;
+      modsSkipped?: number;
+      errors?: string[];
+      requiresResolution?: boolean;
+      conflicts?: any[];
+      isUpdate?: boolean;
+      changes?: any;
+    } | null> => ipcRenderer.invoke("import:modex:manifest", manifest, modpackId),
     resolveConflicts: (data: {
       modpackId: string;
       conflicts: Array<{
         modEntry: any;
         existingMod: any;
-        resolution: 'use_existing' | 'use_new';
+        resolution: "use_existing" | "use_new";
       }>;
       partialData: any;
       manifest: any;
@@ -265,9 +314,9 @@ contextBridge.exposeInMainWorld("api", {
       modpackId: string;
       code: string;
       isUpdate: boolean;
-      changes?: { 
-        added: number; 
-        removed: number; 
+      changes?: {
+        added: number;
+        removed: number;
         unchanged: number;
         updated: number;
         downloaded: number;
@@ -287,7 +336,7 @@ contextBridge.exposeInMainWorld("api", {
         projectID: number;
         fileID: number;
         existingModId: string;
-        resolution: 'use_existing' | 'use_new';
+        resolution: "use_existing" | "use_new";
       }>;
     }): Promise<{
       success: boolean;
@@ -296,6 +345,24 @@ contextBridge.exposeInMainWorld("api", {
       modsSkipped: number;
       errors: string[];
     }> => ipcRenderer.invoke("import:resolveCFConflicts", data),
+  },
+
+  // ========== REMOTE UPDATES ==========
+  remote: {
+    exportManifest: (modpackId: string): Promise<string> => 
+      ipcRenderer.invoke("remote:exportManifest", modpackId),
+    checkUpdate: (modpackId: string): Promise<{
+      hasUpdate: boolean;
+      remoteManifest?: any;
+      changes?: {
+        added: number;
+        removed: number;
+        updated: number;
+        addedMods: string[];
+        removedMods: string[];
+        updatedMods: string[];
+      };
+    }> => ipcRenderer.invoke("remote:checkUpdate", modpackId),
   },
 
   // ========== UPDATES ==========
@@ -361,7 +428,9 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== ANALYZER ==========
   analyzer: {
-    analyzeModpack: (modpackId: string): Promise<{
+    analyzeModpack: (
+      modpackId: string
+    ): Promise<{
       missingDependencies: Array<{
         modId: number;
         modName: string;
@@ -383,12 +452,14 @@ contextBridge.exposeInMainWorld("api", {
       };
       recommendations: string[];
     }> => ipcRenderer.invoke("analyzer:analyzeModpack", modpackId),
-    
-    checkDependencies: (modId: string): Promise<{
+
+    checkDependencies: (
+      modId: string
+    ): Promise<{
       dependencies: Array<{
         modId: number;
         name: string;
-        type: 'required' | 'optional' | 'embedded' | 'incompatible';
+        type: "required" | "optional" | "embedded" | "incompatible";
         slug?: string;
       }>;
       conflicts: Array<{
@@ -396,9 +467,9 @@ contextBridge.exposeInMainWorld("api", {
         name: string;
         reason: string;
       }>;
-      performanceImpact: 'positive' | 'neutral' | 'negative' | 'unknown';
+      performanceImpact: "positive" | "neutral" | "negative" | "unknown";
     }> => ipcRenderer.invoke("analyzer:checkDependencies", modId),
-    
+
     getPerformanceTips: (modpackId: string): Promise<string[]> =>
       ipcRenderer.invoke("analyzer:getPerformanceTips", modpackId),
   },

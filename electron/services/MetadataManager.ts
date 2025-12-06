@@ -71,6 +71,11 @@ export interface Modpack {
   last_sync?: string;
   mod_ids: string[];
   disabled_mod_ids?: string[];
+  remote_source?: {
+    url: string;
+    auto_check: boolean;
+    last_checked?: string;
+  };
 }
 
 export interface CreateModpackData {
@@ -1289,6 +1294,246 @@ ${modLinks}
     return { manifest, code, checksum };
   }
 
+  /**
+   * Export modpack manifest for remote hosting (JSON string)
+   */
+  async exportRemoteManifest(modpackId: string): Promise<string> {
+    const { manifest } = await this.exportToModex(modpackId);
+    return JSON.stringify(manifest, null, 2);
+  }
+
+  /**
+   * Check for updates from a remote source
+   */
+  async checkForRemoteUpdate(modpackId: string): Promise<{
+    hasUpdate: boolean;
+    remoteManifest?: any;
+    changes?: {
+      added: number;
+      removed: number;
+      updated: number;
+      addedMods: { name: string; version: string }[];
+      removedMods: string[];
+      updatedMods: string[];
+      enabledMods: string[];
+      disabledMods: string[];
+    };
+  }> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack || !modpack.remote_source?.url) {
+      return { hasUpdate: false };
+    }
+
+    try {
+      let urlToFetch = modpack.remote_source.url;
+
+      // Sanitize Gist URL: Remove commit hash if present to ensure we get HEAD
+      // Format: https://gist.githubusercontent.com/<user>/<id>/raw/<hash>/<file>
+      const gistRegex = /^(https:\/\/gist\.githubusercontent\.com\/[^/]+\/[^/]+\/raw)\/[0-9a-f]{40}\/(.+)$/;
+      const match = urlToFetch.match(gistRegex);
+      if (match) {
+        urlToFetch = `${match[1]}/${match[2]}`;
+        console.log(`[MetadataManager] Sanitized Gist URL to: ${urlToFetch}`);
+      }
+
+      // For Gist URLs, use the GitHub API to get the latest content (bypasses caching)
+      const gistApiRegex = /^https:\/\/gist\.githubusercontent\.com\/([^/]+)\/([^/]+)\/raw\/(.+)$/;
+      const apiMatch = urlToFetch.match(gistApiRegex);
+      
+      let remoteManifest: any;
+      
+      if (apiMatch) {
+        // Use GitHub Gist API to get fresh content
+        const gistId = apiMatch[2];
+        const filename = apiMatch[3];
+        const apiUrl = `https://api.github.com/gists/${gistId}`;
+        
+        console.log(`[RemoteUpdate] Using GitHub API for fresh content: ${apiUrl}`);
+        
+        const apiResponse = await fetch(apiUrl, {
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        if (!apiResponse.ok) {
+          throw new Error(`GitHub API request failed: ${apiResponse.statusText}`);
+        }
+        
+        const gistData = await apiResponse.json();
+        
+        // Find the file in the gist
+        const file = gistData.files[filename];
+        if (!file) {
+          throw new Error(`File "${filename}" not found in gist. Available: ${Object.keys(gistData.files).join(', ')}`);
+        }
+        
+        // Parse the content
+        remoteManifest = JSON.parse(file.content);
+        console.log(`[RemoteUpdate] Got fresh manifest from GitHub API, version: ${remoteManifest.modpack?.version}`);
+      } else {
+        // Non-Gist URL: use regular fetch with cache busting
+        const urlObj = new URL(urlToFetch);
+        urlObj.searchParams.append("_t", Date.now().toString());
+        
+        const response = await fetch(urlObj.toString(), {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (!response.ok) throw new Error(`Failed to fetch remote manifest: ${response.statusText}`);
+        
+        remoteManifest = await response.json();
+      }
+      
+      // Basic validation
+      if (!remoteManifest.modpack || !remoteManifest.mods) {
+        throw new Error("Invalid remote manifest format");
+      }
+      
+      console.log(`[RemoteUpdate] Remote manifest version: ${remoteManifest.modpack.version}, mods: ${remoteManifest.mods.length}`);
+
+      // Let's calculate the diff to be precise
+      const currentMods = await this.getModsInModpack(modpackId);
+      
+      const addedMods: { name: string; version: string }[] = [];
+      const removedMods: string[] = [];
+      const updatedMods: string[] = [];
+      
+      // Create maps for easier comparison
+      const currentMap = new Map<string, Mod>(); // Key: exact mod id (source-projectId-fileId)
+      const currentProjectMap = new Map<string, Mod>(); // Key: project-id only (to detect updates)
+      
+      console.log(`[RemoteUpdate] Local modpack has ${currentMods.length} mods`);
+      
+      for (const mod of currentMods) {
+        const key = mod.source === 'curseforge' 
+          ? `cf-${mod.cf_project_id}-${mod.cf_file_id}`
+          : `mr-${mod.mr_project_id}-${mod.mr_version_id}`;
+        currentMap.set(key, mod);
+        console.log(`[RemoteUpdate] Local mod: ${mod.name} -> key: ${key}`);
+        
+        const projectKey = mod.source === 'curseforge'
+          ? `cf-${mod.cf_project_id}`
+          : `mr-${mod.mr_project_id}`;
+        currentProjectMap.set(projectKey, mod);
+      }
+      
+      const remoteMods = remoteManifest.mods;
+      const remoteProjectKeys = new Set<string>();
+      
+      console.log(`[RemoteUpdate] Remote manifest has ${remoteMods.length} mods`);
+      
+      for (const rMod of remoteMods) {
+        const key = rMod.source === 'curseforge'
+          ? `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`
+          : `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
+          
+        const projectKey = rMod.source === 'curseforge'
+          ? `cf-${rMod.cf_project_id}`
+          : `mr-${rMod.mr_project_id}`;
+          
+        remoteProjectKeys.add(projectKey);
+        
+        console.log(`[RemoteUpdate] Remote mod: ${rMod.name} -> key: ${key}, hasLocal: ${currentMap.has(key)}`);
+        
+        if (!currentMap.has(key)) {
+          // Not an exact match
+          if (currentProjectMap.has(projectKey)) {
+            // Same project, different file -> Update
+            const oldMod = currentProjectMap.get(projectKey)!;
+            console.log(`[RemoteUpdate] UPDATE detected: ${oldMod.name} (local file: ${oldMod.cf_file_id}, remote file: ${rMod.cf_file_id})`);
+            // Only report update if version string is different or file ID is different
+            // This prevents "phantom" updates if IDs match but something else differs
+            updatedMods.push(`${oldMod.name} (${oldMod.version} → ${rMod.version})`);
+          } else {
+            // New project -> Add
+            console.log(`[RemoteUpdate] ADD detected: ${rMod.name}`);
+            addedMods.push({ name: rMod.name, version: rMod.version });
+          }
+        }
+      }
+      
+      // Check for removed
+      for (const [projectKey, mod] of currentProjectMap.entries()) {
+        if (!remoteProjectKeys.has(projectKey)) {
+          removedMods.push(mod.name);
+        }
+      }
+
+      // Check for enabled/disabled status changes
+      const currentDisabled = new Set(modpack.disabled_mod_ids || []);
+      const remoteDisabled = new Set(remoteManifest.disabled_mods || []);
+      
+      const enabledMods: string[] = [];
+      const disabledMods: string[] = [];
+      
+      // Check for mods that exist in both (or are being updated) and have different status
+      for (const rMod of remoteMods) {
+        // Find the corresponding local mod ID (or what it will be)
+        let modId = "";
+        if (rMod.source === 'curseforge') {
+           modId = `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`;
+        } else {
+           modId = `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
+        }
+
+        // If this mod is in the remote manifest, check its status
+        const isRemoteDisabled = remoteDisabled.has(modId);
+        
+        // We need to check against the LOCAL mod's status.
+        // But if the mod is being updated, the ID changes.
+        // So we should check if the PROJECT was disabled locally.
+        
+        const projectKey = rMod.source === 'curseforge'
+          ? `cf-${rMod.cf_project_id}`
+          : `mr-${rMod.mr_project_id}`;
+          
+        const localMod = currentProjectMap.get(projectKey);
+        
+        if (localMod) {
+          const isLocalDisabled = currentDisabled.has(localMod.id);
+          
+          if (isLocalDisabled && !isRemoteDisabled) {
+            enabledMods.push(rMod.name);
+          } else if (!isLocalDisabled && isRemoteDisabled) {
+            disabledMods.push(rMod.name);
+          }
+        }
+      }
+      
+      const hasUpdate = addedMods.length > 0 || removedMods.length > 0 || updatedMods.length > 0 || enabledMods.length > 0 || disabledMods.length > 0;
+      
+      // Update last_checked timestamp
+      if (modpack.remote_source) {
+        modpack.remote_source.last_checked = new Date().toISOString();
+        await this.updateModpack(modpackId, { remote_source: modpack.remote_source });
+      }
+      
+      return {
+        hasUpdate,
+        remoteManifest: hasUpdate ? remoteManifest : undefined,
+        changes: hasUpdate ? {
+          added: addedMods.length,
+          removed: removedMods.length,
+          updated: updatedMods.length,
+          addedMods,
+          removedMods,
+          updatedMods,
+          enabledMods,
+          disabledMods
+        } : undefined
+      };
+      
+    } catch (error) {
+      console.error("Remote update check failed:", error);
+      throw error;
+    }
+  }
+
   private generateShareCode(): string {
     const uuid = crypto.randomUUID();
     const hash = crypto
@@ -1555,8 +1800,10 @@ ${modLinks}
   async importFromModex(
     manifest: any,
     cfService: any,
-    onProgress?: (current: number, total: number, modName: string) => void
+    onProgress?: (current: number, total: number, modName: string) => void,
+    targetModpackId?: string
   ): Promise<{
+    success: boolean;
     modpackId: string;
     code: string;
     isUpdate: boolean;
@@ -1580,10 +1827,15 @@ ${modLinks}
       throw new Error("Invalid MODEX manifest");
     }
 
-    // Check for existing modpack with same share code
-    const existingModpack = await this.findModpackByShareCode(
-      manifest.share_code
-    );
+    // Check for existing modpack
+    let existingModpack: Modpack | undefined;
+    
+    if (targetModpackId) {
+      existingModpack = await this.getModpackById(targetModpackId);
+    } else {
+      existingModpack = (await this.findModpackByShareCode(manifest.share_code)) || undefined;
+    }
+
     const isUpdate = !!existingModpack;
 
     let modpackId: string;
@@ -1595,13 +1847,13 @@ ${modLinks}
       oldModIds = [...existingModpack.mod_ids];
       oldDisabledModIds = [...(existingModpack.disabled_mod_ids || [])];
 
-      // Update modpack metadata
+      // Update modpack metadata (excluding name/description to preserve local customization)
       await this.updateModpack(modpackId, {
-        name: manifest.modpack.name,
+        // name: manifest.modpack.name, // Don't overwrite name
         version: manifest.modpack.version,
         minecraft_version: manifest.modpack.minecraft_version,
         loader: manifest.modpack.loader,
-        description: manifest.modpack.description,
+        // description: manifest.modpack.description, // Don't overwrite description
         last_sync: new Date().toISOString(),
       });
     } else {
@@ -2020,6 +2272,7 @@ ${modLinks}
     }
 
     return {
+      success: true,
       modpackId,
       code: manifest.share_code,
       isUpdate,

@@ -111,6 +111,21 @@ export const MODLOADER_REVERSE_MAP: Record<string, number> = {
   neoforge: 6,
 };
 
+export interface CFModLoader {
+  name: string;
+  gameVersionId: number;
+  minecraftGameVersionId: number;
+  forgeVersion: string;
+  type: number;
+  downloadUrl: string;
+  filename: string;
+  installProfileJson: string;
+  latest: boolean;
+  recommended: boolean;
+  dateModified: string;
+  mavenVersionString: string;
+}
+
 // ==================== SERVICE ====================
 
 export class CurseForgeService {
@@ -509,8 +524,8 @@ export class CurseForgeService {
 
   /**
    * Convert CF mod+file to library format (metadata only, no file operations)
-   * 
-   * IMPORTANT: 
+   *
+   * IMPORTANT:
    * - game_version comes from CF API's sortableGameVersions or gameVersions array
    * - version (mod version) uses file.displayName directly - no parsing
    */
@@ -582,8 +597,8 @@ export class CurseForgeService {
     } else if (foundVersions.length > 0) {
       // Sort versions and pick the most recent (highest)
       foundVersions.sort((a, b) => {
-        const aParts = a.split('.').map(Number);
-        const bParts = b.split('.').map(Number);
+        const aParts = a.split(".").map(Number);
+        const bParts = b.split(".").map(Number);
         for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
           const aVal = aParts[i] || 0;
           const bVal = bParts[i] || 0;
@@ -595,7 +610,10 @@ export class CurseForgeService {
     }
 
     // Determine loader - prefer specified if available
-    if (preferredLoader && foundLoaders.includes(preferredLoader.toLowerCase())) {
+    if (
+      preferredLoader &&
+      foundLoaders.includes(preferredLoader.toLowerCase())
+    ) {
       loader = preferredLoader.toLowerCase();
     } else if (foundLoaders.length > 0) {
       loader = foundLoaders[0];
@@ -681,6 +699,43 @@ export class CurseForgeService {
 
     if (!response.ok) {
       throw new Error(`CurseForge API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  }
+
+  /**
+   * Get all available mod loaders for a specific game version
+   */
+  async getModLoaders(gameVersion?: string): Promise<CFModLoader[]> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    let url = `${this.apiUrl}/minecraft/modloader`;
+
+    // Note: CF API doesn't support filtering by gameVersion directly in this endpoint
+    // We fetch all and filter client-side if needed, though usually we filter by name/type
+    // However, if we need to filter, we can pass it as a query param if supported in future
+    // For now, we fetch all and let the caller filter
+    if (gameVersion) {
+      url += `?version=${gameVersion}`;
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        "x-api-key": this.apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      // Fallback or empty if not supported/found
+      console.warn(
+        `[CurseForge] Failed to fetch modloaders: ${response.status}`
+      );
+      return [];
     }
 
     const data = await response.json();

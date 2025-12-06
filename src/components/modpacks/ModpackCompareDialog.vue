@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { X, ArrowLeftRight, Plus, ArrowRight } from "lucide-vue-next";
+import {
+  X,
+  ArrowLeftRight,
+  Plus,
+  ArrowRight,
+  ChevronDown,
+  AlertTriangle,
+  Check,
+} from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import type { Mod, Modpack } from "@/types/electron";
@@ -21,8 +29,12 @@ const packBMods = ref<Mod[]>([]);
 const isLoading = ref(false);
 
 // Get selected modpacks
-const packA = computed(() => modpacks.value.find((p) => p.id === packAId.value));
-const packB = computed(() => modpacks.value.find((p) => p.id === packBId.value));
+const packA = computed(() =>
+  modpacks.value.find((p) => p.id === packAId.value)
+);
+const packB = computed(() =>
+  modpacks.value.find((p) => p.id === packBId.value)
+);
 
 // Check if versions/loaders are compatible
 const areCompatible = computed(() => {
@@ -127,164 +139,312 @@ const packBName = computed(
 </script>
 
 <template>
-  <div v-if="open"
-    class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-    <div
-      class="bg-background border rounded-lg shadow-lg w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-      <!-- Header -->
-      <div class="p-4 border-b flex items-center justify-between bg-card/50">
-        <div class="flex items-center gap-3">
+  <Dialog
+    :open="open"
+    @close="emit('close')"
+    maxWidth="6xl"
+    contentClass="max-h-[85vh] flex flex-col p-0"
+  >
+    <!-- Header -->
+    <div class="px-6 py-4 border-b flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-primary/10 rounded-lg">
           <ArrowLeftRight class="w-5 h-5 text-primary" />
-          <h2 class="text-xl font-bold">Compare Modpacks</h2>
         </div>
-        <Button variant="ghost" size="icon" @click="$emit('close')">
-          <X class="w-5 h-5" />
-        </Button>
+        <div>
+          <h2 class="text-lg font-bold">Compare Modpacks</h2>
+          <p class="text-xs text-muted-foreground">
+            Analyze differences and transfer mods between packs
+          </p>
+        </div>
       </div>
+      <Button variant="ghost" size="icon" @click="$emit('close')">
+        <X class="w-5 h-5" />
+      </Button>
+    </div>
 
-      <!-- Pack Selectors -->
-      <div class="p-4 border-b flex items-center gap-4">
-        <div class="flex-1">
-          <label class="text-sm font-medium mb-1 block">Pack A</label>
-          <select v-model="packAId" class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option :value="null" disabled>Select modpack...</option>
-            <option v-for="pack in modpacks" :key="pack.id" :value="pack.id" :disabled="pack.id === packBId">
+    <!-- Comparison Controls -->
+    <div
+      class="px-6 py-4 border-b bg-muted/5 grid grid-cols-[1fr_auto_1fr] gap-4 items-center"
+    >
+      <!-- Pack A Selector -->
+      <div class="space-y-1.5">
+        <label
+          class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+          >Source Pack (A)</label
+        >
+        <div class="relative">
+          <select
+            v-model="packAId"
+            class="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm focus:ring-1 focus:ring-primary appearance-none truncate"
+          >
+            <option
+              :value="null"
+              disabled
+              class="bg-popover text-popover-foreground"
+            >
+              Select modpack...
+            </option>
+            <option
+              v-for="pack in modpacks"
+              :key="pack.id"
+              :value="pack.id"
+              :disabled="pack.id === packBId"
+              class="bg-popover text-popover-foreground"
+            >
               {{ pack.name }}
             </option>
           </select>
+          <ChevronDown
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
+          />
         </div>
-        <ArrowLeftRight class="w-5 h-5 text-muted-foreground mt-6" />
-        <div class="flex-1">
-          <label class="text-sm font-medium mb-1 block">Pack B</label>
-          <select v-model="packBId" class="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
-            <option :value="null" disabled>Select modpack...</option>
-            <option v-for="pack in modpacks" :key="pack.id" :value="pack.id" :disabled="pack.id === packAId">
+        <div v-if="packA" class="flex gap-2 text-xs text-muted-foreground">
+          <span class="bg-secondary px-1.5 rounded">{{
+            packA.minecraft_version
+          }}</span>
+          <span class="bg-secondary px-1.5 rounded capitalize">{{
+            packA.loader
+          }}</span>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="px-2 pt-6">
+        <ArrowLeftRight class="w-5 h-5 text-muted-foreground" />
+      </div>
+
+      <!-- Pack B Selector -->
+      <div class="space-y-1.5">
+        <label
+          class="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+          >Target Pack (B)</label
+        >
+        <div class="relative">
+          <select
+            v-model="packBId"
+            class="w-full h-10 pl-3 pr-8 rounded-md border border-input bg-background text-sm focus:ring-1 focus:ring-primary appearance-none truncate"
+          >
+            <option
+              :value="null"
+              disabled
+              class="bg-popover text-popover-foreground"
+            >
+              Select modpack...
+            </option>
+            <option
+              v-for="pack in modpacks"
+              :key="pack.id"
+              :value="pack.id"
+              :disabled="pack.id === packAId"
+              class="bg-popover text-popover-foreground"
+            >
               {{ pack.name }}
             </option>
           </select>
+          <ChevronDown
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
+          />
         </div>
-      </div>
-
-      <!-- Incompatibility Warning -->
-      <div v-if="packAId && packBId && !areCompatible" class="p-3 border-b bg-yellow-500/10 border-yellow-500/30">
-        <div class="flex items-start gap-2 text-sm">
-          <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" fill="none"
-            stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div>
-            <div class="font-medium text-yellow-700 dark:text-yellow-400">Incompatible Modpacks</div>
-            <div class="text-yellow-600 dark:text-yellow-500 mt-0.5">
-              These modpacks have different Minecraft versions or mod loaders.
-              <span class="font-semibold">Mod transfer is disabled</span> - you can only view differences.
-            </div>
-            <div class="mt-1 text-xs text-yellow-600/80 dark:text-yellow-500/80">
-              Pack A: {{ packA?.minecraft_version }} {{ packA?.loader }} | Pack B: {{ packB?.minecraft_version }} {{
-                packB?.loader }}
-            </div>
-          </div>
+        <div
+          v-if="packB"
+          class="flex gap-2 text-xs text-muted-foreground justify-end"
+        >
+          <span class="bg-secondary px-1.5 rounded">{{
+            packB.minecraft_version
+          }}</span>
+          <span class="bg-secondary px-1.5 rounded capitalize">{{
+            packB.loader
+          }}</span>
         </div>
-      </div>
-
-      <!-- Comparison Results -->
-      <div v-if="packAId && packBId" class="flex-1 flex overflow-hidden">
-        <!-- Only in A -->
-        <div class="flex-1 border-r flex flex-col">
-          <div class="p-2 border-b bg-red-500/10 flex items-center justify-between">
-            <span class="text-sm font-medium">Only in {{ packAName }} ({{ onlyInA.length }})</span>
-            <Button v-if="onlyInA.length > 0" variant="ghost" size="sm" class="h-7 text-xs gap-1"
-              :disabled="!areCompatible" @click="copyAllToB">
-              Copy all to B
-              <ArrowRight class="w-3 h-3" />
-            </Button>
-          </div>
-          <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div v-for="mod in onlyInA" :key="mod.id"
-              class="flex items-center justify-between p-2 rounded-md border bg-background hover:bg-accent/50 group">
-              <div class="min-w-0 flex-1">
-                <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-                <div class="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                  <span v-if="mod.game_version" class="text-emerald-500">{{ mod.game_version }}</span>
-                  <span class="capitalize">{{ mod.loader }}</span>
-                  <span v-if="mod.version" class="text-purple-400 truncate max-w-[100px]" :title="mod.version">{{
-                    mod.version }}</span>
-                </div>
-              </div>
-              <Button variant="ghost" size="icon" class="h-7 w-7 opacity-0 group-hover:opacity-100 flex-shrink-0"
-                :class="!areCompatible ? 'cursor-not-allowed' : ''" :disabled="!areCompatible"
-                :title="areCompatible ? 'Copy to Pack B' : 'Cannot transfer - incompatible versions'"
-                @click="copyToB(mod.id)">
-                <ArrowRight class="w-4 h-4" />
-              </Button>
-            </div>
-            <div v-if="onlyInA.length === 0" class="p-4 text-center text-muted-foreground text-sm">
-              No unique mods
-            </div>
-          </div>
-        </div>
-
-        <!-- Common -->
-        <div class="flex-1 border-r flex flex-col">
-          <div class="p-2 border-b bg-green-500/10">
-            <span class="text-sm font-medium">Common ({{ common.length }})</span>
-          </div>
-          <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div v-for="mod in common" :key="mod.id" class="p-2 rounded-md border bg-background">
-              <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-              <div class="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                <span v-if="mod.game_version" class="text-emerald-500">{{ mod.game_version }}</span>
-                <span class="capitalize">{{ mod.loader }}</span>
-                <span v-if="mod.version" class="text-purple-400 truncate max-w-[100px]" :title="mod.version">{{
-                  mod.version }}</span>
-              </div>
-            </div>
-            <div v-if="common.length === 0" class="p-4 text-center text-muted-foreground text-sm">
-              No common mods
-            </div>
-          </div>
-        </div>
-
-        <!-- Only in B -->
-        <div class="flex-1 flex flex-col">
-          <div class="p-2 border-b bg-blue-500/10 flex items-center justify-between">
-            <span class="text-sm font-medium">Only in {{ packBName }} ({{ onlyInB.length }})</span>
-            <Button v-if="onlyInB.length > 0" variant="ghost" size="sm" class="h-7 text-xs gap-1"
-              :disabled="!areCompatible" @click="copyAllToA">
-              <ArrowRight class="w-3 h-3 rotate-180" />
-              Copy all to A
-            </Button>
-          </div>
-          <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div v-for="mod in onlyInB" :key="mod.id"
-              class="flex items-center justify-between p-2 rounded-md border bg-background hover:bg-accent/50 group">
-              <Button variant="ghost" size="icon" class="h-7 w-7 opacity-0 group-hover:opacity-100 flex-shrink-0"
-                :class="!areCompatible ? 'cursor-not-allowed' : ''" :disabled="!areCompatible"
-                :title="areCompatible ? 'Copy to Pack A' : 'Cannot transfer - incompatible versions'"
-                @click="copyToA(mod.id)">
-                <ArrowRight class="w-4 h-4 rotate-180" />
-              </Button>
-              <div class="min-w-0 flex-1 text-right">
-                <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-                <div class="flex items-center justify-end gap-2 text-xs text-muted-foreground mt-0.5">
-                  <span v-if="mod.version" class="text-purple-400 truncate max-w-[100px]" :title="mod.version">{{
-                    mod.version }}</span>
-                  <span class="capitalize">{{ mod.loader }}</span>
-                  <span v-if="mod.game_version" class="text-emerald-500">{{ mod.game_version }}</span>
-                </div>
-              </div>
-            </div>
-            <div v-if="onlyInB.length === 0" class="p-4 text-center text-muted-foreground text-sm">
-              No unique mods
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Empty State -->
-      <div v-else class="flex-1 flex items-center justify-center text-muted-foreground">
-        Select two modpacks to compare
       </div>
     </div>
-  </div>
+
+    <!-- Incompatibility Warning -->
+    <div
+      v-if="packAId && packBId && !areCompatible"
+      class="px-6 py-3 border-b bg-yellow-500/10 border-yellow-500/20"
+    >
+      <div
+        class="flex items-center gap-3 text-sm text-yellow-600 dark:text-yellow-400"
+      >
+        <div class="p-1 rounded-full bg-yellow-500/20">
+          <AlertTriangle class="w-4 h-4" />
+        </div>
+        <div class="flex-1 font-medium">
+          Incompatible Game Versions or Loaders. Mod transfer is disabled.
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Columns -->
+    <div
+      v-if="packAId && packBId"
+      class="flex-1 flex overflow-hidden bg-background"
+    >
+      <!-- Unique to A -->
+      <div class="flex-1 flex flex-col border-r border-border/50 min-w-0">
+        <div
+          class="p-3 border-b border-border/50 bg-muted/20 flex items-center justify-between sticky top-0"
+        >
+          <span class="text-sm font-semibold flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-orange-500"></span>
+            Only in A ({{ onlyInA.length }})
+          </span>
+          <Button
+            v-if="onlyInA.length > 0"
+            variant="outline"
+            size="sm"
+            class="h-7 text-xs gap-1.5 hover:bg-orange-500/10 hover:text-orange-500 hover:border-orange-500/50"
+            :disabled="!areCompatible"
+            @click="copyAllToB"
+          >
+            Copy All <ArrowRight class="w-3 h-3" />
+          </Button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2 space-y-1">
+          <div
+            v-if="onlyInA.length === 0"
+            class="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm opacity-60"
+          >
+            <Check class="w-8 h-8 mb-2 opacity-20" />
+            <p>No unique mods in {{ packAName }}</p>
+          </div>
+          <div
+            v-for="mod in onlyInA"
+            :key="mod.id"
+            class="group flex items-center justify-between p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/40 transition-all text-sm"
+          >
+            <div class="min-w-0 pr-3">
+              <div class="font-medium truncate">{{ mod.name }}</div>
+              <div
+                class="flex items-center gap-2 text-xs text-muted-foreground mt-0.5"
+              >
+                <span
+                  v-if="mod.version"
+                  class="truncate opacity-70"
+                  :title="mod.version"
+                  >{{ mod.version }}</span
+                >
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7 opacity-0 group-hover:opacity-100 flex-shrink-0 hover:bg-background hover:text-primary shadow-sm border border-transparent hover:border-input"
+              :class="!areCompatible ? 'cursor-not-allowed' : ''"
+              :disabled="!areCompatible"
+              :title="areCompatible ? 'Copy to Pack B' : 'Incompatible'"
+              @click="copyToB(mod.id)"
+            >
+              <ArrowRight class="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Common -->
+      <div
+        class="w-[28%] flex flex-col border-r border-border/50 min-w-0 bg-muted/5"
+      >
+        <div class="p-3 border-b border-border/50 bg-muted/20 sticky top-0">
+          <span
+            class="text-sm font-semibold flex items-center gap-2 opacity-70"
+          >
+            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+            Common ({{ common.length }})
+          </span>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2 space-y-1">
+          <div
+            v-if="common.length === 0"
+            class="p-8 text-center text-muted-foreground text-sm opacity-60"
+          >
+            No common mods found.
+          </div>
+          <div
+            v-for="mod in common"
+            :key="mod.id"
+            class="p-2.5 rounded-lg border border-border/40 bg-background/50 text-sm opacity-70 hover:opacity-100 transition-opacity"
+          >
+            <div class="truncate">{{ mod.name }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unique to B -->
+      <div class="flex-1 flex flex-col min-w-0">
+        <div
+          class="p-3 border-b border-border/50 bg-muted/20 flex items-center justify-between sticky top-0"
+        >
+          <Button
+            v-if="onlyInB.length > 0"
+            variant="outline"
+            size="sm"
+            class="h-7 text-xs gap-1.5 hover:bg-blue-500/10 hover:text-blue-500 hover:border-blue-500/50"
+            :disabled="!areCompatible"
+            @click="copyAllToA"
+          >
+            <ArrowLeftRight class="w-3 h-3" /> Copy All
+          </Button>
+          <span class="text-sm font-semibold flex items-center gap-2">
+            Only in B ({{ onlyInB.length }})
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+          </span>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2 space-y-1">
+          <div
+            v-if="onlyInB.length === 0"
+            class="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm opacity-60"
+          >
+            <Check class="w-8 h-8 mb-2 opacity-20" />
+            <p>No unique mods in {{ packBName }}</p>
+          </div>
+          <div
+            v-for="mod in onlyInB"
+            :key="mod.id"
+            class="group flex items-center justify-between p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-muted/40 transition-all text-sm"
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7 opacity-0 group-hover:opacity-100 flex-shrink-0 hover:bg-background hover:text-primary shadow-sm border border-transparent hover:border-input rotate-180"
+              :class="!areCompatible ? 'cursor-not-allowed' : ''"
+              :disabled="!areCompatible"
+              :title="areCompatible ? 'Copy to Pack A' : 'Incompatible'"
+              @click="copyToA(mod.id)"
+            >
+              <ArrowRight class="w-3.5 h-3.5" />
+            </Button>
+            <div class="min-w-0 pl-3 text-right">
+              <div class="font-medium truncate">{{ mod.name }}</div>
+              <div
+                class="flex items-center justify-end gap-2 text-xs text-muted-foreground mt-0.5"
+              >
+                <span
+                  v-if="mod.version"
+                  class="truncate opacity-70"
+                  :title="mod.version"
+                  >{{ mod.version }}</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div
+      v-else
+      class="flex-1 flex flex-col items-center justify-center text-muted-foreground pb-12"
+    >
+      <div
+        class="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4"
+      >
+        <ArrowLeftRight class="w-8 h-8 opacity-40" />
+      </div>
+      <p class="font-medium">Select modpacks to begin comparison</p>
+    </div>
+  </Dialog>
 </template>

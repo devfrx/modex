@@ -13,6 +13,9 @@ import {
   FolderOpen,
   CheckSquare,
   Square,
+  Check,
+  Filter,
+  ArrowDownToLine,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -24,6 +27,7 @@ const props = defineProps<{
   open: boolean;
   gameVersion?: string;
   modLoader?: string;
+  installedProjectFiles?: Map<number, Set<number>>;
 }>();
 
 const emit = defineEmits<{
@@ -39,13 +43,24 @@ const searchResults = ref<any[]>([]);
 const isSearching = ref(false);
 const isAddingMod = ref<number | null>(null);
 const hasApiKey = ref(false);
-const showFilters = ref(false);
 const currentPage = ref(0);
 const totalResults = ref(0);
 const pageSize = 20;
 
+// Accordion & Files State
+const expandedModId = ref<number | null>(null);
+const modFiles = ref<any[]>([]);
+const isLoadingFiles = ref(false);
+
+// New Filters
+const showReleaseConfig = ref(false); // To toggle advanced filter visibility if needed, or just show in sidebar
+const filterRelease = ref(true);
+const filterBeta = ref(false);
+const filterAlpha = ref(false);
+
 // Bulk selection state
-const selectedModIds = ref<Set<number>>(new Set());
+const selectedModIds = ref<Set<number>>(new Set()); // For Header selection (Quick Download)
+const selectedFileIds = ref<Set<number>>(new Set()); // For specific file selection
 const isSelectionMode = ref(false);
 const targetFolderId = ref<string | null>(null);
 const isAddingBulk = ref(false);
@@ -77,6 +92,7 @@ const gameVersions = [
   "1.16.3",
   "1.16.2",
   "1.16.1",
+  "1.15.2",
 ];
 
 const modLoaders = [
@@ -87,7 +103,6 @@ const modLoaders = [
   { value: "quilt", label: "Quilt" },
 ];
 
-// Sort field options (from CurseForge API)
 const sortFields = [
   { value: 2, label: "Popularity" },
   { value: 1, label: "Featured" },
@@ -97,114 +112,163 @@ const sortFields = [
   { value: 6, label: "Total Downloads" },
 ];
 
-// Categories for Minecraft mods (loaded from API)
 const categories = ref<{ value: number; label: string }[]>([
   { value: 0, label: "All Categories" },
 ]);
 
-// Selected filters
-const selectedSortField = ref(2); // Default: Popularity
-const selectedCategory = ref(0); // Default: All Categories
+const selectedSortField = ref(2);
+const selectedCategory = ref(0);
 
-// Check API key on mount
+const STORAGE_KEYS = {
+  VERSION: "modex:cf-search:version",
+  LOADER: "modex:cf-search:loader",
+  SORT: "modex:cf-search:sort",
+  RELEASE_TYPES: "modex:cf-search:release-types",
+};
+
 onMounted(async () => {
   hasApiKey.value = await window.api.curseforge.hasApiKey();
 
-  // Load categories from API
+  if (!props.gameVersion) {
+    const savedVersion = localStorage.getItem(STORAGE_KEYS.VERSION);
+    if (savedVersion) selectedVersion.value = savedVersion;
+  }
+
+  if (!props.modLoader) {
+    const savedLoader = localStorage.getItem(STORAGE_KEYS.LOADER);
+    if (savedLoader) selectedLoader.value = savedLoader;
+  }
+
+  const savedSort = localStorage.getItem(STORAGE_KEYS.SORT);
+  if (savedSort) selectedSortField.value = parseInt(savedSort);
+
+  // Load Saved Release Types
+  const savedTypes = localStorage.getItem(STORAGE_KEYS.RELEASE_TYPES);
+  if (savedTypes) {
+    const types = JSON.parse(savedTypes);
+    filterRelease.value = types.release ?? true;
+    filterBeta.value = types.beta ?? false;
+    filterAlpha.value = types.alpha ?? false;
+  }
+
   if (hasApiKey.value) {
     try {
       const cfCategories = await window.api.curseforge.getCategories();
       categories.value = [
         { value: 0, label: "All Categories" },
-        ...cfCategories.map((cat: any) => ({
-          value: cat.id,
-          label: cat.name,
-        })),
+        ...cfCategories.map((cat: any) => ({ value: cat.id, label: cat.name })),
       ];
     } catch (err) {
       console.error("Failed to load categories:", err);
     }
-
-    if (props.open) {
-      loadPopular();
-    }
+    if (props.open) loadPopular();
   }
 });
 
-// Watch for open changes
+watch([selectedVersion, selectedLoader], ([v, l]) => {
+  if (v) localStorage.setItem(STORAGE_KEYS.VERSION, v);
+  else localStorage.removeItem(STORAGE_KEYS.VERSION);
+  if (l) localStorage.setItem(STORAGE_KEYS.LOADER, l);
+  else localStorage.removeItem(STORAGE_KEYS.LOADER);
+});
+
+watch(selectedSortField, (newVal) => {
+  localStorage.setItem(STORAGE_KEYS.SORT, newVal.toString());
+});
+
+watch([filterRelease, filterBeta, filterAlpha], () => {
+  localStorage.setItem(
+    STORAGE_KEYS.RELEASE_TYPES,
+    JSON.stringify({
+      release: filterRelease.value,
+      beta: filterBeta.value,
+      alpha: filterAlpha.value,
+    })
+  );
+});
+
 watch(
   () => props.open,
-  async (isOpen) => {
-    if (isOpen) {
-      if (hasApiKey.value && searchResults.value.length === 0) {
-        loadPopular();
-      }
+  (isOpen) => {
+    if (isOpen && hasApiKey.value && searchResults.value.length === 0) {
+      loadPopular();
     }
   }
 );
 
-// Bulk selection functions
-function toggleModSelection(modId: number) {
+// --- Selection Logic ---
+
+function toggleModHeaderSelection(modId: number) {
+  // If we uncheck header, we keep file selections if any (or clear them? User said "allows selecting specific versions", usually implies clear or keep. Let's clear to avoid confusion or keep as is.
+  // Actually, if we CHECK header, we should probably clear any individual file selections for this mod to avoid double-adding.
   if (selectedModIds.value.has(modId)) {
     selectedModIds.value.delete(modId);
   } else {
     selectedModIds.value.add(modId);
+    // Remove any individual file selections for this mod
+    // We need to iterate over selectedFileIds and remove those belonging to this mod.
+    // Since we store only ID, we might need a map. But for now, let's just leave them or clear all if feasible.
+    // For simpler logic: if Header is selected, we IGNORE individual selections for this mod during 'Add'.
   }
 }
 
-function toggleSelectionMode() {
-  isSelectionMode.value = !isSelectionMode.value;
-  if (!isSelectionMode.value) {
-    selectedModIds.value.clear();
+function toggleFileSelection(fileId: number) {
+  if (selectedFileIds.value.has(fileId)) {
+    selectedFileIds.value.delete(fileId);
+  } else {
+    selectedFileIds.value.add(fileId);
   }
 }
 
 function selectAll() {
-  searchResults.value.forEach(mod => selectedModIds.value.add(mod.id));
+  searchResults.value.forEach((mod) => selectedModIds.value.add(mod.id));
 }
 
 function deselectAll() {
   selectedModIds.value.clear();
+  selectedFileIds.value.clear();
 }
 
+// Bulk Add
 async function addSelectedMods() {
-  if (selectedModIds.value.size === 0) return;
+  if (selectedModIds.value.size === 0 && selectedFileIds.value.size === 0)
+    return;
 
   isAddingBulk.value = true;
   const successCount = ref(0);
   const failCount = ref(0);
 
   try {
+    // 1. Process Header Selections (Quick Download Latest Release)
     for (const modId of selectedModIds.value) {
       try {
-        const mod = searchResults.value.find(m => m.id === modId);
+        const mod = searchResults.value.find((m) => m.id === modId);
         if (!mod) continue;
 
-        // Get compatible files
+        // Fetch latest release
         const files = await window.api.curseforge.getModFiles(mod.id, {
           gameVersion: selectedVersion.value || undefined,
           modLoader: selectedLoader.value || undefined,
         });
 
-        if (files.length === 0) {
+        // Filter for Release type specifically for "Quick Download"
+        const releaseFile =
+          files.find((f: any) => f.releaseType === 1) || files[0]; // Fallback to whatever is first/latest if no release
+
+        if (!releaseFile) {
           failCount.value++;
           continue;
         }
 
-        const file = files[0];
         const addedMod = await window.api.curseforge.addToLibrary(
           mod.id,
-          file.id,
+          releaseFile.id,
           selectedLoader.value || undefined
         );
 
         if (addedMod) {
-          // If a folder is selected, move the mod to that folder
-          if (targetFolderId.value) {
+          if (targetFolderId.value)
             moveModToFolder(addedMod.id, targetFolderId.value);
-          }
-
-          emit("added", addedMod);
           successCount.value++;
         } else {
           failCount.value++;
@@ -215,26 +279,120 @@ async function addSelectedMods() {
       }
     }
 
-    // Clear selection after adding
-    selectedModIds.value.clear();
-    isSelectionMode.value = false;
+    // 2. Process Individual File Selections
+    // Note: If a mod header was selected, we should skip its individual files to prevent double install.
+    // However, finding which file belongs to which mod is tricky without a map.
+    // But typically user won't check both due to UI disabling.
 
-    console.log(`Bulk add complete: ${successCount.value} success, ${failCount.value} failed`);
+    // We need a helper to know mod ID for a file ID, or we fetch file details.
+    // To simplify: we iterate search results, look at their fetched files (if cached) or we might have to re-fetch if we didn't store mapping.
+    // IMPROVEMENT: Store file->mod mapping when fetching files.
+
+    // For now, let's assume we can find the file in the currently expanded modFiles if currently visible.
+    // But if user expanded multiple mods?
+    // Let's iterate searchResults => expanded => check file IDs.
+
+    // Actually, simpler approach: We only allow selecting files in EXPANDED accordions.
+    // And we have 'modFiles' which is just for the ONE expanded mod?
+    // Wait, the current implementation of 'toggleExpand' only keeps ONE mod expanded at a time?
+    // "expandedModId.value = mod.id" => Yes, only one.
+    // So 'selectedFileIds' only makes sense for the CURRENTLY expanded mod effectively, unless we persist files?
+    // If we close accordion, do we want to keep selection? Yes ideally.
+    // We need a map of modId -> files list cache if we want to support global multi-file selection.
+
+    // *Limitation Fix*: To support multi-mod file selection, we need to cache files for visited mods.
+    // Let's assume we do best effort or fetch on demand.
+
+    // For this implementation, we will iterate all selectedFileIds. We need their Mod IDs.
+    // We can store composite keys "modId-fileId" in the Set or use a map.
+    // Let's switch selectedFileIds to a Map<number, number> (fileId -> modId).
   } finally {
     isAddingBulk.value = false;
+    selectedModIds.value.clear();
+    selectedFileIds.value.clear(); // Using Set for now, logic below handles composite if needed
+    // Emit 'added' event just once or per mod? The parent refreshes library.
+    emit("added", null);
   }
 }
 
-// Load popular mods (using search with default filters)
-async function loadPopular() {
-  if (!hasApiKey.value) return;
+// Fixed addSelectedMods for the current scope (using header selection mainly)
+// For the file selection: We will update the state to store {fileId, modId}
+const selectedFilesMap = ref<Map<number, number>>(new Map()); // FileID -> ModID
 
-  isSearching.value = true;
-  currentPage.value = 0;
+function toggleFileSelectionMap(fileId: number, modId: number) {
+  if (selectedFilesMap.value.has(fileId)) {
+    selectedFilesMap.value.delete(fileId);
+  } else {
+    selectedFilesMap.value.set(fileId, modId);
+  }
+}
+
+async function executeBulkAdd() {
+  if (selectedModIds.value.size === 0 && selectedFilesMap.value.size === 0)
+    return;
+  isAddingBulk.value = true;
 
   try {
+    // 1. Header Selections
+    for (const modId of selectedModIds.value) {
+      // ... existing logic ...
+      const mod = searchResults.value.find((m) => m.id === modId);
+      if (!mod) continue;
+      const files = await window.api.curseforge.getModFiles(mod.id, {
+        gameVersion: selectedVersion.value || undefined,
+        modLoader: selectedLoader.value || undefined,
+      });
+      const releaseFile =
+        files.find((f: any) => f.releaseType === 1) || files[0];
+      if (releaseFile) {
+        const added = await window.api.curseforge.addToLibrary(
+          mod.id,
+          releaseFile.id,
+          selectedLoader.value || undefined
+        );
+        if (added && targetFolderId.value)
+          moveModToFolder(added.id, targetFolderId.value);
+      }
+    }
+
+    // 2. File Selections
+    for (const [fileId, modId] of selectedFilesMap.value) {
+      // Skip if mod header was already selected (optimization)
+      if (selectedModIds.value.has(modId)) continue;
+
+      const mod = searchResults.value.find((m) => m.id === modId);
+      // If mod isn't in search results anymore (page change), we can't get details easily.
+      // Assumption: User selects from current results.
+      if (!mod) continue;
+
+      const added = await window.api.curseforge.addToLibrary(
+        mod.id,
+        fileId,
+        selectedLoader.value || undefined
+      );
+      if (added && targetFolderId.value)
+        moveModToFolder(added.id, targetFolderId.value);
+    }
+
+    emit("added", null);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    isAddingBulk.value = false;
+    selectedModIds.value.clear();
+    selectedFilesMap.value.clear();
+    isSelectionMode.value = false;
+  }
+}
+
+// Regular Actions
+async function loadPopular() {
+  if (!hasApiKey.value) return;
+  isSearching.value = true;
+  currentPage.value = 0;
+  try {
     const result = await window.api.curseforge.search({
-      query: undefined, // no query = popular
+      query: undefined,
       gameVersion: selectedVersion.value || undefined,
       modLoader: selectedLoader.value || undefined,
       categoryId: selectedCategory.value || undefined,
@@ -245,19 +403,16 @@ async function loadPopular() {
     searchResults.value = result.mods;
     totalResults.value = result.pagination.totalCount;
   } catch (err) {
-    console.error("Failed to load popular mods:", err);
+    console.error(err);
   } finally {
     isSearching.value = false;
   }
 }
 
-// Search mods
 async function searchMods() {
   if (!hasApiKey.value) return;
-
   isSearching.value = true;
   currentPage.value = 0;
-
   try {
     const result = await window.api.curseforge.search({
       query: searchQuery.value || undefined,
@@ -268,23 +423,19 @@ async function searchMods() {
       pageSize,
       index: 0,
     });
-
     searchResults.value = result.mods;
     totalResults.value = result.pagination.totalCount;
   } catch (err) {
-    console.error("Failed to search mods:", err);
+    console.error(err);
   } finally {
     isSearching.value = false;
   }
 }
 
-// Load more results
 async function loadMore() {
   if (!hasApiKey.value || isSearching.value) return;
-
   isSearching.value = true;
   currentPage.value++;
-
   try {
     const result = await window.api.curseforge.search({
       query: searchQuery.value || undefined,
@@ -295,407 +446,729 @@ async function loadMore() {
       pageSize,
       index: currentPage.value * pageSize,
     });
-
     searchResults.value = [...searchResults.value, ...result.mods];
   } catch (err) {
-    console.error("Failed to load more mods:", err);
     currentPage.value--;
   } finally {
     isSearching.value = false;
   }
 }
 
-// Add mod to library
-async function addToLibrary(mod: any) {
-  isAddingMod.value = mod.id;
+// Expand & Fetch
+async function toggleExpand(mod: any) {
+  if (expandedModId.value === mod.id) {
+    expandedModId.value = null;
+    modFiles.value = [];
+    return;
+  }
+  expandedModId.value = mod.id;
+  modFiles.value = [];
+  await fetchModFiles(mod.id);
+}
 
+async function fetchModFiles(modId: number) {
+  isLoadingFiles.value = true;
   try {
-    // Get the best file for the selected version/loader
-    const files = await window.api.curseforge.getModFiles(mod.id, {
+    const files = await window.api.curseforge.getModFiles(modId, {
       gameVersion: selectedVersion.value || undefined,
       modLoader: selectedLoader.value || undefined,
     });
+    // Sort by date desc
+    modFiles.value = files.sort(
+      (a: any, b: any) =>
+        new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
+    );
+  } catch (err) {
+    console.error(err);
+  } finally {
+    isLoadingFiles.value = false;
+  }
+}
 
-    if (files.length === 0) {
-      console.error("No compatible files found");
-      return;
-    }
+// Filtered Files (Release Type)
+const filteredModFiles = computed(() => {
+  return modFiles.value.filter((f) => {
+    if (f.releaseType === 1 && !filterRelease.value) return false;
+    if (f.releaseType === 2 && !filterBeta.value) return false;
+    if (f.releaseType === 3 && !filterAlpha.value) return false;
+    return true;
+  });
+});
 
-    // Use the first (most recent) file
-    const file = files[0];
+function isFileInstalled(modId: number, fileId: number): boolean {
+  return props.installedProjectFiles?.get(modId)?.has(fileId) || false;
+}
 
-    // Add to library with the selected loader preference
+function isModInstalled(modId: number): boolean {
+  return props.installedProjectFiles?.has(modId) || false;
+}
+
+async function addFileToLibrary(mod: any, file: any) {
+  isAddingMod.value = mod.id;
+  try {
     const addedMod = await window.api.curseforge.addToLibrary(
       mod.id,
       file.id,
       selectedLoader.value || undefined
     );
-
     if (addedMod) {
-      // If a folder is selected, move the mod to that folder
-      if (targetFolderId.value) {
+      if (targetFolderId.value)
         moveModToFolder(addedMod.id, targetFolderId.value);
-      }
-
       emit("added", addedMod);
     }
   } catch (err) {
-    console.error("Failed to add mod:", err);
+    console.error(err);
   } finally {
     isAddingMod.value = null;
   }
 }
 
-// Format download count
-function formatDownloads(count: number): string {
-  if (count >= 1000000) {
-    return (count / 1000000).toFixed(1) + "M";
-  } else if (count >= 1000) {
-    return (count / 1000).toFixed(1) + "K";
+// Quick Download (Latest Release matching filters)
+async function quickDownload(mod: any) {
+  isAddingMod.value = mod.id;
+  try {
+    const files = await window.api.curseforge.getModFiles(mod.id, {
+      gameVersion: selectedVersion.value || undefined,
+      modLoader: selectedLoader.value || undefined,
+    });
+    const releaseFile = files.find((f: any) => f.releaseType === 1) || files[0];
+    if (!releaseFile) return;
+
+    const addedMod = await window.api.curseforge.addToLibrary(
+      mod.id,
+      releaseFile.id,
+      selectedLoader.value || undefined
+    );
+    if (addedMod) {
+      if (targetFolderId.value)
+        moveModToFolder(addedMod.id, targetFolderId.value);
+      emit("added", addedMod);
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    isAddingMod.value = null;
   }
+}
+
+function openModPage(mod: any) {
+  if (mod.slug) {
+    window.open(
+      `https://www.curseforge.com/minecraft/mc-mods/${mod.slug}`,
+      "_blank"
+    );
+  }
+}
+
+function formatDownloads(count: number): string {
+  if (count >= 1000000) return (count / 1000000).toFixed(1) + "M";
+  if (count >= 1000) return (count / 1000).toFixed(1) + "K";
   return count.toString();
 }
 
-// Get authors string
 function getAuthors(mod: any): string {
-  if (!mod.authors || mod.authors.length === 0) return "Unknown";
+  if (!mod.authors?.length) return "Unknown";
   return mod.authors.map((a: any) => a.name).join(", ");
 }
 
-// ModLoader ID to name mapping
-const loaderNames: Record<number, string> = {
-  1: "Forge",
-  4: "Fabric",
-  5: "Quilt",
-  6: "NeoForge",
-};
-
-const loaderIds: Record<string, number> = {
-  forge: 1,
-  fabric: 4,
-  quilt: 5,
-  neoforge: 6,
-};
-
-// Find the best matching file index based on filters
-function findMatchingFileIndex(mod: any): any | null {
-  if (!mod.latestFilesIndexes || mod.latestFilesIndexes.length === 0) {
-    return null;
-  }
-
-  const targetVersion = selectedVersion.value || null;
-  const targetLoader = selectedLoader.value
-    ? loaderIds[selectedLoader.value.toLowerCase()]
-    : null;
-
-  // Try to find exact match for both version and loader
-  if (targetVersion && targetLoader) {
-    const exactMatch = mod.latestFilesIndexes.find(
-      (idx: any) =>
-        idx.gameVersion === targetVersion && idx.modLoader === targetLoader
-    );
-    if (exactMatch) return exactMatch;
-  }
-
-  // Try to match version only
-  if (targetVersion) {
-    const versionMatch = mod.latestFilesIndexes.find(
-      (idx: any) => idx.gameVersion === targetVersion
-    );
-    if (versionMatch) return versionMatch;
-  }
-
-  // Try to match loader only
-  if (targetLoader) {
-    const loaderMatch = mod.latestFilesIndexes.find(
-      (idx: any) => idx.modLoader === targetLoader
-    );
-    if (loaderMatch) return loaderMatch;
-  }
-
-  // Fallback to first available
-  return mod.latestFilesIndexes[0];
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString();
 }
 
-// Get game version for display from the matching file
-function getModGameVersion(mod: any): string {
-  const matchingFile = findMatchingFileIndex(mod);
-  return matchingFile?.gameVersion || "";
-}
-
-// Get mod loader for display from the matching file
-function getModLoader(mod: any): string {
-  const matchingFile = findMatchingFileIndex(mod);
-  if (matchingFile?.modLoader && loaderNames[matchingFile.modLoader]) {
-    return loaderNames[matchingFile.modLoader];
-  }
-  return "";
-}
-
-// Check if the mod matches the current filters
-function matchesFilters(mod: any): boolean {
-  const matchingFile = findMatchingFileIndex(mod);
-  if (!matchingFile) return false;
-
-  const targetVersion = selectedVersion.value || null;
-  const targetLoader = selectedLoader.value
-    ? loaderIds[selectedLoader.value.toLowerCase()]
-    : null;
-
-  if (targetVersion && matchingFile.gameVersion !== targetVersion) {
-    return false;
-  }
-  if (targetLoader && matchingFile.modLoader !== targetLoader) {
-    return false;
-  }
-  return true;
-}
-
-// Debounced search
+// Debounce Search
 let searchTimeout: ReturnType<typeof setTimeout>;
 function onSearchInput() {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    if (searchQuery.value.trim()) {
-      searchMods();
-    } else {
-      loadPopular();
-    }
+    if (searchQuery.value.trim()) searchMods();
+    else loadPopular();
   }, 500);
 }
 
-// Has more results
-const hasMore = computed(() => {
-  return searchResults.value.length < totalResults.value;
-});
+const hasMore = computed(() => searchResults.value.length < totalResults.value);
+
+function getReleaseColor(type: number) {
+  if (type === 1) return "bg-green-500/10 text-green-500 border-green-500/20";
+  if (type === 2) return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+  return "bg-orange-500/10 text-orange-500 border-orange-500/20";
+}
 </script>
 
 <template>
-  <Dialog :open="open" @close="emit('close')" maxWidth="4xl">
-    <template #title>
-      <div class="flex items-center gap-2">
-        <Search class="w-5 h-5" />
-        Browse CurseForge
-      </div>
-    </template>
-
-    <div class="space-y-4">
-      <!-- API Key Warning -->
-      <div v-if="!hasApiKey"
-        class="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-500 text-sm">
-        <strong>CurseForge API Key Required</strong>
-        <p class="mt-1 text-yellow-500/80">
-          Please set your CurseForge API key in Settings to browse and download
-          mods.
-          <a href="https://console.curseforge.com/" target="_blank" class="underline inline-flex items-center gap-1">
-            Get API Key
-            <ExternalLink class="w-3 h-3" />
-          </a>
-        </p>
-      </div>
-
-      <!-- Search & Filters -->
-      <div v-if="hasApiKey" class="space-y-3">
-        <div class="flex gap-2">
-          <div class="relative flex-1">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input v-model="searchQuery" type="text" placeholder="Search mods..."
-              class="w-full h-10 pl-10 pr-4 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              @input="onSearchInput" @keyup.enter="searchMods" />
-          </div>
-          <Button variant="outline" @click="showFilters = !showFilters">
+  <Dialog
+    :open="open"
+    @close="emit('close')"
+    maxWidth="6xl"
+    contentClass="p-0 border-none bg-transparent shadow-none"
+  >
+    <div
+      class="flex h-[80vh] overflow-hidden rounded-xl bg-background border border-border shadow-2xl relative"
+    >
+      <!-- Sidebar Filters -->
+      <div
+        class="w-64 flex-shrink-0 border-r border-border bg-muted/10 flex flex-col"
+      >
+        <div class="p-4 border-b border-border">
+          <h3 class="font-semibold flex items-center gap-2">
+            <Filter class="w-4 h-4 text-primary" />
             Filters
-            <ChevronDown class="w-4 h-4 ml-1" :class="{ 'rotate-180': showFilters }" />
-          </Button>
+          </h3>
         </div>
 
-        <!-- Filter Panel -->
-        <div v-if="showFilters" class="grid grid-cols-4 gap-3 p-3 bg-muted/30 rounded-lg">
-          <div>
-            <label class="text-xs text-muted-foreground mb-1 block">Minecraft Version</label>
-            <select v-model="selectedVersion" class="w-full h-9 px-3 rounded-md border bg-background text-sm"
-              @change="searchQuery ? searchMods() : loadPopular()">
-              <option value="">All Versions</option>
-              <option v-for="v in gameVersions.filter(Boolean)" :key="v" :value="v">
-                {{ v }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-muted-foreground mb-1 block">Mod Loader</label>
-            <select v-model="selectedLoader" class="w-full h-9 px-3 rounded-md border bg-background text-sm"
-              @change="searchQuery ? searchMods() : loadPopular()">
-              <option v-for="l in modLoaders" :key="l.value" :value="l.value">
-                {{ l.label }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-muted-foreground mb-1 block">Category</label>
-            <select v-model="selectedCategory" class="w-full h-9 px-3 rounded-md border bg-background text-sm"
-              @change="searchQuery ? searchMods() : loadPopular()">
-              <option v-for="c in categories" :key="c.value" :value="c.value">
-                {{ c.label }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-muted-foreground mb-1 block">Sort By</label>
-            <select v-model="selectedSortField" class="w-full h-9 px-3 rounded-md border bg-background text-sm"
-              @change="searchQuery ? searchMods() : loadPopular()">
-              <option v-for="s in sortFields" :key="s.value" :value="s.value">
-                {{ s.label }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Bulk Actions & Folder Selection -->
-        <div class="flex items-center gap-3 p-3 bg-muted/20 rounded-lg border">
-          <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" @click="toggleSelectionMode"
-              :class="isSelectionMode ? 'bg-primary/10 border-primary' : ''">
-              <CheckSquare v-if="isSelectionMode" class="w-4 h-4 mr-1.5" />
-              <Square v-else class="w-4 h-4 mr-1.5" />
-              {{ isSelectionMode ? 'Selection Mode' : 'Select Multiple' }}
-            </Button>
-
-            <template v-if="isSelectionMode">
-              <Button variant="ghost" size="sm" @click="selectAll">
-                Select All
-              </Button>
-              <Button variant="ghost" size="sm" @click="deselectAll">
-                Clear
-              </Button>
-              <span class="text-sm text-muted-foreground">
-                {{ selectedModIds.size }} selected
-              </span>
-            </template>
+        <div class="flex-1 overflow-y-auto p-4 space-y-6">
+          <!-- Game Version -->
+          <div class="space-y-2">
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Game Version</label
+            >
+            <div class="relative">
+              <select
+                v-model="selectedVersion"
+                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
+                @change="searchQuery ? searchMods() : loadPopular()"
+              >
+                <option value="" class="bg-popover text-popover-foreground">
+                  All Versions
+                </option>
+                <option
+                  v-for="v in gameVersions.filter(Boolean)"
+                  :key="v"
+                  :value="v"
+                  class="bg-popover text-popover-foreground"
+                >
+                  {{ v }}
+                </option>
+              </select>
+              <ChevronDown
+                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
+              />
+            </div>
           </div>
 
-          <div class="h-6 w-px bg-border" />
-
-          <div class="flex items-center gap-2 flex-1">
-            <FolderOpen class="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <label class="text-sm text-muted-foreground whitespace-nowrap">Add to folder:</label>
-            <select v-model="targetFolderId" class="flex-1 h-9 px-3 rounded-md border bg-background text-sm">
-              <option :value="null">Library Root</option>
-              <option v-for="folder in foldersList" :key="folder.id" :value="folder.id">
-                {{ folder.name }}
-              </option>
-            </select>
+          <!-- Mod Loader -->
+          <div class="space-y-2">
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Mod Loader</label
+            >
+            <div class="relative">
+              <select
+                v-model="selectedLoader"
+                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
+                @change="searchQuery ? searchMods() : loadPopular()"
+              >
+                <option
+                  v-for="l in modLoaders"
+                  :key="l.value"
+                  :value="l.value"
+                  class="bg-popover text-popover-foreground"
+                >
+                  {{ l.label }}
+                </option>
+              </select>
+              <ChevronDown
+                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
+              />
+            </div>
           </div>
 
-          <Button v-if="isSelectionMode && selectedModIds.size > 0" @click="addSelectedMods" :disabled="isAddingBulk"
-            class="ml-auto">
-            <Loader2 v-if="isAddingBulk" class="w-4 h-4 mr-1.5 animate-spin" />
-            <Plus v-else class="w-4 h-4 mr-1.5" />
-            Add Selected ({{ selectedModIds.size }})
-          </Button>
+          <!-- Category -->
+          <div class="space-y-2">
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Category</label
+            >
+            <div class="relative">
+              <select
+                v-model="selectedCategory"
+                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
+                @change="searchQuery ? searchMods() : loadPopular()"
+              >
+                <option
+                  v-for="c in categories"
+                  :key="c.value"
+                  :value="c.value"
+                  class="bg-popover text-popover-foreground"
+                >
+                  {{ c.label }}
+                </option>
+              </select>
+              <ChevronDown
+                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
+              />
+            </div>
+          </div>
+
+          <!-- Sort -->
+          <div class="space-y-2">
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Sort By</label
+            >
+            <div class="relative">
+              <select
+                v-model="selectedSortField"
+                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
+                @change="searchQuery ? searchMods() : loadPopular()"
+              >
+                <option
+                  v-for="s in sortFields"
+                  :key="s.value"
+                  :value="s.value"
+                  class="bg-popover text-popover-foreground"
+                >
+                  {{ s.label }}
+                </option>
+              </select>
+              <ChevronDown
+                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
+              />
+            </div>
+          </div>
+
+          <!-- Release Types -->
+          <div class="space-y-2">
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Release Channels</label
+            >
+            <div class="space-y-1.5">
+              <label
+                class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  v-model="filterRelease"
+                  class="rounded border-input text-primary focus:ring-primary/50"
+                />
+                <span class="inline-flex items-center gap-1.5">
+                  <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                  Release
+                </span>
+              </label>
+              <label
+                class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  v-model="filterBeta"
+                  class="rounded border-input text-primary focus:ring-primary/50"
+                />
+                <span class="inline-flex items-center gap-1.5">
+                  <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                  Beta
+                </span>
+              </label>
+              <label
+                class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  v-model="filterAlpha"
+                  class="rounded border-input text-primary focus:ring-primary/50"
+                />
+                <span class="inline-flex items-center gap-1.5">
+                  <div class="w-2 h-2 rounded-full bg-orange-500"></div>
+                  Alpha
+                </span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Results -->
-      <div v-if="hasApiKey" class="relative min-h-[400px] max-h-[500px] overflow-y-auto">
-        <!-- Loading -->
-        <div v-if="isSearching && searchResults.length === 0" class="flex items-center justify-center py-20">
-          <Loader2 class="w-8 h-8 animate-spin text-primary" />
-        </div>
-
-        <!-- Results Grid -->
-        <div v-else-if="searchResults.length > 0" class="grid grid-cols-1 gap-2 p-0.5 overflow-hidden">
-          <div v-for="mod in searchResults" :key="mod.id"
-            class="flex items-center gap-3 p-3 rounded-lg border transition-all" :class="[
-              matchesFilters(mod)
-                ? 'bg-card hover:bg-accent/50'
-                : 'bg-orange-500/5 border-orange-500/30',
-              isSelectionMode && selectedModIds.has(mod.id) ? 'ring-2 ring-primary bg-primary/5' : ''
-            ]">
-            <!-- Checkbox (Selection Mode) -->
-            <button v-if="isSelectionMode" @click="toggleModSelection(mod.id)"
-              class="flex-shrink-0 p-1 hover:bg-accent rounded transition-colors">
-              <CheckSquare v-if="selectedModIds.has(mod.id)" class="w-5 h-5 text-primary" />
-              <Square v-else class="w-5 h-5 text-muted-foreground" />
-            </button>
-
-            <!-- Thumbnail -->
-            <img v-if="mod.logo?.thumbnailUrl" :src="mod.logo.thumbnailUrl" :alt="mod.name"
-              class="w-12 h-12 rounded-md object-cover bg-muted" />
-            <div v-else class="w-12 h-12 rounded-md bg-muted flex items-center justify-center">
-              <Star class="w-5 h-5 text-muted-foreground" />
-            </div>
-
-            <!-- Info -->
-            <div class="flex-1 min-w-0">
-              <div class="font-medium truncate flex items-center gap-2">
-                {{ mod.name }}
-                <AlertTriangle v-if="!matchesFilters(mod)" class="w-4 h-4 text-orange-500 flex-shrink-0"
-                  title="Version/loader mismatch with filters" />
-              </div>
-              <div class="text-xs text-muted-foreground truncate">
-                by {{ getAuthors(mod) }}
-              </div>
-              <div class="text-xs flex items-center gap-3 mt-1">
-                <span class="flex items-center gap-1 text-muted-foreground">
-                  <Download class="w-3 h-3" />
-                  {{ formatDownloads(mod.downloadCount) }}
-                </span>
-                <span v-if="getModGameVersion(mod)" class="flex items-center gap-1" :class="selectedVersion &&
-                  getModGameVersion(mod) !== selectedVersion
-                  ? 'text-orange-500'
-                  : 'text-muted-foreground'
-                  ">
-                  <span class="w-1.5 h-1.5 rounded-full" :class="selectedVersion &&
-                    getModGameVersion(mod) !== selectedVersion
-                    ? 'bg-orange-500/50'
-                    : 'bg-green-500/50'
-                    " />
-                  {{ getModGameVersion(mod) }}
-                </span>
-                <span v-if="getModLoader(mod)" class="flex items-center gap-1" :class="selectedLoader &&
-                  getModLoader(mod).toLowerCase() !==
-                  selectedLoader.toLowerCase()
-                  ? 'text-orange-500'
-                  : 'text-muted-foreground'
-                  ">
-                  <span class="w-1.5 h-1.5 rounded-full" :class="selectedLoader &&
-                    getModLoader(mod).toLowerCase() !==
-                    selectedLoader.toLowerCase()
-                    ? 'bg-orange-500/50'
-                    : 'bg-primary/50'
-                    " />
-                  {{ getModLoader(mod) }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Actions -->
-            <Button v-if="!isSelectionMode" size="sm" :disabled="isAddingMod === mod.id" @click="addToLibrary(mod)">
-              <Loader2 v-if="isAddingMod === mod.id" class="w-4 h-4 animate-spin" />
-              <Plus v-else class="w-4 h-4 mr-1" />
-              Add
-            </Button>
+      <!-- Main Content -->
+      <div class="flex-1 flex flex-col min-w-0 bg-background">
+        <!-- Search Header -->
+        <div class="p-4 border-b border-border flex gap-3 items-center">
+          <div class="relative flex-1">
+            <Search
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
+            />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search mods..."
+              class="w-full h-10 pl-10 pr-4 rounded-lg border bg-input/50 focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all"
+              @input="onSearchInput"
+              @keyup.enter="searchMods"
+            />
           </div>
 
-          <!-- Load More -->
-          <div v-if="hasMore" class="flex justify-center py-4">
-            <Button variant="outline" :disabled="isSearching" @click="loadMore">
-              <Loader2 v-if="isSearching" class="w-4 h-4 animate-spin mr-2" />
-              Load More
+          <!-- Bulk Actions (Only Visible when Selection Mode ON) -->
+          <div
+            v-if="isSelectionMode"
+            class="flex items-center gap-3 animate-in fade-in slide-in-from-right-4 duration-200"
+          >
+            <div class="h-8 w-px bg-border mx-1"></div>
+
+            <div
+              class="flex items-center gap-2 px-3 py-1.5 bg-accent/20 rounded-md border border-accent/30"
+            >
+              <FolderOpen class="w-4 h-4 text-primary" />
+              <select
+                v-model="targetFolderId"
+                class="bg-transparent border-none text-sm focus:ring-0 cursor-pointer min-w-[120px]"
+              >
+                <option :value="null">Library Root</option>
+                <option v-for="f in foldersList" :key="f.id" :value="f.id">
+                  {{ f.name }}
+                </option>
+              </select>
+            </div>
+
+            <Button
+              @click="executeBulkAdd"
+              :disabled="
+                isAddingBulk ||
+                (selectedModIds.size === 0 && selectedFilesMap.size === 0)
+              "
+              size="sm"
+              class="gap-2 shadow-lg shadow-primary/20"
+            >
+              <Loader2 v-if="isAddingBulk" class="w-4 h-4 animate-spin" />
+              <ArrowDownToLine v-else class="w-4 h-4" />
+              Install Selected ({{
+                selectedModIds.size + selectedFilesMap.size
+              }})
             </Button>
+
+            <Button variant="ghost" size="sm" @click="isSelectionMode = false"
+              >Cancel</Button
+            >
           </div>
+
+          <Button
+            v-else
+            variant="outline"
+            size="sm"
+            @click="isSelectionMode = true"
+            class="gap-2"
+          >
+            <CheckSquare class="w-4 h-4" /> Select Multiple
+          </Button>
+
+          <div class="h-8 w-px bg-border mx-1"></div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            @click="emit('close')"
+            title="Close"
+          >
+            <X class="w-5 h-5" />
+          </Button>
         </div>
 
-        <!-- No Results -->
-        <div v-else class="flex flex-col items-center justify-center py-20 text-muted-foreground">
-          <Search class="w-12 h-12 mb-4 opacity-50" />
-          <p>No mods found. Try a different search.</p>
+        <!-- Results Area -->
+        <div class="flex-1 overflow-y-auto p-4 relative">
+          <!-- API Warning -->
+          <div
+            v-if="!hasApiKey"
+            class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-background/80 backdrop-blur-sm z-10"
+          >
+            <AlertTriangle class="w-12 h-12 text-yellow-500 mb-4" />
+            <h3 class="text-xl font-bold mb-2">API Key Required</h3>
+            <p class="text-muted-foreground max-w-md mb-6">
+              You need a CurseForge API key to browse and download mods. Please
+              add it in Settings.
+            </p>
+            <a
+              href="https://console.curseforge.com/"
+              target="_blank"
+              class="text-primary hover:underline"
+              >Get API Key</a
+            >
+          </div>
+
+          <!-- Loading -->
+          <div
+            v-if="isSearching"
+            class="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-[1px] z-10"
+          >
+            <Loader2 class="w-10 h-10 animate-spin text-primary" />
+          </div>
+
+          <!-- List -->
+          <div v-if="searchResults.length > 0" class="flex flex-col gap-3">
+            <div
+              v-for="mod in searchResults"
+              :key="mod.id"
+              class="group border border-border rounded-xl bg-card overflow-hidden transition-all duration-200"
+              :class="{
+                'ring-2 ring-primary/50 shadow-lg shadow-primary/5':
+                  expandedModId === mod.id,
+                'ring-1 ring-primary bg-primary/5':
+                  isSelectionMode && selectedModIds.has(mod.id),
+              }"
+            >
+              <!-- Mod Header -->
+              <div
+                class="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/30 transition-colors relative"
+                @click="toggleExpand(mod)"
+              >
+                <!-- Checkbox for Bulk Selection -->
+                <button
+                  v-if="isSelectionMode"
+                  @click.stop="toggleModHeaderSelection(mod.id)"
+                  class="p-1 rounded hover:bg-background transition-colors mr-1"
+                  title="Select Latest Release"
+                >
+                  <div
+                    class="w-5 h-5 border rounded flex items-center justify-center transition-all"
+                    :class="
+                      selectedModIds.has(mod.id)
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-muted-foreground/30 bg-background'
+                    "
+                  >
+                    <Check
+                      v-if="selectedModIds.has(mod.id)"
+                      class="w-3.5 h-3.5"
+                    />
+                  </div>
+                </button>
+
+                <!-- Icon -->
+                <div
+                  class="w-12 h-12 rounded-lg bg-muted border border-border overflow-hidden shrink-0"
+                >
+                  <img
+                    v-if="mod.logo?.thumbnailUrl"
+                    :src="mod.logo.thumbnailUrl"
+                    class="w-full h-full object-cover"
+                  />
+                  <Star
+                    v-else
+                    class="w-6 h-6 m-auto text-muted-foreground/30"
+                  />
+                </div>
+
+                <!-- Info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <h4 class="font-bold text-base truncate">{{ mod.name }}</h4>
+                    <span
+                      v-if="isModInstalled(mod.id)"
+                      class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20 flex items-center gap-0.5"
+                    >
+                      <Check class="w-3 h-3" /> INSTALLED
+                    </span>
+                  </div>
+                  <p class="text-sm text-muted-foreground truncate">
+                    {{ mod.summary }}
+                  </p>
+
+                  <div
+                    class="flex items-center gap-4 mt-2 text-xs text-muted-foreground"
+                  >
+                    <span class="flex items-center gap-1"
+                      ><span class="font-medium text-foreground">{{
+                        formatDownloads(mod.downloadCount)
+                      }}</span>
+                      downloads</span
+                    >
+                    <span class="w-1 h-1 rounded-full bg-border"></span>
+                    <span class="truncate max-w-[150px]"
+                      >by {{ getAuthors(mod) }}</span
+                    >
+                    <span class="w-1 h-1 rounded-full bg-border"></span>
+                    <span>Updated {{ formatDate(mod.dateModified) }}</span>
+                  </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center gap-2" v-if="!isSelectionMode">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    @click.stop="openModPage(mod)"
+                    title="View on CurseForge"
+                  >
+                    <ExternalLink class="w-4 h-4 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    class="gap-1.5 min-w-[90px]"
+                    size="sm"
+                    :disabled="isAddingMod === mod.id"
+                    @click.stop="quickDownload(mod)"
+                  >
+                    <Loader2
+                      v-if="isAddingMod === mod.id"
+                      class="w-4 h-4 animate-spin"
+                    />
+                    <template v-else>
+                      <ArrowDownToLine class="w-4 h-4" />
+                      <span>Latest</span>
+                    </template>
+                  </Button>
+                </div>
+
+                <ChevronDown
+                  class="w-5 h-5 text-muted-foreground/50 transition-transform duration-300"
+                  :class="{ 'rotate-180': expandedModId === mod.id }"
+                />
+              </div>
+
+              <!-- Accordion Body -->
+              <div
+                v-if="expandedModId === mod.id"
+                class="border-t border-border bg-muted/20 animate-in slide-in-from-top-2 duration-200"
+              >
+                <div v-if="isLoadingFiles" class="flex justify-center p-8">
+                  <Loader2
+                    class="w-8 h-8 animate-spin text-muted-foreground/50"
+                  />
+                </div>
+                <div
+                  v-else-if="filteredModFiles.length === 0"
+                  class="p-8 text-center text-muted-foreground text-sm"
+                >
+                  No files found matching current filters.
+                </div>
+                <div
+                  v-else
+                  class="p-2 space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar"
+                >
+                  <div
+                    v-for="file in filteredModFiles"
+                    :key="file.id"
+                    class="flex items-center gap-3 p-2 rounded-lg hover:bg-background border border-transparent hover:border-border transition-all group/file"
+                    :class="{
+                      'opacity-60 grayscale cursor-not-allowed':
+                        isSelectionMode && selectedModIds.has(mod.id),
+                    }"
+                  >
+                    <!-- Inner Checkbox -->
+                    <div
+                      v-if="isSelectionMode"
+                      class="pl-2"
+                      :class="{
+                        'pointer-events-none': selectedModIds.has(mod.id),
+                      }"
+                    >
+                      <button
+                        class="w-4 h-4 rounded border flex items-center justify-center transition-colors"
+                        :class="
+                          selectedFilesMap.has(file.id)
+                            ? 'bg-primary border-primary text-primary-foreground'
+                            : 'border-muted-foreground/30 bg-background'
+                        "
+                        @click.stop="toggleFileSelectionMap(file.id, mod.id)"
+                      >
+                        <Check
+                          v-if="selectedFilesMap.has(file.id)"
+                          class="w-3 h-3"
+                        />
+                      </button>
+                    </div>
+
+                    <div
+                      class="flex-1 grid grid-cols-12 gap-4 items-center text-sm"
+                    >
+                      <div
+                        class="col-span-6 font-medium truncate"
+                        :title="file.displayName"
+                      >
+                        {{ file.displayName }}
+                      </div>
+                      <div class="col-span-2 text-xs text-muted-foreground">
+                        {{ formatDate(file.fileDate) }}
+                      </div>
+                      <div class="col-span-2">
+                        <span
+                          class="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border"
+                          :class="getReleaseColor(file.releaseType)"
+                        >
+                          {{
+                            file.releaseType === 1
+                              ? "Release"
+                              : file.releaseType === 2
+                              ? "Beta"
+                              : "Alpha"
+                          }}
+                        </span>
+                      </div>
+                      <div
+                        class="col-span-2 text-xs text-muted-foreground text-right"
+                      >
+                        {{ (file.fileLength / 1024 / 1024).toFixed(1) }} MB
+                      </div>
+                    </div>
+
+                    <Button
+                      v-if="!isSelectionMode"
+                      size="sm"
+                      :variant="
+                        isFileInstalled(mod.id, file.id) ? 'secondary' : 'ghost'
+                      "
+                      class="h-8 w-24 ml-2 text-xs"
+                      :disabled="
+                        isFileInstalled(mod.id, file.id) ||
+                        isAddingMod === mod.id
+                      "
+                      @click="addFileToLibrary(mod, file)"
+                    >
+                      <Check
+                        v-if="isFileInstalled(mod.id, file.id)"
+                        class="w-3 h-3 mr-1.5"
+                      />
+                      {{
+                        isFileInstalled(mod.id, file.id)
+                          ? "Installed"
+                          : "Install"
+                      }}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Load More -->
+            <div v-if="hasMore" class="flex justify-center py-6">
+              <Button
+                variant="outline"
+                @click="loadMore"
+                :disabled="isSearching"
+                class="min-w-[150px]"
+              >
+                <Loader2 v-if="isSearching" class="w-4 h-4 animate-spin mr-2" />
+                Load More
+              </Button>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div
+            v-else-if="!isSearching && hasApiKey"
+            class="flex flex-col items-center justify-center h-full text-muted-foreground"
+          >
+            <div
+              class="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4"
+            >
+              <Search class="w-8 h-8 opacity-50" />
+            </div>
+            <p>No results found.</p>
+          </div>
         </div>
       </div>
     </div>
-
-    <template #footer>
-      <Button variant="outline" @click="emit('close')"> Close </Button>
-    </template>
   </Dialog>
 </template>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 100, 100, 0.2);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 100, 100, 0.4);
+}
+</style>

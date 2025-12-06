@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import { Library, Package, Settings, Star, Clock, FolderTree, LayoutGrid, X } from "lucide-vue-next";
+import {
+  Library,
+  Package,
+  Settings,
+  Star,
+  Clock,
+  FolderTree,
+  LayoutGrid,
+  X,
+} from "lucide-vue-next";
 import { cn } from "@/lib/utils";
 import { ref, onMounted, watch } from "vue";
 
@@ -9,7 +18,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'close'): void;
+  (e: "close"): void;
 }>();
 
 // Stats counters
@@ -27,21 +36,31 @@ async function loadStats() {
     modpackCount.value = modpacks.length;
 
     // Load favorites from localStorage and filter to only existing items
-    const modIds = new Set(mods.map(m => m.id));
-    const packIds = new Set(modpacks.map(p => p.id));
+    const modIds = new Set(mods.map((m) => m.id));
+    const packIds = new Set(modpacks.map((p) => p.id));
 
-    let favMods: string[] = JSON.parse(localStorage.getItem("modex:favorites:mods") || "[]");
-    let favPacks: string[] = JSON.parse(localStorage.getItem("modex:favorites:modpacks") || "[]");
+    let favMods: string[] = JSON.parse(
+      localStorage.getItem("modex:favorites:mods") || "[]"
+    );
+    let favPacks: string[] = JSON.parse(
+      localStorage.getItem("modex:favorites:modpacks") || "[]"
+    );
 
     // Filter out deleted items and update localStorage
-    const validFavMods = favMods.filter(id => modIds.has(id));
-    const validFavPacks = favPacks.filter(id => packIds.has(id));
+    const validFavMods = favMods.filter((id) => modIds.has(id));
+    const validFavPacks = favPacks.filter((id) => packIds.has(id));
 
     if (validFavMods.length !== favMods.length) {
-      localStorage.setItem("modex:favorites:mods", JSON.stringify(validFavMods));
+      localStorage.setItem(
+        "modex:favorites:mods",
+        JSON.stringify(validFavMods)
+      );
     }
     if (validFavPacks.length !== favPacks.length) {
-      localStorage.setItem("modex:favorites:modpacks", JSON.stringify(validFavPacks));
+      localStorage.setItem(
+        "modex:favorites:modpacks",
+        JSON.stringify(validFavPacks)
+      );
     }
 
     favoriteModCount.value = validFavMods.length;
@@ -52,7 +71,7 @@ async function loadStats() {
 }
 
 function handleNavClick() {
-  emit('close');
+  emit("close");
 }
 
 onMounted(() => {
@@ -71,79 +90,77 @@ window.addEventListener("storage", loadStats);
     <div class="p-4 sm:p-6 border-b flex items-center justify-between">
       <div>
         <h1
-          class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-          ModEx</h1>
-        <p class="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">Mod Manager</p>
+          class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent"
+        >
+          ModEx
+        </h1>
+        <p class="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">
+          Mod Manager
+        </p>
       </div>
-      <button @click="emit('close')" class="sm:hidden p-1.5 rounded-md hover:bg-accent transition-colors"
-        aria-label="Close menu">
+      <button
+        @click="emit('close')"
+        class="sm:hidden p-1.5 rounded-md hover:bg-accent transition-colors"
+        aria-label="Close menu"
+      >
         <X class="w-5 h-5" />
       </button>
     </div>
     <nav class="flex-1 p-3 sm:p-4 space-y-1.5 sm:space-y-2 overflow-auto">
-      <RouterLink to="/library"
+      <RouterLink
+        to="/library"
         class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm"
-        active-class="bg-accent text-accent-foreground" @click="handleNavClick">
+        active-class="bg-accent text-accent-foreground"
+        @click="handleNavClick"
+      >
         <Library class="w-4 h-4 sm:w-5 sm:h-5" />
         <span class="flex-1">Library</span>
-        <span v-if="modCount > 0" class="text-[10px] sm:text-xs bg-muted px-1.5 sm:px-2 py-0.5 rounded-full">{{ modCount
-          }}</span>
+        <span
+          v-if="modCount > 0"
+          class="text-[10px] sm:text-xs bg-muted px-1.5 sm:px-2 py-0.5 rounded-full"
+          >{{ modCount }}</span
+        >
       </RouterLink>
-      <RouterLink to="/modpacks"
+      <RouterLink
+        to="/modpacks"
         class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm"
-        active-class="bg-accent text-accent-foreground" @click="handleNavClick">
+        active-class="bg-accent text-accent-foreground"
+        @click="handleNavClick"
+      >
         <Package class="w-4 h-4 sm:w-5 sm:h-5" />
         <span class="flex-1">Modpacks</span>
-        <span v-if="modpackCount > 0" class="text-[10px] sm:text-xs bg-muted px-1.5 sm:px-2 py-0.5 rounded-full">{{
-          modpackCount }}</span>
+        <span
+          v-if="modpackCount > 0"
+          class="text-[10px] sm:text-xs bg-muted px-1.5 sm:px-2 py-0.5 rounded-full"
+          >{{ modpackCount }}</span
+        >
       </RouterLink>
-      <RouterLink to="/organize"
+      <RouterLink
+        to="/organize"
         class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm"
-        active-class="bg-accent text-accent-foreground" @click="handleNavClick">
+        active-class="bg-accent text-accent-foreground"
+        @click="handleNavClick"
+      >
         <FolderTree class="w-4 h-4 sm:w-5 sm:h-5" />
         <span class="flex-1">Organize</span>
       </RouterLink>
-      <RouterLink to="/sandbox"
+      <RouterLink
+        to="/sandbox"
         class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm"
-        active-class="bg-accent text-accent-foreground" @click="handleNavClick">
+        active-class="bg-accent text-accent-foreground"
+        @click="handleNavClick"
+      >
         <LayoutGrid class="w-4 h-4 sm:w-5 sm:h-5" />
         <span class="flex-1">Sandbox</span>
       </RouterLink>
-
-      <div class="pt-3 sm:pt-4 pb-1.5 sm:pb-2">
-        <p class="px-2.5 sm:px-3 text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Quick Access</p>
-      </div>
-
-      <RouterLink to="/library?filter=favorites"
-        class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-xs sm:text-sm"
-        @click="handleNavClick">
-        <Star class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-500" />
-        <span class="flex-1">Favorite Mods</span>
-        <span v-if="favoriteModCount > 0"
-          class="text-[10px] sm:text-xs bg-yellow-500/20 text-yellow-500 px-1.5 sm:px-2 py-0.5 rounded-full">{{
-          favoriteModCount }}</span>
-      </RouterLink>
-      <RouterLink to="/modpacks?filter=favorites"
-        class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-xs sm:text-sm"
-        @click="handleNavClick">
-        <Star class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-500" />
-        <span class="flex-1">Favorite Packs</span>
-        <span v-if="favoritePackCount > 0"
-          class="text-[10px] sm:text-xs bg-yellow-500/20 text-yellow-500 px-1.5 sm:px-2 py-0.5 rounded-full">{{
-          favoritePackCount }}</span>
-      </RouterLink>
-      <RouterLink to="/library?filter=recent"
-        class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-xs sm:text-sm"
-        @click="handleNavClick">
-        <Clock class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500" />
-        <span>Recently Added</span>
-      </RouterLink>
     </nav>
     <div class="p-3 sm:p-4 border-t">
-      <RouterLink to="/settings"
+      <RouterLink
+        to="/settings"
         class="flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-1.5 sm:py-2 w-full rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-sm"
-        active-class="bg-accent text-accent-foreground" @click="handleNavClick">
+        active-class="bg-accent text-accent-foreground"
+        @click="handleNavClick"
+      >
         <Settings class="w-4 h-4 sm:w-5 sm:h-5" />
         Settings
       </RouterLink>

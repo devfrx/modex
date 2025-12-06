@@ -50,10 +50,14 @@ const importResult = ref<{
     unchanged: number;
     updated: number;
     downloaded: number;
+    enabled: number;
+    disabled: number;
     addedMods: string[];
     removedMods: string[];
     updatedMods: string[];
     downloadedMods: string[];
+    enabledMods: string[];
+    disabledMods: string[];
   };
 } | null>(null);
 
@@ -406,6 +410,10 @@ function formatBytes(bytes: number): string {
                 updated</span>
               <span v-if="importResult.changes.downloaded > 0" class="text-purple-500">↓{{
                 importResult.changes.downloaded }} downloaded</span>
+              <span v-if="importResult.changes.enabled > 0" class="text-emerald-500">✓{{ importResult.changes.enabled }}
+                enabled</span>
+              <span v-if="importResult.changes.disabled > 0" class="text-amber-500">✕{{ importResult.changes.disabled }}
+                disabled</span>
               <span class="text-muted-foreground">{{ importResult.changes.unchanged }} unchanged</span>
             </div>
 
@@ -430,6 +438,30 @@ function formatBytes(bytes: number): string {
               </div>
               <div v-if="importResult.changes.removedMods.length > 5" class="pl-3 text-red-500/50">
                 ... and {{ importResult.changes.removedMods.length - 5 }} more
+              </div>
+            </div>
+
+            <!-- Enabled Mods -->
+            <div v-if="importResult.changes.enabled > 0" class="space-y-0.5">
+              <div class="text-emerald-500 font-medium">Re-enabled:</div>
+              <div v-for="(mod, idx) in importResult.changes.enabledMods.slice(0, 5)" :key="idx"
+                class="pl-3 text-emerald-500/80">
+                ✓ {{ mod }}
+              </div>
+              <div v-if="importResult.changes.enabledMods.length > 5" class="pl-3 text-emerald-500/50">
+                ... and {{ importResult.changes.enabledMods.length - 5 }} more
+              </div>
+            </div>
+
+            <!-- Disabled Mods -->
+            <div v-if="importResult.changes.disabled > 0" class="space-y-0.5">
+              <div class="text-amber-500 font-medium">Disabled:</div>
+              <div v-for="(mod, idx) in importResult.changes.disabledMods.slice(0, 5)" :key="idx"
+                class="pl-3 text-amber-500/80">
+                ✕ {{ mod }}
+              </div>
+              <div v-if="importResult.changes.disabledMods.length > 5" class="pl-3 text-amber-500/50">
+                ... and {{ importResult.changes.disabledMods.length - 5 }} more
               </div>
             </div>
 

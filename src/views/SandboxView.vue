@@ -176,6 +176,21 @@
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          
+          <!-- Arrow marker for folder->mod links (amber) -->
+          <marker id="arrow-folder" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" :fill="isLightMode ? 'rgba(251, 191, 36, 0.6)' : 'rgba(251, 191, 36, 0.4)'" />
+          </marker>
+          
+          <!-- Arrow marker for mod->modpack links (purple) -->
+          <marker id="arrow-modpack" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" :fill="isLightMode ? 'rgba(139, 92, 246, 0.6)' : 'rgba(139, 92, 246, 0.4)'" />
+          </marker>
+          
+          <!-- Arrow marker for default links -->
+          <marker id="arrow-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" :fill="linkColor" />
+          </marker>
         </defs>
 
         <!-- Background -->
@@ -188,10 +203,20 @@
         <rect width="100%" height="100%" fill="url(#dots)" />
 
         <g ref="zoomGroup">
-          <!-- Links -->
+          <!-- Links with arrows -->
           <g class="links">
-            <line v-for="link in renderedLinks" :key="`${link.source.id}-${link.target.id}`" :x1="link.source.x"
-              :y1="link.source.y" :x2="link.target.x" :y2="link.target.y" :stroke="linkColor" stroke-width="1" />
+            <line 
+              v-for="link in renderedLinks" 
+              :key="`${link.source.id}-${link.target.id}`" 
+              :x1="getLinkStartX(link)"
+              :y1="getLinkStartY(link)" 
+              :x2="getLinkEndX(link)" 
+              :y2="getLinkEndY(link)" 
+              :stroke="getLinkColor(link)" 
+              stroke-width="1.5"
+              :marker-end="getLinkMarker(link)"
+              class="link-line"
+            />
           </g>
 
           <!-- Nodes -->
@@ -738,6 +763,104 @@ const textColor = computed(() =>
 const textMuted = computed(() =>
   isLightMode.value ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.4)"
 );
+
+// Link helper functions for arrow rendering
+function getLinkType(link: GraphLink): 'folder-mod' | 'mod-modpack' | 'folder-folder' | 'default' {
+  const sourceType = link.source.type;
+  const targetType = link.target.type;
+  
+  if (sourceType === 'folder' && targetType === 'mod') return 'folder-mod';
+  if (sourceType === 'mod' && targetType === 'modpack') return 'mod-modpack';
+  if (sourceType === 'folder' && targetType === 'folder') return 'folder-folder';
+  return 'default';
+}
+
+function getLinkColor(link: GraphLink): string {
+  const type = getLinkType(link);
+  switch (type) {
+    case 'folder-mod':
+    case 'folder-folder':
+      return isLightMode.value ? 'rgba(251, 191, 36, 0.4)' : 'rgba(251, 191, 36, 0.25)';
+    case 'mod-modpack':
+      return isLightMode.value ? 'rgba(139, 92, 246, 0.4)' : 'rgba(139, 92, 246, 0.25)';
+    default:
+      return linkColor.value;
+  }
+}
+
+function getLinkMarker(link: GraphLink): string {
+  const type = getLinkType(link);
+  switch (type) {
+    case 'folder-mod':
+    case 'folder-folder':
+      return 'url(#arrow-folder)';
+    case 'mod-modpack':
+      return 'url(#arrow-modpack)';
+    default:
+      return 'url(#arrow-default)';
+  }
+}
+
+// Calculate shortened link endpoints to not overlap with node circles
+function getLinkStartX(link: GraphLink): number {
+  const x1 = link.source.x ?? 0;
+  const y1 = link.source.y ?? 0;
+  const x2 = link.target.x ?? 0;
+  const y2 = link.target.y ?? 0;
+  
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance === 0) return x1;
+  
+  const radius = nodeRadius(link.source) + 2;
+  return x1 + (dx / distance) * radius;
+}
+
+function getLinkStartY(link: GraphLink): number {
+  const x1 = link.source.x ?? 0;
+  const y1 = link.source.y ?? 0;
+  const x2 = link.target.x ?? 0;
+  const y2 = link.target.y ?? 0;
+  
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance === 0) return y1;
+  
+  const radius = nodeRadius(link.source) + 2;
+  return y1 + (dy / distance) * radius;
+}
+
+function getLinkEndX(link: GraphLink): number {
+  const x1 = link.source.x ?? 0;
+  const y1 = link.source.y ?? 0;
+  const x2 = link.target.x ?? 0;
+  const y2 = link.target.y ?? 0;
+  
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance === 0) return x2;
+  
+  const radius = nodeRadius(link.target) + 8; // Extra space for arrow
+  return x2 - (dx / distance) * radius;
+}
+
+function getLinkEndY(link: GraphLink): number {
+  const x1 = link.source.x ?? 0;
+  const y1 = link.source.y ?? 0;
+  const x2 = link.target.x ?? 0;
+  const y2 = link.target.y ?? 0;
+  
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance === 0) return y2;
+  
+  const radius = nodeRadius(link.target) + 8; // Extra space for arrow
+  return y2 - (dy / distance) * radius;
+}
 
 // Check if there are saved positions
 function checkSavedPositions() {
@@ -1475,6 +1598,15 @@ onBeforeUnmount(() => {
 
 .drop-target .node-bg {
   fill-opacity: 0.4;
+}
+
+.link-line {
+  transition: stroke-opacity 0.15s ease;
+}
+
+.link-line:hover {
+  stroke-opacity: 0.8;
+  stroke-width: 2;
 }
 
 .fade-enter-active,

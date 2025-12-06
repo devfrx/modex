@@ -157,6 +157,9 @@ export interface Modpack {
 
   /** Mod IDs in this modpack */
   mod_ids: string[];
+
+  /** Disabled mod IDs (mods that are in the pack but temporarily disabled) */
+  disabled_mod_ids?: string[];
 }
 
 // ==================== MODPACK CREATION ====================
@@ -247,7 +250,7 @@ export interface ModUpdateInfo {
 
 /** A single change in a modpack version */
 export interface ModpackChange {
-  type: "add" | "remove" | "update";
+  type: "add" | "remove" | "update" | "enable" | "disable";
   modId: string;
   modName: string;
   /** For updates: previous version string */
@@ -276,6 +279,8 @@ export interface ModpackVersion {
   changes: ModpackChange[];
   /** Complete snapshot of mod IDs at this version */
   mod_ids: string[];
+  /** Snapshot of disabled mod IDs at this version */
+  disabled_mod_ids?: string[];
   /** Parent version ID (for branching support in the future) */
   parent_id?: string;
   /** Snapshots of CF mods for rollback restoration */

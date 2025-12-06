@@ -141,6 +141,12 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:addMod", modpackId, modId),
     removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
+    toggleMod: (modpackId: string, modId: string): Promise<{ enabled: boolean } | null> =>
+      ipcRenderer.invoke("modpacks:toggleMod", modpackId, modId),
+    setModEnabled: (modpackId: string, modId: string, enabled: boolean): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:setModEnabled", modpackId, modId, enabled),
+    getDisabledMods: (modpackId: string): Promise<string[]> =>
+      ipcRenderer.invoke("modpacks:getDisabledMods", modpackId),
     clone: (modpackId: string, newName: string): Promise<string | null> =>
       ipcRenderer.invoke("modpacks:clone", modpackId, newName),
     setImage: (modpackId: string, imageUrl: string): Promise<boolean> =>
@@ -233,8 +239,16 @@ contextBridge.exposeInMainWorld("api", {
         added: number; 
         removed: number; 
         unchanged: number;
+        updated: number;
+        downloaded: number;
+        enabled: number;
+        disabled: number;
         addedMods: string[];
         removedMods: string[];
+        updatedMods: string[];
+        downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
       };
     } | null> => ipcRenderer.invoke("import:modex"),
     resolveConflicts: (data: {
@@ -255,8 +269,16 @@ contextBridge.exposeInMainWorld("api", {
         added: number; 
         removed: number; 
         unchanged: number;
+        updated: number;
+        downloaded: number;
+        enabled: number;
+        disabled: number;
         addedMods: string[];
         removedMods: string[];
+        updatedMods: string[];
+        downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
       };
     }> => ipcRenderer.invoke("import:resolveConflicts", data),
     resolveCFConflicts: (data: {

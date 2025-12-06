@@ -93,7 +93,7 @@ interface AppConfig {
 // ==================== VERSION CONTROL TYPES ====================
 
 export interface ModpackChange {
-  type: "add" | "remove" | "update";
+  type: "add" | "remove" | "update" | "enable" | "disable";
   modId: string;
   modName: string;
   previousVersion?: string;
@@ -110,6 +110,7 @@ export interface ModpackVersion {
   author?: string;
   changes: ModpackChange[];
   mod_ids: string[];
+  disabled_mod_ids?: string[];
   parent_id?: string;
   /** Snapshots of CF mods for rollback restoration */
   mod_snapshots?: Array<{
@@ -518,12 +519,99 @@ export class MetadataManager {
 
     const initialLength = modpack.mod_ids.length;
     modpack.mod_ids = modpack.mod_ids.filter((id) => id !== modId);
+    
+    // Also remove from disabled list if present
+    if (modpack.disabled_mod_ids) {
+      modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter((id) => id !== modId);
+    }
 
     if (modpack.mod_ids.length === initialLength) return false;
 
     modpack.updated_at = new Date().toISOString();
     await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
     return true;
+  }
+
+  /**
+   * Toggle a mod's enabled/disabled state in a modpack
+   * Disabled mods remain in the pack but won't be included in exports
+   */
+  async toggleModInModpack(
+    modpackId: string,
+    modId: string
+  ): Promise<{ enabled: boolean } | null> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return null;
+
+    // Check if mod is in the pack
+    if (!modpack.mod_ids.includes(modId)) return null;
+
+    // Initialize disabled_mod_ids if not present
+    if (!modpack.disabled_mod_ids) {
+      modpack.disabled_mod_ids = [];
+    }
+
+    let enabled: boolean;
+    if (modpack.disabled_mod_ids.includes(modId)) {
+      // Currently disabled, enable it
+      modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(id => id !== modId);
+      enabled = true;
+    } else {
+      // Currently enabled, disable it
+      modpack.disabled_mod_ids.push(modId);
+      enabled = false;
+    }
+
+    modpack.updated_at = new Date().toISOString();
+    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    
+    return { enabled };
+  }
+
+  /**
+   * Set a mod's enabled state in a modpack
+   */
+  async setModEnabledInModpack(
+    modpackId: string,
+    modId: string,
+    enabled: boolean
+  ): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return false;
+
+    // Check if mod is in the pack
+    if (!modpack.mod_ids.includes(modId)) return false;
+
+    // Initialize disabled_mod_ids if not present
+    if (!modpack.disabled_mod_ids) {
+      modpack.disabled_mod_ids = [];
+    }
+
+    const isCurrentlyDisabled = modpack.disabled_mod_ids.includes(modId);
+    
+    if (enabled && isCurrentlyDisabled) {
+      // Enable the mod
+      modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(id => id !== modId);
+    } else if (!enabled && !isCurrentlyDisabled) {
+      // Disable the mod
+      modpack.disabled_mod_ids.push(modId);
+    } else {
+      // No change needed
+      return true;
+    }
+
+    modpack.updated_at = new Date().toISOString();
+    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    return true;
+  }
+
+  /**
+   * Get the list of disabled mod IDs for a modpack
+   */
+  async getDisabledMods(modpackId: string): Promise<string[]> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return [];
+    return modpack.disabled_mod_ids || [];
   }
 
   // ==================== VERSION CONTROL ====================
@@ -571,6 +659,23 @@ export class MetadataManager {
       return existing.versions[existing.versions.length - 1];
     }
 
+    // Create snapshots of CF mods for potential rollback restoration
+    const library = await this.loadLibrary();
+    const modSnapshots = modpack.mod_ids
+      .map(modId => {
+        const mod = library.mods.find(m => m.id === modId);
+        if (mod && mod.source === 'curseforge' && mod.cf_project_id && mod.cf_file_id) {
+          return {
+            id: mod.id,
+            name: mod.name,
+            cf_project_id: mod.cf_project_id,
+            cf_file_id: mod.cf_file_id,
+          };
+        }
+        return null;
+      })
+      .filter((s): s is NonNullable<typeof s> => s !== null);
+
     const versionId = `v1`;
     const version: ModpackVersion = {
       id: versionId,
@@ -579,6 +684,8 @@ export class MetadataManager {
       created_at: new Date().toISOString(),
       changes: [],
       mod_ids: [...modpack.mod_ids],
+      disabled_mod_ids: [...(modpack.disabled_mod_ids || [])],
+      mod_snapshots: modSnapshots,
     };
 
     const history: ModpackVersionHistory = {
@@ -615,8 +722,15 @@ export class MetadataManager {
     const currentVersion = history.versions.find(v => v.id === history!.current_version_id);
     if (!currentVersion) return null;
 
-    // Calculate changes from current version
-    const changes = this.calculateChanges(currentVersion.mod_ids, modpack.mod_ids, await this.loadLibrary());
+    // Calculate changes from current version (including disabled state changes)
+    const library = await this.loadLibrary();
+    const modChanges = this.calculateChanges(currentVersion.mod_ids, modpack.mod_ids, library);
+    const disabledChanges = this.calculateDisabledChanges(
+      currentVersion.disabled_mod_ids || [],
+      modpack.disabled_mod_ids || [],
+      library
+    );
+    const changes = [...modChanges, ...disabledChanges];
 
     // If no changes, don't create a new version
     if (changes.length === 0) {
@@ -632,7 +746,6 @@ export class MetadataManager {
     const versionTag = tag || this.generateNextTag(currentVersion.tag);
 
     // Create snapshots of CF mods for potential rollback restoration
-    const library = await this.loadLibrary();
     const modSnapshots = modpack.mod_ids
       .map(modId => {
         const mod = library.mods.find(m => m.id === modId);
@@ -655,6 +768,7 @@ export class MetadataManager {
       created_at: new Date().toISOString(),
       changes,
       mod_ids: [...modpack.mod_ids],
+      disabled_mod_ids: [...(modpack.disabled_mod_ids || [])],
       parent_id: currentVersion.id,
       mod_snapshots: modSnapshots,
     };
@@ -716,6 +830,46 @@ export class MetadataManager {
   }
 
   /**
+   * Calculate enable/disable changes between two disabled_mod_ids arrays
+   */
+  private calculateDisabledChanges(
+    oldDisabledIds: string[],
+    newDisabledIds: string[],
+    library: LibraryData
+  ): ModpackChange[] {
+    const changes: ModpackChange[] = [];
+    const oldSet = new Set(oldDisabledIds);
+    const newSet = new Set(newDisabledIds);
+    const modMap = new Map(library.mods.map(m => [m.id, m]));
+
+    // Find newly disabled mods (in new but not in old)
+    for (const modId of newDisabledIds) {
+      if (!oldSet.has(modId)) {
+        const mod = modMap.get(modId);
+        changes.push({
+          type: "disable",
+          modId,
+          modName: mod?.name || modId,
+        });
+      }
+    }
+
+    // Find newly enabled mods (was in old disabled, not in new disabled)
+    for (const modId of oldDisabledIds) {
+      if (!newSet.has(modId)) {
+        const mod = modMap.get(modId);
+        changes.push({
+          type: "enable",
+          modId,
+          modName: mod?.name || modId,
+        });
+      }
+    }
+
+    return changes;
+  }
+
+  /**
    * Generate the next semantic version tag
    */
   private generateNextTag(currentTag: string): string {
@@ -740,8 +894,9 @@ export class MetadataManager {
     const targetVersion = history.versions.find(v => v.id === versionId);
     if (!targetVersion) return false;
 
-    // Update modpack with the version's mod_ids
+    // Update modpack with the version's mod_ids and disabled_mod_ids
     modpack.mod_ids = [...targetVersion.mod_ids];
+    modpack.disabled_mod_ids = [...(targetVersion.disabled_mod_ids || [])];
     modpack.version = targetVersion.tag;
     modpack.updated_at = new Date().toISOString();
     
@@ -751,6 +906,52 @@ export class MetadataManager {
     const rollbackVersion = await this.createVersion(
       modpackId, 
       `Rollback to ${targetVersion.tag}`,
+      `${targetVersion.tag}-rollback`
+    );
+
+    return rollbackVersion !== null;
+  }
+
+  /**
+   * Rollback modpack to a specific version with explicit mod list
+   * This allows the caller to filter which mods are actually restored
+   * (e.g., when some mods couldn't be re-downloaded)
+   */
+  async rollbackToVersionWithMods(
+    modpackId: string, 
+    versionId: string, 
+    modIds: string[]
+  ): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return false;
+
+    const history = await this.getVersionHistory(modpackId);
+    if (!history) return false;
+
+    const targetVersion = history.versions.find(v => v.id === versionId);
+    if (!targetVersion) return false;
+
+    // Filter disabled_mod_ids to only include mods that were restored
+    const modIdSet = new Set(modIds);
+    const restoredDisabledIds = (targetVersion.disabled_mod_ids || []).filter(id => modIdSet.has(id));
+
+    // Update modpack with the provided mod_ids (filtered to only existing mods)
+    modpack.mod_ids = [...modIds];
+    modpack.disabled_mod_ids = restoredDisabledIds;
+    modpack.version = targetVersion.tag;
+    modpack.updated_at = new Date().toISOString();
+    
+    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+
+    // Create a rollback commit with info about partial restoration
+    const wasPartial = modIds.length < targetVersion.mod_ids.length;
+    const message = wasPartial 
+      ? `Partial rollback to ${targetVersion.tag} (${modIds.length}/${targetVersion.mod_ids.length} mods)`
+      : `Rollback to ${targetVersion.tag}`;
+    
+    const rollbackVersion = await this.createVersion(
+      modpackId, 
+      message,
       `${targetVersion.tag}-rollback`
     );
 
@@ -815,11 +1016,16 @@ export class MetadataManager {
     const modpack = await this.getModpackById(modpackId);
     if (!modpack) throw new Error("Modpack not found");
 
-    const mods = await this.getModsInModpack(modpackId);
+    const allMods = await this.getModsInModpack(modpackId);
+    
+    // Get disabled mod IDs set
+    const disabledIds = new Set(modpack.disabled_mod_ids || []);
 
-    // Filter to CF mods only
-    const cfMods = mods.filter(
-      (m) => m.source === "curseforge" && m.cf_project_id && m.cf_file_id
+    // Filter to CF mods only (include both enabled and disabled)
+    const cfMods = allMods.filter(
+      (m) => m.source === "curseforge" && 
+             m.cf_project_id && 
+             m.cf_file_id
     );
 
     const manifest = {
@@ -837,16 +1043,18 @@ export class MetadataManager {
       name: modpack.name,
       version: modpack.version,
       author: "ModEx User",
+      // Include all mods - disabled mods have required: false
       files: cfMods.map((m) => ({
         projectID: m.cf_project_id!,
         fileID: m.cf_file_id!,
-        required: true,
+        required: !disabledIds.has(m.id),
       })),
       overrides: "overrides",
     };
 
-    // Generate modlist.html
-    const modlist = this.generateModlistHtml(cfMods);
+    // Generate modlist.html (only enabled mods)
+    const enabledMods = cfMods.filter(m => !disabledIds.has(m.id));
+    const modlist = this.generateModlistHtml(enabledMods);
 
     return { manifest, modpack, mods: cfMods, modlist };
   }
@@ -881,7 +1089,13 @@ ${modLinks}
     const modpack = await this.getModpackById(modpackId);
     if (!modpack) throw new Error("Modpack not found");
 
-    const mods = await this.getModsInModpack(modpackId);
+    const allMods = await this.getModsInModpack(modpackId);
+    
+    // Get disabled mod IDs set
+    const disabledIds = new Set(modpack.disabled_mod_ids || []);
+    
+    // Include ALL mods (enabled and disabled) for export
+    const mods = allMods;
 
     // Generate or reuse share code
     const code = modpack.share_code || this.generateShareCode();
@@ -891,7 +1105,7 @@ ${modLinks}
       await this.updateModpack(modpackId, { share_code: code });
     }
 
-    // Generate checksum from mod IDs
+    // Generate checksum from mod IDs (only enabled mods)
     const modIds = mods
       .map((m) => m.id)
       .sort()
@@ -931,8 +1145,11 @@ ${modLinks}
         author: m.author,
         thumbnail_url: m.thumbnail_url,
       })),
+      // Include disabled mods info for reference
+      disabled_mods: modpack.disabled_mod_ids || [],
       stats: {
         mod_count: mods.length,
+        disabled_count: disabledIds.size,
       },
       // Include version history if available
       version_history: versionHistory || undefined,
@@ -994,6 +1211,8 @@ ${modLinks}
     const errors: string[] = [];
     const newModIds: string[] = [];
     const addedModNames: string[] = [];
+    // Track which mods are marked as not required (disabled) in manifest
+    const disabledModIds: string[] = [];
     const conflicts: Array<{
       projectID: number;
       fileID: number;
@@ -1009,10 +1228,13 @@ ${modLinks}
     // Process each file entry
     for (const file of manifest.files || []) {
       const { projectID, fileID } = file;
+      // Check if mod is marked as not required (disabled) in manifest
+      // Default to true if not specified (backwards compatibility)
+      const isRequired = file.required !== false;
       processedCount++;
 
       try {
-        console.log(`[CF Import] Processing mod: Project ${projectID}, File ${fileID}`);
+        console.log(`[CF Import] Processing mod: Project ${projectID}, File ${fileID}, required: ${isRequired}`);
         
         // Get mod info from CF API
         const cfMod = await cfService.getMod(projectID);
@@ -1042,6 +1264,12 @@ ${modLinks}
         if (existingMod) {
           console.log(`[CF Import] Found exact match: ${existingMod.name}`);
           newModIds.push(existingMod.id);
+          // Count reused mods as successfully imported (they're added to the modpack)
+          addedModNames.push(existingMod.name);
+          // Track if this mod should be disabled
+          if (!isRequired) {
+            disabledModIds.push(existingMod.id);
+          }
           continue;
         }
 
@@ -1074,6 +1302,21 @@ ${modLinks}
           mcVersion
         );
 
+        // Check for loader mismatch - warn if mod doesn't support modpack's loader
+        // Only skip if:
+        // 1. Modpack has a known loader (not "unknown")
+        // 2. Mod has a known loader (not "unknown")  
+        // 3. They don't match
+        const modpackLoaderKnown = loader !== 'unknown';
+        const modLoaderKnown = formattedMod.loader !== 'unknown';
+        
+        if (modpackLoaderKnown && modLoaderKnown && formattedMod.loader !== loader) {
+          console.warn(`[CF Import] Loader mismatch for ${cfMod.name}: modpack uses ${loader}, mod supports ${formattedMod.loader}`);
+          errors.push(`${cfMod.name}: incompatible loader (requires ${formattedMod.loader}, modpack uses ${loader})`);
+          // Skip this mod instead of adding with wrong loader
+          continue;
+        }
+
         const mod = await this.addMod({
           name: formattedMod.name,
           slug: formattedMod.slug,
@@ -1101,6 +1344,10 @@ ${modLinks}
 
         newModIds.push(mod.id);
         addedModNames.push(mod.name);
+        // Track if this mod should be disabled
+        if (!isRequired) {
+          disabledModIds.push(mod.id);
+        }
       } catch (error: any) {
         console.error(`[CF Import] Error processing ${projectID}:`, error);
         errors.push(`Error processing ${projectID}: ${error.message}`);
@@ -1127,6 +1374,16 @@ ${modLinks}
       await this.addModToModpack(modpackId, modId);
     }
 
+    // Set disabled mods if any were marked as not required in manifest
+    if (disabledModIds.length > 0) {
+      const modpack = await this.getModpackById(modpackId);
+      if (modpack) {
+        modpack.disabled_mod_ids = disabledModIds;
+        await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+        console.log(`[CF Import] Set ${disabledModIds.length} mods as disabled`);
+      }
+    }
+
     return { 
       modpackId, 
       modsImported: addedModNames.length, 
@@ -1150,8 +1407,16 @@ ${modLinks}
       added: number; 
       removed: number; 
       unchanged: number;
+      updated: number;
+      downloaded: number;
+      enabled: number;
+      disabled: number;
       addedMods: string[];
       removedMods: string[];
+      updatedMods: string[];
+      downloadedMods: string[];
+      enabledMods: string[];
+      disabledMods: string[];
     };
   }> {
     if (!manifest.modex_version || !manifest.share_code) {
@@ -1166,10 +1431,12 @@ ${modLinks}
 
     let modpackId: string;
     let oldModIds: string[] = [];
+    let oldDisabledModIds: string[] = [];
 
     if (isUpdate && existingModpack) {
       modpackId = existingModpack.id;
       oldModIds = [...existingModpack.mod_ids];
+      oldDisabledModIds = [...(existingModpack.disabled_mod_ids || [])];
 
       // Update modpack metadata
       await this.updateModpack(modpackId, {
@@ -1400,10 +1667,18 @@ ${modLinks}
       }
     }
 
-    // Update modpack mod list
+    // Update modpack mod list and disabled mods
     const modpack = await this.getModpackById(modpackId);
     if (modpack) {
       modpack.mod_ids = newModIds;
+      
+      // Import disabled_mod_ids from manifest (filter to only include mods that exist in the import)
+      const importedModIdSet = new Set(newModIds);
+      const disabledFromManifest = (manifest.disabled_mods || []).filter(
+        (id: string) => importedModIdSet.has(id)
+      );
+      modpack.disabled_mod_ids = disabledFromManifest;
+      
       modpack.updated_at = new Date().toISOString();
       await fs.writeJson(this.getModpackPath(modpackId), modpack, {
         spaces: 2,
@@ -1464,15 +1739,44 @@ ${modLinks}
         unchanged: number;
         updated: number;
         downloaded: number;
+        enabled: number;
+        disabled: number;
         addedMods: string[];
         removedMods: string[];
         updatedMods: string[];
         downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
       }
       | undefined;
     if (isUpdate) {
       const oldSet = new Set(oldModIds);
       const newSet = new Set(newModIds);
+      
+      // Calculate enabled/disabled changes
+      const oldDisabledSet = new Set(oldDisabledModIds);
+      const newDisabledSet = new Set(modpack?.disabled_mod_ids || []);
+      
+      const enabledModNames: string[] = [];
+      const disabledModNames: string[] = [];
+      
+      // Check mods present in both versions for status changes
+      for (const modId of newModIds) {
+        if (oldSet.has(modId)) {
+          const wasDisabled = oldDisabledSet.has(modId);
+          const isDisabled = newDisabledSet.has(modId);
+          
+          if (wasDisabled && !isDisabled) {
+            // Re-enabled
+            const mod = await this.getModById(modId);
+            if (mod) enabledModNames.push(mod.name);
+          } else if (!wasDisabled && isDisabled) {
+            // Disabled
+            const mod = await this.getModById(modId);
+            if (mod) disabledModNames.push(mod.name);
+          }
+        }
+      }
 
       changes = {
         added: addedModNames.length,
@@ -1480,10 +1784,14 @@ ${modLinks}
         unchanged: newModIds.filter((id) => oldSet.has(id)).length,
         updated: updatedModNames.length,
         downloaded: downloadedModNames.length,
+        enabled: enabledModNames.length,
+        disabled: disabledModNames.length,
         addedMods: addedModNames,
         removedMods: removedModNames,
         updatedMods: updatedModNames,
         downloadedMods: downloadedModNames,
+        enabledMods: enabledModNames,
+        disabledMods: disabledModNames,
       };
       
       console.log('[Import] Update summary:', {
@@ -1491,6 +1799,8 @@ ${modLinks}
         removed: removedModNames.length,
         updated: updatedModNames.length,
         downloaded: downloadedModNames.length,
+        enabled: enabledModNames.length,
+        disabled: disabledModNames.length,
       });
     }
 
@@ -1672,8 +1982,16 @@ ${modLinks}
         added: number; 
         removed: number; 
         unchanged: number;
+        updated: number;
+        downloaded: number;
+        enabled: number;
+        disabled: number;
         addedMods: string[];
         removedMods: string[];
+        updatedMods: string[];
+        downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
       }
       | undefined;
     
@@ -1683,8 +2001,16 @@ ${modLinks}
         added: addedModNames.length,
         removed: removedModNames.length,
         unchanged: newModIds.filter((id) => oldSet.has(id)).length,
+        updated: 0,
+        downloaded: 0,
+        enabled: 0,
+        disabled: 0,
         addedMods: addedModNames,
         removedMods: removedModNames,
+        updatedMods: [],
+        downloadedMods: [],
+        enabledMods: [],
+        disabledMods: [],
       };
     }
 

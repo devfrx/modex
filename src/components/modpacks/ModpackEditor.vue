@@ -40,6 +40,7 @@ const toast = useToast();
 const modpack = ref<Modpack | null>(null);
 const currentMods = ref<Mod[]>([]);
 const availableMods = ref<Mod[]>([]);
+const disabledModIds = ref<Set<string>>(new Set());
 const searchQueryInstalled = ref("");
 const searchQueryAvailable = ref("");
 const isLoading = ref(true);
@@ -172,18 +173,25 @@ const filteredAvailableMods = computed(() => {
 const compatibleCount = computed(() => filteredAvailableMods.value.filter(m => m.isCompatible).length);
 const incompatibleCount = computed(() => filteredAvailableMods.value.filter(m => !m.isCompatible).length);
 
+// Count of enabled mods
+const enabledModCount = computed(() => {
+  return currentMods.value.filter(m => !disabledModIds.value.has(m.id)).length;
+});
+
 async function loadData() {
   if (!props.modpackId) return;
   isLoading.value = true;
   try {
-    const [pack, cMods, allMods] = await Promise.all([
+    const [pack, cMods, allMods, disabled] = await Promise.all([
       window.api.modpacks.getById(props.modpackId),
       window.api.modpacks.getMods(props.modpackId),
       window.api.mods.getAll(),
+      window.api.modpacks.getDisabledMods(props.modpackId),
     ]);
     modpack.value = pack || null;
     currentMods.value = cMods;
     availableMods.value = allMods;
+    disabledModIds.value = new Set(disabled);
     selectedModIds.value.clear();
 
     // Initialize edit form
@@ -247,6 +255,26 @@ async function removeMod(modId: string) {
     emit("update");
   } catch (err) {
     console.error("Failed to remove mod:", err);
+  }
+}
+
+async function toggleModEnabled(modId: string) {
+  try {
+    const result = await window.api.modpacks.toggleMod(props.modpackId, modId);
+    if (result) {
+      // Update local state immediately for responsive UI
+      if (result.enabled) {
+        disabledModIds.value.delete(modId);
+      } else {
+        disabledModIds.value.add(modId);
+      }
+      // Trigger reactivity
+      disabledModIds.value = new Set(disabledModIds.value);
+      emit("update");
+    }
+  } catch (err) {
+    console.error("Failed to toggle mod:", err);
+    toast.error("Toggle Failed", (err as Error).message);
   }
 }
 
@@ -490,7 +518,12 @@ watch(
             <!-- Header -->
             <div class="shrink-0 p-3 border-b border-border/30 bg-muted/20">
               <div class="flex items-center justify-between mb-2">
-                <span class="font-semibold text-sm">Installed</span>
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-sm">Installed</span>
+                  <span class="text-xs text-muted-foreground">
+                    {{ enabledModCount }}<span v-if="disabledModIds.size > 0" class="text-amber-500"> (+{{ disabledModIds.size }} disabled)</span>
+                  </span>
+                </div>
                 <Transition name="fade">
                   <Button v-if="selectedModIds.size > 0" variant="destructive" size="sm" class="h-7 text-xs gap-1"
                     @click="removeSelectedMods">
@@ -523,9 +556,14 @@ watch(
             <!-- Mod List -->
             <div class="flex-1 overflow-y-auto p-2 space-y-1">
               <div v-for="mod in filteredInstalledMods" :key="mod.id"
-                class="flex items-center gap-3 p-2.5 rounded-lg border transition-all group cursor-pointer" :class="selectedModIds.has(mod.id)
-                  ? 'bg-primary/10 border-primary/50 shadow-sm'
-                  : 'border-transparent hover:bg-accent/50 hover:border-border/50'" @click="toggleSelect(mod.id)">
+                class="flex items-center gap-3 p-2.5 rounded-lg border transition-all group cursor-pointer" 
+                :class="[
+                  selectedModIds.has(mod.id)
+                    ? 'bg-primary/10 border-primary/50 shadow-sm'
+                    : 'border-transparent hover:bg-accent/50 hover:border-border/50',
+                  disabledModIds.has(mod.id) ? 'opacity-50' : ''
+                ]" 
+                @click="toggleSelect(mod.id)">
 
                 <!-- Checkbox -->
                 <div class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
@@ -535,9 +573,27 @@ watch(
                   <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3 text-primary-foreground" />
                 </div>
 
+                <!-- Enable/Disable Toggle -->
+                <button 
+                  class="w-8 h-4 rounded-full relative shrink-0 transition-colors"
+                  :class="disabledModIds.has(mod.id) ? 'bg-muted-foreground/30' : 'bg-emerald-500'"
+                  @click.stop="toggleModEnabled(mod.id)"
+                  :title="disabledModIds.has(mod.id) ? 'Click to enable mod' : 'Click to disable mod'"
+                >
+                  <span 
+                    class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all"
+                    :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-4'"
+                  />
+                </button>
+
                 <!-- Mod Info -->
                 <div class="min-w-0 flex-1">
-                  <div class="font-medium text-sm truncate">{{ mod.name }}</div>
+                  <div class="font-medium text-sm truncate flex items-center gap-1.5">
+                    {{ mod.name }}
+                    <span v-if="disabledModIds.has(mod.id)" class="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-medium">
+                      disabled
+                    </span>
+                  </div>
                   <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span v-if="mod.game_version && mod.game_version !== 'unknown'"
                       class="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium">

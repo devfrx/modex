@@ -18,6 +18,8 @@ import {
     Save,
     Clock,
     Sparkles,
+    ToggleLeft,
+    ToggleRight,
 } from "lucide-vue-next";
 
 const props = defineProps<{
@@ -124,8 +126,35 @@ async function rollbackTo(version: ModpackVersion) {
 
     isLoading.value = true;
     try {
-        const success = await window.api.versions.rollback(props.modpackId, version.id);
-        if (success) {
+        const result = await window.api.versions.rollback(props.modpackId, version.id);
+        
+        // Handle new detailed response format
+        if (typeof result === 'object' && result !== null) {
+            if (result.success) {
+                await loadHistory();
+                
+                // Show appropriate message based on restoration status
+                if (result.failedCount > 0) {
+                    const failedNames = result.failedMods?.map((f: any) => f.modName).slice(0, 3).join(', ');
+                    const moreCount = result.failedCount > 3 ? ` and ${result.failedCount - 3} more` : '';
+                    toast.warning(
+                        "Partial Rollback", 
+                        `Restored ${result.totalMods} of ${result.originalModCount} mods. Failed: ${failedNames}${moreCount}`
+                    );
+                } else if (result.restoredCount > 0) {
+                    toast.success(
+                        "Rolled Back", 
+                        `Restored to ${version.tag} (${result.restoredCount} mod${result.restoredCount > 1 ? 's' : ''} re-downloaded)`
+                    );
+                } else {
+                    toast.success("Rolled Back", `Restored to version ${version.tag}`);
+                }
+                emit("refresh");
+            } else {
+                toast.error("Failed", "Could not rollback to this version");
+            }
+        } else if (result) {
+            // Legacy boolean response
             await loadHistory();
             toast.success("Rolled Back", `Restored to version ${version.tag}`);
             emit("refresh");
@@ -176,6 +205,8 @@ function getChangeIcon(type: ModpackChange["type"]) {
         case "add": return Plus;
         case "remove": return Minus;
         case "update": return RefreshCw;
+        case "enable": return ToggleRight;
+        case "disable": return ToggleLeft;
     }
 }
 
@@ -185,6 +216,8 @@ function getChangeColor(type: ModpackChange["type"]): string {
         case "add": return "text-emerald-500 bg-emerald-500/10";
         case "remove": return "text-red-500 bg-red-500/10";
         case "update": return "text-blue-500 bg-blue-500/10";
+        case "enable": return "text-emerald-500 bg-emerald-500/10";
+        case "disable": return "text-amber-500 bg-amber-500/10";
     }
 }
 

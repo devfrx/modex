@@ -37,6 +37,17 @@ export interface ModUsageInfo {
   modpacks: Array<{ id: string; name: string }>;
 }
 
+// ==================== ROLLBACK RESULT ====================
+
+export interface RollbackResult {
+  success: boolean;
+  restoredCount: number;
+  failedCount: number;
+  failedMods: Array<{ modId: string; modName: string; reason: string }>;
+  totalMods: number;
+  originalModCount: number;
+}
+
 // ==================== ELECTRON API ====================
 
 export interface ElectronAPI {
@@ -93,6 +104,12 @@ export interface ElectronAPI {
     getMods: (modpackId: string) => Promise<Mod[]>;
     addMod: (modpackId: string, modId: string) => Promise<boolean>;
     removeMod: (modpackId: string, modId: string) => Promise<boolean>;
+    /** Toggle a mod's enabled/disabled state */
+    toggleMod: (modpackId: string, modId: string) => Promise<{ enabled: boolean } | null>;
+    /** Set a mod's enabled state explicitly */
+    setModEnabled: (modpackId: string, modId: string, enabled: boolean) => Promise<boolean>;
+    /** Get list of disabled mod IDs */
+    getDisabledMods: (modpackId: string) => Promise<string[]>;
     clone: (modpackId: string, newName: string) => Promise<string | null>;
     setImage: (modpackId: string, imageUrl: string) => Promise<boolean>;
     openFolder: (modpackId: string) => Promise<boolean>;
@@ -107,7 +124,7 @@ export interface ElectronAPI {
     /** Create a new version (commit) */
     create: (modpackId: string, message: string, tag?: string) => Promise<ModpackVersion | null>;
     /** Rollback to a specific version */
-    rollback: (modpackId: string, versionId: string) => Promise<boolean>;
+    rollback: (modpackId: string, versionId: string) => Promise<RollbackResult>;
     /** Compare two versions */
     compare: (modpackId: string, fromVersionId: string, toVersionId: string) => Promise<ModpackChange[] | null>;
     /** Get a specific version */
@@ -180,10 +197,14 @@ export interface ElectronAPI {
         unchanged: number;
         updated: number;
         downloaded: number;
+        enabled: number;
+        disabled: number;
         addedMods: string[];
         removedMods: string[];
         updatedMods: string[];
         downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
       };
     } | null>;
     /** Resolve version conflicts during import */
@@ -207,10 +228,14 @@ export interface ElectronAPI {
         unchanged: number;
         updated: number;
         downloaded: number;
+        enabled: number;
+        disabled: number;
         addedMods: string[];
         removedMods: string[];
         updatedMods: string[];
         downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
       };
     }>;
     /** Resolve CurseForge import conflicts */

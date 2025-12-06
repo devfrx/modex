@@ -97,7 +97,7 @@ const unorganizedMods = computed(() => {
 
 const currentFolderMods = computed(() => {
   if (viewMode.value === "tree") return [];
-  
+
   return mods.value.filter(mod => {
     const modFolderId = getModFolder(mod.id);
     return modFolderId === currentFolderId.value;
@@ -110,24 +110,24 @@ const currentFolderSubfolders = computed(() => {
 
 const filteredTree = computed(() => {
   if (!searchQuery.value.trim()) return tree.value;
-  
+
   const query = searchQuery.value.toLowerCase();
-  
+
   function filterNode(node: TreeNode): TreeNode | null {
     if (node.type === "mod") {
       const mod = node.data as Mod;
       if (mod.name.toLowerCase().includes(query) ||
-          mod.author?.toLowerCase().includes(query)) {
+        mod.author?.toLowerCase().includes(query)) {
         return node;
       }
       return null;
     }
-    
+
     // For folders, check children
     const filteredChildren = node.children
       ?.map(child => filterNode(child))
       .filter((n): n is TreeNode => n !== null) || [];
-    
+
     const folder = node.data as ModFolder;
     if (folder.name.toLowerCase().includes(query) || filteredChildren.length > 0) {
       return {
@@ -136,10 +136,10 @@ const filteredTree = computed(() => {
         expanded: true,
       };
     }
-    
+
     return null;
   }
-  
+
   return tree.value
     .map(node => filterNode(node))
     .filter((n): n is TreeNode => n !== null);
@@ -165,13 +165,13 @@ function rebuildTree() {
 // Folder actions
 function handleCreateFolder() {
   if (!newFolderName.value.trim()) return;
-  
+
   createFolder(
     newFolderName.value.trim(),
     editingFolderId.value, // parent
     newFolderColor.value
   );
-  
+
   newFolderName.value = "";
   newFolderColor.value = "#6366f1";
   editingFolderId.value = null;
@@ -181,12 +181,12 @@ function handleCreateFolder() {
 
 function handleRenameFolder() {
   if (!editingFolderId.value || !newFolderName.value.trim()) return;
-  
+
   updateFolder(editingFolderId.value, {
     name: newFolderName.value.trim(),
     color: newFolderColor.value,
   });
-  
+
   newFolderName.value = "";
   editingFolderId.value = null;
   showRenameFolderDialog.value = false;
@@ -195,14 +195,14 @@ function handleRenameFolder() {
 
 function handleDeleteNode() {
   if (!deletingNodeId.value) return;
-  
+
   if (deletingNodeType.value === "folder") {
     deleteFolder(deletingNodeId.value, true);
   } else {
     // Remove mod from folder (doesn't delete the mod)
     moveModToFolder(deletingNodeId.value, null);
   }
-  
+
   deletingNodeId.value = null;
   deletingNodeType.value = null;
   showDeleteDialog.value = false;
@@ -239,15 +239,15 @@ function handleDragEnterFolder(folderId: string) {
 
 function handleDrop(targetId: string | null, targetType: "folder" | "root") {
   if (!draggedNodeId.value) return;
-  
+
   const actualTargetId = targetType === "root" ? null : targetId;
-  
+
   if (draggedNodeType.value === "folder") {
     moveFolderTo(draggedNodeId.value, actualTargetId);
   } else {
     moveModToFolder(draggedNodeId.value, actualTargetId);
   }
-  
+
   handleDragEnd();
   rebuildTree();
 }
@@ -325,10 +325,10 @@ function openMoveDialog() {
 
 function handleBulkMove() {
   if (selectedModIds.value.size === 0) return;
-  
+
   const modIdsArray = Array.from(selectedModIds.value);
   moveModsToFolder(modIdsArray, moveTargetFolderId.value);
-  
+
   clearSelection();
   showMoveDialog.value = false;
   rebuildTree();
@@ -344,7 +344,7 @@ function handleContextMenuMove(targetFolderId: string | null) {
     moveModsToFolder(modIdsArray, targetFolderId);
     clearSelection();
   }
-  
+
   closeContextMenu();
   rebuildTree();
 }
@@ -412,104 +412,94 @@ const colorOptions = [
 
 <template>
   <div class="h-full flex flex-col">
-    <!-- Header -->
-    <div class="p-4 border-b bg-card/50 space-y-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <FolderTree class="w-6 h-6 text-primary" />
-          <div>
-            <h1 class="text-xl font-semibold">Organize Library</h1>
-            <p class="text-sm text-muted-foreground">
-              Drag & drop mods and folders to organize
-            </p>
+    <!-- Compact Header -->
+    <div class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-white/5 bg-[#0a0a0a]">
+      <!-- Mobile: Stack vertically, Desktop: Row -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+        <!-- Left: Title & Stats -->
+        <div class="flex items-center gap-3 sm:gap-4">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="p-1.5 sm:p-2 bg-primary/10 rounded-lg">
+              <FolderTree class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+            </div>
+            <div>
+              <h1 class="text-base sm:text-lg font-semibold tracking-tight">Organize</h1>
+              <p class="text-[10px] sm:text-xs text-muted-foreground">
+                {{ folders.length }} folders • {{ unorganizedMods.length }} loose
+              </p>
+            </div>
+          </div>
+
+          <!-- Separator - hidden on mobile -->
+          <div class="hidden sm:block h-8 w-px bg-white/10" />
+
+          <!-- View Mode Toggle -->
+          <div class="flex items-center bg-white/5 rounded-md p-0.5">
+            <button class="p-1.5 rounded transition-colors text-muted-foreground"
+              :class="viewMode === 'tree' ? 'bg-white/10 text-foreground' : 'hover:text-foreground'"
+              @click="viewMode = 'tree'" title="Tree View">
+              <FolderTree class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+            <button class="p-1.5 rounded transition-colors text-muted-foreground"
+              :class="viewMode === 'grid' ? 'bg-white/10 text-foreground' : 'hover:text-foreground'"
+              @click="viewMode = 'grid'" title="Grid View">
+              <LayoutGrid class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
           </div>
         </div>
-        
-        <div class="flex items-center gap-2">
+
+        <!-- Right: Actions -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <!-- Search -->
+          <div class="relative flex-1 sm:flex-none sm:w-48">
+            <Search class="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input v-model="searchQuery" placeholder="Search..."
+              class="pl-7 sm:pl-8 h-7 sm:h-8 text-xs bg-white/5 border-white/10" />
+          </div>
+
           <!-- Selection Mode Toggle -->
-          <Button 
-            variant="outline" 
-            size="sm" 
-            class="gap-2"
-            :class="isSelectionMode ? 'bg-primary text-primary-foreground' : ''"
-            @click="toggleSelectionMode"
-          >
-            <Check class="w-4 h-4" />
-            {{ isSelectionMode ? 'Exit Selection' : 'Select' }}
+          <Button variant="ghost" size="sm"
+            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-muted-foreground hover:text-foreground"
+            :class="isSelectionMode ? 'bg-primary/20 text-primary' : ''" @click="toggleSelectionMode">
+            <Check class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden sm:inline text-xs">{{ isSelectionMode ? 'Exit' : 'Select' }}</span>
           </Button>
-          
+
           <!-- Bulk actions when selection mode is active -->
           <template v-if="isSelectionMode && selectedModIds.size > 0">
-            <Button variant="secondary" size="sm" class="gap-2" @click="openMoveDialog">
-              <Move class="w-4 h-4" />
-              Move ({{ selectedModIds.size }})
+            <Button variant="secondary" size="sm" class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs"
+              @click="openMoveDialog">
+              <Move class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden xs:inline">Move</span> ({{ selectedModIds.size }})
             </Button>
-            <Button variant="ghost" size="sm" @click="clearSelection">
-              <X class="w-4 h-4" />
+            <Button variant="ghost" size="sm" class="h-7 sm:h-8 px-2" @click="clearSelection">
+              <X class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </Button>
           </template>
-          
-          <!-- View Mode Toggle -->
-          <div class="flex items-center bg-muted rounded-md p-1">
-            <button
-              class="p-1.5 rounded transition-colors"
-              :class="viewMode === 'tree' ? 'bg-background shadow-sm' : 'hover:bg-background/50'"
-              @click="viewMode = 'tree'"
-              title="Tree View"
-            >
-              <FolderTree class="w-4 h-4" />
-            </button>
-            <button
-              class="p-1.5 rounded transition-colors"
-              :class="viewMode === 'grid' ? 'bg-background shadow-sm' : 'hover:bg-background/50'"
-              @click="viewMode = 'grid'"
-              title="Grid View"
-            >
-              <LayoutGrid class="w-4 h-4" />
-            </button>
-          </div>
-          
-          <Button variant="outline" size="sm" @click="loadMods">
-            <RefreshCw class="w-4 h-4" />
+
+          <Button variant="ghost" size="sm" class="h-7 sm:h-8 px-2 text-muted-foreground hover:text-foreground"
+            @click="loadMods">
+            <RefreshCw class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </Button>
-          
-          <Button 
-            size="sm" 
-            class="gap-2"
-            @click="editingFolderId = null; showCreateFolderDialog = true"
-          >
-            <FolderPlus class="w-4 h-4" />
-            New Folder
+
+          <Button size="sm" class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs"
+            @click="editingFolderId = null; showCreateFolderDialog = true">
+            <FolderPlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden xs:inline">New Folder</span>
           </Button>
         </div>
       </div>
-      
-      <!-- Search -->
-      <div class="relative max-w-md">
-        <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          v-model="searchQuery"
-          placeholder="Search mods and folders..."
-          class="pl-10"
-        />
-      </div>
-      
+
       <!-- Breadcrumbs (grid view) -->
-      <div v-if="viewMode === 'grid'" class="flex items-center gap-2 text-sm">
-        <button
-          class="flex items-center gap-1 hover:text-primary transition-colors"
-          @click="navigateToFolder(null)"
-        >
-          <Home class="w-4 h-4" />
-          Root
+      <div v-if="viewMode === 'grid'" class="flex items-center gap-2 text-xs sm:text-sm mt-3">
+        <button class="flex items-center gap-1 hover:text-primary transition-colors" @click="navigateToFolder(null)">
+          <Home class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <span class="hidden xs:inline">Root</span>
         </button>
         <template v-for="(folder, index) in breadcrumbs" :key="folder.id">
-          <ChevronRight class="w-4 h-4 text-muted-foreground" />
-          <button
-            class="hover:text-primary transition-colors"
-            :class="index === breadcrumbs.length - 1 ? 'font-medium' : ''"
-            @click="navigateToFolder(folder.id)"
-          >
+          <ChevronRight class="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
+          <button class="hover:text-primary transition-colors truncate max-w-[100px] sm:max-w-none"
+            :class="index === breadcrumbs.length - 1 ? 'font-medium' : ''" @click="navigateToFolder(folder.id)">
             {{ folder.name }}
           </button>
         </template>
@@ -517,55 +507,34 @@ const colorOptions = [
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-hidden flex">
+    <div class="flex-1 overflow-hidden flex bg-[#0a0a0a]">
       <!-- Tree View -->
-      <div
-        v-if="viewMode === 'tree'"
-        class="flex-1 overflow-auto p-4"
-        @drop="handleRootDrop"
-        @dragover="handleRootDragOver"
-      >
+      <div v-if="viewMode === 'tree'" class="flex-1 overflow-auto p-3 sm:p-4" @drop="handleRootDrop"
+        @dragover="handleRootDragOver">
         <div v-if="isLoading" class="flex items-center justify-center h-full">
           <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
         </div>
-        
+
         <div v-else-if="filteredTree.length === 0" class="text-center py-12 text-muted-foreground">
           <FolderTree class="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>No folders yet. Create your first folder to start organizing!</p>
         </div>
-        
+
         <div v-else class="space-y-0.5">
           <!-- Root drop zone indicator -->
-          <div
-            v-if="draggedNodeId"
+          <div v-if="draggedNodeId"
             class="h-8 border-2 border-dashed border-muted-foreground/30 rounded-md flex items-center justify-center text-xs text-muted-foreground mb-2 transition-colors"
-            :class="dropTargetId === null ? 'border-primary bg-primary/10' : ''"
-            @dragenter="handleRootDragEnter"
-            @dragover="handleRootDragOver"
-            @drop="handleRootDrop"
-          >
+            :class="dropTargetId === null ? 'border-primary bg-primary/10' : ''" @dragenter="handleRootDragEnter"
+            @dragover="handleRootDragOver" @drop="handleRootDrop">
             Drop here for root level
           </div>
-          
-          <TreeNodeItem
-            v-for="node in filteredTree"
-            :key="node.id"
-            :node="node"
-            :depth="0"
-            :selected-node-id="selectedNodeId"
-            :dragged-node-id="draggedNodeId"
-            :drop-target-id="dropTargetId"
-            @select="handleNodeSelect"
-            @toggle="handleToggle"
-            @drag-start="handleDragStart"
-            @drag-end="handleDragEnd"
-            @drag-enter-folder="handleDragEnterFolder"
-            @drop="handleDrop"
-            @rename="openRenameDialog"
-            @delete="openDeleteDialog"
-            @create-subfolder="openCreateSubfolder"
-          />
-          
+
+          <TreeNodeItem v-for="node in filteredTree" :key="node.id" :node="node" :depth="0"
+            :selected-node-id="selectedNodeId" :dragged-node-id="draggedNodeId" :drop-target-id="dropTargetId"
+            @select="handleNodeSelect" @toggle="handleToggle" @drag-start="handleDragStart" @drag-end="handleDragEnd"
+            @drag-enter-folder="handleDragEnterFolder" @drop="handleDrop" @rename="openRenameDialog"
+            @delete="openDeleteDialog" @create-subfolder="openCreateSubfolder" />
+
           <!-- Unorganized Mods Section -->
           <div v-if="unorganizedMods.length > 0" class="mt-6 pt-4 border-t border-border">
             <h3 class="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
@@ -573,33 +542,23 @@ const colorOptions = [
               Unorganized Mods ({{ unorganizedMods.length }})
             </h3>
             <div class="space-y-1">
-              <div
-                v-for="mod in unorganizedMods"
-                :key="mod.id"
+              <div v-for="mod in unorganizedMods" :key="mod.id"
                 class="flex items-center gap-2 p-2 rounded-md border transition-colors cursor-pointer group"
-                :class="selectedModIds.has(mod.id) ? 'border-primary bg-primary/5' : 'hover:bg-muted'"
-                draggable="true"
-                @dragstart="handleDragStart(mod.id, 'mod')"
-                @dragend="handleDragEnd"
+                :class="selectedModIds.has(mod.id) ? 'border-primary bg-primary/5' : 'hover:bg-muted'" draggable="true"
+                @dragstart="handleDragStart(mod.id, 'mod')" @dragend="handleDragEnd"
                 @click="isSelectionMode ? toggleModSelection(mod.id) : null"
-                @contextmenu="openContextMenu($event, mod.id)"
-              >
+                @contextmenu="openContextMenu($event, mod.id)">
                 <!-- Selection checkbox -->
-                <div
-                  v-if="isSelectionMode"
+                <div v-if="isSelectionMode"
                   class="w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0"
-                  :class="selectedModIds.has(mod.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'"
-                >
+                  :class="selectedModIds.has(mod.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'">
                   <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3" />
                 </div>
                 <Package class="w-4 h-4 text-muted-foreground shrink-0" />
                 <span class="flex-1 truncate text-sm">{{ mod.name }}</span>
                 <span class="text-xs text-muted-foreground">{{ mod.version }}</span>
-                <button
-                  class="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted"
-                  title="Move to folder"
-                  @click.stop="openContextMenu($event, mod.id)"
-                >
+                <button class="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted" title="Move to folder"
+                  @click.stop="openContextMenu($event, mod.id)">
                   <FolderInput class="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -609,94 +568,71 @@ const colorOptions = [
       </div>
 
       <!-- Grid View -->
-      <div v-else class="flex-1 overflow-auto p-4">
+      <div v-else class="flex-1 overflow-auto p-3 sm:p-4">
         <!-- Back button -->
-        <Button
-          v-if="currentFolderId"
-          variant="ghost"
-          size="sm"
-          class="mb-4 gap-2"
-          @click="navigateUp"
-        >
-          <ChevronLeft class="w-4 h-4" />
+        <Button v-if="currentFolderId" variant="ghost" size="sm" class="mb-3 sm:mb-4 gap-1.5 sm:gap-2"
+          @click="navigateUp">
+          <ChevronLeft class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           Back
         </Button>
-        
+
         <!-- Subfolders -->
-        <div v-if="currentFolderSubfolders.length > 0" class="mb-6">
-          <h3 class="text-sm font-medium text-muted-foreground mb-3">Folders</h3>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <button
-              v-for="folder in currentFolderSubfolders"
-              :key="folder.id"
-              class="flex flex-col items-center gap-2 p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
-              @click="navigateToFolder(folder.id)"
-            >
-              <Folder class="w-10 h-10" :style="{ color: folder.color }" />
-              <span class="text-sm font-medium truncate w-full text-center">{{ folder.name }}</span>
+        <div v-if="currentFolderSubfolders.length > 0" class="mb-4 sm:mb-6">
+          <h3 class="text-xs sm:text-sm font-medium text-muted-foreground mb-2 sm:mb-3">Folders</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
+            <button v-for="folder in currentFolderSubfolders" :key="folder.id"
+              class="flex flex-col items-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+              @click="navigateToFolder(folder.id)">
+              <Folder class="w-8 h-8 sm:w-10 sm:h-10" :style="{ color: folder.color }" />
+              <span class="text-xs sm:text-sm font-medium truncate w-full text-center">{{ folder.name }}</span>
             </button>
           </div>
         </div>
-        
+
         <!-- Mods in current folder -->
         <div v-if="currentFolderMods.length > 0">
-          <h3 class="text-sm font-medium text-muted-foreground mb-3">
+          <h3 class="text-xs sm:text-sm font-medium text-muted-foreground mb-2 sm:mb-3">
             Mods {{ currentFolder ? `in ${currentFolder.name}` : '(Unorganized)' }}
           </h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            <div
-              v-for="mod in currentFolderMods"
-              :key="mod.id"
-              class="group relative bg-card border rounded-lg p-4 transition-colors cursor-pointer"
-              :class="[
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div v-for="mod in currentFolderMods" :key="mod.id"
+              class="group relative bg-card border rounded-lg p-3 sm:p-4 transition-colors cursor-pointer" :class="[
                 selectedModIds.has(mod.id) ? 'border-primary bg-primary/5' : 'hover:border-primary/50',
                 isSelectionMode ? 'cursor-pointer' : ''
-              ]"
-              @click="isSelectionMode ? toggleModSelection(mod.id) : null"
-              @contextmenu="openContextMenu($event, mod.id)"
-            >
+              ]" @click="isSelectionMode ? toggleModSelection(mod.id) : null"
+              @contextmenu="openContextMenu($event, mod.id)">
               <!-- Selection checkbox -->
-              <div
-                v-if="isSelectionMode"
+              <div v-if="isSelectionMode"
                 class="absolute top-2 left-2 w-5 h-5 rounded border flex items-center justify-center transition-colors"
-                :class="selectedModIds.has(mod.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'"
-              >
+                :class="selectedModIds.has(mod.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'">
                 <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3" />
               </div>
-              
-              <div class="flex items-start gap-3" :class="isSelectionMode ? 'ml-6' : ''">
-                <Package class="w-10 h-10 text-muted-foreground shrink-0" />
+
+              <div class="flex items-start gap-2 sm:gap-3" :class="isSelectionMode ? 'ml-6' : ''">
+                <Package class="w-8 h-8 sm:w-10 sm:h-10 text-muted-foreground shrink-0" />
                 <div class="flex-1 min-w-0">
-                  <h4 class="font-medium truncate">{{ mod.name }}</h4>
+                  <h4 class="font-medium truncate text-sm sm:text-base">{{ mod.name }}</h4>
                   <p class="text-sm text-muted-foreground">{{ mod.version }}</p>
                   <p class="text-xs text-muted-foreground mt-1">{{ mod.loader }}</p>
                 </div>
               </div>
               <!-- Action buttons -->
               <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                <button
-                  class="p-1.5 rounded-md hover:bg-muted"
-                  title="Move to folder"
-                  @click.stop="openContextMenu($event, mod.id)"
-                >
+                <button class="p-1.5 rounded-md hover:bg-muted" title="Move to folder"
+                  @click.stop="openContextMenu($event, mod.id)">
                   <FolderInput class="w-4 h-4" />
                 </button>
-                <button
-                  class="p-1.5 rounded-md hover:bg-destructive hover:text-destructive-foreground"
-                  title="Remove from folder"
-                  @click.stop="moveModToFolder(mod.id, null); rebuildTree()"
-                >
+                <button class="p-1.5 rounded-md hover:bg-destructive hover:text-destructive-foreground"
+                  title="Remove from folder" @click.stop="moveModToFolder(mod.id, null); rebuildTree()">
                   <Trash2 class="w-4 h-4" />
                 </button>
               </div>
             </div>
           </div>
         </div>
-        
-        <div 
-          v-if="currentFolderSubfolders.length === 0 && currentFolderMods.length === 0" 
-          class="text-center py-12 text-muted-foreground"
-        >
+
+        <div v-if="currentFolderSubfolders.length === 0 && currentFolderMods.length === 0"
+          class="text-center py-12 text-muted-foreground">
           <Folder class="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>This folder is empty</p>
           <p class="text-sm">Drag mods here from the tree view to organize them</p>
@@ -705,37 +641,26 @@ const colorOptions = [
     </div>
 
     <!-- Create Folder Dialog -->
-    <Dialog 
-      :open="showCreateFolderDialog" 
-      :title="editingFolderId ? 'Create Subfolder' : 'Create Folder'"
-      :description="editingFolderId ? `Creating subfolder in: ${getFolderById(editingFolderId)?.name}` : 'Create a new folder to organize your mods'"
-    >
+    <Dialog :open="showCreateFolderDialog" :title="editingFolderId ? 'Create Subfolder' : 'Create Folder'"
+      :description="editingFolderId ? `Creating subfolder in: ${getFolderById(editingFolderId)?.name}` : 'Create a new folder to organize your mods'">
       <div class="space-y-4">
         <div>
           <label class="text-sm font-medium">Folder Name</label>
-          <Input
-            v-model="newFolderName"
-            placeholder="Enter folder name..."
-            class="mt-1"
-            @keydown.enter="handleCreateFolder"
-          />
+          <Input v-model="newFolderName" placeholder="Enter folder name..." class="mt-1"
+            @keydown.enter="handleCreateFolder" />
         </div>
-        
+
         <div>
           <label class="text-sm font-medium">Color</label>
           <div class="flex flex-wrap gap-2 mt-2">
-            <button
-              v-for="color in colorOptions"
-              :key="color"
+            <button v-for="color in colorOptions" :key="color"
               class="w-6 h-6 rounded-full transition-transform hover:scale-110"
               :class="newFolderColor === color ? 'ring-2 ring-offset-2 ring-primary' : ''"
-              :style="{ backgroundColor: color }"
-              @click="newFolderColor = color"
-            />
+              :style="{ backgroundColor: color }" @click="newFolderColor = color" />
           </div>
         </div>
       </div>
-      
+
       <template #footer>
         <Button variant="outline" @click="showCreateFolderDialog = false">Cancel</Button>
         <Button @click="handleCreateFolder" :disabled="!newFolderName.trim()">Create</Button>
@@ -743,36 +668,25 @@ const colorOptions = [
     </Dialog>
 
     <!-- Rename Folder Dialog -->
-    <Dialog 
-      :open="showRenameFolderDialog" 
-      title="Rename Folder"
-    >
+    <Dialog :open="showRenameFolderDialog" title="Rename Folder">
       <div class="space-y-4">
         <div>
           <label class="text-sm font-medium">Folder Name</label>
-          <Input
-            v-model="newFolderName"
-            placeholder="Enter folder name..."
-            class="mt-1"
-            @keydown.enter="handleRenameFolder"
-          />
+          <Input v-model="newFolderName" placeholder="Enter folder name..." class="mt-1"
+            @keydown.enter="handleRenameFolder" />
         </div>
-        
+
         <div>
           <label class="text-sm font-medium">Color</label>
           <div class="flex flex-wrap gap-2 mt-2">
-            <button
-              v-for="color in colorOptions"
-              :key="color"
+            <button v-for="color in colorOptions" :key="color"
               class="w-6 h-6 rounded-full transition-transform hover:scale-110"
               :class="newFolderColor === color ? 'ring-2 ring-offset-2 ring-primary' : ''"
-              :style="{ backgroundColor: color }"
-              @click="newFolderColor = color"
-            />
+              :style="{ backgroundColor: color }" @click="newFolderColor = color" />
           </div>
         </div>
       </div>
-      
+
       <template #footer>
         <Button variant="outline" @click="showRenameFolderDialog = false">Cancel</Button>
         <Button @click="handleRenameFolder" :disabled="!newFolderName.trim()">Save</Button>
@@ -780,13 +694,10 @@ const colorOptions = [
     </Dialog>
 
     <!-- Delete Confirmation Dialog -->
-    <Dialog
-      :open="showDeleteDialog"
-      :title="deletingNodeType === 'folder' ? 'Delete Folder' : 'Remove from Folder'"
-      :description="deletingNodeType === 'folder' 
-        ? 'The folder will be deleted and its contents moved to the parent folder.' 
-        : 'The mod will be removed from this folder but not deleted from the library.'"
-    >
+    <Dialog :open="showDeleteDialog" :title="deletingNodeType === 'folder' ? 'Delete Folder' : 'Remove from Folder'"
+      :description="deletingNodeType === 'folder'
+        ? 'The folder will be deleted and its contents moved to the parent folder.'
+        : 'The mod will be removed from this folder but not deleted from the library.'">
       <template #footer>
         <Button variant="outline" @click="showDeleteDialog = false">Cancel</Button>
         <Button variant="destructive" @click="handleDeleteNode">
@@ -796,33 +707,24 @@ const colorOptions = [
     </Dialog>
 
     <!-- Move Dialog -->
-    <Dialog
-      :open="showMoveDialog"
-      title="Move Mods to Folder"
-      :description="`Moving ${selectedModIds.size} mod(s) to a folder`"
-      @close="showMoveDialog = false"
-    >
+    <Dialog :open="showMoveDialog" title="Move Mods to Folder"
+      :description="`Moving ${selectedModIds.size} mod(s) to a folder`" @close="showMoveDialog = false">
       <div class="space-y-2 max-h-60 overflow-auto">
-        <button
-          class="w-full flex items-center gap-2 p-2 rounded-md text-left transition-colors"
+        <button class="w-full flex items-center gap-2 p-2 rounded-md text-left transition-colors"
           :class="moveTargetFolderId === null ? 'bg-primary/10 border border-primary' : 'hover:bg-muted'"
-          @click="moveTargetFolderId = null"
-        >
+          @click="moveTargetFolderId = null">
           <Home class="w-4 h-4" />
           <span>Root (No Folder)</span>
         </button>
-        <button
-          v-for="folder in folders"
-          :key="folder.id"
+        <button v-for="folder in folders" :key="folder.id"
           class="w-full flex items-center gap-2 p-2 rounded-md text-left transition-colors"
           :class="moveTargetFolderId === folder.id ? 'bg-primary/10 border border-primary' : 'hover:bg-muted'"
-          @click="moveTargetFolderId = folder.id"
-        >
+          @click="moveTargetFolderId = folder.id">
           <Folder class="w-4 h-4" :style="{ color: folder.color }" />
           <span>{{ folder.name }}</span>
         </button>
       </div>
-      
+
       <template #footer>
         <Button variant="outline" @click="showMoveDialog = false">Cancel</Button>
         <Button @click="handleBulkMove">Move</Button>
@@ -830,26 +732,17 @@ const colorOptions = [
     </Dialog>
 
     <!-- Context Menu -->
-    <div
-      v-if="contextMenu"
-      class="fixed z-50 min-w-48 bg-popover border rounded-md shadow-md py-1"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-      @click.stop
-    >
+    <div v-if="contextMenu" class="fixed z-50 min-w-48 bg-popover border rounded-md shadow-md py-1"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
       <div class="px-2 py-1.5 text-xs text-muted-foreground font-medium">Move to</div>
-      <button
-        class="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-        @click="handleContextMenuMove(null)"
-      >
+      <button class="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+        @click="handleContextMenuMove(null)">
         <Home class="w-4 h-4" />
         Root (No Folder)
       </button>
-      <button
-        v-for="folder in folders"
-        :key="folder.id"
+      <button v-for="folder in folders" :key="folder.id"
         class="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-        @click="handleContextMenuMove(folder.id)"
-      >
+        @click="handleContextMenuMove(folder.id)">
         <Folder class="w-4 h-4" :style="{ color: folder.color }" />
         {{ folder.name }}
       </button>

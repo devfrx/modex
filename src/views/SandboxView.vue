@@ -1,36 +1,37 @@
 <template>
   <div class="h-full flex flex-col" :class="isLightMode ? 'bg-slate-50' : 'bg-[#0a0a0a]'">
     <!-- Header -->
-    <div class="shrink-0 px-4 py-2.5 border-b flex items-center gap-3"
+    <div class="shrink-0 px-2 sm:px-4 py-2 sm:py-2.5 border-b flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3"
       :class="isLightMode ? 'border-black/5 bg-white/50' : 'border-white/5 bg-white/[0.02]'">
 
       <!-- Title -->
       <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg flex items-center justify-center"
+        <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center"
           :class="isLightMode ? 'bg-violet-100' : 'bg-violet-500/10'">
-          <svg class="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
         </div>
-        <h2 class="text-sm font-semibold" :class="isLightMode ? 'text-black/80' : 'text-white/80'">
+        <h2 class="text-xs sm:text-sm font-semibold" :class="isLightMode ? 'text-black/80' : 'text-white/80'">
           Sandbox
         </h2>
       </div>
 
-      <!-- Divider -->
-      <div class="w-px h-5" :class="isLightMode ? 'bg-black/10' : 'bg-white/10'"></div>
+      <!-- Divider - hidden on mobile -->
+      <div class="hidden sm:block w-px h-5" :class="isLightMode ? 'bg-black/10' : 'bg-white/10'"></div>
 
       <!-- Search -->
-      <div class="relative">
-        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
+      <div class="relative flex-1 sm:flex-none order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0">
+        <svg class="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 sm:w-3.5 sm:h-3.5"
           :class="isLightMode ? 'text-black/30' : 'text-white/30'" fill="none" stroke="currentColor" stroke-width="2"
           viewBox="0 0 24 24">
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.35-4.35" />
         </svg>
         <input v-model="searchQuery" type="text" placeholder="Search..."
-          class="w-36 pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none transition-all"
+          class="w-full sm:w-36 pl-7 sm:pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none transition-all"
           :class="isLightMode
             ? 'bg-black/5 text-black/70 placeholder:text-black/30 focus:bg-black/8 focus:ring-1 focus:ring-black/10'
             : 'bg-white/5 text-white/70 placeholder:text-white/30 focus:bg-white/8 focus:ring-1 focus:ring-white/10'" />
@@ -38,7 +39,8 @@
         <!-- Search Results Dropdown -->
         <Transition name="fade">
           <div v-if="searchResults.length > 0"
-            class="absolute top-full left-0 mt-1.5 w-56 rounded-lg shadow-xl z-50 max-h-56 overflow-auto" :class="isLightMode
+            class="absolute top-full left-0 mt-1.5 w-full sm:w-56 rounded-lg shadow-xl z-50 max-h-56 overflow-auto"
+            :class="isLightMode
               ? 'bg-white border border-black/10'
               : 'bg-zinc-900 border border-white/10'">
             <button v-for="node in searchResults.slice(0, 8)" :key="node.id"
@@ -55,97 +57,109 @@
       </div>
 
       <!-- Filters -->
-      <div class="flex items-center gap-1 p-1 rounded-lg" :class="isLightMode ? 'bg-black/5' : 'bg-white/5'">
-        <button class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all flex items-center gap-1.5" :class="showFolders
-          ? 'bg-amber-500/20 text-amber-500'
-          : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
+      <div class="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg"
+        :class="isLightMode ? 'bg-black/5' : 'bg-white/5'">
+        <button
+          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+          :class="showFolders
+            ? 'bg-amber-500/20 text-amber-500'
+            : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
           @click="showFolders = !showFolders">
           <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-          Folders
+          <span class="hidden xs:inline">Folders</span>
         </button>
-        <button class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all flex items-center gap-1.5" :class="showMods
-          ? 'bg-emerald-500/20 text-emerald-500'
-          : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
+        <button
+          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+          :class="showMods
+            ? 'bg-emerald-500/20 text-emerald-500'
+            : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
           @click="showMods = !showMods">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          Mods
+          <span class="hidden xs:inline">Mods</span>
         </button>
-        <button class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all flex items-center gap-1.5" :class="showModpacks
-          ? 'bg-violet-500/20 text-violet-500'
-          : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
+        <button
+          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+          :class="showModpacks
+            ? 'bg-violet-500/20 text-violet-500'
+            : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
           @click="showModpacks = !showModpacks">
           <span class="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
-          Modpacks
+          <span class="hidden xs:inline">Packs</span>
         </button>
       </div>
 
-      <!-- Stats -->
-      <div class="text-[11px] tabular-nums" :class="isLightMode ? 'text-black/40' : 'text-white/40'">
+      <!-- Stats - hidden on small screens -->
+      <div class="hidden sm:block text-[11px] tabular-nums" :class="isLightMode ? 'text-black/40' : 'text-white/40'">
         {{ filteredNodes.length }}<span class="opacity-50">/{{ nodes.length }}</span> nodes
       </div>
 
       <!-- Spacer -->
-      <div class="flex-1"></div>
+      <div class="flex-1 hidden sm:block"></div>
 
       <!-- Zoom Controls -->
-      <div class="flex items-center gap-1 p-1 rounded-lg" :class="isLightMode ? 'bg-black/5' : 'bg-white/5'">
-        <button class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+      <div class="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg"
+        :class="isLightMode ? 'bg-black/5' : 'bg-white/5'">
+        <button class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors"
           :class="isLightMode ? 'hover:bg-black/10 text-black/60' : 'hover:bg-white/10 text-white/60'" @click="zoomOut"
           title="Zoom Out">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35M8 11h6" />
           </svg>
         </button>
-        <span class="w-10 text-center text-[11px] tabular-nums"
+        <span class="w-8 sm:w-10 text-center text-[10px] sm:text-[11px] tabular-nums"
           :class="isLightMode ? 'text-black/50' : 'text-white/50'">
           {{ zoomLevel }}%
         </span>
-        <button class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+        <button class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors"
           :class="isLightMode ? 'hover:bg-black/10 text-black/60' : 'hover:bg-white/10 text-white/60'" @click="zoomIn"
           title="Zoom In">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35M8 11h6M11 8v6" />
           </svg>
         </button>
-        <button class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+        <button class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors"
           :class="isLightMode ? 'hover:bg-black/10 text-black/60' : 'hover:bg-white/10 text-white/60'"
           @click="fitToView" title="Fit to View">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
           </svg>
         </button>
       </div>
 
       <!-- Layout Controls -->
-      <div class="flex items-center gap-1">
-        <button class="px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all flex items-center gap-1.5" :class="isLightMode
-          ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black/80'
-          : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'" @click="spreadNodes"
+      <div class="hidden sm:flex items-center gap-1">
+        <button
+          class="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5"
+          :class="isLightMode
+            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black/80'
+            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'" @click="spreadNodes"
           title="Spread nodes apart">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
           </svg>
-          Spread
+          <span class="hidden lg:inline">Spread</span>
         </button>
-        <button class="px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all flex items-center gap-1.5" :class="isLightMode
-          ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black/80'
-          : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'" @click="resetLayout"
+        <button
+          class="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5"
+          :class="isLightMode
+            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black/80'
+            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'" @click="resetLayout"
           title="Reset layout">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
             <path d="M3 3v5h5" />
           </svg>
-          Reset
+          <span class="hidden lg:inline">Reset</span>
         </button>
         <button v-if="hasSavedPositions"
-          class="px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all flex items-center gap-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+          class="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20"
           @click="clearSavedPositions" title="Clear saved positions">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
           </svg>
-          Clear
+          <span class="hidden lg:inline">Clear</span>
         </button>
       </div>
     </div>
@@ -182,7 +196,7 @@
 
           <!-- Nodes -->
           <g class="nodes">
-            <g v-for="node in filteredNodes" :key="node.id" :transform="`translate(${node.x ?? 0}, ${node.y ?? 0})`"
+            <g v-for="node in visibleNodes" :key="node.id" :transform="`translate(${node.x ?? 0}, ${node.y ?? 0})`"
               class="node-group" :class="{ 'drop-target': dropTarget?.id === node.id }"
               @mousedown="onDragStart($event, node)" @touchstart.prevent="onDragStart($event, node)"
               @contextmenu.prevent.stop="openContextMenu($event, node)">
@@ -240,7 +254,7 @@
         ">
         <svg :viewBox="`0 0 ${width} ${height}`" class="w-full h-full">
           <rect width="100%" height="100%" :fill="isLightMode ? '#f1f5f9' : '#18181b'" />
-          <circle v-for="node in filteredNodes" :key="'mini-' + node.id" :cx="node.x ?? 0" :cy="node.y ?? 0" :r="4"
+          <circle v-for="node in minimapNodes" :key="'mini-' + node.id" :cx="node.x ?? 0" :cy="node.y ?? 0" :r="4"
             :fill="node.type === 'folder'
               ? '#fbbf24'
               : node.type === 'mod'
@@ -653,6 +667,45 @@ const filteredNodes = computed(() => {
   });
 });
 
+// Viewport-aware rendering for performance with many nodes
+const viewportBounds = ref({ minX: -1000, maxX: 2000, minY: -1000, maxY: 2000 });
+
+// Update viewport bounds when zooming/panning
+function updateViewportBounds() {
+  if (!svgEl.value) return;
+  const transform = d3.zoomTransform(svgEl.value);
+  const padding = 100; // Extra padding to avoid popping
+  viewportBounds.value = {
+    minX: -transform.x / transform.k - padding,
+    maxX: (width.value - transform.x) / transform.k + padding,
+    minY: -transform.y / transform.k - padding,
+    maxY: (height.value - transform.y) / transform.k + padding,
+  };
+}
+
+// Visible nodes (for rendering) - only render nodes in viewport when there are many
+const visibleNodes = computed(() => {
+  const nodeCount = filteredNodes.value.length;
+  // Only apply viewport culling for large graphs
+  if (nodeCount <= 150) return filteredNodes.value;
+
+  const { minX, maxX, minY, maxY } = viewportBounds.value;
+  return filteredNodes.value.filter(n => {
+    const x = n.x ?? 0;
+    const y = n.y ?? 0;
+    return x >= minX && x <= maxX && y >= minY && y <= maxY;
+  });
+});
+
+// Minimap nodes - sample for very large graphs
+const minimapNodes = computed(() => {
+  const nodeCount = filteredNodes.value.length;
+  if (nodeCount <= 200) return filteredNodes.value;
+  // For very large graphs, sample every nth node
+  const sampleRate = Math.ceil(nodeCount / 200);
+  return filteredNodes.value.filter((_, i) => i % sampleRate === 0);
+});
+
 const filteredLinks = computed(() => {
   const visibleIds = new Set(filteredNodes.value.map((n) => n.id));
   return links.value.filter(
@@ -660,7 +713,16 @@ const filteredLinks = computed(() => {
   );
 });
 
-const renderedLinks = computed(() => filteredLinks.value);
+// Only render links for visible nodes when there are many
+const renderedLinks = computed(() => {
+  const nodeCount = filteredNodes.value.length;
+  if (nodeCount <= 150) return filteredLinks.value;
+
+  const visibleIds = new Set(visibleNodes.value.map(n => n.id));
+  return filteredLinks.value.filter(
+    l => visibleIds.has(l.source.id) || visibleIds.has(l.target.id)
+  );
+});
 
 // Theme colors
 const bgColor = computed(() => (isLightMode.value ? "#f8fafc" : "#0a0a0a"));
@@ -836,6 +898,19 @@ function initSimulation() {
 
   const centerX = width.value / 2;
   const centerY = height.value / 2;
+  const nodeCount = nodes.value.length;
+
+  // Performance optimizations based on node count
+  const isLargeGraph = nodeCount > 100;
+  const isVeryLargeGraph = nodeCount > 300;
+
+  // Adjust simulation parameters for better performance with many nodes
+  const chargeStrength = isVeryLargeGraph ? -50 : isLargeGraph ? -100 : -150;
+  const linkDistance = isVeryLargeGraph ? 50 : isLargeGraph ? 60 : 80;
+  const linkStrength = isVeryLargeGraph ? 0.1 : isLargeGraph ? 0.2 : 0.3;
+  const alphaDecay = isVeryLargeGraph ? 0.05 : isLargeGraph ? 0.03 : 0.01;
+  const velocityDecay = isVeryLargeGraph ? 0.5 : isLargeGraph ? 0.4 : 0.3;
+  const collisionRadius = isVeryLargeGraph ? 8 : isLargeGraph ? 10 : 12;
 
   simulation = d3
     .forceSimulation<GraphNode>(nodes.value)
@@ -844,23 +919,43 @@ function initSimulation() {
       d3
         .forceLink<GraphNode, GraphLink>(links.value)
         .id((d) => d.id)
-        .distance(80)
-        .strength(0.3)
+        .distance(linkDistance)
+        .strength(linkStrength)
     )
-    .force("charge", d3.forceManyBody().strength(-150))
+    .force("charge", d3.forceManyBody().strength(chargeStrength).distanceMax(isLargeGraph ? 200 : 400))
     .force("center", d3.forceCenter(centerX, centerY).strength(0.05))
     .force(
       "collision",
-      d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + 12)
+      isVeryLargeGraph ? null : d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + collisionRadius)
     )
     .force("x", d3.forceX(centerX).strength(0.02))
     .force("y", d3.forceY(centerY).strength(0.02))
-    .alphaDecay(0.01)
-    .velocityDecay(0.3)
+    .alphaDecay(alphaDecay)
+    .velocityDecay(velocityDecay)
     .on("tick", onTick);
+
+  // For very large graphs, stop simulation earlier
+  if (isVeryLargeGraph) {
+    setTimeout(() => {
+      if (simulation) simulation.stop();
+    }, 3000);
+  }
 }
 
+// Throttled tick to avoid excessive re-renders with many nodes
+let lastTickTime = 0;
+const tickThrottleMs = computed(() => {
+  const nodeCount = nodes.value.length;
+  if (nodeCount > 300) return 100; // 10 fps
+  if (nodeCount > 100) return 50;  // 20 fps
+  return 16; // ~60 fps
+});
+
 function onTick() {
+  const now = Date.now();
+  if (now - lastTickTime < tickThrottleMs.value) return;
+  lastTickTime = now;
+
   nodes.value = [...nodes.value];
   links.value = [...links.value];
   debouncedSavePositions();
@@ -875,9 +970,11 @@ function initZoom() {
     .on("zoom", (event) => {
       d3.select(zoomGroup.value).attr("transform", event.transform);
       currentZoomScale.value = event.transform.k;
+      updateViewportBounds();
     });
 
   d3.select(svgEl.value).call(zoom);
+  updateViewportBounds();
 }
 
 // Zoom control functions

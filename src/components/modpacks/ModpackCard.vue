@@ -20,7 +20,7 @@ interface ModpackWithCount {
   minecraft_version?: string;
   loader?: string;
   description?: string;
-  image_path?: string;
+  image_url?: string;
   created_at?: string;
   modCount: number;
 }
@@ -52,8 +52,8 @@ function handleImageError(event: Event) {
   <div class="glass-card relative rounded-lg group transition-all duration-200"
     :class="{ 'ring-2 ring-primary bg-primary/5': selected }" @click="$emit('toggle-select', modpack.id)">
     <!-- Image Background -->
-    <div v-if="modpack.image_path" class="absolute inset-0 z-0 overflow-hidden rounded-lg">
-      <img :src="'atom:///' + modpack.image_path.replace(/\\\\/g, '/')"
+    <div v-if="modpack.image_url" class="absolute inset-0 z-0 overflow-hidden rounded-lg">
+      <img :src="'atom:///' + modpack.image_url.replace(/\\\\/g, '/')"
         class="w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity" alt=""
         @error="handleImageError" />
       <div class="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
@@ -86,8 +86,8 @@ function handleImageError(event: Event) {
       <div class="flex items-start justify-between mb-3">
         <div
           class="p-2.5 backdrop-blur-sm rounded-xl group-hover:bg-primary/20 group-hover:text-primary transition-all duration-300"
-          :class="modpack.image_path ? 'bg-background/50' : 'bg-secondary/50'">
-          <Package v-if="!modpack.image_path" class="w-6 h-6" />
+          :class="modpack.image_url ? 'bg-background/50' : 'bg-secondary/50'">
+          <Package v-if="!modpack.image_url" class="w-6 h-6" />
           <Image v-else class="w-6 h-6" />
         </div>
       </div>

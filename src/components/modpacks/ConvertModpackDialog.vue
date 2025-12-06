@@ -130,26 +130,44 @@ async function convertModpack() {
                     continue;
                 }
 
-                // Find file that EXACTLY matches the target version in gameVersions array
-                // CurseForge API may return files that support multiple versions
+                // Find file that EXACTLY matches the target version AND loader in gameVersions array
+                // CurseForge API may return files that support multiple versions/loaders
+                const targetLoaderLower = targetLoader.value.toLowerCase();
                 const file = files.find(f => {
-                    const gameVersions = f.gameVersions || [];
-                    return gameVersions.includes(targetVersion.value);
+                    const gameVersions = (f.gameVersions || []).map((v: string) => v.toLowerCase());
+                    // Must have both the exact MC version AND the loader
+                    const hasVersion = gameVersions.includes(targetVersion.value.toLowerCase());
+                    const hasLoader = gameVersions.includes(targetLoaderLower) ||
+                        gameVersions.some((v: string) => v === targetLoaderLower);
+                    return hasVersion && hasLoader;
                 });
 
                 if (!file) {
-                    // Show what versions were available
-                    const availableVersions = files
-                        .flatMap(f => f.gameVersions || [])
-                        .filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v))
-                        .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
-                        .slice(0, 5)
-                        .join(', ');
+                    // Check if any file has the loader but wrong version, or version but wrong loader
+                    const filesWithLoader = files.filter(f =>
+                        (f.gameVersions || []).some((v: string) => v.toLowerCase() === targetLoaderLower)
+                    );
+                    const filesWithVersion = files.filter(f =>
+                        (f.gameVersions || []).includes(targetVersion.value)
+                    );
+
+                    let reason = `No compatible file for ${targetVersion.value} ${targetLoader.value}`;
+                    if (filesWithVersion.length > 0 && filesWithLoader.length === 0) {
+                        reason = `Version ${targetVersion.value} available but not for ${targetLoader.value}`;
+                    } else if (filesWithLoader.length > 0 && filesWithVersion.length === 0) {
+                        const availableVersions = filesWithLoader
+                            .flatMap(f => f.gameVersions || [])
+                            .filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v))
+                            .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
+                            .slice(0, 3)
+                            .join(', ');
+                        reason = `${targetLoader.value} available for: ${availableVersions || 'unknown versions'}`;
+                    }
 
                     results.push({
                         modName: mod.name,
                         status: "failed",
-                        reason: `No exact match for ${targetVersion.value}. Available: ${availableVersions || 'none'}`,
+                        reason,
                     });
                     failedCount++;
                     continue;

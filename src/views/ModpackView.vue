@@ -550,7 +550,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-6 h-full flex flex-col space-y-6 relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
+  <div class="h-full flex flex-col relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
     @dragleave="handleDragLeave" @drop="handleDrop">
     <!-- Drag & Drop Overlay -->
     <div v-if="isDragging"
@@ -562,91 +562,114 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Header -->
-    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight">Modpacks</h1>
-        <p class="text-muted-foreground">
-          {{ modpacks.length }} packs • {{ totalMods }} mods total
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="outline" class="gap-2">
-          <ArrowLeftRight class="w-4 h-4" />
-          Compare
-        </Button>
-        <Button @click="openShareImport" :disabled="!isElectron()" variant="outline" class="gap-2">
-          <Share2 class="w-4 h-4" />
-          Import .modex
-        </Button>
-        <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" class="gap-2">
-          <Download class="w-4 h-4" />
-          Import CF Modpack
-        </Button>
-        <Button @click="showCreateDialog = true" :disabled="!isElectron()" class="gap-2">
-          <PackagePlus class="w-4 h-4" />
-          Create
-        </Button>
-      </div>
-    </div>
+    <!-- Compact Header -->
+    <div class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-white/5 bg-[#0a0a0a]">
+      <!-- Mobile: Stack vertically, Desktop: Row -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+        <!-- Left: Title & Stats -->
+        <div class="flex items-center gap-3 sm:gap-4">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="p-1.5 sm:p-2 bg-primary/10 rounded-lg">
+              <PackagePlus class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+            </div>
+            <div>
+              <h1 class="text-base sm:text-lg font-semibold tracking-tight">Modpacks</h1>
+              <p class="text-[10px] sm:text-xs text-muted-foreground">
+                {{ modpacks.length }} packs • {{ totalMods }} mods
+              </p>
+            </div>
+          </div>
 
-    <!-- Quick Filters -->
-    <div class="flex items-center gap-2">
-      <button class="px-3 py-1.5 text-sm rounded-full transition-colors" :class="quickFilter === 'all'
-        ? 'bg-primary text-primary-foreground'
-        : 'bg-muted hover:bg-accent'
-        " @click="
-          quickFilter = 'all';
-        router.push('/modpacks');
-        ">
-        All
-      </button>
-      <button class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5" :class="quickFilter === 'favorites'
-        ? 'bg-yellow-500 text-white'
-        : 'bg-muted hover:bg-accent'
-        " @click="
-          quickFilter = 'favorites';
-        router.push('/modpacks?filter=favorites');
-        ">
-        <Star class="w-3.5 h-3.5" />
-        Favorites
-        <span v-if="favoriteModpacks.size > 0" class="text-xs opacity-80">({{ favoriteModpacks.size }})</span>
-      </button>
+          <!-- Separator - hidden on mobile -->
+          <div class="hidden sm:block h-8 w-px bg-white/10" />
+
+          <!-- Quick Filters -->
+          <div class="flex items-center gap-1 sm:gap-1.5">
+            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
+              @click="quickFilter = 'all'; router.push('/modpacks');">
+              All
+            </button>
+            <button
+              class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
+              :class="quickFilter === 'favorites'
+                ? 'bg-yellow-500/20 text-yellow-400 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
+              @click="quickFilter = 'favorites'; router.push('/modpacks?filter=favorites');">
+              <Star class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-yellow-400' : ''" />
+              <span v-if="favoriteModpacks.size > 0" class="hidden xs:inline">({{ favoriteModpacks.size }})</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Actions -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
+            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3">
+            <ArrowLeftRight class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden lg:inline text-xs">Compare</span>
+          </Button>
+          <Button @click="openShareImport" :disabled="!isElectron()" variant="ghost" size="sm"
+            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex">
+            <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden lg:inline text-xs">.modex</span>
+          </Button>
+          <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
+            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
+            <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden xs:inline">Import</span>
+          </Button>
+          <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
+            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
+            <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden xs:inline">Create</span>
+          </Button>
+        </div>
+      </div>
     </div>
 
     <!-- Content -->
-    <div v-if="error" class="flex items-center justify-center flex-1">
+    <div v-if="error" class="flex items-center justify-center flex-1 bg-[#0a0a0a]">
       <p class="text-destructive">{{ error }}</p>
     </div>
 
-    <div v-else-if="isLoading" class="flex items-center justify-center flex-1">
+    <div v-else-if="isLoading" class="flex items-center justify-center flex-1 bg-[#0a0a0a]">
       <div class="flex flex-col items-center gap-2">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         <p class="text-muted-foreground">Loading...</p>
       </div>
     </div>
 
-    <div v-else-if="modpacks.length === 0" class="flex items-center justify-center flex-1">
+    <div v-else-if="modpacks.length === 0" class="flex items-center justify-center flex-1 bg-[#0a0a0a]">
       <div class="text-center max-w-md">
-        <div class="bg-secondary/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-          <PackagePlus class="w-8 h-8 text-muted-foreground" />
+        <div class="bg-primary/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <PackagePlus class="w-8 h-8 text-primary" />
         </div>
         <h3 class="text-lg font-semibold mb-2">No modpacks yet</h3>
-        <p class="text-muted-foreground mb-6">
+        <p class="text-muted-foreground mb-6 text-sm">
           Create or import a modpack to get started.
         </p>
         <div class="flex justify-center gap-2">
-          <Button @click="importCurseForgeModpack" variant="secondary">Import CF Modpack</Button>
-          <Button @click="showCreateDialog = true">Create</Button>
+          <Button @click="importCurseForgeModpack" variant="secondary" size="sm" class="gap-1.5">
+            <Download class="w-4 h-4" />
+            Import CF
+          </Button>
+          <Button @click="showCreateDialog = true" size="sm" class="gap-1.5">
+            <PackagePlus class="w-4 h-4" />
+            Create
+          </Button>
         </div>
       </div>
     </div>
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1 pb-20 overflow-auto">
-      <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
-        :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete"
-        @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
-        @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog" />
+    <div v-else class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-[#0a0a0a]">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+        <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
+          :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete"
+          @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
+          @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog" />
+      </div>
     </div>
 
     <!-- Bulk Action Bar -->

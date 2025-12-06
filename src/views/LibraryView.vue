@@ -16,22 +16,18 @@ import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
 import {
   Search,
-  Filter,
   FolderPlus,
   FilePlus,
   Trash2,
   PackagePlus,
   PlusCircle,
-  ArrowUpDown,
   LayoutGrid,
   List,
   LayoutList,
   Info,
   X,
   Star,
-  Copy,
   AlertTriangle,
-  FolderOutput,
   HardDrive,
   Folder,
   FolderInput,
@@ -259,20 +255,28 @@ function isFavorite(modId: string): boolean {
   return favoriteMods.value.has(modId);
 }
 
-// Duplicate detection
+// Duplicate detection - only considers exact matches of name, loader, version, game_version, and filename
 function detectDuplicates() {
-  const nameMap = new Map<string, string[]>();
+  const keyMap = new Map<string, string[]>();
   for (const mod of mods.value) {
-    const key = mod.name.toLowerCase();
-    if (!nameMap.has(key)) {
-      nameMap.set(key, []);
+    // Create a composite key from all relevant fields
+    const key = [
+      mod.name.toLowerCase().trim(),
+      (mod.loader || '').toLowerCase().trim(),
+      (mod.version || '').toLowerCase().trim(),
+      (mod.game_version || '').toLowerCase().trim(),
+      (mod.filename || '').toLowerCase().trim()
+    ].join('|');
+
+    if (!keyMap.has(key)) {
+      keyMap.set(key, []);
     }
-    nameMap.get(key)!.push(mod.id);
+    keyMap.get(key)!.push(mod.id);
   }
 
-  // Filter to only show actual duplicates
+  // Filter to only show actual duplicates (exact same key appears more than once)
   duplicates.value = new Map(
-    [...nameMap.entries()].filter(([_, ids]) => ids.length > 1)
+    [...keyMap.entries()].filter(([_, ids]) => ids.length > 1)
   );
 }
 
@@ -617,7 +621,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-6 h-full flex flex-col space-y-4 relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
+  <div class="h-full flex flex-col relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
     @dragleave="handleDragLeave" @drop="handleDrop">
     <!-- Drag & Drop Overlay -->
     <div v-if="isDragging"
@@ -631,178 +635,165 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Header -->
-    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight">Library</h1>
-        <p class="text-muted-foreground">
-          {{ mods.length }} mods
-          <template v-if="Object.keys(loaderStats).length">
-            •
-            <span v-for="(count, loader) in loaderStats" :key="loader" class="ml-1">
-              {{ count }} {{ loader }}
-            </span>
-          </template>
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <Button @click="showUpdatesDialog = true" :disabled="!isElectron()" variant="outline" class="gap-2"
-          title="Controlla aggiornamenti mod">
-          <ArrowUpCircle class="w-4 h-4" />
-          Updates
-        </Button>
-        <Button @click="showCurseForgeSearch = true" variant="default" class="gap-2">
-          <Globe class="w-4 h-4" />
-          Browse CurseForge
-        </Button>
-      </div>
-    </div>
+    <!-- Compact Header -->
+    <div class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-white/5 bg-[#0a0a0a]">
+      <!-- Mobile: Stack vertically, Desktop: Row -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+        <!-- Left: Title & Stats -->
+        <div class="flex items-center gap-3 sm:gap-4">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="p-1.5 sm:p-2 bg-primary/10 rounded-lg">
+              <HardDrive class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+            </div>
+            <div>
+              <h1 class="text-base sm:text-lg font-semibold tracking-tight">Library</h1>
+              <p class="text-[10px] sm:text-xs text-muted-foreground">
+                {{ mods.length }} mods
+                <span class="hidden md:inline" v-if="Object.keys(loaderStats).length > 1"> •
+                  <span v-for="(count, loader, idx) in loaderStats" :key="loader">
+                    {{ count }} {{ loader }}{{ idx < Object.keys(loaderStats).length - 1 ? ', ' : '' }} </span>
+                  </span>
+              </p>
+            </div>
+          </div>
 
-    <!-- Quick Filters -->
-    <div class="flex items-center gap-2">
-      <button class="px-3 py-1.5 text-sm rounded-full transition-colors" :class="quickFilter === 'all'
-        ? 'bg-primary text-primary-foreground'
-        : 'bg-muted hover:bg-accent'
-        " @click="
-          quickFilter = 'all';
-        router.push('/library');
-        ">
-        All
-      </button>
-      <button class="px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5" :class="quickFilter === 'favorites'
-        ? 'bg-yellow-500 text-white'
-        : 'bg-muted hover:bg-accent'
-        " @click="
-          quickFilter = 'favorites';
-        router.push('/library?filter=favorites');
-        ">
-        <Star class="w-3.5 h-3.5" />
-        Favorites
-        <span v-if="favoriteMods.size > 0" class="text-xs opacity-80">({{ favoriteMods.size }})</span>
-      </button>
-      <button class="px-3 py-1.5 text-sm rounded-full transition-colors" :class="quickFilter === 'recent'
-        ? 'bg-blue-500 text-white'
-        : 'bg-muted hover:bg-accent'
-        " @click="
-          quickFilter = 'recent';
-        router.push('/library?filter=recent');
-        ">
-        Recent
-      </button>
+          <!-- Separator - hidden on mobile -->
+          <div class="hidden sm:block h-8 w-px bg-white/10" />
 
-      <!-- Duplicate Warning -->
-      <div v-if="duplicateCount > 0"
-        class="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-500/20 text-orange-500 rounded-full cursor-pointer hover:bg-orange-500/30"
-        @click="searchQuery = ''" title="Click to show all and review duplicates">
-        <AlertTriangle class="w-3.5 h-3.5" />
-        {{ duplicateCount }} potential duplicates
-      </div>
-    </div>
+          <!-- Quick Filters -->
+          <div class="flex items-center gap-1 sm:gap-1.5">
+            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
+              @click="quickFilter = 'all'; router.push('/library');">
+              All
+            </button>
+            <button
+              class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
+              :class="quickFilter === 'favorites'
+                ? 'bg-yellow-500/20 text-yellow-400 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
+              @click="quickFilter = 'favorites'; router.push('/library?filter=favorites');">
+              <Star class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-yellow-400' : ''" />
+              <span v-if="favoriteMods.size > 0" class="hidden xs:inline">({{ favoriteMods.size }})</span>
+            </button>
+            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'recent'
+              ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-white/5'"
+              @click="quickFilter = 'recent'; router.push('/library?filter=recent');">
+              Recent
+            </button>
 
-    <!-- Toolbar -->
-    <div class="flex flex-wrap items-center gap-3">
-      <!-- Search -->
-      <div class="relative flex-1 min-w-[200px] max-w-md flex gap-2">
-        <div class="relative flex-1">
-          <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input v-model="searchQuery" :placeholder="searchField === 'all'
-            ? 'Search all fields...'
-            : `Search by ${searchField}...`
-            " class="pl-9" />
+            <!-- Duplicate Warning Badge -->
+            <div v-if="duplicateCount > 0"
+              class="flex items-center gap-1 px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs bg-orange-500/20 text-orange-400 rounded-md cursor-pointer hover:bg-orange-500/30 transition-colors"
+              @click="searchQuery = ''" title="Click to show all and review duplicates">
+              <AlertTriangle class="w-3 h-3" />
+              <span class="hidden sm:inline">{{ duplicateCount }}</span>
+            </div>
+          </div>
         </div>
+
+        <!-- Right: Actions -->
+        <div class="flex items-center gap-2">
+          <Button @click="showUpdatesDialog = true" :disabled="!isElectron()" variant="ghost" size="sm"
+            class="gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3"
+            title="Check for mod updates">
+            <ArrowUpCircle class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden lg:inline text-xs">Updates</span>
+          </Button>
+          <Button @click="showCurseForgeSearch = true" variant="default" size="sm"
+            class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
+            <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span class="hidden xs:inline">CurseForge</span>
+          </Button>
+        </div>
+      </div>
+
+      <!-- Search & Filters Bar - Scrollable on mobile -->
+      <div class="flex items-center gap-2 sm:gap-3 mt-3 sm:mt-4 overflow-x-auto pb-1 -mb-1 scrollbar-thin">
+        <!-- Search -->
+        <div class="relative flex-shrink-0 w-40 sm:w-auto sm:flex-1 sm:max-w-sm">
+          <Search
+            class="absolute left-2 sm:left-2.5 top-1/2 transform -translate-y-1/2 h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground" />
+          <Input v-model="searchQuery" :placeholder="searchField === 'all' ? 'Search...' : `By ${searchField}...`"
+            class="pl-7 sm:pl-8 h-7 sm:h-8 text-xs sm:text-sm bg-white/5 border-white/10" />
+        </div>
+
+        <!-- Search Field Selector - Hidden on mobile -->
         <select v-model="searchField"
-          class="h-10 rounded-md border border-input bg-background px-2 py-2 text-xs ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+          class="hidden md:block h-7 sm:h-8 rounded-md border border-white/10 bg-white/5 px-2 text-[10px] sm:text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           title="Search field">
           <option value="all">All</option>
           <option value="name">Name</option>
           <option value="author">Author</option>
           <option value="version">Version</option>
-          <option value="description">Description</option>
         </select>
-      </div>
 
-      <!-- Loader Filter -->
-      <div class="flex items-center gap-2">
-        <Filter class="w-4 h-4 text-muted-foreground" />
+        <!-- Loader Filter -->
         <select v-model="selectedLoader"
-          class="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring">
-          <option value="all">All Loaders</option>
+          class="flex-shrink-0 h-7 sm:h-8 rounded-md border border-white/10 bg-white/5 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="all">All</option>
           <option v-for="loader in loaders" :key="loader" :value="loader">
-            {{ loader }} ({{ loaderStats[loader] }})
+            {{ loader }}
           </option>
         </select>
-      </div>
 
-      <!-- Sort -->
-      <div class="flex items-center gap-1 border rounded-md">
-        <button class="h-9 px-3 text-xs rounded-l-md transition-colors" :class="sortBy === 'name'
-          ? 'bg-primary text-primary-foreground'
-          : 'hover:bg-accent'
-          " @click="toggleSort('name')">
-          Name
-        </button>
-        <button class="h-9 px-3 text-xs transition-colors" :class="sortBy === 'loader'
-          ? 'bg-primary text-primary-foreground'
-          : 'hover:bg-accent'
-          " @click="toggleSort('loader')">
-          Loader
-        </button>
-        <button class="h-9 px-3 text-xs transition-colors" :class="sortBy === 'version'
-          ? 'bg-primary text-primary-foreground'
-          : 'hover:bg-accent'
-          " @click="toggleSort('version')">
-          Version
-        </button>
-        <button class="h-9 px-3 text-xs rounded-r-md transition-colors" :class="sortBy === 'created_at'
-          ? 'bg-primary text-primary-foreground'
-          : 'hover:bg-accent'
-          " @click="toggleSort('created_at')">
-          Date
-        </button>
-      </div>
+        <!-- Separator - Hidden on mobile -->
+        <div class="hidden lg:block h-6 w-px bg-white/10" />
 
-      <!-- View Mode -->
-      <div class="flex items-center gap-1 border rounded-md">
-        <button class="h-9 w-9 flex items-center justify-center rounded-l-md transition-colors" :class="viewMode === 'grid'
-          ? 'bg-primary text-primary-foreground'
-          : 'hover:bg-accent'
-          " @click="viewMode = 'grid'" title="Grid view">
-          <LayoutGrid class="w-4 h-4" />
-        </button>
-        <button class="h-9 w-9 flex items-center justify-center transition-colors" :class="viewMode === 'list'
-          ? 'bg-primary text-primary-foreground'
-          : 'hover:bg-accent'
-          " @click="viewMode = 'list'" title="List view">
-          <List class="w-4 h-4" />
-        </button>
-        <button class="h-9 w-9 flex items-center justify-center rounded-r-md transition-colors" :class="viewMode === 'compact'
-          ? 'bg-primary text-primary-foreground'
-          : 'hover:bg-accent'
-          " @click="viewMode = 'compact'" title="Compact view">
-          <LayoutList class="w-4 h-4" />
-        </button>
-      </div>
+        <!-- Sort Buttons - Hidden on mobile -->
+        <div class="hidden lg:flex items-center gap-0.5 p-0.5 bg-white/5 rounded-md">
+          <button v-for="field in ['name', 'loader', 'version', 'created_at'] as const" :key="field"
+            class="px-2 py-1 text-xs rounded transition-all" :class="sortBy === field
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'" @click="toggleSort(field)">
+            {{ field === 'created_at' ? 'Date' : field.charAt(0).toUpperCase() + field.slice(1) }}
+          </button>
+        </div>
 
-      <!-- Toggle Thumbnails -->
-      <Button variant="ghost" size="sm" class="gap-2" @click="showThumbnails = !showThumbnails"
-        :title="showThumbnails ? 'Hide thumbnails' : 'Show thumbnails'">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          :class="showThumbnails ? '' : 'opacity-50'">
-          <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-          <circle cx="9" cy="9" r="2" />
-          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-        </svg>
-      </Button>
+        <!-- View Mode -->
+        <div class="flex items-center gap-0.5 p-0.5 bg-white/5 rounded-md flex-shrink-0">
+          <button class="p-1 sm:p-1.5 rounded transition-all"
+            :class="viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+            @click="viewMode = 'grid'" title="Grid view">
+            <LayoutGrid class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          </button>
+          <button class="p-1 sm:p-1.5 rounded transition-all"
+            :class="viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+            @click="viewMode = 'list'" title="List view">
+            <List class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          </button>
+          <button class="hidden sm:block p-1.5 rounded transition-all"
+            :class="viewMode === 'compact' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+            @click="viewMode = 'compact'" title="Compact view">
+            <LayoutList class="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-      <!-- Selection Buttons -->
-      <div class="flex items-center gap-1 border-l pl-3 ml-auto">
-        <Button variant="ghost" size="sm" class="text-xs" @click="selectAll" :disabled="filteredMods.length === 0">
-          Select All
-        </Button>
-        <Button variant="ghost" size="sm" class="text-xs" @click="selectNone" :disabled="selectedModIds.size === 0">
-          Deselect
-        </Button>
+        <!-- Thumbnails Toggle - Hidden on mobile -->
+        <button class="hidden sm:block p-1.5 rounded-md transition-all flex-shrink-0"
+          :class="showThumbnails ? 'bg-white/10 text-foreground' : 'text-muted-foreground hover:text-foreground'"
+          @click="showThumbnails = !showThumbnails" :title="showThumbnails ? 'Hide thumbnails' : 'Show thumbnails'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+            <circle cx="9" cy="9" r="2" />
+            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+          </svg>
+        </button>
+
+        <!-- Selection Buttons - Hidden on mobile -->
+        <div class="hidden md:flex items-center gap-1 ml-auto">
+          <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            @click="selectAll" :disabled="filteredMods.length === 0">
+            Select All
+          </Button>
+          <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            @click="selectNone" :disabled="selectedModIds.size === 0">
+            Clear
+          </Button>
+        </div>
       </div>
     </div>
 
@@ -818,24 +809,22 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-else-if="mods.length === 0" class="flex items-center justify-center flex-1">
+    <div v-else-if="mods.length === 0" class="flex items-center justify-center flex-1 bg-[#0a0a0a]">
       <div class="text-center max-w-md">
-        <div class="bg-secondary/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-          <FolderPlus class="w-8 h-8 text-muted-foreground" />
+        <div class="bg-primary/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <HardDrive class="w-8 h-8 text-primary" />
         </div>
         <h3 class="text-lg font-semibold mb-2">No mods yet</h3>
-        <p class="text-muted-foreground mb-6">Browse CurseForge to add mods to your library.</p>
-        <div class="flex justify-center gap-2">
-          <Button @click="showCurseForgeSearch = true">
-            <Globe class="w-4 h-4 mr-2" />
-            Browse CurseForge
-          </Button>
-        </div>
+        <p class="text-muted-foreground mb-6 text-sm">Browse CurseForge to add mods to your library.</p>
+        <Button @click="showCurseForgeSearch = true" class="gap-2">
+          <Globe class="w-4 h-4" />
+          Browse CurseForge
+        </Button>
       </div>
     </div>
 
     <!-- Grid View -->
-    <div v-else-if="viewMode === 'grid'" class="flex-1 overflow-auto p-1 pb-20">
+    <div v-else-if="viewMode === 'grid'" class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-[#0a0a0a]">
       <ModGrid :mods="filteredMods" :selected-ids="selectedModIds" :favorite-ids="favoriteMods"
         :duplicate-ids="duplicateModIds" :show-thumbnails="showThumbnails" @delete="confirmDelete"
         @edit="openEditDialog" @toggle-select="toggleSelection" @show-details="showModDetails"
@@ -843,41 +832,46 @@ onMounted(() => {
     </div>
 
     <!-- List View -->
-    <div v-else-if="viewMode === 'list'" class="flex-1 overflow-auto pb-20">
-      <div class="bg-card rounded-lg border overflow-hidden">
-        <table class="w-full text-sm">
-          <thead class="bg-muted/50 border-b">
+    <div v-else-if="viewMode === 'list'" class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-[#0a0a0a]">
+      <div class="bg-card/50 rounded-lg border border-white/5 overflow-hidden overflow-x-auto">
+        <table class="w-full text-sm min-w-[400px]">
+          <thead class="bg-white/5 border-b border-white/5">
             <tr>
-              <th class="text-left p-3 font-medium">Name</th>
-              <th class="text-left p-3 font-medium">Version</th>
-              <th class="text-left p-3 font-medium">Loader</th>
-              <th class="text-left p-3 font-medium">Author</th>
-              <th class="text-right p-3 font-medium">Actions</th>
+              <th class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Name</th>
+              <th
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs hidden sm:table-cell">
+                Version</th>
+              <th class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Loader</th>
+              <th
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs hidden md:table-cell">
+                Author</th>
+              <th class="text-right p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="mod in filteredMods" :key="mod.id"
-              class="border-b last:border-0 hover:bg-accent/50 cursor-pointer transition-colors"
+              class="border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer transition-colors"
               :class="{ 'bg-primary/10': selectedModIds.has(mod.id) }" @click="toggleSelection(mod.id)">
-              <td class="p-3 font-medium">{{ mod.name }}</td>
-              <td class="p-3 text-muted-foreground">{{ mod.version }}</td>
-              <td class="p-3">
-                <span class="px-2 py-0.5 rounded-full text-xs bg-secondary">{{
-                  mod.loader
-                }}</span>
+              <td class="p-2 sm:p-3 font-medium text-xs sm:text-sm">{{ mod.name }}</td>
+              <td class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs hidden sm:table-cell">{{ mod.version }}
               </td>
-              <td class="p-3 text-muted-foreground">{{ mod.author || "-" }}</td>
-              <td class="p-3 text-right">
-                <div class="flex justify-end gap-1" @click.stop>
-                  <Button variant="ghost" size="icon" class="h-7 w-7" @click="showModDetails(mod)">
-                    <Info class="w-3.5 h-3.5" />
+              <td class="p-2 sm:p-3">
+                <span class="px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] sm:text-xs bg-white/10">{{ mod.loader
+                  }}</span>
+              </td>
+              <td class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs hidden md:table-cell">{{ mod.author ||
+                "-" }}</td>
+              <td class="p-2 sm:p-3 text-right">
+                <div class="flex justify-end gap-0.5 sm:gap-1" @click.stop>
+                  <Button variant="ghost" size="icon"
+                    class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-foreground"
+                    @click="showModDetails(mod)">
+                    <Info class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon" class="h-7 w-7" @click="openEditDialog(mod.id)">
-                    <FilePlus class="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" class="h-7 w-7 hover:text-destructive"
+                  <Button variant="ghost" size="icon"
+                    class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-destructive"
                     @click="confirmDelete(mod.id)">
-                    <Trash2 class="w-3.5 h-3.5" />
+                    <Trash2 class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   </Button>
                 </div>
               </td>
@@ -888,12 +882,12 @@ onMounted(() => {
     </div>
 
     <!-- Compact View -->
-    <div v-else class="flex-1 overflow-auto pb-20 p-1">
-      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+    <div v-else class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-[#0a0a0a]">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-1.5 sm:gap-2">
         <div v-for="mod in filteredMods" :key="mod.id"
-          class="p-2 rounded-md border cursor-pointer transition-colors hover:bg-accent/50 group" :class="{
-            'ring-2 ring-primary bg-primary/5': selectedModIds.has(mod.id),
-          }" @click="toggleSelection(mod.id)" @dblclick="showModDetails(mod)">
+          class="p-2 rounded-lg border border-white/5 cursor-pointer transition-all hover:bg-white/5 hover:border-white/10 group"
+          :class="{ 'ring-1 ring-primary bg-primary/5': selectedModIds.has(mod.id) }" @click="toggleSelection(mod.id)"
+          @dblclick="showModDetails(mod)">
           <div class="font-medium text-xs truncate">{{ mod.name }}</div>
           <div class="text-[10px] text-muted-foreground truncate">
             {{ mod.loader }} • {{ mod.version }}
@@ -903,59 +897,63 @@ onMounted(() => {
     </div>
 
     <!-- Details Sidebar -->
-    <div v-if="showDetails && detailsMod"
-      class="fixed top-0 right-0 h-full w-80 bg-background border-l shadow-lg z-40 flex flex-col animate-in slide-in-from-right duration-200">
-      <div class="p-4 border-b flex items-center justify-between">
-        <h3 class="font-semibold">Mod Details</h3>
-        <Button variant="ghost" size="icon" @click="closeDetails">
-          <X class="w-4 h-4" />
-        </Button>
-      </div>
-      <div class="flex-1 overflow-y-auto p-4 space-y-4">
-        <div>
-          <h4 class="text-lg font-bold">{{ detailsMod.name }}</h4>
-          <p class="text-sm text-muted-foreground">{{ detailsMod.version }}</p>
+    <Transition enter-active-class="transition-transform duration-200 ease-out" enter-from-class="translate-x-full"
+      enter-to-class="translate-x-0" leave-active-class="transition-transform duration-150 ease-in"
+      leave-from-class="translate-x-0" leave-to-class="translate-x-full">
+      <div v-if="showDetails && detailsMod"
+        class="fixed top-0 right-0 h-full w-80 bg-[#0a0a0a] border-l border-white/10 shadow-2xl z-40 flex flex-col">
+        <div class="p-4 border-b border-white/5 flex items-center justify-between">
+          <h3 class="font-semibold">Mod Details</h3>
+          <Button variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-foreground"
+            @click="closeDetails">
+            <X class="w-4 h-4" />
+          </Button>
         </div>
-        <div class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-muted-foreground">Loader</span>
-            <span class="px-2 py-0.5 rounded-full text-xs bg-secondary">{{
-              detailsMod.loader
-            }}</span>
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+          <div>
+            <h4 class="text-lg font-bold">{{ detailsMod.name }}</h4>
+            <p class="text-sm text-muted-foreground">{{ detailsMod.version }}</p>
           </div>
-          <div class="flex justify-between">
-            <span class="text-muted-foreground">Author</span>
-            <span>{{ detailsMod.author || "-" }}</span>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between items-center">
+              <span class="text-muted-foreground">Loader</span>
+              <span class="px-2 py-0.5 rounded-md text-xs bg-white/10">{{ detailsMod.loader }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">Author</span>
+              <span>{{ detailsMod.author || "-" }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">Game Version</span>
+              <span class="px-2 py-0.5 rounded-md text-xs bg-emerald-500/20 text-emerald-400">{{ detailsMod.game_version
+              }}</span>
+            </div>
           </div>
-          <div class="flex justify-between">
-            <span class="text-muted-foreground">Game Version</span>
-            <span>{{ detailsMod.game_version }}</span>
+          <div>
+            <span class="text-xs text-muted-foreground">Description</span>
+            <p class="text-sm mt-1 text-muted-foreground">
+              {{ detailsMod.description || "No description" }}
+            </p>
+          </div>
+          <div>
+            <span class="text-xs text-muted-foreground">Source</span>
+            <p class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5">
+              {{ detailsMod.source }} (ID: {{ detailsMod.cf_project_id }})
+            </p>
+          </div>
+          <div>
+            <span class="text-xs text-muted-foreground">Filename</span>
+            <p class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5">
+              {{ detailsMod.filename }}
+            </p>
           </div>
         </div>
-        <div>
-          <span class="text-xs text-muted-foreground">Description</span>
-          <p class="text-sm mt-1">
-            {{ detailsMod.description || "No description" }}
-          </p>
-        </div>
-        <div>
-          <span class="text-xs text-muted-foreground">Source</span>
-          <p class="text-xs mt-1 font-mono break-all bg-muted p-2 rounded">
-            {{ detailsMod.source }} (ID: {{ detailsMod.cf_project_id }})
-          </p>
-        </div>
-        <div>
-          <span class="text-xs text-muted-foreground">Filename</span>
-          <p class="text-xs mt-1 font-mono break-all bg-muted p-2 rounded">
-            {{ detailsMod.filename }}
-          </p>
+        <div class="p-4 border-t border-white/5 flex gap-2">
+          <Button variant="outline" class="flex-1" @click="openEditDialog(detailsMod.id)">Edit</Button>
+          <Button variant="destructive" class="flex-1" @click="confirmDelete(detailsMod.id)">Delete</Button>
         </div>
       </div>
-      <div class="p-4 border-t flex gap-2">
-        <Button variant="outline" class="flex-1" @click="openEditDialog(detailsMod.id)">Edit</Button>
-        <Button variant="destructive" class="flex-1" @click="confirmDelete(detailsMod.id)">Delete</Button>
-      </div>
-    </div>
+    </Transition>
 
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModIds.size > 0" :count="selectedModIds.size" label="mods" @clear="clearSelection">

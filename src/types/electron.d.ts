@@ -11,6 +11,9 @@ import type {
   ModexManifest,
   ModFolder,
   TreeNode,
+  ModpackVersion,
+  ModpackVersionHistory,
+  ModpackChange,
 } from "./index";
 
 // Re-export core types
@@ -21,6 +24,9 @@ export type {
   ModUpdateInfo,
   ModFolder,
   TreeNode,
+  ModpackVersion,
+  ModpackVersionHistory,
+  ModpackChange,
 };
 
 // ==================== ELECTRON API ====================
@@ -80,6 +86,22 @@ export interface ElectronAPI {
     clone: (modpackId: string, newName: string) => Promise<string | null>;
     setImage: (modpackId: string, imageUrl: string) => Promise<boolean>;
     openFolder: (modpackId: string) => Promise<boolean>;
+  };
+
+  // ========== VERSION CONTROL ==========
+  versions: {
+    /** Get version history for a modpack */
+    getHistory: (modpackId: string) => Promise<ModpackVersionHistory | null>;
+    /** Initialize version control for a modpack */
+    initialize: (modpackId: string, message?: string) => Promise<ModpackVersion | null>;
+    /** Create a new version (commit) */
+    create: (modpackId: string, message: string, tag?: string) => Promise<ModpackVersion | null>;
+    /** Rollback to a specific version */
+    rollback: (modpackId: string, versionId: string) => Promise<boolean>;
+    /** Compare two versions */
+    compare: (modpackId: string, fromVersionId: string, toVersionId: string) => Promise<ModpackChange[] | null>;
+    /** Get a specific version */
+    get: (modpackId: string, versionId: string) => Promise<ModpackVersion | null>;
   };
 
   // ========== EXPORT/IMPORT ==========

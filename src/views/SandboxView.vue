@@ -1,105 +1,153 @@
 <template>
-  <div class="h-full flex flex-col" :class="isLightMode ? 'bg-slate-50' : 'bg-[#0c0c0c]'">
+  <div class="h-full flex flex-col" :class="isLightMode ? 'bg-slate-50' : 'bg-[#0a0a0a]'">
     <!-- Header -->
-    <div class="px-5 py-3 border-b flex items-center gap-4 flex-wrap"
-      :class="isLightMode ? 'border-black/5' : 'border-white/5'">
-      <h2 class="text-sm font-medium" :class="isLightMode ? 'text-black/90' : 'text-white/90'">
-        Sandbox
-      </h2>
+    <div class="shrink-0 px-4 py-2.5 border-b flex items-center gap-3"
+      :class="isLightMode ? 'border-black/5 bg-white/50' : 'border-white/5 bg-white/[0.02]'">
+
+      <!-- Title -->
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg flex items-center justify-center"
+          :class="isLightMode ? 'bg-violet-100' : 'bg-violet-500/10'">
+          <svg class="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+        </div>
+        <h2 class="text-sm font-semibold" :class="isLightMode ? 'text-black/80' : 'text-white/80'">
+          Sandbox
+        </h2>
+      </div>
+
+      <!-- Divider -->
+      <div class="w-px h-5" :class="isLightMode ? 'bg-black/10' : 'bg-white/10'"></div>
 
       <!-- Search -->
       <div class="relative">
-        <input v-model="searchQuery" type="text" placeholder="Search nodes..."
-          class="w-40 px-3 py-1.5 text-xs rounded-md outline-none transition-all" :class="isLightMode
-              ? 'bg-black/5 text-black/70 placeholder:text-black/30 focus:bg-black/10'
-              : 'bg-white/5 text-white/70 placeholder:text-white/30 focus:bg-white/10'
-            " />
-        <div v-if="searchResults.length > 0"
-          class="absolute top-full left-0 mt-1 w-48 rounded-md shadow-lg z-50 max-h-48 overflow-auto" :class="isLightMode
+        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
+          :class="isLightMode ? 'text-black/30' : 'text-white/30'" fill="none" stroke="currentColor" stroke-width="2"
+          viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
+        </svg>
+        <input v-model="searchQuery" type="text" placeholder="Search..."
+          class="w-36 pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none transition-all"
+          :class="isLightMode
+            ? 'bg-black/5 text-black/70 placeholder:text-black/30 focus:bg-black/8 focus:ring-1 focus:ring-black/10'
+            : 'bg-white/5 text-white/70 placeholder:text-white/30 focus:bg-white/8 focus:ring-1 focus:ring-white/10'" />
+
+        <!-- Search Results Dropdown -->
+        <Transition name="fade">
+          <div v-if="searchResults.length > 0"
+            class="absolute top-full left-0 mt-1.5 w-56 rounded-lg shadow-xl z-50 max-h-56 overflow-auto" :class="isLightMode
               ? 'bg-white border border-black/10'
-              : 'bg-zinc-900 border border-white/10'
-            ">
-          <button v-for="node in searchResults.slice(0, 8)" :key="node.id"
-            class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors" :class="isLightMode
+              : 'bg-zinc-900 border border-white/10'">
+            <button v-for="node in searchResults.slice(0, 8)" :key="node.id"
+              class="w-full px-3 py-2 text-xs text-left flex items-center gap-2.5 transition-colors" :class="isLightMode
                 ? 'hover:bg-black/5 text-black/70'
-                : 'hover:bg-white/5 text-white/70'
-              " @click="focusOnNode(node)">
-            <span :class="node.type === 'folder'
-                ? 'text-amber-500'
-                : node.type === 'mod'
-                  ? 'text-emerald-500'
-                  : 'text-violet-500'
-              ">●</span>
-            {{ node.label }}
-          </button>
-        </div>
+                : 'hover:bg-white/5 text-white/70'" @click="focusOnNode(node)">
+              <span class="w-2 h-2 rounded-full"
+                :class="node.type === 'folder' ? 'bg-amber-500' : node.type === 'mod' ? 'bg-emerald-500' : 'bg-violet-500'"></span>
+              <span class="truncate">{{ node.label }}</span>
+              <span class="ml-auto text-[10px] opacity-50 capitalize">{{ node.type }}</span>
+            </button>
+          </div>
+        </Transition>
       </div>
 
       <!-- Filters -->
-      <div class="flex items-center gap-3 text-xs">
-        <label class="flex items-center gap-1.5 cursor-pointer"
-          :class="isLightMode ? 'text-black/60' : 'text-white/60'">
-          <input type="checkbox" v-model="showFolders" class="accent-amber-500" />
-          <span class="text-amber-500">Folders</span>
-        </label>
-        <label class="flex items-center gap-1.5 cursor-pointer"
-          :class="isLightMode ? 'text-black/60' : 'text-white/60'">
-          <input type="checkbox" v-model="showMods" class="accent-emerald-500" />
-          <span class="text-emerald-500">Mods</span>
-        </label>
-        <label class="flex items-center gap-1.5 cursor-pointer"
-          :class="isLightMode ? 'text-black/60' : 'text-white/60'">
-          <input type="checkbox" v-model="showModpacks" class="accent-violet-500" />
-          <span class="text-violet-500">Modpacks</span>
-        </label>
+      <div class="flex items-center gap-1 p-1 rounded-lg" :class="isLightMode ? 'bg-black/5' : 'bg-white/5'">
+        <button class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all flex items-center gap-1.5" :class="showFolders
+          ? 'bg-amber-500/20 text-amber-500'
+          : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
+          @click="showFolders = !showFolders">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+          Folders
+        </button>
+        <button class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all flex items-center gap-1.5" :class="showMods
+          ? 'bg-emerald-500/20 text-emerald-500'
+          : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
+          @click="showMods = !showMods">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          Mods
+        </button>
+        <button class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all flex items-center gap-1.5" :class="showModpacks
+          ? 'bg-violet-500/20 text-violet-500'
+          : (isLightMode ? 'text-black/40 hover:text-black/60' : 'text-white/40 hover:text-white/60')"
+          @click="showModpacks = !showModpacks">
+          <span class="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
+          Modpacks
+        </button>
       </div>
 
-      <div class="flex gap-2 ml-auto">
-        <button class="px-3 py-1.5 text-xs rounded-md transition-all" :class="isLightMode
-            ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black'
-            : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-          " @click="spreadNodes">
+      <!-- Stats -->
+      <div class="text-[11px] tabular-nums" :class="isLightMode ? 'text-black/40' : 'text-white/40'">
+        {{ filteredNodes.length }}<span class="opacity-50">/{{ nodes.length }}</span> nodes
+      </div>
+
+      <!-- Spacer -->
+      <div class="flex-1"></div>
+
+      <!-- Zoom Controls -->
+      <div class="flex items-center gap-1 p-1 rounded-lg" :class="isLightMode ? 'bg-black/5' : 'bg-white/5'">
+        <button class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+          :class="isLightMode ? 'hover:bg-black/10 text-black/60' : 'hover:bg-white/10 text-white/60'" @click="zoomOut"
+          title="Zoom Out">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35M8 11h6" />
+          </svg>
+        </button>
+        <span class="w-10 text-center text-[11px] tabular-nums"
+          :class="isLightMode ? 'text-black/50' : 'text-white/50'">
+          {{ zoomLevel }}%
+        </span>
+        <button class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+          :class="isLightMode ? 'hover:bg-black/10 text-black/60' : 'hover:bg-white/10 text-white/60'" @click="zoomIn"
+          title="Zoom In">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35M8 11h6M11 8v6" />
+          </svg>
+        </button>
+        <button class="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+          :class="isLightMode ? 'hover:bg-black/10 text-black/60' : 'hover:bg-white/10 text-white/60'"
+          @click="fitToView" title="Fit to View">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Layout Controls -->
+      <div class="flex items-center gap-1">
+        <button class="px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all flex items-center gap-1.5" :class="isLightMode
+          ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black/80'
+          : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'" @click="spreadNodes"
+          title="Spread nodes apart">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
           Spread
         </button>
-        <button class="px-3 py-1.5 text-xs rounded-md transition-all" :class="isLightMode
-            ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black'
-            : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-          " @click="resetLayout">
+        <button class="px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all flex items-center gap-1.5" :class="isLightMode
+          ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black/80'
+          : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'" @click="resetLayout"
+          title="Reset layout">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
           Reset
         </button>
         <button v-if="hasSavedPositions"
-          class="px-3 py-1.5 text-xs rounded-md bg-red-500/10 text-red-400/70 hover:bg-red-500/20 hover:text-red-400 transition-all"
-          @click="clearSavedPositions">
-          Clear Saved
+          class="px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all flex items-center gap-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+          @click="clearSavedPositions" title="Clear saved positions">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+          Clear
         </button>
       </div>
-    </div>
-
-    <!-- Legend -->
-    <div class="px-5 py-2 border-b flex items-center gap-6 text-xs" :class="isLightMode
-        ? 'border-black/5 text-black/50'
-        : 'border-white/5 text-white/50'
-      ">
-      <span class="flex items-center gap-2">
-        <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-        </svg>
-        <span>Folder</span>
-      </span>
-      <span class="flex items-center gap-2">
-        <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        </svg>
-        <span>Mod</span>
-      </span>
-      <span class="flex items-center gap-2">
-        <svg class="w-3.5 h-3.5 text-violet-400" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M20 7.5v9l-4 2.25L12 21l-4-2.25L4 16.5v-9L8 5.25 12 3l4 2.25L20 7.5z" />
-        </svg>
-        <span>Modpack</span>
-      </span>
-      <span class="ml-auto" :class="isLightMode ? 'text-black/30' : 'text-white/30'">{{ filteredNodes.length }} / {{
-        nodes.length }} nodes</span>
     </div>
 
     <!-- Canvas -->
@@ -173,10 +221,10 @@
 
               <!-- Label below -->
               <text :y="node.type === 'folder' ? 32 : node.type === 'mod' ? 26 : 30" text-anchor="middle" :fill="node.type === 'folder'
-                  ? 'rgba(251, 191, 36, 0.9)'
-                  : node.type === 'mod'
-                    ? 'rgba(52, 211, 153, 0.9)'
-                    : 'rgba(139, 92, 246, 0.9)'
+                ? 'rgba(251, 191, 36, 0.9)'
+                : node.type === 'mod'
+                  ? 'rgba(52, 211, 153, 0.9)'
+                  : 'rgba(139, 92, 246, 0.9)'
                 " font-size="9" font-weight="500" pointer-events="none" class="select-none">
                 {{ node.label }}
               </text>
@@ -187,17 +235,17 @@
 
       <!-- Minimap -->
       <div class="absolute bottom-4 right-4 w-32 h-24 rounded-lg overflow-hidden border shadow-lg" :class="isLightMode
-          ? 'bg-white/90 border-black/10'
-          : 'bg-zinc-900/90 border-white/10'
+        ? 'bg-white/90 border-black/10'
+        : 'bg-zinc-900/90 border-white/10'
         ">
         <svg :viewBox="`0 0 ${width} ${height}`" class="w-full h-full">
           <rect width="100%" height="100%" :fill="isLightMode ? '#f1f5f9' : '#18181b'" />
           <circle v-for="node in filteredNodes" :key="'mini-' + node.id" :cx="node.x ?? 0" :cy="node.y ?? 0" :r="4"
             :fill="node.type === 'folder'
-                ? '#fbbf24'
-                : node.type === 'mod'
-                  ? '#34d399'
-                  : '#8b5cf6'
+              ? '#fbbf24'
+              : node.type === 'mod'
+                ? '#34d399'
+                : '#8b5cf6'
               " />
         </svg>
       </div>
@@ -221,8 +269,8 @@
       <!-- Drag hint -->
       <div v-if="draggedNode?.type === 'mod'"
         class="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 text-xs rounded-md backdrop-blur" :class="isLightMode
-            ? 'bg-black/10 text-black/60'
-            : 'bg-white/10 text-white/60'
+          ? 'bg-black/10 text-black/60'
+          : 'bg-white/10 text-white/60'
           ">
         Drop on a modpack or folder
       </div>
@@ -231,13 +279,13 @@
       <Transition name="fade">
         <div v-if="contextMenu.show" class="absolute z-50 min-w-[160px] rounded-lg shadow-xl border overflow-hidden"
           :class="isLightMode
-              ? 'bg-white border-black/10'
-              : 'bg-zinc-900 border-white/10'
+            ? 'bg-white border-black/10'
+            : 'bg-zinc-900 border-white/10'
             " :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
           <div class="py-1">
             <div class="px-3 py-1.5 text-xs font-medium border-b" :class="isLightMode
-                ? 'text-black/40 border-black/5'
-                : 'text-white/40 border-white/5'
+              ? 'text-black/40 border-black/5'
+              : 'text-white/40 border-white/5'
               ">
               {{ contextMenu.node?.label }}
             </div>
@@ -245,14 +293,14 @@
             <!-- Mod actions -->
             <template v-if="contextMenu.node?.type === 'mod'">
               <button class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors" :class="isLightMode
-                  ? 'hover:bg-black/5 text-black/70'
-                  : 'hover:bg-white/5 text-white/70'
+                ? 'hover:bg-black/5 text-black/70'
+                : 'hover:bg-white/5 text-white/70'
                 " @click="contextAction('viewMod')">
                 <span>📄</span> View Details
               </button>
               <button class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors" :class="isLightMode
-                  ? 'hover:bg-black/5 text-black/70'
-                  : 'hover:bg-white/5 text-white/70'
+                ? 'hover:bg-black/5 text-black/70'
+                : 'hover:bg-white/5 text-white/70'
                 " @click="contextAction('removeFolderAssignment')">
                 <span>📁</span> Remove from Folder
               </button>
@@ -261,8 +309,8 @@
             <!-- Folder actions -->
             <template v-if="contextMenu.node?.type === 'folder'">
               <button class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors" :class="isLightMode
-                  ? 'hover:bg-black/5 text-black/70'
-                  : 'hover:bg-white/5 text-white/70'
+                ? 'hover:bg-black/5 text-black/70'
+                : 'hover:bg-white/5 text-white/70'
                 " @click="contextAction('viewFolder')">
                 <span>📂</span> View Folder
               </button>
@@ -271,14 +319,14 @@
             <!-- Modpack actions -->
             <template v-if="contextMenu.node?.type === 'modpack'">
               <button class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors" :class="isLightMode
-                  ? 'hover:bg-black/5 text-black/70'
-                  : 'hover:bg-white/5 text-white/70'
+                ? 'hover:bg-black/5 text-black/70'
+                : 'hover:bg-white/5 text-white/70'
                 " @click="contextAction('viewModpack')">
                 <span>📦</span> View Modpack
               </button>
               <button class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors" :class="isLightMode
-                  ? 'hover:bg-black/5 text-black/70'
-                  : 'hover:bg-white/5 text-white/70'
+                ? 'hover:bg-black/5 text-black/70'
+                : 'hover:bg-white/5 text-white/70'
                 " @click="contextAction('exportModpack')">
                 <span>📤</span> Export
               </button>
@@ -287,8 +335,8 @@
             <!-- Common actions -->
             <div class="border-t my-1" :class="isLightMode ? 'border-black/5' : 'border-white/5'"></div>
             <button class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors" :class="isLightMode
-                ? 'hover:bg-black/5 text-black/70'
-                : 'hover:bg-white/5 text-white/70'
+              ? 'hover:bg-black/5 text-black/70'
+              : 'hover:bg-white/5 text-white/70'
               " @click="contextAction('centerOnNode')">
               <span>🎯</span> Center View
             </button>
@@ -300,20 +348,20 @@
       <Transition name="slide">
         <div v-if="detailNode" class="absolute top-4 left-4 w-72 rounded-lg shadow-xl border overflow-hidden z-40"
           :class="isLightMode
-              ? 'bg-white border-black/10'
-              : 'bg-zinc-900 border-white/10'
+            ? 'bg-white border-black/10'
+            : 'bg-zinc-900 border-white/10'
             ">
           <!-- Header -->
           <div class="px-4 py-3 border-b flex items-center justify-between" :class="isLightMode
-              ? 'border-black/5 bg-black/5'
-              : 'border-white/5 bg-white/5'
+            ? 'border-black/5 bg-black/5'
+            : 'border-white/5 bg-white/5'
             ">
             <div class="flex items-center gap-2">
               <span :class="detailNode.type === 'folder'
-                  ? 'text-amber-500'
-                  : detailNode.type === 'mod'
-                    ? 'text-emerald-500'
-                    : 'text-violet-500'
+                ? 'text-amber-500'
+                : detailNode.type === 'mod'
+                  ? 'text-emerald-500'
+                  : 'text-violet-500'
                 ">
                 {{
                   detailNode.type === "folder"
@@ -336,8 +384,8 @@
             </div>
             <button @click="detailNode = null"
               class="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors" :class="isLightMode
-                  ? 'text-black/50 hover:text-black'
-                  : 'text-white/50 hover:text-white'
+                ? 'text-black/50 hover:text-black'
+                : 'text-white/50 hover:text-white'
                 ">
               ✕
             </button>
@@ -449,42 +497,42 @@
 
           <!-- Actions -->
           <div class="px-4 py-3 border-t flex gap-2" :class="isLightMode
-              ? 'border-black/5 bg-black/5'
-              : 'border-white/5 bg-white/5'
+            ? 'border-black/5 bg-black/5'
+            : 'border-white/5 bg-white/5'
             ">
             <button v-if="detailNode.type === 'mod'" class="flex-1 px-3 py-1.5 text-xs rounded transition-colors"
               :class="isLightMode
-                  ? 'bg-black/10 hover:bg-black/20 text-black/70'
-                  : 'bg-white/10 hover:bg-white/20 text-white/70'
+                ? 'bg-black/10 hover:bg-black/20 text-black/70'
+                : 'bg-white/10 hover:bg-white/20 text-white/70'
                 " @click="
-                router.push('/library');
-              detailNode = null;
-              ">
+                  router.push('/library');
+                detailNode = null;
+                ">
               Go to Library
             </button>
             <button v-if="detailNode.type === 'modpack'" class="flex-1 px-3 py-1.5 text-xs rounded transition-colors"
               :class="isLightMode
-                  ? 'bg-black/10 hover:bg-black/20 text-black/70'
-                  : 'bg-white/10 hover:bg-white/20 text-white/70'
+                ? 'bg-black/10 hover:bg-black/20 text-black/70'
+                : 'bg-white/10 hover:bg-white/20 text-white/70'
                 " @click="
-                router.push('/modpacks');
-              detailNode = null;
-              ">
+                  router.push('/modpacks');
+                detailNode = null;
+                ">
               Go to Modpacks
             </button>
             <button v-if="detailNode.type === 'folder'" class="flex-1 px-3 py-1.5 text-xs rounded transition-colors"
               :class="isLightMode
-                  ? 'bg-black/10 hover:bg-black/20 text-black/70'
-                  : 'bg-white/10 hover:bg-white/20 text-white/70'
+                ? 'bg-black/10 hover:bg-black/20 text-black/70'
+                : 'bg-white/10 hover:bg-white/20 text-white/70'
                 " @click="
-                router.push('/organize');
-              detailNode = null;
-              ">
+                  router.push('/organize');
+                detailNode = null;
+                ">
               Go to Organize
             </button>
             <button class="px-3 py-1.5 text-xs rounded transition-colors" :class="isLightMode
-                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600'
-                : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'
+              ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600'
+              : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'
               " @click="
                 focusOnNode(detailNode);
               detailNode = null;
@@ -588,6 +636,10 @@ const dropTarget = ref<GraphNode | null>(null);
 const feedbackMessage = ref<string | null>(null);
 const hasSavedPositions = ref(false);
 
+// Zoom level tracking
+const currentZoomScale = ref(1);
+const zoomLevel = computed(() => Math.round(currentZoomScale.value * 100));
+
 let simulation: d3.Simulation<GraphNode, GraphLink> | null = null;
 let zoom: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null;
 
@@ -611,12 +663,12 @@ const filteredLinks = computed(() => {
 const renderedLinks = computed(() => filteredLinks.value);
 
 // Theme colors
-const bgColor = computed(() => (isLightMode.value ? "#f8fafc" : "#0c0c0c"));
+const bgColor = computed(() => (isLightMode.value ? "#f8fafc" : "#0a0a0a"));
 const dotColor = computed(() =>
-  isLightMode.value ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.05)"
+  isLightMode.value ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)"
 );
 const linkColor = computed(() =>
-  isLightMode.value ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.08)"
+  isLightMode.value ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.06)"
 );
 const textColor = computed(() =>
   isLightMode.value ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.7)"
@@ -822,9 +874,75 @@ function initZoom() {
     .scaleExtent([0.1, 4])
     .on("zoom", (event) => {
       d3.select(zoomGroup.value).attr("transform", event.transform);
+      currentZoomScale.value = event.transform.k;
     });
 
   d3.select(svgEl.value).call(zoom);
+}
+
+// Zoom control functions
+function zoomIn() {
+  if (!svgEl.value || !zoom) return;
+  d3.select(svgEl.value)
+    .transition()
+    .duration(200)
+    .call(zoom.scaleBy, 1.3);
+}
+
+function zoomOut() {
+  if (!svgEl.value || !zoom) return;
+  d3.select(svgEl.value)
+    .transition()
+    .duration(200)
+    .call(zoom.scaleBy, 0.7);
+}
+
+function fitToView() {
+  if (!svgEl.value || !zoom || filteredNodes.value.length === 0) return;
+
+  // Calculate bounding box of all visible nodes
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+
+  filteredNodes.value.forEach(node => {
+    const x = node.x || 0;
+    const y = node.y || 0;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  });
+
+  // Add padding
+  const padding = 80;
+  minX -= padding;
+  maxX += padding;
+  minY -= padding;
+  maxY += padding;
+
+  const boxWidth = maxX - minX;
+  const boxHeight = maxY - minY;
+
+  // Calculate scale to fit
+  const scale = Math.min(
+    width.value / boxWidth,
+    height.value / boxHeight,
+    2 // Max scale
+  ) * 0.9;
+
+  // Calculate center
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  const transform = d3.zoomIdentity
+    .translate(width.value / 2, height.value / 2)
+    .scale(scale)
+    .translate(-centerX, -centerY);
+
+  d3.select(svgEl.value)
+    .transition()
+    .duration(500)
+    .call(zoom.transform, transform);
 }
 
 function spreadNodes() {

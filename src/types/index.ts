@@ -209,6 +209,8 @@ export interface ModexManifest {
   stats: {
     mod_count: number;
   };
+  /** Version control history (optional, included if modpack has versions) */
+  version_history?: ModpackVersionHistory;
 }
 
 export interface ModexManifestMod {
@@ -239,6 +241,53 @@ export interface ModUpdateInfo {
   /** New file ID to update to */
   newFileId?: number;
   newVersionId?: string;
+}
+
+// ==================== VERSION CONTROL ====================
+
+/** A single change in a modpack version */
+export interface ModpackChange {
+  type: "add" | "remove" | "update";
+  modId: string;
+  modName: string;
+  /** For updates: previous version string */
+  previousVersion?: string;
+  /** For updates: new version string */
+  newVersion?: string;
+  /** For updates: previous file ID */
+  previousFileId?: number;
+  /** For updates: new file ID */
+  newFileId?: number;
+}
+
+/** A snapshot/commit of the modpack state */
+export interface ModpackVersion {
+  /** Unique version ID (e.g., "v1", "v2", or timestamp) */
+  id: string;
+  /** Version tag (e.g., "1.0.0", "1.1.0") */
+  tag: string;
+  /** Commit message */
+  message: string;
+  /** Timestamp of when this version was created */
+  created_at: string;
+  /** Author (for future multi-user support) */
+  author?: string;
+  /** List of changes from previous version */
+  changes: ModpackChange[];
+  /** Complete snapshot of mod IDs at this version */
+  mod_ids: string[];
+  /** Parent version ID (for branching support in the future) */
+  parent_id?: string;
+}
+
+/** Version control history for a modpack */
+export interface ModpackVersionHistory {
+  /** Modpack ID this history belongs to */
+  modpack_id: string;
+  /** Current/latest version ID */
+  current_version_id: string;
+  /** All versions, ordered from oldest to newest */
+  versions: ModpackVersion[];
 }
 
 // ==================== API CONFIG ====================

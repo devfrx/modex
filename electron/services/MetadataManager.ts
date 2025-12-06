@@ -90,11 +90,41 @@ interface AppConfig {
   modrinth_api_key?: string;
 }
 
+// ==================== VERSION CONTROL TYPES ====================
+
+export interface ModpackChange {
+  type: "add" | "remove" | "update";
+  modId: string;
+  modName: string;
+  previousVersion?: string;
+  newVersion?: string;
+  previousFileId?: number;
+  newFileId?: number;
+}
+
+export interface ModpackVersion {
+  id: string;
+  tag: string;
+  message: string;
+  created_at: string;
+  author?: string;
+  changes: ModpackChange[];
+  mod_ids: string[];
+  parent_id?: string;
+}
+
+export interface ModpackVersionHistory {
+  modpack_id: string;
+  current_version_id: string;
+  versions: ModpackVersion[];
+}
+
 // ==================== MANAGER ====================
 
 export class MetadataManager {
   private baseDir: string;
   private modpacksDir: string;
+  private versionsDir: string;
   private cacheDir: string;
   private libraryPath: string;
   private configPath: string;
@@ -105,6 +135,7 @@ export class MetadataManager {
   constructor() {
     this.baseDir = path.join(app.getPath("userData"), "modex");
     this.modpacksDir = path.join(this.baseDir, "modpacks");
+    this.versionsDir = path.join(this.baseDir, "versions");
     this.cacheDir = path.join(this.baseDir, "cache");
     this.libraryPath = path.join(this.baseDir, "library.json");
     this.configPath = path.join(this.baseDir, "config.json");
@@ -114,6 +145,7 @@ export class MetadataManager {
   private async ensureDirectories(): Promise<void> {
     await fs.ensureDir(this.baseDir);
     await fs.ensureDir(this.modpacksDir);
+    await fs.ensureDir(this.versionsDir);
     await fs.ensureDir(this.cacheDir);
   }
 
@@ -406,6 +438,8 @@ export class MetadataManager {
 
     try {
       await fs.remove(modpackPath);
+      // Also delete version history
+      await this.deleteVersionHistory(id);
       return true;
     } catch (error) {
       console.error(`Failed to delete modpack ${id}:`, error);
@@ -483,6 +517,263 @@ export class MetadataManager {
     modpack.updated_at = new Date().toISOString();
     await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
     return true;
+  }
+
+  // ==================== VERSION CONTROL ====================
+
+  private getVersionHistoryPath(modpackId: string): string {
+    return path.join(this.versionsDir, `${modpackId}.json`);
+  }
+
+  /**
+   * Get version history for a modpack
+   */
+  async getVersionHistory(modpackId: string): Promise<ModpackVersionHistory | null> {
+    const historyPath = this.getVersionHistoryPath(modpackId);
+    
+    try {
+      if (await fs.pathExists(historyPath)) {
+        return await fs.readJson(historyPath);
+      }
+    } catch (error) {
+      console.error(`Failed to read version history for ${modpackId}:`, error);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Save version history for a modpack
+   */
+  private async saveVersionHistory(history: ModpackVersionHistory): Promise<void> {
+    const historyPath = this.getVersionHistoryPath(history.modpack_id);
+    await fs.writeJson(historyPath, history, { spaces: 2 });
+  }
+
+  /**
+   * Initialize version control for a modpack (create first version)
+   */
+  async initializeVersionControl(modpackId: string, message: string = "Initial version"): Promise<ModpackVersion | null> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return null;
+
+    // Check if already initialized
+    const existing = await this.getVersionHistory(modpackId);
+    if (existing && existing.versions.length > 0) {
+      console.log(`Version control already initialized for ${modpackId}`);
+      return existing.versions[existing.versions.length - 1];
+    }
+
+    const versionId = `v1`;
+    const version: ModpackVersion = {
+      id: versionId,
+      tag: modpack.version || "1.0.0",
+      message,
+      created_at: new Date().toISOString(),
+      changes: [],
+      mod_ids: [...modpack.mod_ids],
+    };
+
+    const history: ModpackVersionHistory = {
+      modpack_id: modpackId,
+      current_version_id: versionId,
+      versions: [version],
+    };
+
+    await this.saveVersionHistory(history);
+    return version;
+  }
+
+  /**
+   * Create a new version (commit) for a modpack
+   */
+  async createVersion(
+    modpackId: string, 
+    message: string, 
+    tag?: string
+  ): Promise<ModpackVersion | null> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return null;
+
+    let history = await this.getVersionHistory(modpackId);
+    
+    // Auto-initialize if no history exists
+    if (!history) {
+      const initialVersion = await this.initializeVersionControl(modpackId, "Initial version");
+      if (!initialVersion) return null;
+      history = await this.getVersionHistory(modpackId);
+      if (!history) return null;
+    }
+
+    const currentVersion = history.versions.find(v => v.id === history!.current_version_id);
+    if (!currentVersion) return null;
+
+    // Calculate changes from current version
+    const changes = this.calculateChanges(currentVersion.mod_ids, modpack.mod_ids, await this.loadLibrary());
+
+    // If no changes, don't create a new version
+    if (changes.length === 0) {
+      console.log(`No changes detected for modpack ${modpackId}`);
+      return currentVersion;
+    }
+
+    // Generate next version ID
+    const nextVersionNumber = history.versions.length + 1;
+    const versionId = `v${nextVersionNumber}`;
+    
+    // Generate tag if not provided
+    const versionTag = tag || this.generateNextTag(currentVersion.tag);
+
+    const newVersion: ModpackVersion = {
+      id: versionId,
+      tag: versionTag,
+      message,
+      created_at: new Date().toISOString(),
+      changes,
+      mod_ids: [...modpack.mod_ids],
+      parent_id: currentVersion.id,
+    };
+
+    history.versions.push(newVersion);
+    history.current_version_id = versionId;
+
+    await this.saveVersionHistory(history);
+    
+    // Update modpack version to match
+    await this.updateModpack(modpackId, { version: versionTag });
+
+    return newVersion;
+  }
+
+  /**
+   * Calculate changes between two mod_ids arrays
+   */
+  private calculateChanges(
+    oldModIds: string[], 
+    newModIds: string[], 
+    library: LibraryData
+  ): ModpackChange[] {
+    const changes: ModpackChange[] = [];
+    const oldSet = new Set(oldModIds);
+    const newSet = new Set(newModIds);
+    const modMap = new Map(library.mods.map(m => [m.id, m]));
+
+    // Find removed mods
+    for (const modId of oldModIds) {
+      if (!newSet.has(modId)) {
+        const mod = modMap.get(modId);
+        changes.push({
+          type: "remove",
+          modId,
+          modName: mod?.name || modId,
+          previousVersion: mod?.version,
+        });
+      }
+    }
+
+    // Find added mods
+    for (const modId of newModIds) {
+      if (!oldSet.has(modId)) {
+        const mod = modMap.get(modId);
+        changes.push({
+          type: "add",
+          modId,
+          modName: mod?.name || modId,
+          newVersion: mod?.version,
+        });
+      }
+    }
+
+    // Note: Updates are detected when mod IDs change (because file ID is part of the ID)
+    // We could also track same-project updates by comparing cf_project_id
+
+    return changes;
+  }
+
+  /**
+   * Generate the next semantic version tag
+   */
+  private generateNextTag(currentTag: string): string {
+    const parts = currentTag.split(".");
+    if (parts.length === 3) {
+      const patch = parseInt(parts[2], 10) || 0;
+      return `${parts[0]}.${parts[1]}.${patch + 1}`;
+    }
+    return `${currentTag}.1`;
+  }
+
+  /**
+   * Rollback modpack to a specific version
+   */
+  async rollbackToVersion(modpackId: string, versionId: string): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return false;
+
+    const history = await this.getVersionHistory(modpackId);
+    if (!history) return false;
+
+    const targetVersion = history.versions.find(v => v.id === versionId);
+    if (!targetVersion) return false;
+
+    // Update modpack with the version's mod_ids
+    modpack.mod_ids = [...targetVersion.mod_ids];
+    modpack.version = targetVersion.tag;
+    modpack.updated_at = new Date().toISOString();
+    
+    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+
+    // Create a rollback commit
+    const rollbackVersion = await this.createVersion(
+      modpackId, 
+      `Rollback to ${targetVersion.tag}`,
+      `${targetVersion.tag}-rollback`
+    );
+
+    return rollbackVersion !== null;
+  }
+
+  /**
+   * Get version by ID
+   */
+  async getVersion(modpackId: string, versionId: string): Promise<ModpackVersion | null> {
+    const history = await this.getVersionHistory(modpackId);
+    if (!history) return null;
+    
+    return history.versions.find(v => v.id === versionId) || null;
+  }
+
+  /**
+   * Compare two versions and return the diff
+   */
+  async compareVersions(
+    modpackId: string, 
+    fromVersionId: string, 
+    toVersionId: string
+  ): Promise<ModpackChange[] | null> {
+    const history = await this.getVersionHistory(modpackId);
+    if (!history) return null;
+
+    const fromVersion = history.versions.find(v => v.id === fromVersionId);
+    const toVersion = history.versions.find(v => v.id === toVersionId);
+    
+    if (!fromVersion || !toVersion) return null;
+
+    const library = await this.loadLibrary();
+    return this.calculateChanges(fromVersion.mod_ids, toVersion.mod_ids, library);
+  }
+
+  /**
+   * Delete version history when modpack is deleted
+   */
+  async deleteVersionHistory(modpackId: string): Promise<void> {
+    const historyPath = this.getVersionHistoryPath(modpackId);
+    try {
+      if (await fs.pathExists(historyPath)) {
+        await fs.remove(historyPath);
+      }
+    } catch (error) {
+      console.error(`Failed to delete version history for ${modpackId}:`, error);
+    }
   }
 
   // ==================== EXPORT ====================
@@ -586,6 +877,9 @@ ${modLinks}
       .digest("hex")
       .substring(0, 16);
 
+    // Get version history if available
+    const versionHistory = await this.getVersionHistory(modpackId);
+
     const manifest = {
       modex_version: "2.0",
       share_code: code,
@@ -615,6 +909,8 @@ ${modLinks}
       stats: {
         mod_count: mods.length,
       },
+      // Include version history if available
+      version_history: versionHistory || undefined,
     };
 
     return { manifest, code, checksum };
@@ -1066,6 +1362,34 @@ ${modLinks}
       await fs.writeJson(this.getModpackPath(modpackId), modpack, {
         spaces: 2,
       });
+    }
+
+    // Import version history if present in manifest
+    if (manifest.version_history && Array.isArray(manifest.version_history) && manifest.version_history.length > 0) {
+      console.log(`[Import] Importing ${manifest.version_history.length} version history entries`);
+      
+      // Get existing history (if updating)
+      const existingHistory = await this.getVersionHistory(modpackId);
+      
+      // Create a map of existing version IDs to avoid duplicates
+      const existingVersionIds = new Set(existingHistory.entries.map(e => e.version_id));
+      
+      // Add only new entries from manifest
+      let importedCount = 0;
+      for (const entry of manifest.version_history) {
+        if (!existingVersionIds.has(entry.version_id)) {
+          existingHistory.entries.push(entry);
+          importedCount++;
+        }
+      }
+      
+      // Sort by timestamp (oldest first)
+      existingHistory.entries.sort((a, b) => 
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      
+      await this.saveVersionHistory(modpackId, existingHistory);
+      console.log(`[Import] Imported ${importedCount} new version history entries (${manifest.version_history.length - importedCount} duplicates skipped)`);
     }
 
     // Calculate changes if update

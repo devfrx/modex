@@ -11,11 +11,16 @@ import {
   ImagePlus,
   ArrowUpCircle,
   Lock,
-  Edit,
   Save,
+  GitBranch,
+  Package,
+  Settings,
+  Layers,
+  AlertCircle,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
+import VersionHistoryPanel from "@/components/modpacks/VersionHistoryPanel.vue";
 import type { Mod, Modpack } from "@/types/electron";
 
 const props = defineProps<{
@@ -37,13 +42,12 @@ const availableMods = ref<Mod[]>([]);
 const searchQueryInstalled = ref("");
 const searchQueryAvailable = ref("");
 const isLoading = ref(true);
-const isRefreshingMetadata = ref(false);
 const sortBy = ref<"name" | "version">("name");
 const sortDir = ref<"asc" | "desc">("asc");
 const selectedModIds = ref<Set<string>>(new Set());
 const showUpdatesDialog = ref(false);
-const showEditInfo = ref(false);
 const isSaving = ref(false);
+const activeTab = ref<"mods" | "versions" | "settings">("mods");
 
 // Editable form fields
 const editForm = ref({
@@ -90,7 +94,6 @@ function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
 
   // Check loader compatibility
   if (packLoader && modLoader && modLoader !== "unknown") {
-    // NeoForge and Forge have some compatibility
     const isNeoForgeForgeCompat =
       (packLoader === "neoforge" && modLoader === "forge") ||
       (packLoader === "forge" && modLoader === "neoforge");
@@ -121,15 +124,6 @@ function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
 
   return { compatible: true };
 }
-
-// Stats
-const loaderStats = computed(() => {
-  const stats: Record<string, number> = {};
-  for (const mod of currentMods.value) {
-    stats[mod.loader] = (stats[mod.loader] || 0) + 1;
-  }
-  return Object.entries(stats).map(([loader, count]) => ({ loader, count }));
-});
 
 // Filtered & Sorted Mods
 const filteredInstalledMods = computed(() => {
@@ -165,7 +159,6 @@ const filteredAvailableMods = computed(() => {
           incompatibilityReason: compatibility.reason,
         };
       })
-      // Sort: compatible mods first, then incompatible
       .sort((a, b) => {
         if (a.isCompatible && !b.isCompatible) return -1;
         if (!a.isCompatible && b.isCompatible) return 1;
@@ -173,6 +166,10 @@ const filteredAvailableMods = computed(() => {
       })
   );
 });
+
+// Compatibility stats
+const compatibleCount = computed(() => filteredAvailableMods.value.filter(m => m.isCompatible).length);
+const incompatibleCount = computed(() => filteredAvailableMods.value.filter(m => !m.isCompatible).length);
 
 async function loadData() {
   if (!props.modpackId) return;
@@ -219,10 +216,9 @@ async function saveModpackInfo() {
       loader: editForm.value.loader,
     });
 
-    // Reload data to reflect changes
     await loadData();
-    showEditInfo.value = false;
     emit("update");
+    toast.success("Saved", "Modpack settings updated");
   } catch (err) {
     console.error("Failed to save modpack info:", err);
     toast.error("Save Failed", (err as Error).message);
@@ -256,14 +252,13 @@ async function removeMod(modId: string) {
 async function removeSelectedMods() {
   if (selectedModIds.value.size === 0) return;
 
-  // Copy the Set to an array before iterating to avoid mutation issues
   const idsToRemove: string[] = Array.from(selectedModIds.value);
 
   try {
     for (const id of idsToRemove) {
       await window.api.modpacks.removeMod(props.modpackId, id);
     }
-    selectedModIds.value = new Set(); // Clear selection reactively
+    selectedModIds.value = new Set();
     await loadData();
     emit("update");
   } catch (err) {
@@ -305,7 +300,6 @@ function toggleSort(field: "name" | "version") {
 async function selectImage() {
   const imagePath = await window.api.dialogs.selectImage();
   if (imagePath && modpack.value) {
-    // Use the new setImage API that stores the URL
     const success = await window.api.modpacks.setImage(
       props.modpackId,
       imagePath
@@ -325,7 +319,6 @@ watch(
   { immediate: true }
 );
 
-// Also watch modpackId changes
 watch(
   () => props.modpackId,
   () => {
@@ -336,263 +329,353 @@ watch(
 
 <template>
   <div v-if="isOpen"
-    class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+    class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
     <div
-      class="bg-background border rounded-lg shadow-lg w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-      <!-- Header -->
-      <div class="p-4 border-b bg-card/50">
-        <!-- View mode -->
-        <div v-if="!showEditInfo" class="flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-bold">
-              {{ modpack?.name || "Loading..." }}
-            </h2>
-            <div class="flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{{ modpack?.version }}</span>
-              <span>•</span>
-              <span class="font-medium text-foreground">{{
-                currentMods.length
-              }}</span>
-              mods
-              <span v-if="modpack?.minecraft_version"
-                class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs">
-                {{ modpack.minecraft_version }}
-              </span>
-              <span v-if="modpack?.loader"
-                class="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs capitalize">
-                {{ modpack.loader }}
-              </span>
+      class="bg-background border border-border/50 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+
+      <!-- Compact Header -->
+      <div class="shrink-0 border-b border-border/50 bg-gradient-to-r from-card/80 to-card/40">
+        <!-- Top Bar -->
+        <div class="px-5 py-3 flex items-center gap-4">
+          <!-- Pack Info -->
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <!-- Thumbnail -->
+            <div v-if="modpack?.image_url" class="w-10 h-10 rounded-lg overflow-hidden ring-2 ring-primary/20 shrink-0">
+              <img :src="modpack.image_url" class="w-full h-full object-cover" />
             </div>
-            <p v-if="modpack?.description" class="text-sm text-muted-foreground mt-1 line-clamp-1">
-              {{ modpack.description }}
-            </p>
+            <div v-else
+              class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-primary/20 shrink-0">
+              <Package class="w-5 h-5 text-primary" />
+            </div>
+
+            <!-- Name & Meta -->
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <h2 class="text-lg font-bold truncate">{{ modpack?.name || "Loading..." }}</h2>
+                <span v-if="modpack?.version" class="text-xs text-muted-foreground font-mono">v{{ modpack.version
+                  }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span v-if="modpack?.minecraft_version"
+                  class="px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium">
+                  {{ modpack.minecraft_version }}
+                </span>
+                <span v-if="modpack?.loader"
+                  class="px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-500 font-medium capitalize">
+                  {{ modpack.loader }}
+                </span>
+                <span class="text-muted-foreground">
+                  <Layers class="w-3 h-3 inline mr-0.5" />
+                  {{ currentMods.length }} mods
+                </span>
+              </div>
+            </div>
           </div>
-          <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" @click="showEditInfo = true" title="Edit modpack info">
-              <Edit class="w-4 h-4" />
-            </Button>
-            <Button variant="outline" size="sm" class="gap-2" @click="selectImage" title="Set cover image">
+
+          <!-- Actions -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            <Button variant="ghost" size="sm" class="h-8 px-2.5 gap-1.5" @click="selectImage" title="Set cover image">
               <ImagePlus class="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" class="gap-2"
-              :disabled="!modpack?.minecraft_version || !modpack?.loader" :title="!modpack?.minecraft_version || !modpack?.loader
-                ? 'Set Minecraft version and loader first'
-                : 'Check for mod updates'
-                " @click="showUpdatesDialog = true">
+            <Button variant="ghost" size="sm" class="h-8 px-2.5 gap-1.5"
+              :disabled="!modpack?.minecraft_version || !modpack?.loader"
+              :title="!modpack?.minecraft_version || !modpack?.loader ? 'Set version and loader first' : 'Check updates'"
+              @click="showUpdatesDialog = true">
               <ArrowUpCircle class="w-4 h-4" />
-              Updates
             </Button>
-            <Button variant="outline" size="sm" class="gap-2" @click="$emit('export')" title="Export as ZIP file">
+            <Button variant="outline" size="sm" class="h-8 px-3 gap-1.5" @click="$emit('export')">
               <Download class="w-4 h-4" />
-              Export ZIP
+              <span class="hidden sm:inline">Export</span>
             </Button>
-            <Button variant="ghost" size="icon" @click="$emit('close')">
+            <Button variant="ghost" size="sm" class="h-8 w-8 p-0 ml-1" @click="$emit('close')">
               <X class="w-5 h-5" />
             </Button>
           </div>
         </div>
 
-        <!-- Edit mode -->
-        <div v-else class="space-y-3">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">Edit Modpack Info</h2>
-            <div class="flex items-center gap-2">
-              <Button variant="outline" size="sm" @click="showEditInfo = false" :disabled="isSaving">
-                Cancel
-              </Button>
-              <Button size="sm" class="gap-2" @click="saveModpackInfo" :disabled="isSaving">
-                <Save class="w-4 h-4" />
-                {{ isSaving ? "Saving..." : "Save" }}
-              </Button>
+        <!-- Tab Navigation -->
+        <div class="px-5 flex items-center gap-1">
+          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'mods'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'" @click="activeTab = 'mods'">
+            <div class="flex items-center gap-1.5">
+              <Layers class="w-4 h-4" />
+              Mods
             </div>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs text-muted-foreground mb-1 block">Name</label>
-              <input v-model="editForm.name" type="text"
-                class="w-full h-9 px-3 rounded-md border bg-background text-sm" />
+            <div v-if="activeTab === 'mods'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          </button>
+          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'versions'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'" @click="activeTab = 'versions'">
+            <div class="flex items-center gap-1.5">
+              <GitBranch class="w-4 h-4" />
+              History
             </div>
-            <div>
-              <label class="text-xs text-muted-foreground mb-1 block">Version</label>
-              <input v-model="editForm.version" type="text"
-                class="w-full h-9 px-3 rounded-md border bg-background text-sm" placeholder="1.0.0" />
+            <div v-if="activeTab === 'versions'"
+              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          </button>
+          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'settings'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'" @click="activeTab = 'settings'">
+            <div class="flex items-center gap-1.5">
+              <Settings class="w-4 h-4" />
+              Settings
             </div>
-            <div>
-              <label class="text-xs text-muted-foreground mb-1 block flex items-center gap-1.5">
-                Minecraft Version
-                <Lock v-if="isExistingModpack" class="w-3 h-3" title="Cannot change version of existing modpack" />
-              </label>
-              <select v-model="editForm.minecraft_version" :disabled="isExistingModpack"
-                class="w-full h-9 px-3 rounded-md border bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                :title="isExistingModpack ? 'Cannot change version of existing modpack. Use conversion feature to create a copy with different version.' : ''">
-                <option value="">Select version...</option>
-                <option v-for="v in gameVersions" :key="v" :value="v">
-                  {{ v }}
-                </option>
-              </select>
-            </div>
-            <div>
-              <label class="text-xs text-muted-foreground mb-1 block flex items-center gap-1.5">
-                Mod Loader
-                <Lock v-if="isExistingModpack" class="w-3 h-3" title="Cannot change loader of existing modpack" />
-              </label>
-              <select v-model="editForm.loader" :disabled="isExistingModpack"
-                class="w-full h-9 px-3 rounded-md border bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed capitalize"
-                :title="isExistingModpack ? 'Cannot change loader of existing modpack. Use conversion feature to create a copy with different loader.' : ''">
-                <option value="">Select loader...</option>
-                <option v-for="l in loaders" :key="l" :value="l" class="capitalize">
-                  {{ l }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label class="text-xs text-muted-foreground mb-1 block">Description</label>
-            <textarea v-model="editForm.description" rows="2"
-              class="w-full px-3 py-2 rounded-md border bg-background text-sm resize-none"
-              placeholder="Modpack description..."></textarea>
-          </div>
+            <div v-if="activeTab === 'settings'"
+              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          </button>
         </div>
       </div>
 
       <!-- Content -->
       <div class="flex-1 flex overflow-hidden">
-        <!-- Left: Installed Mods -->
-        <div class="w-1/2 border-r flex flex-col bg-card/30">
-          <div class="p-3 border-b bg-muted/20 space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="font-medium text-sm">Installed Mods</span>
-              <Button v-if="selectedModIds.size > 0" variant="destructive" size="sm" class="h-7 text-xs gap-1"
-                @click="removeSelectedMods">
-                <Trash2 class="w-3 h-3" />
-                Remove ({{ selectedModIds.size }})
-              </Button>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="relative flex-1">
-                <Search class="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                <input v-model="searchQueryInstalled" placeholder="Search installed..."
-                  class="w-full h-7 pl-7 pr-2 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
+        <!-- Mods Tab -->
+        <template v-if="activeTab === 'mods'">
+          <!-- Left: Installed Mods -->
+          <div class="w-1/2 border-r border-border/50 flex flex-col">
+            <!-- Header -->
+            <div class="shrink-0 p-3 border-b border-border/30 bg-muted/20">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-semibold text-sm">Installed</span>
+                <Transition name="fade">
+                  <Button v-if="selectedModIds.size > 0" variant="destructive" size="sm" class="h-7 text-xs gap-1"
+                    @click="removeSelectedMods">
+                    <Trash2 class="w-3 h-3" />
+                    Remove {{ selectedModIds.size }}
+                  </Button>
+                </Transition>
               </div>
-              <div class="flex gap-1">
-                <button class="h-7 text-xs px-2 rounded-md transition-colors hover:bg-accent"
-                  :class="sortBy === 'name' ? 'bg-accent' : ''" @click="toggleSort('name')">
-                  Name
-                </button>
-                <button class="h-7 text-xs px-2 rounded-md transition-colors hover:bg-accent"
-                  :class="sortBy === 'version' ? 'bg-accent' : ''" @click="toggleSort('version')">
-                  Version
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div v-for="mod in filteredInstalledMods" :key="mod.id"
-              class="flex items-center gap-2 p-2 rounded-md border transition-colors group cursor-pointer" :class="selectedModIds.has(mod.id)
-                ? 'bg-primary/10 border-primary'
-                : 'bg-background hover:bg-accent/50'
-                " @click="toggleSelect(mod.id)">
-              <div class="w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors" :class="selectedModIds.has(mod.id)
-                ? 'bg-primary border-primary'
-                : 'border-muted-foreground/30'
-                ">
-                <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3 text-primary-foreground" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-                <div class="flex items-center gap-1.5 mt-0.5">
-                  <span v-if="mod.game_version && mod.game_version !== 'unknown'"
-                    class="text-[10px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{ mod.game_version
-                    }}</span>
-                  <span v-if="mod.loader && mod.loader !== 'unknown'"
-                    class="text-[10px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 capitalize">{{ mod.loader
-                    }}</span>
-                  <span v-if="mod.version" class="text-[10px] text-muted-foreground truncate max-w-[100px]"
-                    :title="mod.version">{{ mod.version }}</span>
+              <div class="flex items-center gap-2">
+                <div class="relative flex-1">
+                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input v-model="searchQueryInstalled" placeholder="Search installed..."
+                    class="w-full h-8 pl-8 pr-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all" />
+                </div>
+                <div class="flex rounded-lg border border-border/50 overflow-hidden">
+                  <button class="h-8 text-xs px-3 transition-colors"
+                    :class="sortBy === 'name' ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'"
+                    @click="toggleSort('name')">
+                    Name
+                  </button>
+                  <button class="h-8 text-xs px-3 border-l border-border/50 transition-colors"
+                    :class="sortBy === 'version' ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'"
+                    @click="toggleSort('version')">
+                    Version
+                  </button>
                 </div>
               </div>
-              <Button variant="ghost" size="icon"
-                class="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                @click.stop="removeMod(mod.id)">
-                <Trash2 class="w-3.5 h-3.5" />
-              </Button>
             </div>
-            <div v-if="filteredInstalledMods.length === 0" class="p-8 text-center text-muted-foreground text-sm">
-              {{
-                searchQueryInstalled
-                  ? "No matching mods."
-                  : "No mods in this pack yet."
-              }}
+
+            <!-- Mod List -->
+            <div class="flex-1 overflow-y-auto p-2 space-y-1">
+              <div v-for="mod in filteredInstalledMods" :key="mod.id"
+                class="flex items-center gap-3 p-2.5 rounded-lg border transition-all group cursor-pointer" :class="selectedModIds.has(mod.id)
+                  ? 'bg-primary/10 border-primary/50 shadow-sm'
+                  : 'border-transparent hover:bg-accent/50 hover:border-border/50'" @click="toggleSelect(mod.id)">
+
+                <!-- Checkbox -->
+                <div class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                  :class="selectedModIds.has(mod.id)
+                    ? 'bg-primary border-primary'
+                    : 'border-muted-foreground/30 group-hover:border-muted-foreground/50'">
+                  <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3 text-primary-foreground" />
+                </div>
+
+                <!-- Mod Info -->
+                <div class="min-w-0 flex-1">
+                  <div class="font-medium text-sm truncate">{{ mod.name }}</div>
+                  <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span v-if="mod.game_version && mod.game_version !== 'unknown'"
+                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium">
+                      {{ mod.game_version }}
+                    </span>
+                    <span v-if="mod.loader && mod.loader !== 'unknown'"
+                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-500 font-medium capitalize">
+                      {{ mod.loader }}
+                    </span>
+                    <span v-if="mod.version" class="text-[10px] text-muted-foreground truncate max-w-[100px] font-mono"
+                      :title="mod.version">
+                      {{ mod.version }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Remove Button -->
+                <Button variant="ghost" size="icon"
+                  class="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                  @click.stop="removeMod(mod.id)">
+                  <Trash2 class="w-3.5 h-3.5" />
+                </Button>
+              </div>
+
+              <!-- Empty State -->
+              <div v-if="filteredInstalledMods.length === 0" class="p-8 text-center">
+                <Layers class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                <p class="text-sm text-muted-foreground">
+                  {{ searchQueryInstalled ? "No matching mods" : "No mods in this pack yet" }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Selection Footer -->
+            <div v-if="currentMods.length > 0"
+              class="shrink-0 px-3 py-2 border-t border-border/30 bg-muted/10 flex items-center justify-between text-xs">
+              <span class="text-muted-foreground">{{ selectedModIds.size }} of {{ currentMods.length }} selected</span>
+              <div class="flex gap-3">
+                <button class="text-muted-foreground hover:text-foreground transition-colors" @click="selectAll">
+                  Select All
+                </button>
+                <button class="text-muted-foreground hover:text-foreground transition-colors" @click="clearSelection">
+                  Clear
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Selection Footer -->
-          <div v-if="currentMods.length > 0"
-            class="p-2 border-t bg-muted/10 flex items-center justify-between text-xs text-muted-foreground">
-            <span>{{ selectedModIds.size }} selected</span>
-            <div class="flex gap-2">
-              <button class="hover:text-foreground" @click="selectAll">
-                Select All
-              </button>
-              <button class="hover:text-foreground" @click="clearSelection">
-                Clear
-              </button>
+          <!-- Right: Available Mods -->
+          <div class="w-1/2 flex flex-col bg-muted/5">
+            <!-- Header -->
+            <div class="shrink-0 p-3 border-b border-border/30 bg-muted/20">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-semibold text-sm">Library</span>
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-emerald-500">{{ compatibleCount }} compatible</span>
+                  <span v-if="incompatibleCount > 0" class="text-amber-500">{{ incompatibleCount }} incompatible</span>
+                </div>
+              </div>
+              <div class="relative">
+                <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <input v-model="searchQueryAvailable" placeholder="Search library..."
+                  class="w-full h-8 pl-8 pr-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all" />
+              </div>
+            </div>
+
+            <!-- Mod List -->
+            <div class="flex-1 overflow-y-auto p-2 space-y-1">
+              <div v-for="mod in filteredAvailableMods" :key="mod.id"
+                class="flex items-center justify-between p-2.5 rounded-lg transition-all relative" :class="mod.isCompatible
+                  ? 'hover:bg-accent/50 cursor-pointer group'
+                  : 'opacity-40'">
+
+                <!-- Mod Info -->
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium text-sm truncate">{{ mod.name }}</span>
+                    <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  </div>
+                  <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span v-if="mod.game_version && mod.game_version !== 'unknown'"
+                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium">
+                      {{ mod.game_version }}
+                    </span>
+                    <span v-if="mod.loader && mod.loader !== 'unknown'"
+                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-500 font-medium capitalize">
+                      {{ mod.loader }}
+                    </span>
+                    <span v-if="mod.version" class="text-[10px] text-muted-foreground truncate max-w-[80px] font-mono"
+                      :title="mod.version">
+                      {{ mod.version }}
+                    </span>
+                    <span v-if="!mod.isCompatible" class="text-[10px] text-amber-500 italic">
+                      {{ mod.incompatibilityReason }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Add Button -->
+                <Button v-if="mod.isCompatible" variant="ghost" size="icon"
+                  class="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0 hover:bg-primary/10"
+                  @click.stop="addMod(mod.id)">
+                  <Plus class="w-4 h-4" />
+                </Button>
+                <Lock v-else class="w-4 h-4 text-muted-foreground/50 shrink-0 mr-2" />
+              </div>
+
+              <!-- Empty State -->
+              <div v-if="filteredAvailableMods.length === 0" class="p-8 text-center">
+                <Package class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                <p class="text-sm text-muted-foreground">No mods available to add</p>
+              </div>
             </div>
           </div>
+        </template>
+
+        <!-- Version History Tab -->
+        <div v-else-if="activeTab === 'versions'" class="flex-1 p-6 overflow-auto">
+          <VersionHistoryPanel v-if="modpack" :modpack-id="modpackId" :modpack-name="modpack.name"
+            @refresh="loadData" />
         </div>
 
-        <!-- Right: Available Mods -->
-        <div class="w-1/2 flex flex-col bg-background">
-          <div class="p-3 border-b bg-muted/20 font-medium text-sm flex items-center justify-between gap-2">
-            <span>Available Mods</span>
-            <div class="flex items-center gap-2">
-              <div class="relative w-44">
-                <Search class="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                <input v-model="searchQueryAvailable" placeholder="Search library..."
-                  class="w-full h-7 pl-7 pr-2 rounded-md border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
-              </div>
-            </div>
-          </div>
-          <div class="flex-1 overflow-y-auto p-2 space-y-1">
-            <div v-for="mod in filteredAvailableMods" :key="mod.id"
-              class="flex items-center justify-between p-2 rounded-md border transition-colors relative" :class="[
-                mod.isCompatible
-                  ? 'border-transparent hover:border-border hover:bg-accent/50 cursor-pointer group'
-                  : 'border-transparent bg-muted/30 opacity-50 cursor-not-allowed',
-              ]" :title="mod.incompatibilityReason">
-              <!-- Lock icon for incompatible mods -->
-              <div v-if="!mod.isCompatible"
-                class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div class="bg-background/80 rounded-full p-1">
-                  <Lock class="w-4 h-4 text-muted-foreground" />
-                </div>
-              </div>
+        <!-- Settings Tab -->
+        <div v-else-if="activeTab === 'settings'" class="flex-1 p-6 overflow-auto">
+          <div class="max-w-2xl mx-auto space-y-6">
+            <div>
+              <h3 class="text-lg font-semibold mb-4">Modpack Settings</h3>
 
-              <div class="min-w-0 flex-1">
-                <div class="font-medium text-sm truncate">{{ mod.name }}</div>
-                <div class="flex items-center gap-1.5 mt-0.5">
-                  <span v-if="mod.game_version && mod.game_version !== 'unknown'"
-                    class="text-[10px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{ mod.game_version
-                    }}</span>
-                  <span v-if="mod.loader && mod.loader !== 'unknown'"
-                    class="text-[10px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 capitalize">{{ mod.loader
-                    }}</span>
-                  <span v-if="mod.version" class="text-[10px] text-muted-foreground truncate max-w-[80px]"
-                    :title="mod.version">{{ mod.version }}</span>
-                  <span v-if="!mod.isCompatible" class="text-[10px] text-yellow-500">
-                    ({{ mod.incompatibilityReason }})
-                  </span>
+              <div class="space-y-4">
+                <!-- Name -->
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">Name</label>
+                  <input v-model="editForm.name" type="text"
+                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50" />
+                </div>
+
+                <!-- Version -->
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">Version</label>
+                  <input v-model="editForm.version" type="text"
+                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+                    placeholder="1.0.0" />
+                </div>
+
+                <!-- MC Version & Loader Row -->
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium flex items-center gap-1.5">
+                      Minecraft Version
+                      <Lock v-if="isExistingModpack" class="w-3 h-3 text-muted-foreground" />
+                    </label>
+                    <select v-model="editForm.minecraft_version" :disabled="isExistingModpack"
+                      class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <option value="">Select version...</option>
+                      <option v-for="v in gameVersions" :key="v" :value="v">{{ v }}</option>
+                    </select>
+                  </div>
+
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium flex items-center gap-1.5">
+                      Mod Loader
+                      <Lock v-if="isExistingModpack" class="w-3 h-3 text-muted-foreground" />
+                    </label>
+                    <select v-model="editForm.loader" :disabled="isExistingModpack"
+                      class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed capitalize">
+                      <option value="">Select loader...</option>
+                      <option v-for="l in loaders" :key="l" :value="l" class="capitalize">{{ l }}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <p v-if="isExistingModpack" class="text-xs text-muted-foreground">
+                  Minecraft version and loader cannot be changed after modpack creation to prevent mod compatibility
+                  issues.
+                </p>
+
+                <!-- Description -->
+                <div class="space-y-2">
+                  <label class="text-sm font-medium">Description</label>
+                  <textarea v-model="editForm.description" rows="3"
+                    class="w-full px-3 py-2 rounded-lg border border-border/50 bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+                    placeholder="Describe your modpack..."></textarea>
+                </div>
+
+                <!-- Save Button -->
+                <div class="pt-2">
+                  <Button @click="saveModpackInfo" :disabled="isSaving" class="gap-2">
+                    <Save class="w-4 h-4" />
+                    {{ isSaving ? "Saving..." : "Save Changes" }}
+                  </Button>
                 </div>
               </div>
-              <Button v-if="mod.isCompatible" variant="ghost" size="icon"
-                class="h-7 w-7 text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                @click.stop="addMod(mod.id)">
-                <Plus class="w-4 h-4" />
-              </Button>
-            </div>
-            <div v-if="filteredAvailableMods.length === 0" class="p-8 text-center text-muted-foreground text-sm">
-              No matching mods found.
             </div>
           </div>
         </div>
@@ -604,3 +687,15 @@ watch(
       @updated="loadData" />
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

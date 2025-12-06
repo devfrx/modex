@@ -142,6 +142,22 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:openFolder", modpackId),
   },
 
+  // ========== VERSION CONTROL ==========
+  versions: {
+    getHistory: (modpackId: string): Promise<any | null> =>
+      ipcRenderer.invoke("versions:getHistory", modpackId),
+    initialize: (modpackId: string, message?: string): Promise<any | null> =>
+      ipcRenderer.invoke("versions:initialize", modpackId, message),
+    create: (modpackId: string, message: string, tag?: string): Promise<any | null> =>
+      ipcRenderer.invoke("versions:create", modpackId, message, tag),
+    rollback: (modpackId: string, versionId: string): Promise<boolean> =>
+      ipcRenderer.invoke("versions:rollback", modpackId, versionId),
+    compare: (modpackId: string, fromVersionId: string, toVersionId: string): Promise<any[] | null> =>
+      ipcRenderer.invoke("versions:compare", modpackId, fromVersionId, toVersionId),
+    get: (modpackId: string, versionId: string): Promise<any | null> =>
+      ipcRenderer.invoke("versions:get", modpackId, versionId),
+  },
+
   // ========== EXPORT ==========
   export: {
     curseforge: (

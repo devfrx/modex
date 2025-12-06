@@ -290,6 +290,32 @@ async function initializeBackend() {
     }
   });
 
+  // ========== VERSION CONTROL IPC HANDLERS ==========
+
+  ipcMain.handle("versions:getHistory", async (_, modpackId: string) => {
+    return metadataManager.getVersionHistory(modpackId);
+  });
+
+  ipcMain.handle("versions:initialize", async (_, modpackId: string, message?: string) => {
+    return metadataManager.initializeVersionControl(modpackId, message);
+  });
+
+  ipcMain.handle("versions:create", async (_, modpackId: string, message: string, tag?: string) => {
+    return metadataManager.createVersion(modpackId, message, tag);
+  });
+
+  ipcMain.handle("versions:rollback", async (_, modpackId: string, versionId: string) => {
+    return metadataManager.rollbackToVersion(modpackId, versionId);
+  });
+
+  ipcMain.handle("versions:compare", async (_, modpackId: string, fromVersionId: string, toVersionId: string) => {
+    return metadataManager.compareVersions(modpackId, fromVersionId, toVersionId);
+  });
+
+  ipcMain.handle("versions:get", async (_, modpackId: string, versionId: string) => {
+    return metadataManager.getVersion(modpackId, versionId);
+  });
+
   // ========== EXPORT IPC HANDLERS ==========
 
   ipcMain.handle("export:curseforge", async (_, modpackId: string) => {

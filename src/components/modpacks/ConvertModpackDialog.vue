@@ -23,12 +23,50 @@ const newName = ref("");
 const targetVersion = ref("");
 const targetLoader = ref("");
 const isConverting = ref(false);
+const conversionProgress = ref({ current: 0, total: 0, modName: "" });
 const conversionResult = ref<{
     success: number;
     failed: number;
     skipped: number;
     details: Array<{ modName: string; status: "success" | "failed" | "skipped"; reason?: string }>;
 } | null>(null);
+
+// Summary filter for results
+const summaryFilter = ref<"all" | "success" | "failed" | "skipped">("all");
+
+const filteredDetails = computed(() => {
+    if (!conversionResult.value) return [];
+    if (summaryFilter.value === "all") return conversionResult.value.details;
+    return conversionResult.value.details.filter(d => d.status === summaryFilter.value);
+});
+
+// Group failed mods by reason category
+const failedByReason = computed(() => {
+    if (!conversionResult.value) return {};
+    const failed = conversionResult.value.details.filter(d => d.status === "failed");
+    const groups: Record<string, typeof failed> = {
+        "Wrong Loader": [],
+        "Wrong Version": [],
+        "Not Available": [],
+        "Other": []
+    };
+
+    for (const item of failed) {
+        const reason = item.reason?.toLowerCase() || "";
+        if (reason.includes("not for") || reason.includes("requires")) {
+            groups["Wrong Loader"].push(item);
+        } else if (reason.includes("version") && reason.includes("available for")) {
+            groups["Wrong Version"].push(item);
+        } else if (reason.includes("no files found") || reason.includes("no compatible")) {
+            groups["Not Available"].push(item);
+        } else {
+            groups["Other"].push(item);
+        }
+    }
+
+    // Remove empty groups
+    return Object.fromEntries(Object.entries(groups).filter(([_, v]) => v.length > 0));
+});
 
 const gameVersions = [
     "1.21.4",
@@ -57,6 +95,7 @@ watch(() => props.open, (isOpen) => {
         targetVersion.value = props.modpack.minecraft_version || "";
         targetLoader.value = props.modpack.loader || "";
         conversionResult.value = null;
+        conversionProgress.value = { current: 0, total: 0, modName: "" };
     }
 });
 
@@ -81,6 +120,7 @@ async function convertModpack() {
     try {
         // Get current mods
         const currentMods = await window.api.modpacks.getMods(props.modpack.id);
+        conversionProgress.value = { current: 0, total: currentMods.length, modName: "" };
 
         // Create new modpack
         const newModpackId = await window.api.modpacks.create({
@@ -102,6 +142,12 @@ async function convertModpack() {
         let skippedCount = 0;
 
         for (const mod of currentMods) {
+            conversionProgress.value = {
+                current: conversionProgress.value.current + 1,
+                total: currentMods.length,
+                modName: mod.name
+            };
+
             try {
                 // Skip if not from CurseForge
                 if (mod.source !== "curseforge" || !mod.cf_project_id) {
@@ -131,14 +177,14 @@ async function convertModpack() {
                 }
 
                 // Find file that EXACTLY matches the target version AND loader in gameVersions array
-                // CurseForge API may return files that support multiple versions/loaders
+                // STRICT: The file must explicitly list the target loader - no cross-loader compatibility
                 const targetLoaderLower = targetLoader.value.toLowerCase();
                 const file = files.find(f => {
                     const gameVersions = (f.gameVersions || []).map((v: string) => v.toLowerCase());
-                    // Must have both the exact MC version AND the loader
+                    // Must have the exact MC version
                     const hasVersion = gameVersions.includes(targetVersion.value.toLowerCase());
-                    const hasLoader = gameVersions.includes(targetLoaderLower) ||
-                        gameVersions.some((v: string) => v === targetLoaderLower);
+                    // Must have the EXACT loader - strict match only
+                    const hasLoader = gameVersions.includes(targetLoaderLower);
                     return hasVersion && hasLoader;
                 });
 
@@ -220,7 +266,8 @@ async function convertModpack() {
             `${successCount} mods converted, ${failedCount} failed, ${skippedCount} skipped`
         );
 
-        emit("success");
+        // Don't emit success here - let user review results and close manually
+        // emit("success") is called when user clicks "Done" after reviewing
     } catch (err) {
         console.error("Conversion failed:", err);
         toast.error("Conversion Failed", (err as Error).message);
@@ -296,30 +343,77 @@ function handleClose() {
                     class="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-600 dark:text-blue-400 text-sm">
                     <strong>Note:</strong> This will create a copy of your modpack and attempt to find compatible
                     versions of
-                    all mods for the target version/loader. Mods that don't have compatible versions will be skipped.
+                    all mods for the target version/loader. Mods without a file for the exact target loader will be
+                    skipped.
+                </div>
+
+                <!-- Progress indicator during conversion -->
+                <div v-if="isConverting" class="space-y-3">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-muted-foreground">Converting mods...</span>
+                        <span class="font-medium">{{ conversionProgress.current }} / {{ conversionProgress.total
+                        }}</span>
+                    </div>
+                    <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
+                        <div class="bg-primary h-full transition-all duration-300"
+                            :style="{ width: `${(conversionProgress.current / conversionProgress.total) * 100}%` }">
+                        </div>
+                    </div>
+                    <div v-if="conversionProgress.modName" class="text-xs text-muted-foreground truncate">
+                        {{ conversionProgress.modName }}
+                    </div>
                 </div>
             </div>
 
             <!-- Conversion Results -->
-            <div v-if="conversionResult" class="space-y-3">
+            <div v-if="conversionResult" class="space-y-4">
+                <!-- Summary Cards -->
                 <div class="grid grid-cols-3 gap-3">
-                    <div class="p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-center">
+                    <button @click="summaryFilter = summaryFilter === 'success' ? 'all' : 'success'"
+                        class="p-3 rounded-lg text-center transition-all" :class="summaryFilter === 'success'
+                            ? 'bg-green-500/20 border-2 border-green-500'
+                            : 'bg-green-500/10 border border-green-500/30 hover:bg-green-500/15'">
                         <div class="text-2xl font-bold text-green-500">{{ conversionResult.success }}</div>
                         <div class="text-xs text-green-600 dark:text-green-400">Converted</div>
-                    </div>
-                    <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-center">
+                    </button>
+                    <button @click="summaryFilter = summaryFilter === 'failed' ? 'all' : 'failed'"
+                        class="p-3 rounded-lg text-center transition-all" :class="summaryFilter === 'failed'
+                            ? 'bg-red-500/20 border-2 border-red-500'
+                            : 'bg-red-500/10 border border-red-500/30 hover:bg-red-500/15'">
                         <div class="text-2xl font-bold text-red-500">{{ conversionResult.failed }}</div>
                         <div class="text-xs text-red-600 dark:text-red-400">Failed</div>
-                    </div>
-                    <div class="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-center">
+                    </button>
+                    <button @click="summaryFilter = summaryFilter === 'skipped' ? 'all' : 'skipped'"
+                        class="p-3 rounded-lg text-center transition-all" :class="summaryFilter === 'skipped'
+                            ? 'bg-yellow-500/20 border-2 border-yellow-500'
+                            : 'bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/15'">
                         <div class="text-2xl font-bold text-yellow-500">{{ conversionResult.skipped }}</div>
                         <div class="text-xs text-yellow-600 dark:text-yellow-400">Skipped</div>
-                    </div>
+                    </button>
                 </div>
 
-                <!-- Details -->
+                <!-- Failure Categories (only shown when filtering failed) -->
+                <div v-if="summaryFilter === 'failed' && Object.keys(failedByReason).length > 0"
+                    class="flex flex-wrap gap-2 text-xs">
+                    <span v-for="(items, category) in failedByReason" :key="category"
+                        class="px-2 py-1 rounded-full bg-red-500/10 text-red-500 border border-red-500/20">
+                        {{ category }}: {{ items.length }}
+                    </span>
+                </div>
+
+                <!-- Filter indicator -->
+                <div v-if="summaryFilter !== 'all'" class="flex items-center justify-between text-sm">
+                    <span class="text-muted-foreground">
+                        Showing {{ filteredDetails.length }} {{ summaryFilter }} mods
+                    </span>
+                    <button @click="summaryFilter = 'all'" class="text-primary hover:underline text-xs">
+                        Show all
+                    </button>
+                </div>
+
+                <!-- Details List -->
                 <div class="max-h-64 overflow-y-auto space-y-1">
-                    <div v-for="(detail, idx) in conversionResult.details" :key="idx"
+                    <div v-for="(detail, idx) in filteredDetails" :key="idx"
                         class="flex items-start gap-2 p-2 rounded text-sm" :class="{
                             'bg-green-500/10': detail.status === 'success',
                             'bg-red-500/10': detail.status === 'failed',
@@ -342,8 +436,15 @@ function handleClose() {
 
         <template #footer>
             <div class="flex justify-end gap-3">
-                <Button variant="outline" @click="handleClose" :disabled="isConverting">
-                    {{ conversionResult ? "Close" : "Cancel" }}
+                <Button v-if="conversionResult" variant="outline" @click="handleClose">
+                    Close
+                </Button>
+                <Button v-if="conversionResult" @click="() => { emit('success'); emit('close'); }">
+                    <CheckCircle2 class="w-4 h-4 mr-2" />
+                    Done
+                </Button>
+                <Button v-if="!conversionResult" variant="outline" @click="handleClose" :disabled="isConverting">
+                    Cancel
                 </Button>
                 <Button v-if="!conversionResult" @click="convertModpack"
                     :disabled="!canConvert || !hasChanges || isConverting">

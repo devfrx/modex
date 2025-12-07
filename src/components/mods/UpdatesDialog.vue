@@ -31,6 +31,7 @@ const toast = useToast();
 
 // State
 const isLoading = ref(false);
+const checkProgress = ref({ current: 0, total: 0, modName: "" });
 const updates = ref<ModUpdateInfo[]>([]);
 const updatingMods = ref<Set<string>>(new Set());
 const showSettings = ref(false);
@@ -64,6 +65,13 @@ watch(
 async function checkForUpdates() {
   isLoading.value = true;
   updates.value = [];
+  checkProgress.value = { current: 0, total: 0, modName: "" };
+
+  // Listen for progress updates
+  const progressHandler = (data: { current: number; total: number; modName: string }) => {
+    checkProgress.value = data;
+  };
+  window.api.on("updates:progress", progressHandler);
 
   try {
     if (props.modpackId) {
@@ -75,6 +83,7 @@ async function checkForUpdates() {
     console.error("Failed to check updates:", err);
     toast.error("Update Check Failed", (err as Error).message);
   } finally {
+    window.ipcRenderer?.off("updates:progress", progressHandler as any);
     isLoading.value = false;
   }
 }
@@ -190,6 +199,22 @@ function getSourceLabel(source: string) {
           API Keys
         </div>
 
+        <!-- Progress indicator during check -->
+        <div v-if="isLoading && checkProgress.total > 0" class="mb-4 p-3 rounded-lg bg-muted/30 border border-border">
+          <div class="flex items-center justify-between text-sm mb-2">
+            <span class="text-muted-foreground">Controllo aggiornamenti...</span>
+            <span class="font-medium">{{ checkProgress.current }} / {{ checkProgress.total }}</span>
+          </div>
+          <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
+            <div class="bg-primary h-full transition-all duration-300"
+              :style="{ width: `${(checkProgress.current / checkProgress.total) * 100}%` }">
+            </div>
+          </div>
+          <div v-if="checkProgress.modName" class="text-xs text-muted-foreground mt-1.5 truncate">
+            {{ checkProgress.modName }}
+          </div>
+        </div>
+
         <div class="space-y-2">
           <label class="text-xs text-muted-foreground">CurseForge API Key</label>
           <div class="flex gap-2">
@@ -229,6 +254,22 @@ function getSourceLabel(source: string) {
       <div v-if="checkedCount > 0" class="mb-2 text-sm text-muted-foreground">
         {{ checkedCount }} mod controllate, {{ updateCount }} aggiornamenti
         disponibili
+      </div>
+
+      <!-- Progress indicator during check -->
+      <div v-if="isLoading && checkProgress.total > 0" class="mb-4 space-y-2">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-muted-foreground">Controllo aggiornamenti...</span>
+          <span class="font-medium">{{ checkProgress.current }} / {{ checkProgress.total }}</span>
+        </div>
+        <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
+          <div class="bg-primary h-full transition-all duration-300"
+            :style="{ width: `${(checkProgress.current / checkProgress.total) * 100}%` }">
+          </div>
+        </div>
+        <div v-if="checkProgress.modName" class="text-xs text-muted-foreground truncate">
+          {{ checkProgress.modName }}
+        </div>
       </div>
 
       <!-- Update List -->

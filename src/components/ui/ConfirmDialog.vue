@@ -61,9 +61,6 @@ const variantClasses = computed(() => {
                 button: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
             };
     }
-}); button: "bg-red-500 hover:bg-red-600",
-            };
-    }
 });
 
 const IconComponent = computed(() => {

@@ -16,12 +16,16 @@ import {
   Check,
   Filter,
   ArrowDownToLine,
+  Package,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import { useFolderTree } from "@/composables/useFolderTree";
+import { useToast } from "@/composables/useToast";
+import type { Modpack } from "@/types/electron";
 
 const { folders: foldersList, moveModToFolder } = useFolderTree();
+const toast = useToast();
 
 const props = defineProps<{
   open: boolean;
@@ -63,7 +67,26 @@ const selectedModIds = ref<Set<number>>(new Set()); // For Header selection (Qui
 const selectedFileIds = ref<Set<number>>(new Set()); // For specific file selection
 const isSelectionMode = ref(false);
 const targetFolderId = ref<string | null>(null);
+const targetModpackId = ref<string | null>(null); // Target modpack for direct add
 const isAddingBulk = ref(false);
+
+// Modpacks for direct add feature
+const allModpacks = ref<Modpack[]>([]);
+
+// Filtered modpacks based on current version/loader filters
+// ONLY show modpacks when BOTH version and loader filters are set
+const compatibleModpacks = computed(() => {
+  // If both version and loader are not set, return empty array - no modpacks available
+  if (!selectedVersion.value || !selectedLoader.value) {
+    return [];
+  }
+
+  return allModpacks.value.filter(pack => {
+    // Both version and loader filters are set, match both
+    return pack.minecraft_version === selectedVersion.value &&
+      pack.loader?.toLowerCase() === selectedLoader.value.toLowerCase();
+  }).filter(pack => !pack.remote_source?.url); // Exclude linked/read-only modpacks
+});
 
 // Available filters
 const gameVersions = [
@@ -128,6 +151,13 @@ const STORAGE_KEYS = {
 
 onMounted(async () => {
   hasApiKey.value = await window.api.curseforge.hasApiKey();
+
+  // Load modpacks for direct-add feature
+  try {
+    allModpacks.value = await window.api.modpacks.getAll();
+  } catch (err) {
+    console.error("Failed to load modpacks:", err);
+  }
 
   if (!props.gameVersion) {
     const savedVersion = localStorage.getItem(STORAGE_KEYS.VERSION);
@@ -332,10 +362,16 @@ async function executeBulkAdd() {
     return;
   isAddingBulk.value = true;
 
+  const addedModIds: string[] = [];
+
+  // Get target modpack if selected (for compatibility validation)
+  const targetPack = targetModpackId.value
+    ? allModpacks.value.find(p => p.id === targetModpackId.value)
+    : null;
+
   try {
     // 1. Header Selections
     for (const modId of selectedModIds.value) {
-      // ... existing logic ...
       const mod = searchResults.value.find((m) => m.id === modId);
       if (!mod) continue;
       const files = await window.api.curseforge.getModFiles(mod.id, {
@@ -350,8 +386,11 @@ async function executeBulkAdd() {
           releaseFile.id,
           selectedLoader.value || undefined
         );
-        if (added && targetFolderId.value)
-          moveModToFolder(added.id, targetFolderId.value);
+        if (added) {
+          addedModIds.push(added.id);
+          if (targetFolderId.value)
+            moveModToFolder(added.id, targetFolderId.value);
+        }
       }
     }
 
@@ -361,8 +400,6 @@ async function executeBulkAdd() {
       if (selectedModIds.value.has(modId)) continue;
 
       const mod = searchResults.value.find((m) => m.id === modId);
-      // If mod isn't in search results anymore (page change), we can't get details easily.
-      // Assumption: User selects from current results.
       if (!mod) continue;
 
       const added = await window.api.curseforge.addToLibrary(
@@ -370,13 +407,46 @@ async function executeBulkAdd() {
         fileId,
         selectedLoader.value || undefined
       );
-      if (added && targetFolderId.value)
-        moveModToFolder(added.id, targetFolderId.value);
+      if (added) {
+        addedModIds.push(added.id);
+        if (targetFolderId.value)
+          moveModToFolder(added.id, targetFolderId.value);
+      }
+    }
+
+    // 3. Add to target modpack if selected
+    if (targetModpackId.value && addedModIds.length > 0) {
+      let addedToPackCount = 0;
+      let skippedCount = 0;
+
+      for (const modId of addedModIds) {
+        try {
+          await window.api.modpacks.addMod(targetModpackId.value, modId);
+          addedToPackCount++;
+        } catch (err) {
+          // Mod might be incompatible with modpack
+          console.warn(`Skipped adding mod ${modId} to modpack:`, err);
+          skippedCount++;
+        }
+      }
+
+      if (addedToPackCount > 0) {
+        toast.success(
+          "Added to Modpack",
+          `${addedToPackCount} mod(s) added to ${targetPack?.name || 'modpack'}${skippedCount > 0 ? `, ${skippedCount} skipped (incompatible)` : ''}`
+        );
+      } else if (skippedCount > 0) {
+        toast.error(
+          "Incompatible Mods",
+          `All ${skippedCount} mods were incompatible with the modpack`
+        );
+      }
     }
 
     emit("added", null);
   } catch (e) {
     console.error(e);
+    toast.error("Error", (e as Error).message);
   } finally {
     isAddingBulk.value = false;
     selectedModIds.value.clear();
@@ -485,12 +555,24 @@ async function fetchModFiles(modId: number) {
   }
 }
 
-// Filtered Files (Release Type)
+// Filtered Files (Release Type + Loader Strict Filter)
 const filteredModFiles = computed(() => {
   return modFiles.value.filter((f) => {
+    // Filter by release type
     if (f.releaseType === 1 && !filterRelease.value) return false;
     if (f.releaseType === 2 && !filterBeta.value) return false;
     if (f.releaseType === 3 && !filterAlpha.value) return false;
+
+    // Strict loader filter: if a loader is selected, the file MUST contain it
+    // No fuzzy matching - exact match only
+    if (selectedLoader.value) {
+      const loaderLower = selectedLoader.value.toLowerCase();
+      const fileLoaders = (f.gameVersions || []).map((gv: string) => gv.toLowerCase());
+      if (!fileLoaders.includes(loaderLower)) {
+        return false;
+      }
+    }
+
     return true;
   });
 });
@@ -514,10 +596,23 @@ async function addFileToLibrary(mod: any, file: any) {
     if (addedMod) {
       if (targetFolderId.value)
         moveModToFolder(addedMod.id, targetFolderId.value);
+
+      // Add to modpack if selected
+      if (targetModpackId.value) {
+        try {
+          await window.api.modpacks.addMod(targetModpackId.value, addedMod.id);
+          const pack = allModpacks.value.find(p => p.id === targetModpackId.value);
+          toast.success("Added to Modpack", `${mod.name} added to ${pack?.name || 'modpack'}`);
+        } catch (err) {
+          toast.error("Modpack Error", `Could not add to modpack: ${(err as Error).message}`);
+        }
+      }
+
       emit("added", addedMod);
     }
   } catch (err) {
     console.error(err);
+    toast.error("Error", (err as Error).message);
   } finally {
     isAddingMod.value = null;
   }
@@ -542,10 +637,23 @@ async function quickDownload(mod: any) {
     if (addedMod) {
       if (targetFolderId.value)
         moveModToFolder(addedMod.id, targetFolderId.value);
+
+      // Add to modpack if selected
+      if (targetModpackId.value) {
+        try {
+          await window.api.modpacks.addMod(targetModpackId.value, addedMod.id);
+          const pack = allModpacks.value.find(p => p.id === targetModpackId.value);
+          toast.success("Added to Modpack", `${mod.name} added to ${pack?.name || 'modpack'}`);
+        } catch (err) {
+          toast.error("Modpack Error", `Could not add to modpack: ${(err as Error).message}`);
+        }
+      }
+
       emit("added", addedMod);
     }
   } catch (err) {
     console.error(err);
+    toast.error("Error", (err as Error).message);
   } finally {
     isAddingMod.value = null;
   }
@@ -595,19 +703,10 @@ function getReleaseColor(type: number) {
 </script>
 
 <template>
-  <Dialog
-    :open="open"
-    @close="emit('close')"
-    maxWidth="6xl"
-    contentClass="p-0 border-none bg-transparent shadow-none"
-  >
-    <div
-      class="flex h-[80vh] overflow-hidden rounded-xl bg-background border border-border shadow-2xl relative"
-    >
+  <Dialog :open="open" @close="emit('close')" maxWidth="6xl" contentClass="p-0 border-none bg-transparent shadow-none">
+    <div class="flex h-[80vh] overflow-hidden rounded-xl bg-background border border-border shadow-2xl relative">
       <!-- Sidebar Filters -->
-      <div
-        class="w-64 flex-shrink-0 border-r border-border bg-muted/10 flex flex-col"
-      >
+      <div class="w-64 flex-shrink-0 border-r border-border bg-muted/10 flex flex-col">
         <div class="p-4 border-b border-border">
           <h3 class="font-semibold flex items-center gap-2">
             <Filter class="w-4 h-4 text-primary" />
@@ -618,161 +717,153 @@ function getReleaseColor(type: number) {
         <div class="flex-1 overflow-y-auto p-4 space-y-6">
           <!-- Game Version -->
           <div class="space-y-2">
-            <label
-              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-              >Game Version</label
-            >
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Game Version</label>
             <div class="relative">
-              <select
-                v-model="selectedVersion"
+              <select v-model="selectedVersion"
                 class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
-                @change="searchQuery ? searchMods() : loadPopular()"
-              >
+                @change="searchQuery ? searchMods() : loadPopular()">
                 <option value="" class="bg-popover text-popover-foreground">
                   All Versions
                 </option>
-                <option
-                  v-for="v in gameVersions.filter(Boolean)"
-                  :key="v"
-                  :value="v"
-                  class="bg-popover text-popover-foreground"
-                >
+                <option v-for="v in gameVersions.filter(Boolean)" :key="v" :value="v"
+                  class="bg-popover text-popover-foreground">
                   {{ v }}
                 </option>
               </select>
-              <ChevronDown
-                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
-              />
+              <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
             </div>
           </div>
 
           <!-- Mod Loader -->
           <div class="space-y-2">
-            <label
-              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-              >Mod Loader</label
-            >
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mod Loader</label>
             <div class="relative">
-              <select
-                v-model="selectedLoader"
+              <select v-model="selectedLoader"
                 class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
-                @change="searchQuery ? searchMods() : loadPopular()"
-              >
-                <option
-                  v-for="l in modLoaders"
-                  :key="l.value"
-                  :value="l.value"
-                  class="bg-popover text-popover-foreground"
-                >
+                @change="searchQuery ? searchMods() : loadPopular()">
+                <option v-for="l in modLoaders" :key="l.value" :value="l.value"
+                  class="bg-popover text-popover-foreground">
                   {{ l.label }}
                 </option>
               </select>
-              <ChevronDown
-                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
-              />
+              <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
             </div>
           </div>
 
           <!-- Category -->
           <div class="space-y-2">
-            <label
-              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-              >Category</label
-            >
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</label>
             <div class="relative">
-              <select
-                v-model="selectedCategory"
+              <select v-model="selectedCategory"
                 class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
-                @change="searchQuery ? searchMods() : loadPopular()"
-              >
-                <option
-                  v-for="c in categories"
-                  :key="c.value"
-                  :value="c.value"
-                  class="bg-popover text-popover-foreground"
-                >
+                @change="searchQuery ? searchMods() : loadPopular()">
+                <option v-for="c in categories" :key="c.value" :value="c.value"
+                  class="bg-popover text-popover-foreground">
                   {{ c.label }}
                 </option>
               </select>
-              <ChevronDown
-                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
-              />
+              <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
             </div>
           </div>
 
           <!-- Sort -->
           <div class="space-y-2">
-            <label
-              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-              >Sort By</label
-            >
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort By</label>
             <div class="relative">
-              <select
-                v-model="selectedSortField"
+              <select v-model="selectedSortField"
                 class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
-                @change="searchQuery ? searchMods() : loadPopular()"
-              >
-                <option
-                  v-for="s in sortFields"
-                  :key="s.value"
-                  :value="s.value"
-                  class="bg-popover text-popover-foreground"
-                >
+                @change="searchQuery ? searchMods() : loadPopular()">
+                <option v-for="s in sortFields" :key="s.value" :value="s.value"
+                  class="bg-popover text-popover-foreground">
                   {{ s.label }}
                 </option>
               </select>
-              <ChevronDown
-                class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none"
-              />
+              <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
             </div>
           </div>
 
           <!-- Release Types -->
           <div class="space-y-2">
-            <label
-              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
-              >Release Channels</label
-            >
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Release Channels</label>
             <div class="space-y-1.5">
-              <label
-                class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none"
-              >
-                <input
-                  type="checkbox"
-                  v-model="filterRelease"
-                  class="rounded border-input text-primary focus:ring-primary/50"
-                />
+              <label class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none">
+                <input type="checkbox" v-model="filterRelease"
+                  class="rounded border-input text-primary focus:ring-primary/50" />
                 <span class="inline-flex items-center gap-1.5">
                   <div class="w-2 h-2 rounded-full bg-green-500"></div>
                   Release
                 </span>
               </label>
-              <label
-                class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none"
-              >
-                <input
-                  type="checkbox"
-                  v-model="filterBeta"
-                  class="rounded border-input text-primary focus:ring-primary/50"
-                />
+              <label class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none">
+                <input type="checkbox" v-model="filterBeta"
+                  class="rounded border-input text-primary focus:ring-primary/50" />
                 <span class="inline-flex items-center gap-1.5">
                   <div class="w-2 h-2 rounded-full bg-blue-500"></div>
                   Beta
                 </span>
               </label>
-              <label
-                class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none"
-              >
-                <input
-                  type="checkbox"
-                  v-model="filterAlpha"
-                  class="rounded border-input text-primary focus:ring-primary/50"
-                />
+              <label class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none">
+                <input type="checkbox" v-model="filterAlpha"
+                  class="rounded border-input text-primary focus:ring-primary/50" />
                 <span class="inline-flex items-center gap-1.5">
                   <div class="w-2 h-2 rounded-full bg-orange-500"></div>
                   Alpha
                 </span>
               </label>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div class="border-t border-border my-2"></div>
+
+          <!-- Add to Modpack -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Package class="w-3 h-3" />
+              Add to Modpack
+            </label>
+            <!-- Only show select when both filters are set -->
+            <template v-if="selectedVersion && selectedLoader">
+              <div class="relative">
+                <select v-model="targetModpackId"
+                  class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
+                  <option :value="null" class="bg-popover text-popover-foreground">
+                    Library Only
+                  </option>
+                  <option v-for="pack in compatibleModpacks" :key="pack.id" :value="pack.id"
+                    class="bg-popover text-popover-foreground">
+                    {{ pack.name }} ({{ pack.minecraft_version }} {{ pack.loader }})
+                  </option>
+                </select>
+                <ChevronDown
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
+              </div>
+              <p v-if="compatibleModpacks.length === 0" class="text-xs text-muted-foreground">
+                No modpacks match the current filters
+              </p>
+            </template>
+            <p v-else class="text-xs text-amber-500 p-2 bg-amber-500/10 rounded-md">
+              Set both version & loader filters to enable adding to modpacks
+            </p>
+          </div>
+
+          <!-- Target Folder -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <FolderOpen class="w-3 h-3" />
+              Target Folder
+            </label>
+            <div class="relative">
+              <select v-model="targetFolderId"
+                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
+                <option :value="null" class="bg-popover text-popover-foreground">
+                  Library Root
+                </option>
+                <option v-for="f in foldersList" :key="f.id" :value="f.id" class="bg-popover text-popover-foreground">
+                  {{ f.name }}
+                </option>
+              </select>
+              <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
             </div>
           </div>
         </div>
@@ -783,34 +874,21 @@ function getReleaseColor(type: number) {
         <!-- Search Header -->
         <div class="p-4 border-b border-border flex gap-3 items-center">
           <div class="relative flex-1">
-            <Search
-              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
-            />
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search mods..."
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input v-model="searchQuery" type="text" placeholder="Search mods..."
               class="w-full h-10 pl-10 pr-4 rounded-lg border bg-input/50 focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all"
-              @input="onSearchInput"
-              @keyup.enter="searchMods"
-            />
+              @input="onSearchInput" @keyup.enter="searchMods" />
           </div>
 
           <!-- Bulk Actions (Only Visible when Selection Mode ON) -->
-          <div
-            v-if="isSelectionMode"
-            class="flex items-center gap-3 animate-in fade-in slide-in-from-right-4 duration-200"
-          >
+          <div v-if="isSelectionMode"
+            class="flex items-center gap-3 animate-in fade-in slide-in-from-right-4 duration-200">
             <div class="h-8 w-px bg-border mx-1"></div>
 
-            <div
-              class="flex items-center gap-2 px-3 py-1.5 bg-accent/20 rounded-md border border-accent/30"
-            >
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-accent/20 rounded-md border border-accent/30">
               <FolderOpen class="w-4 h-4 text-primary" />
-              <select
-                v-model="targetFolderId"
-                class="bg-transparent border-none text-sm focus:ring-0 cursor-pointer min-w-[120px]"
-              >
+              <select v-model="targetFolderId"
+                class="bg-transparent border-none text-sm focus:ring-0 cursor-pointer min-w-[120px]">
                 <option :value="null">Library Root</option>
                 <option v-for="f in foldersList" :key="f.id" :value="f.id">
                   {{ f.name }}
@@ -818,15 +896,9 @@ function getReleaseColor(type: number) {
               </select>
             </div>
 
-            <Button
-              @click="executeBulkAdd"
-              :disabled="
-                isAddingBulk ||
-                (selectedModIds.size === 0 && selectedFilesMap.size === 0)
-              "
-              size="sm"
-              class="gap-2 shadow-lg shadow-primary/20"
-            >
+            <Button @click="executeBulkAdd" :disabled="isAddingBulk ||
+              (selectedModIds.size === 0 && selectedFilesMap.size === 0)
+              " size="sm" class="gap-2 shadow-lg shadow-primary/20">
               <Loader2 v-if="isAddingBulk" class="w-4 h-4 animate-spin" />
               <ArrowDownToLine v-else class="w-4 h-4" />
               Install Selected ({{
@@ -834,29 +906,16 @@ function getReleaseColor(type: number) {
               }})
             </Button>
 
-            <Button variant="ghost" size="sm" @click="isSelectionMode = false"
-              >Cancel</Button
-            >
+            <Button variant="ghost" size="sm" @click="isSelectionMode = false">Cancel</Button>
           </div>
 
-          <Button
-            v-else
-            variant="outline"
-            size="sm"
-            @click="isSelectionMode = true"
-            class="gap-2"
-          >
+          <Button v-else variant="outline" size="sm" @click="isSelectionMode = true" class="gap-2">
             <CheckSquare class="w-4 h-4" /> Select Multiple
           </Button>
 
           <div class="h-8 w-px bg-border mx-1"></div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            @click="emit('close')"
-            title="Close"
-          >
+          <Button variant="ghost" size="icon" @click="emit('close')" title="Close">
             <X class="w-5 h-5" />
           </Button>
         </div>
@@ -864,95 +923,59 @@ function getReleaseColor(type: number) {
         <!-- Results Area -->
         <div class="flex-1 overflow-y-auto p-4 relative">
           <!-- API Warning -->
-          <div
-            v-if="!hasApiKey"
-            class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-background/80 backdrop-blur-sm z-10"
-          >
+          <div v-if="!hasApiKey"
+            class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-background/80 backdrop-blur-sm z-10">
             <AlertTriangle class="w-12 h-12 text-yellow-500 mb-4" />
             <h3 class="text-xl font-bold mb-2">API Key Required</h3>
             <p class="text-muted-foreground max-w-md mb-6">
               You need a CurseForge API key to browse and download mods. Please
               add it in Settings.
             </p>
-            <a
-              href="https://console.curseforge.com/"
-              target="_blank"
-              class="text-primary hover:underline"
-              >Get API Key</a
-            >
+            <a href="https://console.curseforge.com/" target="_blank" class="text-primary hover:underline">Get API
+              Key</a>
           </div>
 
           <!-- Loading -->
-          <div
-            v-if="isSearching"
-            class="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-[1px] z-10"
-          >
+          <div v-if="isSearching"
+            class="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-[1px] z-10">
             <Loader2 class="w-10 h-10 animate-spin text-primary" />
           </div>
 
           <!-- List -->
           <div v-if="searchResults.length > 0" class="flex flex-col gap-3">
-            <div
-              v-for="mod in searchResults"
-              :key="mod.id"
-              class="group border border-border rounded-xl bg-card overflow-hidden transition-all duration-200"
-              :class="{
+            <div v-for="mod in searchResults" :key="mod.id"
+              class="group border border-border rounded-xl bg-card overflow-hidden transition-all duration-200" :class="{
                 'ring-2 ring-primary/50 shadow-lg shadow-primary/5':
                   expandedModId === mod.id,
                 'ring-1 ring-primary bg-primary/5':
                   isSelectionMode && selectedModIds.has(mod.id),
-              }"
-            >
+              }">
               <!-- Mod Header -->
-              <div
-                class="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/30 transition-colors relative"
-                @click="toggleExpand(mod)"
-              >
+              <div class="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/30 transition-colors relative"
+                @click="toggleExpand(mod)">
                 <!-- Checkbox for Bulk Selection -->
-                <button
-                  v-if="isSelectionMode"
-                  @click.stop="toggleModHeaderSelection(mod.id)"
-                  class="p-1 rounded hover:bg-background transition-colors mr-1"
-                  title="Select Latest Release"
-                >
-                  <div
-                    class="w-5 h-5 border rounded flex items-center justify-center transition-all"
-                    :class="
-                      selectedModIds.has(mod.id)
-                        ? 'bg-primary border-primary text-primary-foreground'
-                        : 'border-muted-foreground/30 bg-background'
-                    "
-                  >
-                    <Check
-                      v-if="selectedModIds.has(mod.id)"
-                      class="w-3.5 h-3.5"
-                    />
+                <button v-if="isSelectionMode" @click.stop="toggleModHeaderSelection(mod.id)"
+                  class="p-1 rounded hover:bg-background transition-colors mr-1" title="Select Latest Release">
+                  <div class="w-5 h-5 border rounded flex items-center justify-center transition-all" :class="selectedModIds.has(mod.id)
+                    ? 'bg-primary border-primary text-primary-foreground'
+                    : 'border-muted-foreground/30 bg-background'
+                    ">
+                    <Check v-if="selectedModIds.has(mod.id)" class="w-3.5 h-3.5" />
                   </div>
                 </button>
 
                 <!-- Icon -->
-                <div
-                  class="w-12 h-12 rounded-lg bg-muted border border-border overflow-hidden shrink-0"
-                >
-                  <img
-                    v-if="mod.logo?.thumbnailUrl"
-                    :src="mod.logo.thumbnailUrl"
-                    class="w-full h-full object-cover"
-                  />
-                  <Star
-                    v-else
-                    class="w-6 h-6 m-auto text-muted-foreground/30"
-                  />
+                <div class="w-12 h-12 rounded-lg bg-muted border border-border overflow-hidden shrink-0">
+                  <img v-if="mod.logo?.thumbnailUrl" :src="mod.logo.thumbnailUrl" class="w-full h-full object-cover" />
+                  <Star v-else class="w-6 h-6 m-auto text-muted-foreground/30" />
                 </div>
 
                 <!-- Info -->
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-1">
                     <h4 class="font-bold text-base truncate">{{ mod.name }}</h4>
-                    <span
-                      v-if="isModInstalled(mod.id)"
-                      class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20 flex items-center gap-0.5"
-                    >
+                    <span v-if="isModInstalled(mod.id)"
+                      class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20 flex items-center gap-0.5">
                       <Check class="w-3 h-3" /> INSTALLED
                     </span>
                   </div>
@@ -960,19 +983,13 @@ function getReleaseColor(type: number) {
                     {{ mod.summary }}
                   </p>
 
-                  <div
-                    class="flex items-center gap-4 mt-2 text-xs text-muted-foreground"
-                  >
-                    <span class="flex items-center gap-1"
-                      ><span class="font-medium text-foreground">{{
-                        formatDownloads(mod.downloadCount)
-                      }}</span>
-                      downloads</span
-                    >
+                  <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                    <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
+                      formatDownloads(mod.downloadCount)
+                        }}</span>
+                      downloads</span>
                     <span class="w-1 h-1 rounded-full bg-border"></span>
-                    <span class="truncate max-w-[150px]"
-                      >by {{ getAuthors(mod) }}</span
-                    >
+                    <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>
                     <span class="w-1 h-1 rounded-full bg-border"></span>
                     <span>Updated {{ formatDate(mod.dateModified) }}</span>
                   </div>
@@ -980,24 +997,12 @@ function getReleaseColor(type: number) {
 
                 <!-- Actions -->
                 <div class="flex items-center gap-2" v-if="!isSelectionMode">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    @click.stop="openModPage(mod)"
-                    title="View on CurseForge"
-                  >
+                  <Button variant="ghost" size="icon" @click.stop="openModPage(mod)" title="View on CurseForge">
                     <ExternalLink class="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  <Button
-                    class="gap-1.5 min-w-[90px]"
-                    size="sm"
-                    :disabled="isAddingMod === mod.id"
-                    @click.stop="quickDownload(mod)"
-                  >
-                    <Loader2
-                      v-if="isAddingMod === mod.id"
-                      class="w-4 h-4 animate-spin"
-                    />
+                  <Button class="gap-1.5 min-w-[90px]" size="sm" :disabled="isAddingMod === mod.id"
+                    @click.stop="quickDownload(mod)">
+                    <Loader2 v-if="isAddingMod === mod.id" class="w-4 h-4 animate-spin" />
                     <template v-else>
                       <ArrowDownToLine class="w-4 h-4" />
                       <span>Latest</span>
@@ -1005,115 +1010,67 @@ function getReleaseColor(type: number) {
                   </Button>
                 </div>
 
-                <ChevronDown
-                  class="w-5 h-5 text-muted-foreground/50 transition-transform duration-300"
-                  :class="{ 'rotate-180': expandedModId === mod.id }"
-                />
+                <ChevronDown class="w-5 h-5 text-muted-foreground/50 transition-transform duration-300"
+                  :class="{ 'rotate-180': expandedModId === mod.id }" />
               </div>
 
               <!-- Accordion Body -->
-              <div
-                v-if="expandedModId === mod.id"
-                class="border-t border-border bg-muted/20 animate-in slide-in-from-top-2 duration-200"
-              >
+              <div v-if="expandedModId === mod.id"
+                class="border-t border-border bg-muted/20 animate-in slide-in-from-top-2 duration-200">
                 <div v-if="isLoadingFiles" class="flex justify-center p-8">
-                  <Loader2
-                    class="w-8 h-8 animate-spin text-muted-foreground/50"
-                  />
+                  <Loader2 class="w-8 h-8 animate-spin text-muted-foreground/50" />
                 </div>
-                <div
-                  v-else-if="filteredModFiles.length === 0"
-                  class="p-8 text-center text-muted-foreground text-sm"
-                >
+                <div v-else-if="filteredModFiles.length === 0" class="p-8 text-center text-muted-foreground text-sm">
                   No files found matching current filters.
                 </div>
-                <div
-                  v-else
-                  class="p-2 space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar"
-                >
-                  <div
-                    v-for="file in filteredModFiles"
-                    :key="file.id"
+                <div v-else class="p-2 space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar">
+                  <div v-for="file in filteredModFiles" :key="file.id"
                     class="flex items-center gap-3 p-2 rounded-lg hover:bg-background border border-transparent hover:border-border transition-all group/file"
                     :class="{
                       'opacity-60 grayscale cursor-not-allowed':
                         isSelectionMode && selectedModIds.has(mod.id),
-                    }"
-                  >
+                    }">
                     <!-- Inner Checkbox -->
-                    <div
-                      v-if="isSelectionMode"
-                      class="pl-2"
-                      :class="{
-                        'pointer-events-none': selectedModIds.has(mod.id),
-                      }"
-                    >
-                      <button
-                        class="w-4 h-4 rounded border flex items-center justify-center transition-colors"
-                        :class="
-                          selectedFilesMap.has(file.id)
-                            ? 'bg-primary border-primary text-primary-foreground'
-                            : 'border-muted-foreground/30 bg-background'
-                        "
-                        @click.stop="toggleFileSelectionMap(file.id, mod.id)"
-                      >
-                        <Check
-                          v-if="selectedFilesMap.has(file.id)"
-                          class="w-3 h-3"
-                        />
+                    <div v-if="isSelectionMode" class="pl-2" :class="{
+                      'pointer-events-none': selectedModIds.has(mod.id),
+                    }">
+                      <button class="w-4 h-4 rounded border flex items-center justify-center transition-colors" :class="selectedFilesMap.has(file.id)
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-muted-foreground/30 bg-background'
+                        " @click.stop="toggleFileSelectionMap(file.id, mod.id)">
+                        <Check v-if="selectedFilesMap.has(file.id)" class="w-3 h-3" />
                       </button>
                     </div>
 
-                    <div
-                      class="flex-1 grid grid-cols-12 gap-4 items-center text-sm"
-                    >
-                      <div
-                        class="col-span-6 font-medium truncate"
-                        :title="file.displayName"
-                      >
+                    <div class="flex-1 grid grid-cols-12 gap-4 items-center text-sm">
+                      <div class="col-span-6 font-medium truncate" :title="file.displayName">
                         {{ file.displayName }}
                       </div>
                       <div class="col-span-2 text-xs text-muted-foreground">
                         {{ formatDate(file.fileDate) }}
                       </div>
                       <div class="col-span-2">
-                        <span
-                          class="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border"
-                          :class="getReleaseColor(file.releaseType)"
-                        >
+                        <span class="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border"
+                          :class="getReleaseColor(file.releaseType)">
                           {{
                             file.releaseType === 1
                               ? "Release"
                               : file.releaseType === 2
-                              ? "Beta"
-                              : "Alpha"
+                                ? "Beta"
+                                : "Alpha"
                           }}
                         </span>
                       </div>
-                      <div
-                        class="col-span-2 text-xs text-muted-foreground text-right"
-                      >
+                      <div class="col-span-2 text-xs text-muted-foreground text-right">
                         {{ (file.fileLength / 1024 / 1024).toFixed(1) }} MB
                       </div>
                     </div>
 
-                    <Button
-                      v-if="!isSelectionMode"
-                      size="sm"
-                      :variant="
-                        isFileInstalled(mod.id, file.id) ? 'secondary' : 'ghost'
-                      "
-                      class="h-8 w-24 ml-2 text-xs"
-                      :disabled="
-                        isFileInstalled(mod.id, file.id) ||
+                    <Button v-if="!isSelectionMode" size="sm" :variant="isFileInstalled(mod.id, file.id) ? 'secondary' : 'ghost'
+                      " class="h-8 w-24 ml-2 text-xs" :disabled="isFileInstalled(mod.id, file.id) ||
                         isAddingMod === mod.id
-                      "
-                      @click="addFileToLibrary(mod, file)"
-                    >
-                      <Check
-                        v-if="isFileInstalled(mod.id, file.id)"
-                        class="w-3 h-3 mr-1.5"
-                      />
+                        " @click="addFileToLibrary(mod, file)">
+                      <Check v-if="isFileInstalled(mod.id, file.id)" class="w-3 h-3 mr-1.5" />
                       {{
                         isFileInstalled(mod.id, file.id)
                           ? "Installed"
@@ -1127,12 +1084,7 @@ function getReleaseColor(type: number) {
 
             <!-- Load More -->
             <div v-if="hasMore" class="flex justify-center py-6">
-              <Button
-                variant="outline"
-                @click="loadMore"
-                :disabled="isSearching"
-                class="min-w-[150px]"
-              >
+              <Button variant="outline" @click="loadMore" :disabled="isSearching" class="min-w-[150px]">
                 <Loader2 v-if="isSearching" class="w-4 h-4 animate-spin mr-2" />
                 Load More
               </Button>
@@ -1140,13 +1092,9 @@ function getReleaseColor(type: number) {
           </div>
 
           <!-- Empty State -->
-          <div
-            v-else-if="!isSearching && hasApiKey"
-            class="flex flex-col items-center justify-center h-full text-muted-foreground"
-          >
-            <div
-              class="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4"
-            >
+          <div v-else-if="!isSearching && hasApiKey"
+            class="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <div class="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
               <Search class="w-8 h-8 opacity-50" />
             </div>
             <p>No results found.</p>
@@ -1161,13 +1109,16 @@ function getReleaseColor(type: number) {
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(100, 100, 100, 0.2);
   border-radius: 10px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 100, 100, 0.4);
 }

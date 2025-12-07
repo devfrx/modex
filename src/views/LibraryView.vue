@@ -78,6 +78,7 @@ const duplicates = ref<Map<string, string[]>>(new Map());
 // Sorting
 const sortBy = ref<"name" | "loader" | "created_at" | "version">("name");
 const sortDir = ref<"asc" | "desc">("asc");
+const sortFields = ["name", "loader", "version", "created_at"] as const;
 
 // View Mode
 const viewMode = ref<"grid" | "list" | "compact">("grid");
@@ -989,11 +990,10 @@ onMounted(() => {
 
         <!-- Sort Buttons - Hidden on mobile -->
         <div class="hidden lg:flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-          <button v-for="field in ['name', 'loader', 'version', 'created_at'] as const" :key="field"
-            class="px-2 py-1 text-xs rounded transition-all" :class="sortBy === field
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-              " @click="toggleSort(field)">
+          <button v-for="field in sortFields" :key="field" class="px-2 py-1 text-xs rounded transition-all" :class="sortBy === field
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted-foreground hover:text-foreground'
+            " @click="toggleSort(field)">
             {{
               field === "created_at"
                 ? "Date"

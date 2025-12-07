@@ -20,8 +20,14 @@ import {
   RefreshCw,
   Share2,
   Globe,
+  ToggleLeft,
+  ToggleRight,
+  Filter,
+  CheckSquare,
+  Square,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
+import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import VersionHistoryPanel from "@/components/modpacks/VersionHistoryPanel.vue";
 import ModpackAnalysisPanel from "@/components/modpacks/ModpackAnalysisPanel.vue";
@@ -58,7 +64,11 @@ const sortDir = ref<"asc" | "desc">("asc");
 const selectedModIds = ref<Set<string>>(new Set());
 const showUpdatesDialog = ref(false);
 const isSaving = ref(false);
+const modsFilter = ref<"all" | "incompatible" | "disabled">("all");
 const activeTab = ref<"mods" | "analysis" | "versions" | "settings" | "remote">("mods");
+
+// Confirm dialog state for removing incompatible mods
+const showRemoveIncompatibleDialog = ref(false);
 
 // Remote Updates
 const showReviewDialog = ref(false);
@@ -149,11 +159,22 @@ function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
   return { compatible: true };
 }
 
-// Filtered & Sorted Mods
+// Filtered & Sorted Mods with compatibility info
 const filteredInstalledMods = computed(() => {
-  let mods = currentMods.value.filter((m) =>
-    m.name.toLowerCase().includes(searchQueryInstalled.value.toLowerCase())
-  );
+  let mods = currentMods.value.filter((m) => {
+    // Search filter
+    const matchesSearch = m.name.toLowerCase().includes(searchQueryInstalled.value.toLowerCase());
+    if (!matchesSearch) return false;
+
+    // Quick filter
+    if (modsFilter.value === "incompatible") {
+      return !isModCompatible(m).compatible;
+    }
+    if (modsFilter.value === "disabled") {
+      return disabledModIds.value.has(m.id);
+    }
+    return true;
+  });
   mods.sort((a, b) => {
     const aVal = a[sortBy.value] || "";
     const bVal = b[sortBy.value] || "";
@@ -161,6 +182,23 @@ const filteredInstalledMods = computed(() => {
     return sortDir.value === "asc" ? cmp : -cmp;
   });
   return mods;
+});
+
+// Installed mods with compatibility check
+const installedModsWithCompatibility = computed(() => {
+  return filteredInstalledMods.value.map(mod => {
+    const compatibility = isModCompatible(mod);
+    return {
+      ...mod,
+      isCompatible: compatibility.compatible,
+      incompatibilityReason: compatibility.reason,
+    };
+  });
+});
+
+// Count of incompatible mods
+const incompatibleModCount = computed(() => {
+  return currentMods.value.filter(m => !isModCompatible(m).compatible).length;
 });
 
 // Mods with compatibility info
@@ -366,7 +404,75 @@ function clearSelection() {
   selectedModIds.value = new Set();
 }
 
-function toggleSort(field: "name" | "version") {
+// Bulk enable/disable selected mods
+async function bulkEnableSelected() {
+  if (selectedModIds.value.size === 0 || isLinked.value) return;
+
+  for (const modId of selectedModIds.value) {
+    if (disabledModIds.value.has(modId)) {
+      try {
+        await window.api.modpacks.toggleMod(props.modpackId, modId);
+        disabledModIds.value.delete(modId);
+      } catch (err) {
+        console.error(`Failed to enable mod ${modId}:`, err);
+      }
+    }
+  }
+  disabledModIds.value = new Set(disabledModIds.value);
+  emit("update");
+  toast.success("Mods Enabled", `Enabled ${selectedModIds.value.size} mod(s)`);
+}
+
+async function bulkDisableSelected() {
+  if (selectedModIds.value.size === 0 || isLinked.value) return;
+
+  for (const modId of selectedModIds.value) {
+    if (!disabledModIds.value.has(modId)) {
+      try {
+        await window.api.modpacks.toggleMod(props.modpackId, modId);
+        disabledModIds.value.add(modId);
+      } catch (err) {
+        console.error(`Failed to disable mod ${modId}:`, err);
+      }
+    }
+  }
+  disabledModIds.value = new Set(disabledModIds.value);
+  emit("update");
+  toast.success("Mods Disabled", `Disabled ${selectedModIds.value.size} mod(s)`);
+}
+
+async function removeIncompatibleMods() {
+  if (isLinked.value) return;
+
+  const incompatibleMods = currentMods.value.filter(m => !isModCompatible(m).compatible);
+  if (incompatibleMods.length === 0) {
+    toast.info("No Incompatible Mods", "All mods are compatible with this modpack");
+    return;
+  }
+
+  // Show confirm dialog
+  showRemoveIncompatibleDialog.value = true;
+}
+
+async function confirmRemoveIncompatibleMods() {
+  showRemoveIncompatibleDialog.value = false;
+
+  const incompatibleMods = currentMods.value.filter(m => !isModCompatible(m).compatible);
+
+  let removed = 0;
+  for (const mod of incompatibleMods) {
+    try {
+      await window.api.modpacks.removeMod(props.modpackId, mod.id);
+      removed++;
+    } catch (err) {
+      console.error(`Failed to remove mod ${mod.id}:`, err);
+    }
+  }
+
+  await loadData();
+  emit("update");
+  toast.success("Mods Removed", `Removed ${removed} incompatible mod(s)`);
+} function toggleSort(field: "name" | "version") {
   if (sortBy.value === field) {
     sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
   } else {
@@ -798,14 +904,53 @@ watch(
                     }}<span v-if="disabledModIds.size > 0" class="text-amber-500">
                       (+{{ disabledModIds.size }} disabled)</span>
                   </span>
+                  <span v-if="incompatibleModCount > 0" class="text-xs text-red-500 font-medium">
+                    ({{ incompatibleModCount }} incompatible)
+                  </span>
                 </div>
-                <Transition name="fade">
-                  <Button v-if="selectedModIds.size > 0" variant="destructive" size="sm" class="h-7 text-xs gap-1"
-                    @click="removeSelectedMods">
-                    <Trash2 class="w-3 h-3" />
-                    Remove {{ selectedModIds.size }}
+                <!-- Bulk Actions -->
+                <div v-if="selectedModIds.size > 0 && !isLinked" class="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" class="h-7 text-xs gap-1 text-emerald-500 hover:text-emerald-600"
+                    @click="bulkEnableSelected" title="Enable selected">
+                    <ToggleRight class="w-3 h-3" />
                   </Button>
-                </Transition>
+                  <Button variant="ghost" size="sm" class="h-7 text-xs gap-1 text-amber-500 hover:text-amber-600"
+                    @click="bulkDisableSelected" title="Disable selected">
+                    <ToggleLeft class="w-3 h-3" />
+                  </Button>
+                  <Button variant="destructive" size="sm" class="h-7 text-xs gap-1" @click="removeSelectedMods">
+                    <Trash2 class="w-3 h-3" />
+                    {{ selectedModIds.size }}
+                  </Button>
+                </div>
+              </div>
+
+              <!-- Quick Filters -->
+              <div class="flex items-center gap-1 mb-2">
+                <button class="h-6 text-[10px] px-2 rounded transition-colors"
+                  :class="modsFilter === 'all' ? 'bg-primary/15 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'"
+                  @click="modsFilter = 'all'">
+                  All
+                </button>
+                <button v-if="incompatibleModCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors"
+                  :class="modsFilter === 'incompatible' ? 'bg-red-500/15 text-red-500 font-medium' : 'hover:bg-muted text-muted-foreground'"
+                  @click="modsFilter = 'incompatible'">
+                  <AlertCircle class="w-3 h-3 inline mr-0.5" />
+                  Incompatible ({{ incompatibleModCount }})
+                </button>
+                <button v-if="disabledModIds.size > 0" class="h-6 text-[10px] px-2 rounded transition-colors"
+                  :class="modsFilter === 'disabled' ? 'bg-amber-500/15 text-amber-500 font-medium' : 'hover:bg-muted text-muted-foreground'"
+                  @click="modsFilter = 'disabled'">
+                  Disabled ({{ disabledModIds.size }})
+                </button>
+
+                <!-- Remove all incompatible mods button -->
+                <button v-if="incompatibleModCount > 0 && !isLinked"
+                  class="h-6 text-[10px] px-2.5 rounded transition-colors ml-auto flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
+                  @click="removeIncompatibleMods" title="Remove all incompatible mods from this modpack">
+                  <Trash2 class="w-3 h-3" />
+                  <span>Remove All Incompatible</span>
+                </button>
               </div>
               <div class="flex items-center gap-2">
                 <div class="relative flex-1">
@@ -832,11 +977,13 @@ watch(
 
             <!-- Mod List -->
             <div class="flex-1 overflow-y-auto p-2 space-y-1">
-              <div v-for="mod in filteredInstalledMods" :key="mod.id"
+              <div v-for="mod in installedModsWithCompatibility" :key="mod.id"
                 class="flex items-center gap-3 p-2.5 rounded-lg border transition-all group cursor-pointer" :class="[
                   selectedModIds.has(mod.id)
                     ? 'bg-primary/10 border-primary/50 shadow-sm'
-                    : 'border-transparent hover:bg-accent/50 hover:border-border/50',
+                    : !mod.isCompatible
+                      ? 'bg-red-500/10 border-red-500/30 hover:bg-red-500/15'
+                      : 'border-transparent hover:bg-accent/50 hover:border-border/50',
                   disabledModIds.has(mod.id) ? 'opacity-50' : '',
                   isLinked ? 'cursor-default' : 'cursor-pointer'
                 ]" @click="!isLinked && toggleSelect(mod.id)">
@@ -857,8 +1004,8 @@ watch(
                   disabledModIds.has(mod.id) ? 'bg-muted-foreground/30' : 'bg-emerald-500',
                   isLinked ? 'opacity-50 cursor-not-allowed' : ''
                 ]" @click.stop="!isLinked && toggleModEnabled(mod.id)" :title="isLinked
-                    ? 'Managed by remote source'
-                    : (disabledModIds.has(mod.id) ? 'Click to enable mod' : 'Click to disable mod')"
+                  ? 'Managed by remote source'
+                  : (disabledModIds.has(mod.id) ? 'Click to enable mod' : 'Click to disable mod')"
                   :disabled="isLinked">
                   <span class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all"
                     :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-4'" />
@@ -872,20 +1019,30 @@ watch(
                       class="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-medium">
                       disabled
                     </span>
+                    <span v-if="!mod.isCompatible"
+                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium">
+                      incompatible
+                    </span>
                   </div>
                   <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span v-if="mod.game_version && mod.game_version !== 'unknown'"
-                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium">
+                      class="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
+                      :class="mod.isCompatible ? 'bg-emerald-500/15 text-emerald-500' : 'bg-red-500/15 text-red-500'">
                       {{ mod.game_version }}
                     </span>
                     <span v-if="mod.loader && mod.loader !== 'unknown'"
-                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-500 font-medium capitalize">
+                      class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize"
+                      :class="mod.isCompatible ? 'bg-blue-500/15 text-blue-500' : 'bg-red-500/15 text-red-500'">
                       {{ mod.loader }}
                     </span>
                     <span v-if="mod.version" class="text-[10px] text-muted-foreground truncate max-w-[100px] font-mono"
                       :title="mod.version">
                       {{ mod.version }}
                     </span>
+                  </div>
+                  <div v-if="!mod.isCompatible && mod.incompatibilityReason"
+                    class="text-[10px] text-red-500 mt-0.5 truncate" :title="mod.incompatibilityReason">
+                    {{ mod.incompatibilityReason }}
                   </div>
                 </div>
 
@@ -1197,6 +1354,12 @@ watch(
     <UpdateReviewDialog v-if="updateResult && modpack" :open="showReviewDialog" :modpack-name="modpack.name"
       :changes="updateResult.changes" :new-version="updateResult.remoteManifest?.modpack.version"
       @close="showReviewDialog = false" @confirm="applyRemoteUpdate" />
+
+    <!-- Confirm Remove Incompatible Mods Dialog -->
+    <ConfirmDialog :open="showRemoveIncompatibleDialog" title="Remove Incompatible Mods"
+      :message="`This will remove ${incompatibleModCount} mod(s) that don't match the modpack's version (${modpack?.minecraft_version}) or loader (${modpack?.loader}). The mods will remain in your library but will be removed from this modpack.`"
+      confirm-text="Remove Mods" cancel-text="Cancel" variant="danger" icon="trash"
+      @close="showRemoveIncompatibleDialog = false" @confirm="confirmRemoveIncompatibleMods" />
   </div>
 </template>
 

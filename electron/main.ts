@@ -1057,22 +1057,31 @@ async function initializeBackend() {
     }
   });
 
-  ipcMain.handle("updates:checkAll", async () => {
+  ipcMain.handle("updates:checkAll", async (event) => {
     const mods = await metadataManager.getAllMods();
     const results = [];
+    const cfMods = mods.filter(m => m.source === "curseforge" && m.cf_project_id);
+    let current = 0;
 
-    for (const mod of mods) {
-      if (mod.source !== "curseforge" || !mod.cf_project_id) continue;
+    for (const mod of cfMods) {
+      current++;
+      // Send progress update
+      event.sender.send("updates:progress", {
+        current,
+        total: cfMods.length,
+        modName: mod.name
+      });
 
       try {
         const latestFile = await curseforgeService.getBestFile(
-          mod.cf_project_id,
+          mod.cf_project_id!,
           mod.game_version,
           mod.loader
         );
 
         results.push({
           modId: mod.id,
+          projectName: mod.name,
           currentVersion: mod.version,
           latestVersion: latestFile?.displayName || null,
           hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
@@ -1085,6 +1094,7 @@ async function initializeBackend() {
       } catch (error) {
         results.push({
           modId: mod.id,
+          projectName: mod.name,
           currentVersion: mod.version,
           latestVersion: null,
           hasUpdate: false,
@@ -1096,7 +1106,7 @@ async function initializeBackend() {
     return results;
   });
 
-  ipcMain.handle("updates:checkModpack", async (_, modpackId: string) => {
+  ipcMain.handle("updates:checkModpack", async (event, modpackId: string) => {
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) throw new Error("Modpack not found");
 
@@ -1105,19 +1115,29 @@ async function initializeBackend() {
 
     const mcVersion = modpack.minecraft_version || "1.20.1";
     const loader = modpack.loader || "forge";
+    
+    const cfMods = mods.filter(m => m.source === "curseforge" && m.cf_project_id);
+    let current = 0;
 
-    for (const mod of mods) {
-      if (mod.source !== "curseforge" || !mod.cf_project_id) continue;
+    for (const mod of cfMods) {
+      current++;
+      // Send progress update
+      event.sender.send("updates:progress", {
+        current,
+        total: cfMods.length,
+        modName: mod.name
+      });
 
       try {
         const latestFile = await curseforgeService.getBestFile(
-          mod.cf_project_id,
+          mod.cf_project_id!,
           mcVersion,
           loader
         );
 
         results.push({
           modId: mod.id,
+          projectName: mod.name,
           currentVersion: mod.version,
           latestVersion: latestFile?.displayName || null,
           hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
@@ -1130,6 +1150,7 @@ async function initializeBackend() {
       } catch (error) {
         results.push({
           modId: mod.id,
+          projectName: mod.name,
           currentVersion: mod.version,
           latestVersion: null,
           hasUpdate: false,

@@ -17,7 +17,7 @@ function closeSidebar() {
   <div class="flex h-screen bg-background text-foreground">
     <!-- Mobile menu button -->
     <button @click="sidebarOpen = true"
-      class="fixed top-2 left-2 z-40 sm:hidden p-2 rounded-lg bg-card border border-white/10 shadow-lg"
+      class="fixed top-2 left-2 z-40 sm:hidden p-2 rounded-lg bg-card border border-border shadow-lg"
       aria-label="Open menu">
       <Menu class="w-5 h-5" />
     </button>

@@ -92,9 +92,9 @@
 
 /* Glassmorphism Utilities */
 .glass {
-  @apply bg-background/60 backdrop-blur-lg border border-white/10;
+  @apply bg-background/60 backdrop-blur-lg border border-border;
 }
 
 .glass-card {
-  @apply bg-card/50 backdrop-blur-md border border-white/5 hover:border-primary/50 transition-all duration-300;
+  @apply bg-card/50 backdrop-blur-md border border-border hover:border-primary/50 transition-all duration-300;
 }

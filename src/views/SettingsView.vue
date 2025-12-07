@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { useToast } from "@/composables/useToast";
 import { useDialog } from "@/composables/useDialog";
 import Button from "@/components/ui/Button.vue";
@@ -19,6 +19,9 @@ import {
   Monitor,
   Keyboard,
   Heart,
+  Globe,
+  Key,
+  Check,
 } from "lucide-vue-next";
 
 // App version from package.json
@@ -35,6 +38,22 @@ const modpackCount = ref(0);
 const totalSize = ref("0 MB");
 const isClearingData = ref(false);
 const apiAvailable = ref(true);
+const cfApiKey = ref("");
+const isCheckingUpdate = ref(false);
+const currentTab = ref("general");
+
+// Tabs Configuration
+const tabs = [
+  { id: "general", name: "General", icon: SettingsIcon },
+  { id: "appearance", name: "Appearance", icon: Palette },
+  { id: "library", name: "Library", icon: Database },
+  { id: "shortcuts", name: "Shortcuts", icon: Keyboard },
+  { id: "about", name: "About", icon: Info },
+];
+
+const currentTabName = computed(() => {
+  return tabs.find((t) => t.id === currentTab.value)?.name || "Settings";
+});
 
 // Accent color options
 const accentColors = [
@@ -81,9 +100,30 @@ async function loadSettings() {
     // Metadata-only mode: no local file storage
     totalSize.value = "N/A (metadata only)";
     libraryPath.value = "Mods are stored as metadata references only";
+
+    // Load API Key
+    cfApiKey.value = await window.api.updates.getApiKey("curseforge");
   } catch (err) {
     console.error("Failed to load stats:", err);
   }
+}
+
+async function saveCfApiKey() {
+  try {
+    await window.api.updates.setApiKey("curseforge", cfApiKey.value);
+    toast.success("Saved", "CurseForge API Key updated");
+  } catch (err) {
+    toast.error("Error", "Failed to save API Key");
+  }
+}
+
+async function checkForAppUpdates() {
+  isCheckingUpdate.value = true;
+  // Mock update check for now
+  setTimeout(() => {
+    isCheckingUpdate.value = false;
+    toast.success("Up to Date", "You are using the latest version of ModEx.");
+  }, 1500);
 }
 
 async function openLibraryFolder() {
@@ -117,11 +157,12 @@ function applyAccentColor(color: (typeof accentColors)[0]) {
 async function clearAllData() {
   const confirmed = await confirm({
     title: "Clear All Data",
-    message: "This will delete ALL mods and modpacks permanently.\n\nThis action cannot be undone. Are you sure?",
+    message:
+      "This will delete ALL mods and modpacks permanently.\n\nThis action cannot be undone. Are you sure?",
     variant: "danger",
     icon: "warning",
     confirmText: "Delete Everything",
-    cancelText: "Cancel"
+    cancelText: "Cancel",
   });
 
   if (!confirmed) {
@@ -144,7 +185,10 @@ async function clearAllData() {
     await loadSettings();
     toast.success("Data Cleared", "All data cleared successfully!");
   } catch (err) {
-    toast.error("Clear Failed", "Failed to clear data: " + (err as Error).message);
+    toast.error(
+      "Clear Failed",
+      "Failed to clear data: " + (err as Error).message
+    );
   } finally {
     isClearingData.value = false;
   }
@@ -184,208 +228,308 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-[#0a0a0a]">
-    <!-- Compact Header -->
-    <div class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-white/5">
-      <div class="flex items-center gap-2 sm:gap-3">
-        <div class="p-1.5 sm:p-2 bg-primary/10 rounded-lg">
-          <SettingsIcon class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-        </div>
-        <div>
-          <h1 class="text-base sm:text-lg font-semibold tracking-tight">Settings</h1>
-          <p class="text-[10px] sm:text-xs text-muted-foreground">
-            Preferences & library management
-          </p>
+  <div class="flex h-full bg-background text-foreground overflow-hidden">
+    <!-- Sidebar -->
+    <div class="w-64 flex-shrink-0 border-r border-border bg-card/30 flex flex-col">
+      <div class="p-6 pb-4">
+        <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <SettingsIcon class="w-6 h-6 text-primary" />
+          Settings
+        </h1>
+        <p class="text-xs text-muted-foreground mt-1">
+          Manage your preferences
+        </p>
+      </div>
+
+      <nav class="flex-1 px-3 space-y-1 overflow-y-auto">
+        <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id"
+          class="w-full text-left px-3 py-2.5 rounded-md flex items-center gap-3 transition-all duration-200 text-sm font-medium"
+          :class="currentTab === tab.id
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+            ">
+          <component :is="tab.icon" class="w-4 h-4" />
+          {{ tab.name }}
+        </button>
+      </nav>
+
+      <div class="p-4 border-t border-border">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
+            <span class="text-sm font-bold text-primary">M</span>
+          </div>
+          <div>
+            <div class="text-sm font-medium">ModEx</div>
+            <div class="text-xs text-muted-foreground">v{{ appVersion }}</div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Content -->
-    <div class="flex-1 overflow-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
-      <!-- API Warning Banner -->
-      <div v-if="!apiAvailable"
-        class="bg-destructive/10 border border-destructive text-destructive rounded-lg p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
-        <AlertTriangle class="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-        <div>
-          <p class="font-medium text-sm sm:text-base">Backend API not available</p>
-          <p class="text-xs sm:text-sm opacity-80">Please restart the application.</p>
-        </div>
-      </div>
-
-      <!-- Settings Sections -->
-      <div class="grid gap-4 sm:gap-6 max-w-3xl">
-        <!-- Appearance -->
-        <div class="glass-card rounded-lg p-4 sm:p-5 space-y-4 sm:space-y-5">
-          <h2 class="text-base sm:text-lg font-semibold flex items-center gap-2">
-            <Palette class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-            Appearance
+    <!-- Content Area -->
+    <div class="flex-1 overflow-auto bg-background">
+      <div class="max-w-3xl mx-auto p-8">
+        <div class="mb-8">
+          <h2 class="text-2xl font-semibold tracking-tight">
+            {{ currentTabName }}
           </h2>
+          <p class="text-muted-foreground text-sm mt-1">
+            Customize your {{ currentTabName.toLowerCase() }} settings
+          </p>
+        </div>
 
-          <!-- Theme Selection -->
-          <div class="space-y-2 sm:space-y-3">
-            <label class="text-xs sm:text-sm font-medium">Theme</label>
-            <div class="flex flex-wrap gap-2">
-              <Button :variant="theme === 'dark' ? 'default' : 'outline'" size="sm"
-                class="gap-1.5 sm:gap-2 h-7 sm:h-8 text-xs sm:text-sm" @click="applyTheme('dark')">
-                <Moon class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Dark
-              </Button>
-              <Button :variant="theme === 'light' ? 'default' : 'outline'" size="sm"
-                class="gap-1.5 sm:gap-2 h-7 sm:h-8 text-xs sm:text-sm" @click="applyTheme('light')">
-                <Sun class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Light
-              </Button>
-              <Button :variant="theme === 'system' ? 'default' : 'outline'" size="sm"
-                class="gap-1.5 sm:gap-2 h-7 sm:h-8 text-xs sm:text-sm" @click="applyTheme('system')">
-                <Monitor class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                System
-              </Button>
-            </div>
-          </div>
-
-          <!-- Accent Color -->
-          <div class="space-y-2 sm:space-y-3">
-            <label class="text-xs sm:text-sm font-medium">Accent Color</label>
-            <div class="flex gap-2">
-              <button v-for="color in accentColors" :key="color.name" :class="[
-                color.class,
-                'w-7 h-7 sm:w-8 sm:h-8 rounded-full transition-all hover:scale-110',
-                accentColor === color.name
-                  ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground'
-                  : '',
-              ]" :title="color.name" @click="applyAccentColor(color)" />
-            </div>
+        <!-- API Warning Banner -->
+        <div v-if="!apiAvailable"
+          class="mb-6 bg-destructive/10 border border-destructive text-destructive rounded-lg p-4 flex items-center gap-3">
+          <AlertTriangle class="w-5 h-5 flex-shrink-0" />
+          <div>
+            <p class="font-medium">Backend API not available</p>
+            <p class="text-sm opacity-80">Please restart the application.</p>
           </div>
         </div>
 
-        <!-- Storage Location -->
-        <div class="glass-card rounded-lg p-4 sm:p-5 space-y-3 sm:space-y-4">
-          <h2 class="text-base sm:text-lg font-semibold flex items-center gap-2">
-            <FolderOpen class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-            Storage Location
-          </h2>
-
-          <div class="space-y-2">
-            <label class="text-xs sm:text-sm font-medium">Mod Library Path</label>
-            <div class="flex flex-col sm:flex-row gap-2">
-              <Input v-model="libraryPath" readonly class="flex-1 font-mono text-xs h-8 sm:h-9" />
-              <Button variant="outline" @click="openLibraryFolder"
-                class="gap-1.5 sm:gap-2 h-8 sm:h-9 text-xs sm:text-sm">
-                <ExternalLink class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Open
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Library Statistics -->
-        <div class="glass-card rounded-lg p-4 sm:p-5 space-y-3 sm:space-y-4">
-          <div class="flex items-center justify-between">
-            <h2 class="text-base sm:text-lg font-semibold flex items-center gap-2">
-              <Database class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-              Library Statistics
-            </h2>
-            <Button variant="ghost" size="sm" @click="refreshLibrary" class="gap-2">
-              <RefreshCw class="w-4 h-4" />
-              Refresh
-            </Button>
-          </div>
-
-          <div class="grid grid-cols-1 xs:grid-cols-3 gap-3 sm:gap-4">
-            <div class="p-3 sm:p-4 bg-secondary/30 rounded-lg text-center">
-              <div class="text-2xl sm:text-3xl font-bold text-primary">{{ modCount }}</div>
-              <div class="text-[10px] sm:text-xs text-muted-foreground mt-1">Total Mods</div>
-            </div>
-            <div class="p-3 sm:p-4 bg-secondary/30 rounded-lg text-center">
-              <div class="text-2xl sm:text-3xl font-bold text-primary">
-                {{ modpackCount }}
+        <!-- General Tab -->
+        <div v-if="currentTab === 'general'" class="space-y-8">
+          <!-- API Keys -->
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <Key class="w-4 h-4 text-primary" />
+              API Configuration
+            </h3>
+            <div class="p-5 rounded-xl border border-border bg-card/50">
+              <div class="space-y-4">
+                <div class="space-y-2">
+                  <label class="text-sm font-medium flex items-center gap-2">
+                    CurseForge API Key
+                  </label>
+                  <div class="flex gap-2">
+                    <Input v-model="cfApiKey" type="password" placeholder="Enter your API Key (Optional)"
+                      class="flex-1" />
+                    <Button variant="outline" @click="saveCfApiKey">Save</Button>
+                  </div>
+                  <p class="text-xs text-muted-foreground">
+                    Leave empty to use the built-in shared key. Required only
+                    for high-traffic usage.
+                  </p>
+                </div>
               </div>
-              <div class="text-[10px] sm:text-xs text-muted-foreground mt-1">Modpacks</div>
             </div>
-            <div class="p-3 sm:p-4 bg-secondary/30 rounded-lg text-center">
-              <div class="text-2xl sm:text-3xl font-bold text-primary">{{ totalSize }}</div>
-              <div class="text-[10px] sm:text-xs text-muted-foreground mt-1">Total Size</div>
+          </section>
+
+          <!-- Updates -->
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <RefreshCw class="w-4 h-4 text-primary" />
+              Updates
+            </h3>
+            <div class="p-5 rounded-xl border border-border bg-card/50">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-medium">Application Updates</div>
+                  <div class="text-sm text-muted-foreground">
+                    Check for the latest version of ModEx
+                  </div>
+                </div>
+                <Button variant="outline" @click="checkForAppUpdates" :disabled="isCheckingUpdate" class="gap-2">
+                  <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingUpdate }" />
+                  {{ isCheckingUpdate ? "Checking..." : "Check Now" }}
+                </Button>
+              </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        <!-- Keyboard Shortcuts -->
-        <div class="glass-card rounded-lg p-4 sm:p-5 space-y-3 sm:space-y-4">
-          <h2 class="text-base sm:text-lg font-semibold flex items-center gap-2">
-            <Keyboard class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-            Keyboard Shortcuts
-          </h2>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div v-for="shortcut in shortcuts" :key="shortcut.keys"
-              class="flex items-center justify-between p-2 bg-secondary/20 rounded">
-              <span class="text-xs sm:text-sm text-muted-foreground">{{
-                shortcut.action
-                }}</span>
-              <kbd class="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-secondary text-[10px] sm:text-xs rounded font-mono">{{
-                shortcut.keys
-                }}</kbd>
+        <!-- Appearance Tab -->
+        <div v-if="currentTab === 'appearance'" class="space-y-8">
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <Sun class="w-4 h-4 text-primary" />
+              Theme
+            </h3>
+            <div class="p-5 rounded-xl border border-border bg-card/50">
+              <div class="grid grid-cols-3 gap-4">
+                <button
+                  class="flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all hover:bg-muted/50"
+                  :class="theme === 'light'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-transparent'
+                    " @click="applyTheme('light')">
+                  <Sun class="w-8 h-8" />
+                  <span class="text-sm font-medium">Light</span>
+                </button>
+                <button
+                  class="flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all hover:bg-muted/50"
+                  :class="theme === 'dark'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-transparent'
+                    " @click="applyTheme('dark')">
+                  <Moon class="w-8 h-8" />
+                  <span class="text-sm font-medium">Dark</span>
+                </button>
+                <button
+                  class="flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all hover:bg-muted/50"
+                  :class="theme === 'system'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-transparent'
+                    " @click="applyTheme('system')">
+                  <Monitor class="w-8 h-8" />
+                  <span class="text-sm font-medium">System</span>
+                </button>
+              </div>
             </div>
-          </div>
+          </section>
+
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <Palette class="w-4 h-4 text-primary" />
+              Accent Color
+            </h3>
+            <div class="p-5 rounded-xl border border-border bg-card/50">
+              <div class="flex flex-wrap gap-4">
+                <button v-for="color in accentColors" :key="color.name" :class="[
+                  color.class,
+                  'w-12 h-12 rounded-full transition-all hover:scale-110 flex items-center justify-center',
+                  accentColor === color.name
+                    ? 'ring-4 ring-offset-4 ring-offset-background ring-foreground'
+                    : '',
+                ]" :title="color.name" @click="applyAccentColor(color)">
+                  <Check v-if="accentColor === color.name" class="w-6 h-6 text-white" />
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <!-- Danger Zone -->
-        <div class="glass-card rounded-lg p-4 sm:p-5 space-y-3 sm:space-y-4 border-destructive/50">
-          <h2 class="text-base sm:text-lg font-semibold flex items-center gap-2 text-destructive">
-            <AlertTriangle class="w-4 h-4 sm:w-5 sm:h-5" />
-            Danger Zone
-          </h2>
+        <!-- Library Tab -->
+        <div v-if="currentTab === 'library'" class="space-y-8">
+          <section class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-medium flex items-center gap-2">
+                <Database class="w-4 h-4 text-primary" />
+                Statistics
+              </h3>
+              <Button variant="ghost" size="sm" @click="refreshLibrary" class="gap-2">
+                <RefreshCw class="w-4 h-4" />
+                Refresh
+              </Button>
+            </div>
 
-          <div
-            class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-destructive/10 rounded-lg">
+            <div class="grid grid-cols-3 gap-4">
+              <div
+                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
+                <div class="text-3xl font-bold text-primary">
+                  {{ modCount }}
+                </div>
+                <div class="text-sm text-muted-foreground mt-1">Total Mods</div>
+              </div>
+              <div
+                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
+                <div class="text-3xl font-bold text-primary">
+                  {{ modpackCount }}
+                </div>
+                <div class="text-sm text-muted-foreground mt-1">Modpacks</div>
+              </div>
+              <div
+                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
+                <div class="text-3xl font-bold text-primary">
+                  {{ totalSize }}
+                </div>
+                <div class="text-sm text-muted-foreground mt-1">Total Size</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <FolderOpen class="w-4 h-4 text-primary" />
+              Storage Location
+            </h3>
+            <div class="p-5 rounded-xl border border-border bg-card/50">
+              <div class="space-y-2">
+                <label class="text-sm font-medium">Mod Library Path</label>
+                <div class="flex gap-2">
+                  <Input v-model="libraryPath" readonly class="flex-1 font-mono text-sm" />
+                  <Button variant="outline" @click="openLibraryFolder">
+                    <ExternalLink class="w-4 h-4 mr-2" />
+                    Open
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2 text-destructive">
+              <AlertTriangle class="w-4 h-4" />
+              Danger Zone
+            </h3>
+            <div class="p-5 rounded-xl border border-destructive/30 bg-destructive/5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-medium text-destructive">Clear All Data</div>
+                  <div class="text-sm text-muted-foreground">
+                    Permanently delete all mods and modpacks. This cannot be
+                    undone.
+                  </div>
+                </div>
+                <Button variant="destructive" @click="clearAllData" :disabled="isClearingData">
+                  <Trash2 class="w-4 h-4 mr-2" />
+                  {{ isClearingData ? "Clearing..." : "Clear All Data" }}
+                </Button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Shortcuts Tab -->
+        <div v-if="currentTab === 'shortcuts'" class="space-y-8">
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <Keyboard class="w-4 h-4 text-primary" />
+              Keyboard Shortcuts
+            </h3>
+            <div class="rounded-xl border border-border bg-card/50 overflow-hidden">
+              <div class="divide-y divide-border">
+                <div v-for="shortcut in shortcuts" :key="shortcut.keys"
+                  class="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                  <span class="text-sm font-medium">{{ shortcut.action }}</span>
+                  <kbd class="px-2 py-1 bg-muted text-xs rounded-md font-mono border border-border shadow-sm">
+                    {{ shortcut.keys }}
+                  </kbd>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- About Tab -->
+        <div v-if="currentTab === 'about'" class="space-y-8">
+          <div class="flex flex-col items-center justify-center py-12 text-center space-y-6">
+            <div class="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center mb-4">
+              <span class="text-5xl font-bold text-primary">M</span>
+            </div>
+
             <div>
-              <p class="font-medium text-sm sm:text-base">Clear All Data</p>
-              <p class="text-[10px] sm:text-xs text-muted-foreground">
-                Permanently delete all mods and modpacks.
+              <h2 class="text-3xl font-bold tracking-tight">ModEx</h2>
+              <p class="text-muted-foreground mt-2 text-lg">The modern Minecraft mod manager</p>
+            </div>
+
+            <div class="flex gap-4 mt-4">
+              <div class="px-4 py-2 rounded-full bg-muted text-sm font-medium">
+                v{{ appVersion }}
+              </div>
+              <div class="px-4 py-2 rounded-full bg-muted text-sm font-medium">
+                Electron + Vue 3
+              </div>
+            </div>
+
+            <div class="pt-8 text-sm text-muted-foreground">
+              <p class="flex items-center justify-center gap-1">
+                Made with
+                <Heart class="w-4 h-4 text-red-500 fill-red-500" /> for the community
               </p>
+              <p class="mt-2">© {{ new Date().getFullYear() }} ModEx Team</p>
             </div>
-            <Button variant="destructive" class="gap-1.5 sm:gap-2 h-8 sm:h-9 text-xs sm:text-sm w-full sm:w-auto"
-              @click="clearAllData" :disabled="isClearingData">
-              <Trash2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              {{ isClearingData ? "Clearing..." : "Clear All" }}
-            </Button>
-          </div>
-        </div>
-
-        <!-- About -->
-        <div class="glass-card rounded-lg p-4 sm:p-5 space-y-3 sm:space-y-4">
-          <h2 class="text-base sm:text-lg font-semibold flex items-center gap-2">
-            <Info class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-            About ModEx
-          </h2>
-
-          <div class="space-y-3">
-            <div class="flex items-center gap-3 sm:gap-4">
-              <div class="w-12 h-12 sm:w-16 sm:h-16 bg-primary/20 rounded-xl flex items-center justify-center">
-                <span class="text-2xl sm:text-3xl font-bold text-primary">M</span>
-              </div>
-              <div>
-                <h3 class="text-lg sm:text-xl font-bold">ModEx</h3>
-                <p class="text-xs sm:text-sm text-muted-foreground">Minecraft Mod Manager</p>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm">
-              <div class="flex justify-between p-2 bg-secondary/20 rounded">
-                <span class="text-muted-foreground">Version</span>
-                <span class="font-medium">{{ appVersion }}</span>
-              </div>
-              <div class="flex justify-between p-2 bg-secondary/20 rounded">
-                <span class="text-muted-foreground">Framework</span>
-                <span class="font-medium">Electron + Vue 3</span>
-              </div>
-            </div>
-
-            <p class="text-[10px] sm:text-xs text-muted-foreground pt-2 flex items-center gap-1">
-              Made with
-              <Heart class="w-3 h-3 text-red-500 fill-red-500" /> for
-              Minecraft modders
-            </p>
           </div>
         </div>
       </div>

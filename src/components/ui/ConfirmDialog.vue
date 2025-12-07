@@ -34,31 +34,34 @@ const variantClasses = computed(() => {
     switch (props.variant) {
         case "danger":
             return {
-                bg: "bg-red-500/10",
-                border: "border-red-500/30",
-                text: "text-red-500",
-                button: "bg-red-500 hover:bg-red-600",
+                bg: "bg-destructive/10",
+                border: "border-destructive/30",
+                text: "text-destructive",
+                button: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
             };
         case "warning":
             return {
                 bg: "bg-yellow-500/10",
                 border: "border-yellow-500/30",
                 text: "text-yellow-500",
-                button: "bg-yellow-500 hover:bg-yellow-600",
+                button: "bg-yellow-500 text-white hover:bg-yellow-600",
             };
         case "info":
             return {
                 bg: "bg-blue-500/10",
                 border: "border-blue-500/30",
                 text: "text-blue-500",
-                button: "bg-blue-500 hover:bg-blue-600",
+                button: "bg-blue-500 text-white hover:bg-blue-600",
             };
         default:
             return {
-                bg: "bg-red-500/10",
-                border: "border-red-500/30",
-                text: "text-red-500",
-                button: "bg-red-500 hover:bg-red-600",
+                bg: "bg-destructive/10",
+                border: "border-destructive/30",
+                text: "text-destructive",
+                button: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+            };
+    }
+}); button: "bg-red-500 hover:bg-red-600",
             };
     }
 });
@@ -112,7 +115,7 @@ function handleConfirm() {
                 <Button variant="outline" @click="handleCancel">
                     {{ cancelText }}
                 </Button>
-                <Button :class="variantClasses.button" class="text-white" @click="handleConfirm">
+                <Button :class="variantClasses.button" @click="handleConfirm">
                     {{ confirmText }}
                 </Button>
             </div>

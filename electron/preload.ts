@@ -106,20 +106,22 @@ contextBridge.exposeInMainWorld("api", {
       options?: { gameVersion?: string; modLoader?: string }
     ): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getModFiles", modId, options),
-    getCategories: (): Promise<any[]> =>
-      ipcRenderer.invoke("curseforge:getCategories"),
+    getCategories: (contentType?: "mods" | "resourcepacks" | "shaders"): Promise<any[]> =>
+      ipcRenderer.invoke("curseforge:getCategories", contentType),
     getPopular: (gameVersion?: string, modLoader?: string): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getPopular", gameVersion, modLoader),
     addToLibrary: (
       projectId: number,
       fileId: number,
-      preferredLoader?: string
+      preferredLoader?: string,
+      contentType?: "mods" | "resourcepacks" | "shaders"
     ): Promise<Mod | null> =>
       ipcRenderer.invoke(
         "curseforge:addToLibrary",
         projectId,
         fileId,
-        preferredLoader
+        preferredLoader,
+        contentType
       ),
   },
 
@@ -349,7 +351,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== REMOTE UPDATES ==========
   remote: {
-    exportManifest: (modpackId: string): Promise<string> => 
+    exportManifest: (modpackId: string): Promise<string> =>
       ipcRenderer.invoke("remote:exportManifest", modpackId),
     checkUpdate: (modpackId: string): Promise<{
       hasUpdate: boolean;

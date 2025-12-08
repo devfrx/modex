@@ -93,13 +93,13 @@ export class ModUpdateService {
   // Registrati su https://console.curseforge.com/ per ottenere una API key
   private curseforgeApiKey: string = "";
   private curseforgeApiUrl = "https://api.curseforge.com/v1";
-  
+
   // Modrinth API - Non richiede API Key
   private modrinthApiUrl = "https://api.modrinth.com/v2";
-  
+
   // Minecraft Game ID per CurseForge
   private readonly MINECRAFT_GAME_ID = 432;
-  
+
   // Cache per evitare troppe richieste
   private updateCache: Map<string, { data: ModUpdateInfo; timestamp: number }> = new Map();
   private cacheDuration = 5 * 60 * 1000; // 5 minuti
@@ -119,16 +119,16 @@ export class ModUpdateService {
   async saveApiKey(source: "curseforge" | "modrinth", apiKey: string): Promise<void> {
     const configFile = path.join(this.configPath, "update-config.json");
     let config: any = {};
-    
+
     if (await fs.pathExists(configFile)) {
       config = await fs.readJson(configFile);
     }
-    
+
     if (source === "curseforge") {
       config.curseforgeApiKey = apiKey;
       this.curseforgeApiKey = apiKey;
     }
-    
+
     await fs.writeJson(configFile, config, { spaces: 2 });
   }
 
@@ -146,13 +146,13 @@ export class ModUpdateService {
     try {
       const AdmZip = (await import("adm-zip")).default;
       const zip = new AdmZip(modPath);
-      
+
       // Cerca fabric.mod.json o mods.toml per info
       const fabricMod = zip.getEntry("fabric.mod.json");
       const forgeMod = zip.getEntry("META-INF/mods.toml");
-      
+
       let modInfo: any = null;
-      
+
       if (fabricMod) {
         modInfo = JSON.parse(fabricMod.getData().toString("utf8"));
       } else if (forgeMod) {
@@ -160,18 +160,18 @@ export class ModUpdateService {
         const tomlContent = forgeMod.getData().toString("utf8");
         modInfo = this.parseBasicToml(tomlContent);
       }
-      
+
       if (modInfo) {
         // Cerca riferimenti a CurseForge o Modrinth nei metadati
         const contact = modInfo.contact || modInfo.custom || {};
-        
+
         // CurseForge
         if (contact.curseforge || contact.homepage?.includes("curseforge")) {
           const cfUrl = contact.curseforge || contact.homepage;
           const projectId = this.extractCurseForgeId(cfUrl);
           return { source: "curseforge", projectId, fileId: null };
         }
-        
+
         // Modrinth
         if (contact.modrinth || contact.homepage?.includes("modrinth")) {
           const mrUrl = contact.modrinth || contact.homepage;
@@ -179,7 +179,7 @@ export class ModUpdateService {
           return { source: "modrinth", projectId, fileId: null };
         }
       }
-      
+
       return { source: "unknown", projectId: null, fileId: null };
     } catch (err) {
       console.error("Failed to detect mod source:", err);
@@ -191,9 +191,9 @@ export class ModUpdateService {
    * Ottiene i metadati corretti di una mod da CurseForge
    * Ritorna loader e game_version estratti dalle API
    */
-  async getModMetadataFromApi(filePath: string): Promise<{ 
-    loader: string; 
-    game_version: string; 
+  async getModMetadataFromApi(filePath: string): Promise<{
+    loader: string;
+    game_version: string;
     name?: string;
     source: string;
     projectId?: string;
@@ -206,37 +206,37 @@ export class ModUpdateService {
 
     try {
       const result = await this.findModByHash(filePath);
-      
+
       if (result?.currentFile && result.sourceInfo.projectId) {
         const file = result.currentFile;
         const projectId = result.sourceInfo.projectId;
-        
+
         // Usa l'endpoint GET /v1/mods/{modId} per ottenere info complete
         const modInfo = await this.getModById(parseInt(projectId));
-        
+
         if (modInfo) {
           return this.extractMetadataFromModInfo(modInfo, file, projectId, filename);
         }
       }
-      
+
       // Fallback: cerca per nome se fingerprint non ha trovato nulla
       debugLog(`Fingerprint not found for ${filename}, trying search...`);
       const searchResult = await this.searchModByName(filename);
-      
+
       if (searchResult) {
         debugLog(`Found mod by search: ${searchResult.name} (${searchResult.id})`);
         return this.extractMetadataFromModInfo(
-          searchResult, 
-          undefined, 
-          searchResult.id.toString(), 
+          searchResult,
+          undefined,
+          searchResult.id.toString(),
           filename
         );
       }
-      
+
     } catch (err) {
       console.error("Failed to get mod metadata from API:", err);
     }
-    
+
     return null;
   }
 
@@ -244,20 +244,20 @@ export class ModUpdateService {
    * Estrae loader e game_version da modInfo
    */
   private extractMetadataFromModInfo(
-    modInfo: any, 
-    currentFile: CurseForgeFile | undefined, 
+    modInfo: any,
+    currentFile: CurseForgeFile | undefined,
     projectId: string,
     filename: string
   ): { loader: string; game_version: string; name?: string; source: string; projectId?: string } {
     let loader = 'unknown';
     let game_version = 'unknown';
-    
+
     // Se abbiamo il file corrente, cerca in latestFilesIndexes
     if (currentFile) {
       const fileIndex = modInfo.latestFilesIndexes?.find(
         (idx: any) => idx.fileId === currentFile.id
       );
-      
+
       if (fileIndex) {
         if (fileIndex.modLoader !== undefined) {
           loader = CURSEFORGE_MODLOADER_MAP[fileIndex.modLoader] || 'unknown';
@@ -266,7 +266,7 @@ export class ModUpdateService {
           game_version = fileIndex.gameVersion;
         }
       }
-      
+
       // Fallback: estrai dalle gameVersions del file
       if (loader === 'unknown' || game_version === 'unknown') {
         const gameVersions = currentFile.gameVersions || [];
@@ -294,11 +294,11 @@ export class ModUpdateService {
         }
       }
     }
-    
+
     const name = modInfo.name;
-    
+
     debugLog(`API Metadata for ${filename}: loader=${loader}, game_version=${game_version}, name=${name}`);
-    
+
     return {
       loader,
       game_version,
@@ -313,7 +313,7 @@ export class ModUpdateService {
    */
   async getModById(modId: number): Promise<any | null> {
     if (!this.curseforgeApiKey) return null;
-    
+
     try {
       const response = await fetch(`${this.curseforgeApiUrl}/mods/${modId}`, {
         method: "GET",
@@ -322,7 +322,7 @@ export class ModUpdateService {
           "Accept": "application/json",
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         return data.data || null;
@@ -330,7 +330,7 @@ export class ModUpdateService {
     } catch (err) {
       console.error("Failed to get mod by ID:", err);
     }
-    
+
     return null;
   }
 
@@ -338,12 +338,12 @@ export class ModUpdateService {
    * Cerca una mod su CurseForge per nome (fallback quando fingerprint non trova nulla)
    */
   async searchModByName(
-    modName: string, 
-    gameVersion?: string, 
+    modName: string,
+    gameVersion?: string,
     modLoader?: number
   ): Promise<any | null> {
     if (!this.curseforgeApiKey) return null;
-    
+
     try {
       const params = new URLSearchParams({
         gameId: this.MINECRAFT_GAME_ID.toString(),
@@ -352,18 +352,18 @@ export class ModUpdateService {
         sortField: '2', // Popularity
         sortOrder: 'desc',
       });
-      
+
       if (gameVersion) {
         params.append('gameVersion', gameVersion);
       }
-      
+
       if (modLoader !== undefined) {
         params.append('modLoaderType', modLoader.toString());
       }
-      
+
       const url = `${this.curseforgeApiUrl}/mods/search?${params}`;
       debugLog(`Searching mods: ${url}`);
-      
+
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -371,14 +371,14 @@ export class ModUpdateService {
           "Accept": "application/json",
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         if (data.data?.length > 0) {
           // Trova il match migliore per nome
           const exactMatch = data.data.find(
             (m: any) => m.name.toLowerCase() === modName.toLowerCase() ||
-                        m.slug.toLowerCase() === modName.toLowerCase().replace(/\s+/g, '-')
+              m.slug.toLowerCase() === modName.toLowerCase().replace(/\s+/g, '-')
           );
           return exactMatch || data.data[0];
         }
@@ -386,7 +386,7 @@ export class ModUpdateService {
     } catch (err) {
       console.error("Failed to search mod by name:", err);
     }
-    
+
     return null;
   }
 
@@ -398,18 +398,18 @@ export class ModUpdateService {
       debugLog("No CurseForge API key set");
       return null;
     }
-    
+
     try {
       // CurseForge usa fingerprint (murmur2 hash)
       const fileBuffer = await fs.readFile(filePath);
       const fingerprint = this.computeMurmur2(fileBuffer);
-      
+
       debugLog(`Computed fingerprint for ${path.basename(filePath)}: ${fingerprint}`);
-      
+
       // Usa l'endpoint corretto con gameId nel path
       const url = `${this.curseforgeApiUrl}/fingerprints/${this.MINECRAFT_GAME_ID}`;
       debugLog(`Calling: POST ${url}`);
-      
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -419,13 +419,13 @@ export class ModUpdateService {
         },
         body: JSON.stringify({ fingerprints: [fingerprint] }),
       });
-      
+
       debugLog(`Response status: ${response.status}`);
-      
+
       if (response.ok) {
         const data = await response.json();
         debugLog(`Fingerprint response:`, JSON.stringify(data, null, 2).substring(0, 500));
-        
+
         if (data.data?.exactMatches?.length > 0) {
           const match: CurseForgeFingerprintMatch = data.data.exactMatches[0];
           debugLog(`Found exact match: mod ${match.id}, file ${match.file.id}`);
@@ -448,7 +448,7 @@ export class ModUpdateService {
     } catch (err) {
       console.error("CurseForge fingerprint lookup failed:", err);
     }
-    
+
     return null;
   }
 
@@ -467,7 +467,7 @@ export class ModUpdateService {
     debugLog(`  Current Version: ${currentVersion}`);
     debugLog(`  Game Version: ${gameVersion}`);
     debugLog(`  Loader: ${loader}`);
-    
+
     // Check cache
     const cached = this.updateCache.get(modId);
     if (cached && Date.now() - cached.timestamp < this.cacheDuration) {
@@ -493,12 +493,12 @@ export class ModUpdateService {
     try {
       // Prima prova a trovare tramite fingerprint CurseForge (più affidabile)
       const hashResult = await this.findModByHash(modPath);
-      
+
       if (hashResult && hashResult.sourceInfo.source === "curseforge") {
         debugLog("Found mod via CurseForge fingerprint");
         result.source = "curseforge";
         result.projectId = hashResult.sourceInfo.projectId;
-        
+
         // Abbiamo già i file dal risultato fingerprint!
         if (hashResult.currentFile && hashResult.latestFiles) {
           const cfUpdate = await this.checkCurseForgeUpdateFromFiles(
@@ -517,7 +517,7 @@ export class ModUpdateService {
         result.source = sourceInfo.source;
         result.projectId = sourceInfo.projectId;
         result.debugInfo = `Source detected from metadata: ${sourceInfo.source}`;
-        
+
         if (sourceInfo.source === "curseforge" && sourceInfo.projectId) {
           debugLog(`Checking CurseForge by project ID: ${sourceInfo.projectId}`);
           const cfUpdate = await this.checkCurseForgeUpdate(
@@ -553,10 +553,10 @@ export class ModUpdateService {
     }
 
     debugLog(`Result: hasUpdate=${result.hasUpdate}, latestVersion=${result.latestVersion}`);
-    
+
     // Cache result
     this.updateCache.set(modId, { data: result, timestamp: Date.now() });
-    
+
     return result;
   }
 
@@ -570,16 +570,20 @@ export class ModUpdateService {
     cfFileId: number,
     currentVersion: string,
     gameVersion: string,
-    loader: string
+    loader: string,
+    contentType?: "mod" | "resourcepack" | "shader"
   ): Promise<ModUpdateInfo> {
     debugLog(`\n=== Checking CF update for: ${modId} (project: ${cfProjectId}, file: ${cfFileId}) ===`);
-    
+
     // Check cache
     const cached = this.updateCache.get(modId);
     if (cached && Date.now() - cached.timestamp < this.cacheDuration) {
       debugLog("Returning cached result");
       return cached.data;
     }
+
+    // Determine if loader is relevant (only for mods)
+    const isModContent = !contentType || contentType === "mod";
 
     const result: ModUpdateInfo = {
       modId,
@@ -618,7 +622,11 @@ export class ModUpdateService {
       const modData = await modResponse.json();
       const mod: CurseForgeMod = modData.data;
       result.projectName = mod.name;
-      result.updateUrl = `https://www.curseforge.com/minecraft/mc-mods/${mod.slug}`;
+
+      // Determine URL path based on content type
+      const urlPath = contentType === "resourcepack" ? "texture-packs" :
+        contentType === "shader" ? "shaders" : "mc-mods";
+      result.updateUrl = `https://www.curseforge.com/minecraft/${urlPath}/${mod.slug}`;
 
       // Get all files for this mod
       const filesResponse = await fetch(
@@ -641,27 +649,28 @@ export class ModUpdateService {
 
       // Find current file
       const currentFile = files.find(f => f.id === cfFileId);
-      
+
       // Find best matching file for current game version and loader
       const loaderLower = loader.toLowerCase();
       const matchingFiles = files.filter(f => {
-        const hasGameVersion = f.gameVersions.some(gv => 
+        const hasGameVersion = f.gameVersions.some(gv =>
           gv === gameVersion || gv.startsWith(gameVersion) || gameVersion.startsWith(gv)
         );
-        const hasLoader = f.gameVersions.some(gv => 
+        // Only check loader for mods, not for resourcepacks/shaders
+        const hasLoader = isModContent ? f.gameVersions.some(gv =>
           gv.toLowerCase() === loaderLower
-        );
+        ) : true;
         return hasGameVersion && hasLoader && f.releaseType === 1; // release only
       });
 
       // Sort by date, newest first
-      matchingFiles.sort((a, b) => 
+      matchingFiles.sort((a, b) =>
         new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
       );
 
       if (matchingFiles.length > 0) {
         const latestFile = matchingFiles[0];
-        
+
         // Compare file IDs - newer file should have higher ID
         if (latestFile.id > cfFileId) {
           result.hasUpdate = true;
@@ -673,17 +682,17 @@ export class ModUpdateService {
           result.debugInfo = `Already on latest version (file ${cfFileId})`;
         }
       } else {
-        // No matching files, try to find any release for this loader
-        const loaderFiles = files.filter(f => 
+        // No matching files, try to find any release for this loader (or any release for non-mod content)
+        const loaderFiles = isModContent ? files.filter(f =>
           f.gameVersions.some(gv => gv.toLowerCase() === loaderLower) && f.releaseType === 1
-        );
-        
+        ) : files.filter(f => f.releaseType === 1); // For non-mods, just get all releases
+
         if (loaderFiles.length > 0) {
-          loaderFiles.sort((a, b) => 
+          loaderFiles.sort((a, b) =>
             new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
           );
           const latestFile = loaderFiles[0];
-          
+
           if (latestFile.id > cfFileId) {
             result.hasUpdate = true;
             result.latestVersion = latestFile.displayName || latestFile.fileName;
@@ -692,7 +701,7 @@ export class ModUpdateService {
             result.debugInfo = `Update available (different MC version): file ${cfFileId} -> ${latestFile.id}`;
           }
         } else {
-          result.debugInfo = `No compatible files found for ${loader}`;
+          result.debugInfo = isModContent ? `No compatible files found for ${loader}` : `No compatible files found`;
         }
       }
     } catch (err) {
@@ -701,10 +710,10 @@ export class ModUpdateService {
     }
 
     debugLog(`Result: hasUpdate=${result.hasUpdate}, latestVersion=${result.latestVersion}`);
-    
+
     // Cache result
     this.updateCache.set(modId, { data: result, timestamp: Date.now() });
-    
+
     return result;
   }
 
@@ -721,38 +730,38 @@ export class ModUpdateService {
     debugLog(`Checking CF update from ${latestFiles.length} available files`);
     debugLog(`Input gameVersion: ${gameVersion}, loader: ${loader}`);
     debugLog(`Current file gameVersions: ${currentFile.gameVersions?.join(', ') || 'none'}`);
-    
+
     const loaderName = loader.toLowerCase();
     let compatibleFiles: CurseForgeFile[] = [];
-    
+
     // Se abbiamo una versione MC specifica (da modpack), filtra per quella
     const hasSpecificVersion = gameVersion && gameVersion !== 'unknown';
-    
+
     if (hasSpecificVersion) {
       debugLog(`Filtering for specific MC version: ${gameVersion}`);
-      
+
       // Filtra file per la versione specifica
       compatibleFiles = latestFiles.filter(f => {
-        const hasGameVersion = f.gameVersions.some(gv => 
+        const hasGameVersion = f.gameVersions.some(gv =>
           gv === gameVersion ||
           gv.startsWith(gameVersion) ||
           gameVersion.startsWith(gv)
         );
-        
-        const hasLoader = loaderName !== 'unknown' && f.gameVersions.some(gv => 
+
+        const hasLoader = loaderName !== 'unknown' && f.gameVersions.some(gv =>
           gv.toLowerCase() === loaderName ||
           gv.toLowerCase().includes(loaderName)
         );
-        
+
         return hasGameVersion && (hasLoader || loaderName === 'unknown');
       });
-      
+
       debugLog(`Compatible files for ${gameVersion}/${loader}: ${compatibleFiles.length}`);
-      
+
       // Se nessun file per questa versione, prova solo game version
       if (compatibleFiles.length === 0) {
-        compatibleFiles = latestFiles.filter(f => 
-          f.gameVersions.some(gv => 
+        compatibleFiles = latestFiles.filter(f =>
+          f.gameVersions.some(gv =>
             gv === gameVersion ||
             gv.startsWith(gameVersion) ||
             gameVersion.startsWith(gv)
@@ -763,30 +772,30 @@ export class ModUpdateService {
     } else {
       // LIBRERIA: prendi il latest assoluto (il più recente globalmente)
       debugLog(`No specific version - taking absolute latest for library`);
-      
+
       // Filtra solo per loader se specificato
       if (loaderName !== 'unknown') {
-        compatibleFiles = latestFiles.filter(f => 
-          f.gameVersions.some(gv => 
+        compatibleFiles = latestFiles.filter(f =>
+          f.gameVersions.some(gv =>
             gv.toLowerCase() === loaderName ||
             gv.toLowerCase().includes(loaderName)
           )
         );
         debugLog(`Files matching loader ${loaderName}: ${compatibleFiles.length}`);
       }
-      
+
       // Se ancora nessun file, usa tutti
       if (compatibleFiles.length === 0) {
         compatibleFiles = latestFiles;
       }
     }
-    
+
     // Se ancora nessun file, usa tutti come fallback
     if (compatibleFiles.length === 0) {
       debugLog(`No filtered files found, using all ${latestFiles.length} latest files`);
       compatibleFiles = latestFiles;
     }
-    
+
     return this.compareAndReturnUpdate(projectId, currentFile, compatibleFiles);
   }
 
@@ -799,16 +808,16 @@ export class ModUpdateService {
     const sorted = availableFiles.sort(
       (a, b) => new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
     );
-    
+
     const latest = sorted[0];
-    
+
     debugLog(`Current file: ${currentFile.fileName} (ID: ${currentFile.id}, date: ${currentFile.fileDate})`);
     debugLog(`Latest file: ${latest.fileName} (ID: ${latest.id}, date: ${latest.fileDate})`);
-    
+
     // Confronta per ID file (più affidabile) o per data
-    const hasUpdate = latest.id !== currentFile.id && 
+    const hasUpdate = latest.id !== currentFile.id &&
       new Date(latest.fileDate).getTime() > new Date(currentFile.fileDate).getTime();
-    
+
     // Ottieni info progetto
     let projectName = null;
     try {
@@ -822,9 +831,9 @@ export class ModUpdateService {
     } catch (e) {
       debugLog("Failed to fetch project name");
     }
-    
+
     const latestVersion = this.extractVersion(latest.fileName) || latest.displayName;
-    
+
     return {
       latestVersion,
       hasUpdate,
@@ -833,7 +842,7 @@ export class ModUpdateService {
       projectName,
       releaseDate: latest.fileDate,
       source: "curseforge",
-      debugInfo: hasUpdate 
+      debugInfo: hasUpdate
         ? `Update available: ${currentFile.fileName} -> ${latest.fileName}`
         : `Already latest: ${currentFile.fileName}`,
     };
@@ -851,23 +860,23 @@ export class ModUpdateService {
       // Calcola SHA-512 del file
       const fileBuffer = await fs.readFile(modPath);
       const sha512 = crypto.createHash("sha512").update(fileBuffer).digest("hex");
-      
+
       debugLog(`Searching Modrinth by SHA-512: ${sha512.substring(0, 16)}...`);
-      
+
       // Cerca per hash
       const response = await fetch(`${this.modrinthApiUrl}/version_file/${sha512}?algorithm=sha512`);
-      
+
       if (response.ok) {
         const version: ModrinthVersion = await response.json();
         debugLog(`Found on Modrinth: project for version ${version.version_number}`);
-        
+
         // Ottieni project ID dalla versione
         const versionResponse = await fetch(`${this.modrinthApiUrl}/version/${version.id}`);
         if (!versionResponse.ok) return null;
-        
+
         const versionData = await versionResponse.json();
         const projectId = versionData.project_id;
-        
+
         // Ora controlla aggiornamenti
         return this.checkModrinthUpdate(projectId, version.version_number, gameVersion, loader);
       } else {
@@ -876,7 +885,7 @@ export class ModUpdateService {
     } catch (err) {
       debugLog(`Modrinth search error: ${(err as Error).message}`);
     }
-    
+
     return null;
   }
 
@@ -932,7 +941,7 @@ export class ModUpdateService {
       const projectResponse = await fetch(`${this.curseforgeApiUrl}/mods/${projectId}`, {
         headers: { "x-api-key": this.curseforgeApiKey },
       });
-      
+
       let projectName = null;
       if (projectResponse.ok) {
         const projectData = await projectResponse.json();
@@ -1061,7 +1070,7 @@ export class ModUpdateService {
     mods: Array<{ id: string; path: string; version: string; game_version: string; loader: string }>
   ): Promise<ModUpdateInfo[]> {
     const results: ModUpdateInfo[] = [];
-    
+
     // Limita concorrenza per non sovraccaricare le API
     const batchSize = 5;
     for (let i = 0; i < mods.length; i += batchSize) {
@@ -1072,13 +1081,13 @@ export class ModUpdateService {
         )
       );
       results.push(...batchResults);
-      
+
       // Piccola pausa tra batch
       if (i + batchSize < mods.length) {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
-    
+
     return results;
   }
 
@@ -1090,7 +1099,7 @@ export class ModUpdateService {
       /[-_](\d+\.\d+(?:\.\d+)?(?:[-+].+)?)\.(jar|zip)$/i,
       /[-_]v?(\d+\.\d+(?:\.\d+)?)[-_]/i,
     ];
-    
+
     for (const pattern of patterns) {
       const match = filename.match(pattern);
       if (match) return match[1];
@@ -1128,19 +1137,19 @@ export class ModUpdateService {
   private parseBasicToml(content: string): any {
     // Parser TOML molto basico per estrarre info
     const result: any = { contact: {} };
-    
+
     const lines = content.split("\n");
     for (const line of lines) {
       if (line.includes("=")) {
         const [key, ...valueParts] = line.split("=");
         const value = valueParts.join("=").trim().replace(/^["']|["']$/g, "");
-        
+
         if (key.trim() === "homepage" || key.trim() === "issueTracker") {
           result.contact[key.trim()] = value;
         }
       }
     }
-    
+
     return result;
   }
 
@@ -1151,7 +1160,7 @@ export class ModUpdateService {
   private computeMurmur2(data: Buffer): number {
     // Rimuovi whitespace come fa CurseForge
     const filtered = data.filter((b) => b !== 9 && b !== 10 && b !== 13 && b !== 32);
-    
+
     const seed = 1;
     const m = 0x5bd1e995;
     const r = 24;

@@ -10,6 +10,8 @@ import {
   Trash2,
   FolderPlus,
   Package,
+  Image,
+  Sparkles,
 } from "lucide-vue-next";
 import type { TreeNode, ModFolder, Mod } from "@/types/electron";
 
@@ -210,7 +212,11 @@ function onChildCreateSubfolder(parentId: string) {
             :style="{ color: folderData?.color || '#6366f1' }"
           />
         </template>
-        <Package v-else class="w-4 h-4 text-muted-foreground" />
+        <template v-else>
+          <Image v-if="modData?.content_type === 'resourcepack'" class="w-4 h-4 text-blue-500" />
+          <Sparkles v-else-if="modData?.content_type === 'shader'" class="w-4 h-4 text-pink-500" />
+          <Package v-else class="w-4 h-4 text-emerald-500" />
+        </template>
       </div>
 
       <!-- Name -->

@@ -21,6 +21,9 @@ import {
   ArrowRight,
   CornerDownRight,
   Filter,
+  Layers,
+  Image,
+  Sparkles,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
@@ -48,6 +51,7 @@ const {
 const mods = ref<Mod[]>([]);
 const isLoading = ref(true);
 const searchQuery = ref("");
+const selectedContentType = ref<"all" | "mod" | "resourcepack" | "shader">("all");
 
 // Tree state
 const tree = ref<TreeNode[]>([]);
@@ -107,31 +111,69 @@ const unorganizedMods = computed(() => {
 const currentFolderMods = computed(() => {
   if (viewMode.value === "tree") return [];
 
-  return mods.value.filter((mod) => {
+  let filtered = mods.value.filter((mod) => {
     const modFolderId = getModFolder(mod.id);
     return modFolderId === currentFolderId.value;
   });
+
+  // Apply filters
+  const query = searchQuery.value.toLowerCase();
+  if (query) {
+    filtered = filtered.filter(mod => 
+      mod.name.toLowerCase().includes(query) || 
+      mod.author?.toLowerCase().includes(query)
+    );
+  }
+
+  if (selectedContentType.value !== 'all') {
+    filtered = filtered.filter(mod => {
+      const type = mod.content_type || 'mod';
+      return type === selectedContentType.value;
+    });
+  }
+
+  return filtered;
 });
 
 const currentFolderSubfolders = computed(() => {
   return folders.value.filter((f) => f.parentId === currentFolderId.value);
 });
 
-const filteredTree = computed(() => {
-  if (!searchQuery.value.trim()) return tree.value;
+// Content type counts
+const contentTypeCounts = computed(() => {
+  const counts = { mod: 0, resourcepack: 0, shader: 0 };
+  for (const m of mods.value) {
+    const ct = m.content_type || "mod";
+    if (ct === "mod") counts.mod++;
+    else if (ct === "resourcepack") counts.resourcepack++;
+    else if (ct === "shader") counts.shader++;
+  }
+  return counts;
+});
 
+const filteredTree = computed(() => {
   const query = searchQuery.value.toLowerCase();
+  const filterByType = selectedContentType.value !== "all";
 
   function filterNode(node: TreeNode): TreeNode | null {
     if (node.type === "mod") {
       const mod = node.data as Mod;
-      if (
+      
+      // Content type filter
+      if (filterByType) {
+        const modType = mod.content_type || "mod";
+        if (modType !== selectedContentType.value) return null;
+      }
+      
+      // Search filter
+      if (query && !(
         mod.name.toLowerCase().includes(query) ||
         mod.author?.toLowerCase().includes(query)
-      ) {
-        return node;
+      )) {
+        return null;
       }
-      return null;
+      
+      return node;
     }
 
     // For folders, check children
@@ -141,19 +183,21 @@ const filteredTree = computed(() => {
         .filter((n): n is TreeNode => n !== null) || [];
 
     const folder = node.data as ModFolder;
-    if (
-      folder.name.toLowerCase().includes(query) ||
-      filteredChildren.length > 0
-    ) {
+    
+    // Show folder if it matches search OR has matching children
+    const folderMatchesSearch = !query || folder.name.toLowerCase().includes(query);
+    if (folderMatchesSearch || filteredChildren.length > 0) {
       return {
         ...node,
         children: filteredChildren,
-        expanded: true,
+        expanded: query || filterByType ? true : node.expanded,
       };
     }
 
     return null;
   }
+
+  if (!query && !filterByType) return tree.value;
 
   return tree.value
     .map((node) => filterNode(node))
@@ -490,6 +534,49 @@ const colorOptions = [
               class="pl-8 h-8 text-xs bg-muted/50 border-border focus:ring-primary/50" />
           </div>
 
+          <!-- Content Type Filter -->
+          <div class="hidden sm:flex items-center gap-0.5 p-0.5 rounded-md bg-muted/50 border border-border">
+            <button
+              class="px-1.5 py-1 text-[10px] font-medium rounded transition-all"
+              :class="selectedContentType === 'all' 
+                ? 'bg-background shadow-sm text-foreground' 
+                : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'all'"
+            >
+              All
+            </button>
+            <button
+              class="px-1.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1"
+              :class="selectedContentType === 'mod' 
+                ? 'bg-emerald-500/15 text-emerald-500' 
+                : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'mod'"
+              :title="`${contentTypeCounts.mod} mods`"
+            >
+              <Layers class="w-3 h-3" />
+            </button>
+            <button
+              class="px-1.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1"
+              :class="selectedContentType === 'resourcepack' 
+                ? 'bg-blue-500/15 text-blue-500' 
+                : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'resourcepack'"
+              :title="`${contentTypeCounts.resourcepack} resource packs`"
+            >
+              <Image class="w-3 h-3" />
+            </button>
+            <button
+              class="px-1.5 py-1 text-[10px] font-medium rounded transition-all flex items-center gap-1"
+              :class="selectedContentType === 'shader' 
+                ? 'bg-pink-500/15 text-pink-500' 
+                : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'shader'"
+              :title="`${contentTypeCounts.shader} shaders`"
+            >
+              <Sparkles class="w-3 h-3" />
+            </button>
+          </div>
+
           <!-- Selection -->
           <Button variant="ghost" size="sm"
             class="hidden sm:flex items-center gap-1.5 h-8 px-2.5 text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -625,8 +712,16 @@ const colorOptions = [
                 </div>
 
                 <div
-                  class="w-8 h-8 rounded bg-muted flex items-center justify-center text-muted-foreground group-hover:text-foreground">
-                  <Package class="w-4 h-4" />
+                  class="w-8 h-8 rounded flex items-center justify-center transition-colors"
+                  :class="mod.content_type === 'resourcepack' 
+                    ? 'bg-blue-500/10 text-blue-500' 
+                    : mod.content_type === 'shader' 
+                      ? 'bg-pink-500/10 text-pink-500' 
+                      : 'bg-emerald-500/10 text-emerald-500'"
+                >
+                  <Image v-if="mod.content_type === 'resourcepack'" class="w-4 h-4" />
+                  <Sparkles v-else-if="mod.content_type === 'shader'" class="w-4 h-4" />
+                  <Package v-else class="w-4 h-4" />
                 </div>
 
                 <div class="flex-1 min-w-0">
@@ -712,8 +807,16 @@ const colorOptions = [
 
               <div class="flex items-start gap-3" :class="isSelectionMode ? 'pl-8' : ''">
                 <div
-                  class="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-muted-foreground group-hover:text-foreground shrink-0">
-                  <Package class="w-5 h-5" />
+                  class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors"
+                  :class="mod.content_type === 'resourcepack' 
+                    ? 'bg-blue-500/10 text-blue-500' 
+                    : mod.content_type === 'shader' 
+                      ? 'bg-pink-500/10 text-pink-500' 
+                      : 'bg-emerald-500/10 text-emerald-500'"
+                >
+                  <Image v-if="mod.content_type === 'resourcepack'" class="w-5 h-5" />
+                  <Sparkles v-else-if="mod.content_type === 'shader'" class="w-5 h-5" />
+                  <Package v-else class="w-5 h-5" />
                 </div>
                 <div class="flex-1 min-w-0">
                   <h4 class="text-sm font-medium text-foreground group-hover:text-foreground truncate">

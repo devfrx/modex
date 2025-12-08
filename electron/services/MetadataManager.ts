@@ -17,6 +17,7 @@ import { app } from "electron";
 import path from "path";
 import fs from "fs-extra";
 import crypto from "crypto";
+import { getContentTypeFromClassId } from "./CurseForgeService";
 
 // ==================== TYPES ====================
 
@@ -26,7 +27,9 @@ export interface Mod {
   slug?: string;
   version: string;
   game_version: string;
+  game_versions?: string[]; // List of compatible MC versions (mainly for shaders/resourcepacks)
   loader: string;
+  content_type?: "mod" | "resourcepack" | "shader";
   description?: string;
   author?: string;
   thumbnail_url?: string;
@@ -177,8 +180,20 @@ export class MetadataManager {
     return {};
   }
 
+  private async safeWriteJson(filePath: string, data: any): Promise<void> {
+    const tempPath = `${filePath}.tmp`;
+    await fs.writeJson(tempPath, data, { spaces: 2 });
+    try {
+      await fs.move(tempPath, filePath, { overwrite: true });
+    } catch (error) {
+      // If move fails, try to clean up temp file
+      await fs.remove(tempPath).catch(() => { });
+      throw error;
+    }
+  }
+
   async saveConfig(config: AppConfig): Promise<void> {
-    await fs.writeJson(this.configPath, config, { spaces: 2 });
+    await this.safeWriteJson(this.configPath, config);
   }
 
   async getApiKey(source: "curseforge" | "modrinth"): Promise<string> {
@@ -238,7 +253,7 @@ export class MetadataManager {
   }
 
   private async saveLibrary(data: LibraryData): Promise<void> {
-    await fs.writeJson(this.libraryPath, data, { spaces: 2 });
+    await this.safeWriteJson(this.libraryPath, data);
   }
 
   async getAllMods(): Promise<Mod[]> {
@@ -383,8 +398,64 @@ export class MetadataManager {
           const modpack = await fs.readJson(modpackPath);
           modpack.mod_count = modpack.mod_ids?.length || 0;
           modpacks.push(modpack);
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Failed to read modpack ${file}:`, error);
+
+          // Attempt recovery for corrupted JSON (e.g. garbage at end of file)
+          if (error instanceof SyntaxError) {
+            const modpackPath = path.join(this.modpacksDir, file);
+            try {
+              console.log(`Attempting to recover corrupted modpack: ${file}`);
+              const content = await fs.readFile(modpackPath, 'utf-8');
+              let recovered = false;
+
+              // Strategy 1: Use position from error message
+              // Error format: "Unexpected non-whitespace character after JSON at position 3182"
+              const match = error.message.match(/at position (\d+)/);
+              if (match) {
+                const pos = parseInt(match[1], 10);
+                if (pos > 0 && pos < content.length) {
+                  try {
+                    const fixedContent = content.substring(0, pos);
+                    const modpack = JSON.parse(fixedContent);
+                    await this.safeWriteJson(modpackPath, modpack);
+                    modpack.mod_count = modpack.mod_ids?.length || 0;
+                    modpacks.push(modpack);
+                    console.log(`Successfully recovered modpack using position: ${file}`);
+                    recovered = true;
+                  } catch (e) {
+                    console.log(`Position-based recovery failed for ${file}`);
+                  }
+                }
+              }
+
+              // Strategy 2: Find last closing brace (fallback)
+              if (!recovered) {
+                const lastBrace = content.lastIndexOf('}');
+                if (lastBrace !== -1) {
+                  const fixedContent = content.substring(0, lastBrace + 1);
+                  const modpack = JSON.parse(fixedContent);
+                  await this.safeWriteJson(modpackPath, modpack);
+                  modpack.mod_count = modpack.mod_ids?.length || 0;
+                  modpacks.push(modpack);
+                  console.log(`Successfully recovered modpack using brace search: ${file}`);
+                  recovered = true;
+                }
+              }
+
+              if (!recovered) {
+                throw new Error("All recovery strategies failed");
+              }
+            } catch (recoveryError) {
+              console.error(`Failed to recover modpack ${file}, renaming to .corrupted:`, recoveryError);
+              // Rename corrupted file so it doesn't crash the app on next load
+              try {
+                await fs.rename(modpackPath, `${modpackPath}.corrupted`);
+              } catch (renameError) {
+                console.error(`Failed to rename corrupted file ${file}:`, renameError);
+              }
+            }
+          }
         }
       }
     } catch (error) {
@@ -440,7 +511,7 @@ export class MetadataManager {
       mod_ids: [],
     };
 
-    await fs.writeJson(this.getModpackPath(id), modpack, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(id), modpack);
     return id;
   }
 
@@ -458,7 +529,7 @@ export class MetadataManager {
       updated_at: new Date().toISOString(),
     };
 
-    await fs.writeJson(this.getModpackPath(id), updated, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(id), updated);
     return true;
   }
 
@@ -495,7 +566,7 @@ export class MetadataManager {
     if (newModpack) {
       newModpack.mod_ids = [...original.mod_ids];
       newModpack.image_url = original.image_url;
-      await fs.writeJson(this.getModpackPath(newId), newModpack, { spaces: 2 });
+      await this.safeWriteJson(this.getModpackPath(newId), newModpack);
     }
 
     return newId;
@@ -573,7 +644,7 @@ export class MetadataManager {
     modpack.mod_ids.push(modId);
     modpack.updated_at = new Date().toISOString();
 
-    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     return true;
   }
 
@@ -597,7 +668,7 @@ export class MetadataManager {
     if (modpack.mod_ids.length === initialLength) return false;
 
     modpack.updated_at = new Date().toISOString();
-    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     return true;
   }
 
@@ -634,7 +705,7 @@ export class MetadataManager {
     }
 
     modpack.updated_at = new Date().toISOString();
-    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
 
     return { enabled };
   }
@@ -674,7 +745,7 @@ export class MetadataManager {
     }
 
     modpack.updated_at = new Date().toISOString();
-    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     return true;
   }
 
@@ -719,7 +790,7 @@ export class MetadataManager {
     history: ModpackVersionHistory
   ): Promise<void> {
     const historyPath = this.getVersionHistoryPath(history.modpack_id);
-    await fs.writeJson(historyPath, history, { spaces: 2 });
+    await this.safeWriteJson(historyPath, history);
   }
 
   /**
@@ -1002,7 +1073,7 @@ export class MetadataManager {
     modpack.version = targetVersion.tag;
     modpack.updated_at = new Date().toISOString();
 
-    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
 
     // Create a rollback commit
     const rollbackVersion = await this.createVersion(
@@ -1045,7 +1116,7 @@ export class MetadataManager {
     modpack.version = targetVersion.tag;
     modpack.updated_at = new Date().toISOString();
 
-    await fs.writeJson(this.getModpackPath(modpackId), modpack, { spaces: 2 });
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
 
     // Create a rollback commit with info about partial restoration
     const wasPartial = modIds.length < targetVersion.mod_ids.length;
@@ -1243,10 +1314,12 @@ export class MetadataManager {
 
     const modLinks = sortedMods
       .map((mod) => {
+        // Determine URL path based on content type
+        const urlPath = mod.content_type === "resourcepack" ? "texture-packs" :
+          mod.content_type === "shader" ? "shaders" : "mc-mods";
         const url =
           mod.website_url ||
-          `https://www.curseforge.com/minecraft/mc-mods/${
-            mod.slug || mod.cf_project_id
+          `https://www.curseforge.com/minecraft/${urlPath}/${mod.slug || mod.cf_project_id
           }`;
         const author = mod.author || "Unknown";
         return `<li><a href="${url}">${mod.name} (by ${author})</a></li>`;
@@ -1317,6 +1390,7 @@ ${modLinks}
         version: m.version,
         filename: m.filename,
         source: m.source,
+        content_type: m.content_type,
         cf_project_id: m.cf_project_id,
         cf_file_id: m.cf_file_id,
         mr_project_id: m.mr_project_id,
@@ -1382,15 +1456,15 @@ ${modLinks}
       // For Gist URLs, use the GitHub API to get the latest content (bypasses caching)
       const gistApiRegex = /^https:\/\/gist\.githubusercontent\.com\/([^/]+)\/([^/]+)\/raw\/(.+)$/;
       const apiMatch = urlToFetch.match(gistApiRegex);
-      
+
       let remoteManifest: any;
-      
+
       if (apiMatch) {
         // Use GitHub Gist API to get fresh content
         const gistId = apiMatch[2];
         const filename = apiMatch[3];
         const apiUrl = `https://api.github.com/gists/${gistId}`;
-        
+
         const apiResponse = await fetch(apiUrl, {
           headers: {
             'Accept': 'application/vnd.github.v3+json',
@@ -1398,26 +1472,26 @@ ${modLinks}
             'Pragma': 'no-cache'
           }
         });
-        
+
         if (!apiResponse.ok) {
           throw new Error(`GitHub API request failed: ${apiResponse.statusText}`);
         }
-        
+
         const gistData = await apiResponse.json();
-        
+
         // Find the file in the gist
         const file = gistData.files[filename];
         if (!file) {
           throw new Error(`File "${filename}" not found in gist. Available: ${Object.keys(gistData.files).join(', ')}`);
         }
-        
+
         // Parse the content
         remoteManifest = JSON.parse(file.content);
       } else {
         // Non-Gist URL: use regular fetch with cache busting
         const urlObj = new URL(urlToFetch);
         urlObj.searchParams.append("_t", Date.now().toString());
-        
+
         const response = await fetch(urlObj.toString(), {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -1425,52 +1499,52 @@ ${modLinks}
           }
         });
         if (!response.ok) throw new Error(`Failed to fetch remote manifest: ${response.statusText}`);
-        
+
         remoteManifest = await response.json();
       }
-      
+
       // Basic validation
       if (!remoteManifest.modpack || !remoteManifest.mods) {
         throw new Error("Invalid remote manifest format");
       }
-      
+
       // Let's calculate the diff to be precise
       const currentMods = await this.getModsInModpack(modpackId);
-      
+
       const addedMods: { name: string; version: string }[] = [];
       const removedMods: string[] = [];
       const updatedMods: string[] = [];
-      
+
       // Create maps for easier comparison
       const currentMap = new Map<string, Mod>(); // Key: exact mod id (source-projectId-fileId)
       const currentProjectMap = new Map<string, Mod>(); // Key: project-id only (to detect updates)
-      
+
       for (const mod of currentMods) {
-        const key = mod.source === 'curseforge' 
+        const key = mod.source === 'curseforge'
           ? `cf-${mod.cf_project_id}-${mod.cf_file_id}`
           : `mr-${mod.mr_project_id}-${mod.mr_version_id}`;
         currentMap.set(key, mod);
-        
+
         const projectKey = mod.source === 'curseforge'
           ? `cf-${mod.cf_project_id}`
           : `mr-${mod.mr_project_id}`;
         currentProjectMap.set(projectKey, mod);
       }
-      
+
       const remoteMods = remoteManifest.mods;
       const remoteProjectKeys = new Set<string>();
-      
+
       for (const rMod of remoteMods) {
         const key = rMod.source === 'curseforge'
           ? `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`
           : `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
-          
+
         const projectKey = rMod.source === 'curseforge'
           ? `cf-${rMod.cf_project_id}`
           : `mr-${rMod.mr_project_id}`;
-          
+
         remoteProjectKeys.add(projectKey);
-        
+
         if (!currentMap.has(key)) {
           // Not an exact match
           if (currentProjectMap.has(projectKey)) {
@@ -1485,7 +1559,7 @@ ${modLinks}
           }
         }
       }
-      
+
       // Check for removed
       for (const [projectKey, mod] of currentProjectMap.entries()) {
         if (!remoteProjectKeys.has(projectKey)) {
@@ -1496,36 +1570,36 @@ ${modLinks}
       // Check for enabled/disabled status changes
       const currentDisabled = new Set(modpack.disabled_mod_ids || []);
       const remoteDisabled = new Set(remoteManifest.disabled_mods || []);
-      
+
       const enabledMods: string[] = [];
       const disabledMods: string[] = [];
-      
+
       // Check for mods that exist in both (or are being updated) and have different status
       for (const rMod of remoteMods) {
         // Find the corresponding local mod ID (or what it will be)
         let modId = "";
         if (rMod.source === 'curseforge') {
-           modId = `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`;
+          modId = `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`;
         } else {
-           modId = `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
+          modId = `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
         }
 
         // If this mod is in the remote manifest, check its status
         const isRemoteDisabled = remoteDisabled.has(modId);
-        
+
         // We need to check against the LOCAL mod's status.
         // But if the mod is being updated, the ID changes.
         // So we should check if the PROJECT was disabled locally.
-        
+
         const projectKey = rMod.source === 'curseforge'
           ? `cf-${rMod.cf_project_id}`
           : `mr-${rMod.mr_project_id}`;
-          
+
         const localMod = currentProjectMap.get(projectKey);
-        
+
         if (localMod) {
           const isLocalDisabled = currentDisabled.has(localMod.id);
-          
+
           if (isLocalDisabled && !isRemoteDisabled) {
             enabledMods.push(rMod.name);
           } else if (!isLocalDisabled && isRemoteDisabled) {
@@ -1533,15 +1607,15 @@ ${modLinks}
           }
         }
       }
-      
+
       const hasUpdate = addedMods.length > 0 || removedMods.length > 0 || updatedMods.length > 0 || enabledMods.length > 0 || disabledMods.length > 0;
-      
+
       // Update last_checked timestamp
       if (modpack.remote_source) {
         modpack.remote_source.last_checked = new Date().toISOString();
         await this.updateModpack(modpackId, { remote_source: modpack.remote_source });
       }
-      
+
       return {
         hasUpdate,
         remoteManifest: hasUpdate ? remoteManifest : undefined,
@@ -1556,7 +1630,7 @@ ${modLinks}
           disabledMods
         } : undefined
       };
-      
+
     } catch (error) {
       console.error("Remote update check failed:", error);
       throw error;
@@ -1608,9 +1682,8 @@ ${modLinks}
       version: manifest.version || "1.0.0",
       minecraft_version: mcVersion,
       loader,
-      description: `Imported from CurseForge. Author: ${
-        manifest.author || "Unknown"
-      }`,
+      description: `Imported from CurseForge. Author: ${manifest.author || "Unknown"
+        }`,
     });
 
     const errors: string[] = [];
@@ -1710,13 +1783,17 @@ ${modLinks}
           continue;
         }
 
+        // Detect content type from CF mod classId
+        const contentType = getContentTypeFromClassId(cfMod.classId);
+
         // New mod - use modToLibraryFormat for consistent metadata
-        console.log(`[CF Import] Adding new mod: ${cfMod.name}`);
+        console.log(`[CF Import] Adding new ${contentType}: ${cfMod.name}`);
         const formattedMod = cfService.modToLibraryFormat(
           cfMod,
           cfFile,
           loader,
-          mcVersion
+          mcVersion,
+          contentType
         );
 
         // Check for loader mismatch - warn if mod doesn't support modpack's loader
@@ -1724,10 +1801,13 @@ ${modLinks}
         // 1. Modpack has a known loader (not "unknown")
         // 2. Mod has a known loader (not "unknown")
         // 3. They don't match
+        // Note: Skip loader check for resourcepacks/shaders as they don't require loaders
         const modpackLoaderKnown = loader !== "unknown";
         const modLoaderKnown = formattedMod.loader !== "unknown";
+        const isModContent = contentType === "mods";
 
         if (
+          isModContent &&
           modpackLoaderKnown &&
           modLoaderKnown &&
           formattedMod.loader !== loader
@@ -1747,7 +1827,9 @@ ${modLinks}
           slug: formattedMod.slug,
           version: formattedMod.version,
           game_version: formattedMod.game_version,
+          game_versions: formattedMod.game_versions,
           loader: formattedMod.loader,
+          content_type: formattedMod.content_type,
           filename: formattedMod.filename,
           source: "curseforge",
           cf_project_id: formattedMod.cf_project_id,
@@ -1806,9 +1888,7 @@ ${modLinks}
       const modpack = await this.getModpackById(modpackId);
       if (modpack) {
         modpack.disabled_mod_ids = disabledModIds;
-        await fs.writeJson(this.getModpackPath(modpackId), modpack, {
-          spaces: 2,
-        });
+        await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
         console.log(
           `[CF Import] Set ${disabledModIds.length} mods as disabled`
         );
@@ -1858,7 +1938,7 @@ ${modLinks}
 
     // Check for existing modpack
     let existingModpack: Modpack | undefined;
-    
+
     if (targetModpackId) {
       existingModpack = await this.getModpackById(targetModpackId);
     } else {
@@ -2048,12 +2128,16 @@ ${modLinks}
             );
 
             if (cfMod && cfFile) {
+              // Detect content type from CF mod classId
+              const contentType = getContentTypeFromClassId(cfMod.classId);
+
               // Use modToLibraryFormat to get consistent metadata
               const formattedMod = cfService.modToLibraryFormat(
                 cfMod,
                 cfFile,
                 manifest.modpack.loader,
-                manifest.modpack.minecraft_version
+                manifest.modpack.minecraft_version,
+                contentType
               );
 
               newMod = await this.addMod({
@@ -2062,6 +2146,7 @@ ${modLinks}
                 version: formattedMod.version,
                 game_version: formattedMod.game_version,
                 loader: formattedMod.loader,
+                content_type: formattedMod.content_type,
                 filename: formattedMod.filename,
                 source: "curseforge",
                 cf_project_id: formattedMod.cf_project_id,
@@ -2081,7 +2166,7 @@ ${modLinks}
                 website_url: formattedMod.website_url,
               });
               console.log(
-                `[Import] Added mod from CF API: ${newMod.name} v${newMod.version}`
+                `[Import] Added ${contentType}: ${newMod.name} v${newMod.version}`
               );
             } else {
               throw new Error("Mod or file not found on CurseForge");
@@ -2162,9 +2247,7 @@ ${modLinks}
       modpack.disabled_mod_ids = disabledFromManifest;
 
       modpack.updated_at = new Date().toISOString();
-      await fs.writeJson(this.getModpackPath(modpackId), modpack, {
-        spaces: 2,
-      });
+      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     }
 
     // Import version history if present in manifest
@@ -2220,8 +2303,7 @@ ${modLinks}
 
         await this.saveVersionHistory(existingHistory);
         console.log(
-          `[Import] Imported ${importedCount} new version history entries (${
-            manifest.version_history.length - importedCount
+          `[Import] Imported ${importedCount} new version history entries (${manifest.version_history.length - importedCount
           } duplicates skipped)`
         );
       }
@@ -2230,20 +2312,20 @@ ${modLinks}
     // Calculate changes if update
     let changes:
       | {
-          added: number;
-          removed: number;
-          unchanged: number;
-          updated: number;
-          downloaded: number;
-          enabled: number;
-          disabled: number;
-          addedMods: string[];
-          removedMods: string[];
-          updatedMods: string[];
-          downloadedMods: string[];
-          enabledMods: string[];
-          disabledMods: string[];
-        }
+        added: number;
+        removed: number;
+        unchanged: number;
+        updated: number;
+        downloaded: number;
+        enabled: number;
+        disabled: number;
+        addedMods: string[];
+        removedMods: string[];
+        updatedMods: string[];
+        downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
+      }
       | undefined;
     if (isUpdate) {
       const oldSet = new Set(oldModIds);
@@ -2378,11 +2460,15 @@ ${modLinks}
             );
 
             if (cfMod && cfFile) {
+              // Detect content type from CF mod classId
+              const contentType = getContentTypeFromClassId(cfMod.classId);
+
               const formattedMod = cfService.modToLibraryFormat(
                 cfMod,
                 cfFile,
                 manifest.modpack.loader,
-                manifest.modpack.minecraft_version
+                manifest.modpack.minecraft_version,
+                contentType
               );
 
               newMod = await this.addMod({
@@ -2391,6 +2477,7 @@ ${modLinks}
                 version: formattedMod.version,
                 game_version: formattedMod.game_version,
                 loader: formattedMod.loader,
+                content_type: formattedMod.content_type,
                 filename: formattedMod.filename,
                 source: "curseforge",
                 cf_project_id: formattedMod.cf_project_id,
@@ -2482,28 +2569,26 @@ ${modLinks}
     if (modpack) {
       modpack.mod_ids = newModIds;
       modpack.updated_at = new Date().toISOString();
-      await fs.writeJson(this.getModpackPath(modpackId), modpack, {
-        spaces: 2,
-      });
+      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     }
 
     // Calculate changes
     let changes:
       | {
-          added: number;
-          removed: number;
-          unchanged: number;
-          updated: number;
-          downloaded: number;
-          enabled: number;
-          disabled: number;
-          addedMods: string[];
-          removedMods: string[];
-          updatedMods: string[];
-          downloadedMods: string[];
-          enabledMods: string[];
-          disabledMods: string[];
-        }
+        added: number;
+        removed: number;
+        unchanged: number;
+        updated: number;
+        downloaded: number;
+        enabled: number;
+        disabled: number;
+        addedMods: string[];
+        removedMods: string[];
+        updatedMods: string[];
+        downloadedMods: string[];
+        enabledMods: string[];
+        disabledMods: string[];
+      }
       | undefined;
 
     if (isUpdate) {
@@ -2595,12 +2680,16 @@ ${modLinks}
             throw new Error("Mod or file not found on CurseForge");
           }
 
+          // Detect content type from CF mod classId
+          const contentType = getContentTypeFromClassId(cfMod.classId);
+
           // Use modToLibraryFormat for consistent metadata
           const formattedMod = cfService.modToLibraryFormat(
             cfMod,
             cfFile,
             loader,
-            mcVersion
+            mcVersion,
+            contentType
           );
 
           const newMod = await this.addMod({
@@ -2609,6 +2698,7 @@ ${modLinks}
             version: formattedMod.version,
             game_version: formattedMod.game_version,
             loader: formattedMod.loader,
+            content_type: formattedMod.content_type,
             filename: formattedMod.filename,
             source: "curseforge",
             cf_project_id: formattedMod.cf_project_id,

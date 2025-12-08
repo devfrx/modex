@@ -23,8 +23,14 @@ export interface Mod {
   /** Minecraft version (e.g., "1.20.1", "1.21.1") */
   game_version: string;
 
+  /** List of compatible Minecraft versions (primarily for shaders/resourcepacks) */
+  game_versions?: string[];
+
   /** Mod loader (forge, fabric, quilt, neoforge) */
   loader: string;
+
+  /** Content type: mod, resourcepack, or shader */
+  content_type?: "mod" | "resourcepack" | "shader";
 
   /** Short description */
   description?: string;

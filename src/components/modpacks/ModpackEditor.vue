@@ -25,9 +25,12 @@ import {
   Filter,
   CheckSquare,
   Square,
+  Image,
+  Sparkles,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
+import ProgressDialog from "@/components/ui/ProgressDialog.vue";
 import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import VersionHistoryPanel from "@/components/modpacks/VersionHistoryPanel.vue";
 import ModpackAnalysisPanel from "@/components/modpacks/ModpackAnalysisPanel.vue";
@@ -66,6 +69,7 @@ const showUpdatesDialog = ref(false);
 const isSaving = ref(false);
 const modsFilter = ref<"all" | "incompatible" | "disabled">("all");
 const activeTab = ref<"mods" | "analysis" | "versions" | "settings" | "remote">("mods");
+const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
 
 // Confirm dialog state for removing incompatible mods
 const showRemoveIncompatibleDialog = ref(false);
@@ -74,6 +78,11 @@ const showRemoveIncompatibleDialog = ref(false);
 const showReviewDialog = ref(false);
 const updateResult = ref<UpdateResult | null>(null);
 const isCheckingUpdate = ref(false);
+const showProgressDialog = ref(false);
+const progressState = ref({
+  message: "Starting update...",
+  percent: 0,
+});
 
 // Editable form fields
 const editForm = ref({
@@ -121,38 +130,59 @@ const isLinked = computed(() => {
 function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
   if (!modpack.value) return { compatible: true };
 
-  const packLoader = modpack.value.loader?.toLowerCase();
+  const modContentType = mod.content_type || "mod";
   const packVersion = modpack.value.minecraft_version;
-  const modLoader = mod.loader?.toLowerCase();
   const modVersion = mod.game_version;
 
-  // Check loader compatibility
-  if (packLoader && modLoader && modLoader !== "unknown") {
-    const isNeoForgeForgeCompat =
-      (packLoader === "neoforge" && modLoader === "forge") ||
-      (packLoader === "forge" && modLoader === "neoforge");
+  // Only check loader for mods (resourcepacks and shaders don't have loaders)
+  if (modContentType === "mod") {
+    const packLoader = modpack.value.loader?.toLowerCase();
+    const modLoader = mod.loader?.toLowerCase();
 
-    if (modLoader !== packLoader && !isNeoForgeForgeCompat) {
-      return {
-        compatible: false,
-        reason: `Requires ${modLoader}, modpack uses ${packLoader}`,
-      };
+    // Check loader compatibility
+    if (packLoader && modLoader && modLoader !== "unknown") {
+      const isNeoForgeForgeCompat =
+        (packLoader === "neoforge" && modLoader === "forge") ||
+        (packLoader === "forge" && modLoader === "neoforge");
+
+      if (modLoader !== packLoader && !isNeoForgeForgeCompat) {
+        return {
+          compatible: false,
+          reason: `Requires ${modLoader}, modpack uses ${packLoader}`,
+        };
+      }
     }
   }
 
   // Check MC version compatibility
   if (packVersion && modVersion && modVersion !== "unknown") {
-    const versionsMatch =
-      modVersion === packVersion ||
-      modVersion.startsWith(packVersion) ||
-      packVersion.startsWith(modVersion) ||
-      modVersion.includes(packVersion);
+    // For shaders/resourcepacks, check if packVersion is in the game_versions array
+    if (modContentType !== "mod" && mod.game_versions && mod.game_versions.length > 0) {
+      const isVersionCompatible = mod.game_versions.some(gv => 
+        gv === packVersion ||
+        gv.startsWith(packVersion) ||
+        packVersion.startsWith(gv)
+      );
+      if (!isVersionCompatible) {
+        return {
+          compatible: false,
+          reason: `Supports MC ${mod.game_versions.slice(0, 3).join(', ')}${mod.game_versions.length > 3 ? '...' : ''}, modpack is ${packVersion}`,
+        };
+      }
+    } else {
+      // Standard single version check for mods or items without game_versions array
+      const versionsMatch =
+        modVersion === packVersion ||
+        modVersion.startsWith(packVersion) ||
+        packVersion.startsWith(modVersion) ||
+        modVersion.includes(packVersion);
 
-    if (!versionsMatch) {
-      return {
-        compatible: false,
-        reason: `For MC ${modVersion}, modpack is ${packVersion}`,
-      };
+      if (!versionsMatch) {
+        return {
+          compatible: false,
+          reason: `For MC ${modVersion}, modpack is ${packVersion}`,
+        };
+      }
     }
   }
 
@@ -162,6 +192,12 @@ function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
 // Filtered & Sorted Mods with compatibility info
 const filteredInstalledMods = computed(() => {
   let mods = currentMods.value.filter((m) => {
+    // Content type filter
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod") return false;
+    if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack") return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader") return false;
+
     // Search filter
     const matchesSearch = m.name.toLowerCase().includes(searchQueryInstalled.value.toLowerCase());
     if (!matchesSearch) return false;
@@ -184,6 +220,18 @@ const filteredInstalledMods = computed(() => {
   return mods;
 });
 
+// Content type counts
+const contentTypeCounts = computed(() => {
+  const counts = { mods: 0, resourcepacks: 0, shaders: 0 };
+  for (const m of currentMods.value) {
+    const ct = m.content_type || "mod";
+    if (ct === "mod") counts.mods++;
+    else if (ct === "resourcepack") counts.resourcepacks++;
+    else if (ct === "shader") counts.shaders++;
+  }
+  return counts;
+});
+
 // Installed mods with compatibility check
 const installedModsWithCompatibility = computed(() => {
   return filteredInstalledMods.value.map(mod => {
@@ -196,19 +244,42 @@ const installedModsWithCompatibility = computed(() => {
   });
 });
 
-// Count of incompatible mods
+// Count of incompatible mods (per tab)
 const incompatibleModCount = computed(() => {
-  return currentMods.value.filter(m => !isModCompatible(m).compatible).length;
+  return currentMods.value.filter(m => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod") return false;
+    if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack") return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader") return false;
+    return !isModCompatible(m).compatible;
+  }).length;
+});
+
+// Count of disabled mods (per tab)
+const disabledModCount = computed(() => {
+  return currentMods.value.filter(m => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod") return false;
+    if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack") return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader") return false;
+    return disabledModIds.value.has(m.id);
+  }).length;
 });
 
 // Mods with compatibility info
 const filteredAvailableMods = computed(() => {
   const currentIds = new Set(currentMods.value.map((m) => m.id));
   return availableMods.value
-    .filter(
-      (m) =>
-        !currentIds.has(m.id) &&
-        m.name.toLowerCase().includes(searchQueryAvailable.value.toLowerCase())
+    .filter((m) => {
+        // Content type filter
+        const modContentType = m.content_type || "mod";
+        if (contentTypeTab.value === "mods" && modContentType !== "mod") return false;
+        if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack") return false;
+        if (contentTypeTab.value === "shaders" && modContentType !== "shader") return false;
+
+        return !currentIds.has(m.id) &&
+          m.name.toLowerCase().includes(searchQueryAvailable.value.toLowerCase());
+      }
     )
     .map((mod) => {
       const compatibility = isModCompatible(mod);
@@ -352,6 +423,10 @@ async function toggleModEnabled(modId: string) {
       // Update local state immediately for responsive UI
       if (result.enabled) {
         disabledModIds.value.delete(modId);
+        // If viewing disabled filter and enabling a mod, switch to "all" so it remains visible
+        if (modsFilter.value === "disabled") {
+          modsFilter.value = "all";
+        }
       } else {
         disabledModIds.value.add(modId);
       }
@@ -680,7 +755,9 @@ async function applyRemoteUpdate() {
   const manifest = JSON.parse(JSON.stringify(updateResult.value.remoteManifest));
 
   // Show progress toast
-  toast.info("Updating Modpack", "Applying remote changes...");
+  // toast.info("Updating Modpack", "Applying remote changes...");
+  showProgressDialog.value = true;
+  progressState.value = { message: "Starting update...", percent: 0 };
 
   try {
     // Progress handler
@@ -689,10 +766,11 @@ async function applyRemoteUpdate() {
       total: number;
       modName: string;
     }) => {
-      // We could show a progress dialog here but for now just log
-      console.log(
-        `Update Progress: ${data.current}/${data.total} - ${data.modName}`
-      );
+      const percent = Math.round((data.current / data.total) * 100);
+      progressState.value = {
+        message: `Downloading ${data.modName} (${data.current}/${data.total})`,
+        percent,
+      };
     };
 
     window.api.on("import:progress", progressHandler);
@@ -701,7 +779,8 @@ async function applyRemoteUpdate() {
     const result = await window.api.import.modexFromData(manifest, props.modpackId);
 
     // Remove listener
-    window.ipcRenderer.off("import:progress", progressHandler as any);
+    // @ts-ignore
+    window.ipcRenderer.off("import:progress", progressHandler);
 
     if (result && result.success) {
       toast.success("Update Complete", `Modpack updated successfully!`);
@@ -838,7 +917,7 @@ watch(
             " @click="activeTab = 'mods'">
             <div class="flex items-center gap-1.5">
               <Layers class="w-4 h-4" />
-              Mods
+              Resources
             </div>
             <div v-if="activeTab === 'mods'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
@@ -889,9 +968,48 @@ watch(
       </div>
 
       <!-- Content -->
-      <div class="flex-1 flex overflow-hidden">
+      <div class="flex-1 flex flex-col overflow-hidden">
         <!-- Mods Tab -->
         <template v-if="activeTab === 'mods'">
+          <!-- Content Type Sub-tabs -->
+          <div class="shrink-0 px-4 py-2 border-b border-border/30 bg-muted/10 flex items-center gap-1">
+            <button 
+              class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
+              :class="contentTypeTab === 'mods' 
+                ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30' 
+                : 'hover:bg-muted text-muted-foreground'"
+              @click="contentTypeTab = 'mods'"
+            >
+              <Layers class="w-3.5 h-3.5" />
+              Mods
+              <span class="text-[10px] px-1 py-0.5 rounded bg-emerald-500/10">{{ contentTypeCounts.mods }}</span>
+            </button>
+            <button 
+              class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
+              :class="contentTypeTab === 'resourcepacks' 
+                ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30' 
+                : 'hover:bg-muted text-muted-foreground'"
+              @click="contentTypeTab = 'resourcepacks'"
+            >
+              <Image class="w-3.5 h-3.5" />
+              Resource Packs
+              <span class="text-[10px] px-1 py-0.5 rounded bg-blue-500/10">{{ contentTypeCounts.resourcepacks }}</span>
+            </button>
+            <button 
+              class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
+              :class="contentTypeTab === 'shaders' 
+                ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30' 
+                : 'hover:bg-muted text-muted-foreground'"
+              @click="contentTypeTab = 'shaders'"
+            >
+              <Sparkles class="w-3.5 h-3.5" />
+              Shaders
+              <span class="text-[10px] px-1 py-0.5 rounded bg-pink-500/10">{{ contentTypeCounts.shaders }}</span>
+            </button>
+          </div>
+
+          <!-- Content Split View -->
+          <div class="flex-1 flex overflow-hidden">
           <!-- Left: Installed Mods -->
           <div class="w-1/2 border-r border-border/50 flex flex-col">
             <!-- Header -->
@@ -900,9 +1018,9 @@ watch(
                 <div class="flex items-center gap-2">
                   <span class="font-semibold text-sm">Installed</span>
                   <span class="text-xs text-muted-foreground">
-                    {{ enabledModCount
-                    }}<span v-if="disabledModIds.size > 0" class="text-amber-500">
-                      (+{{ disabledModIds.size }} disabled)</span>
+                    {{ filteredInstalledMods.length
+                    }}<span v-if="disabledModCount > 0" class="text-amber-500">
+                      (+{{ disabledModCount }} disabled)</span>
                   </span>
                   <span v-if="incompatibleModCount > 0" class="text-xs text-red-500 font-medium">
                     ({{ incompatibleModCount }} incompatible)
@@ -938,10 +1056,10 @@ watch(
                   <AlertCircle class="w-3 h-3 inline mr-0.5" />
                   Incompatible ({{ incompatibleModCount }})
                 </button>
-                <button v-if="disabledModIds.size > 0" class="h-6 text-[10px] px-2 rounded transition-colors"
+                <button v-if="disabledModCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors"
                   :class="modsFilter === 'disabled' ? 'bg-amber-500/15 text-amber-500 font-medium' : 'hover:bg-muted text-muted-foreground'"
                   @click="modsFilter = 'disabled'">
-                  Disabled ({{ disabledModIds.size }})
+                  Disabled ({{ disabledModCount }})
                 </button>
 
                 <!-- Remove all incompatible mods button -->
@@ -1025,7 +1143,14 @@ watch(
                     </span>
                   </div>
                   <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <span v-if="mod.game_version && mod.game_version !== 'unknown'"
+                    <!-- Game versions (show list for shaders/resourcepacks if available) -->
+                    <span v-if="mod.content_type !== 'mod' && mod.game_versions && mod.game_versions.length >= 1"
+                      class="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
+                      :class="mod.isCompatible ? 'bg-emerald-500/15 text-emerald-500' : 'bg-red-500/15 text-red-500'"
+                      :title="mod.game_versions.join(', ')">
+                      {{ mod.game_versions.slice(0, 2).join(', ') }}{{ mod.game_versions.length > 2 ? ` +${mod.game_versions.length - 2}` : '' }}
+                    </span>
+                    <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
                       class="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
                       :class="mod.isCompatible ? 'bg-emerald-500/15 text-emerald-500' : 'bg-red-500/15 text-red-500'">
                       {{ mod.game_version }}
@@ -1061,12 +1186,18 @@ watch(
 
               <!-- Empty State -->
               <div v-if="filteredInstalledMods.length === 0" class="p-8 text-center">
-                <Layers class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                <Layers v-if="contentTypeTab === 'mods'" class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                <Image v-else-if="contentTypeTab === 'resourcepacks'" class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                <Sparkles v-else class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
                 <p class="text-sm text-muted-foreground">
                   {{
                     searchQueryInstalled
-                      ? "No matching mods"
-                      : "No mods in this pack yet"
+                      ? "No matching items"
+                      : contentTypeTab === 'mods' 
+                        ? "No mods in this pack yet"
+                        : contentTypeTab === 'resourcepacks'
+                          ? "No resource packs in this pack yet"
+                          : "No shaders in this pack yet"
                   }}
                 </p>
               </div>
@@ -1122,7 +1253,13 @@ watch(
                     <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   </div>
                   <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <span v-if="mod.game_version && mod.game_version !== 'unknown'"
+                    <!-- Game versions (show list for shaders/resourcepacks if available) -->
+                    <span v-if="mod.content_type !== 'mod' && mod.game_versions && mod.game_versions.length >= 1"
+                      class="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium"
+                      :title="mod.game_versions.join(', ')">
+                      {{ mod.game_versions.slice(0, 2).join(', ') }}{{ mod.game_versions.length > 2 ? ` +${mod.game_versions.length - 2}` : '' }}
+                    </span>
+                    <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
                       class="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium">
                       {{ mod.game_version }}
                     </span>
@@ -1154,10 +1291,11 @@ watch(
               <div v-if="filteredAvailableMods.length === 0" class="p-8 text-center">
                 <Package class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
                 <p class="text-sm text-muted-foreground">
-                  No mods available to add
+                  No {{ contentTypeTab === 'mods' ? 'mods' : contentTypeTab === 'resourcepacks' ? 'resource packs' : 'shaders' }} available to add
                 </p>
               </div>
             </div>
+          </div>
           </div>
         </template>
 
@@ -1354,6 +1492,10 @@ watch(
     <UpdateReviewDialog v-if="updateResult && modpack" :open="showReviewDialog" :modpack-name="modpack.name"
       :changes="updateResult.changes" :new-version="updateResult.remoteManifest?.modpack.version"
       @close="showReviewDialog = false" @confirm="applyRemoteUpdate" />
+
+    <!-- Progress Dialog -->
+    <ProgressDialog :open="showProgressDialog" title="Updating Modpack" :message="progressState.message"
+      :progress="progressState.percent" />
 
     <!-- Confirm Remove Incompatible Mods Dialog -->
     <ConfirmDialog :open="showRemoveIncompatibleDialog" title="Remove Incompatible Mods"

@@ -13,6 +13,7 @@ import * as path from "path";
 export interface CFMod {
   id: number;
   gameId: number;
+  classId?: number; // 6=mods, 12=resourcepacks, 6552=shaders
   name: string;
   slug: string;
   summary: string;
@@ -128,11 +129,27 @@ export interface CFModLoader {
 
 // ==================== SERVICE ====================
 
+// Content Type Class IDs
+export const CONTENT_CLASS_IDS = {
+  mods: 6,
+  resourcepacks: 12,
+  shaders: 6552,
+} as const;
+
+export type ContentType = keyof typeof CONTENT_CLASS_IDS;
+
+// Helper to get content type from classId
+export function getContentTypeFromClassId(classId?: number): ContentType {
+  if (classId === CONTENT_CLASS_IDS.resourcepacks) return "resourcepacks";
+  if (classId === CONTENT_CLASS_IDS.shaders) return "shaders";
+  return "mods"; // Default to mods
+}
+
 export class CurseForgeService {
   private apiKey: string = "";
   private readonly apiUrl = "https://api.curseforge.com/v1";
   private readonly MINECRAFT_GAME_ID = 432;
-  private readonly MODS_CLASS_ID = 6; // Mods category
+  private readonly MODS_CLASS_ID = 6; // Legacy - use CONTENT_CLASS_IDS instead
 
   // Simple in-memory cache
   private cache = new Map<string, { data: any; expires: number }>();
@@ -281,9 +298,8 @@ export class CurseForgeService {
     const params = new URLSearchParams();
     if (options?.stripped) params.append("stripped", "true");
 
-    const url = `${this.apiUrl}/mods/${modId}/description${
-      params.toString() ? "?" + params : ""
-    }`;
+    const url = `${this.apiUrl}/mods/${modId}/description${params.toString() ? "?" + params : ""
+      }`;
     const response = await fetch(url, {
       headers: {
         "x-api-key": this.apiKey,
@@ -339,14 +355,20 @@ export class CurseForgeService {
     index?: number;
     sortField?: number;
     sortOrder?: "asc" | "desc";
+    contentType?: ContentType;
   }): Promise<CFSearchResult> {
     if (!this.apiKey) {
       throw new Error("CurseForge API key not set");
     }
 
+    // Use content type class ID or default to mods
+    const classId = options.contentType
+      ? CONTENT_CLASS_IDS[options.contentType]
+      : this.MODS_CLASS_ID;
+
     const params = new URLSearchParams({
       gameId: this.MINECRAFT_GAME_ID.toString(),
-      classId: this.MODS_CLASS_ID.toString(),
+      classId: classId.toString(),
       pageSize: (options.pageSize || 20).toString(),
       index: (options.index || 0).toString(),
       sortField: (options.sortField || 2).toString(),
@@ -361,7 +383,8 @@ export class CurseForgeService {
       params.append("gameVersion", options.gameVersion);
     }
 
-    if (options.modLoader) {
+    // Only apply mod loader filter for mods (not for resourcepacks/shaders)
+    if (options.modLoader && (!options.contentType || options.contentType === "mods")) {
       const loaderNum = MODLOADER_REVERSE_MAP[options.modLoader.toLowerCase()];
       if (loaderNum !== undefined) {
         params.append("modLoaderType", loaderNum.toString());
@@ -496,23 +519,34 @@ export class CurseForgeService {
   async getBestFile(
     modId: number,
     gameVersion: string,
-    modLoader: string
+    modLoader: string,
+    contentType?: "mod" | "resourcepack" | "shader"
   ): Promise<CFFile | null> {
-    // First try exact match with version and loader
-    const files = await this.getModFiles(modId, {
-      gameVersion,
-      modLoader,
-    });
+    // For resourcepacks/shaders, loader is not relevant
+    const isModContent = !contentType || contentType === "mod";
+
+    // First try exact match with version and loader (for mods only)
+    const files = isModContent
+      ? await this.getModFiles(modId, {
+        gameVersion,
+        modLoader,
+      })
+      : await this.getModFiles(modId, { gameVersion }); // No loader filter for non-mods
 
     if (files.length === 0) {
       // Fallback: try same version with any loader that matches
       const allFiles = await this.getModFiles(modId, { gameVersion });
       if (allFiles.length > 0) {
-        const loaderLower = modLoader.toLowerCase();
-        const matching = allFiles.find((f) =>
-          f.gameVersions.some((gv) => gv.toLowerCase() === loaderLower)
-        );
-        return matching || null; // Return null if no matching loader found
+        if (isModContent) {
+          const loaderLower = modLoader.toLowerCase();
+          const matching = allFiles.find((f) =>
+            f.gameVersions.some((gv) => gv.toLowerCase() === loaderLower)
+          );
+          return matching || null; // Return null if no matching loader found
+        } else {
+          // For non-mods, return the first file
+          return allFiles[0];
+        }
       }
       return null;
     }
@@ -533,7 +567,8 @@ export class CurseForgeService {
     mod: CFMod,
     file: CFFile,
     preferredLoader?: string,
-    targetGameVersion?: string
+    targetGameVersion?: string,
+    contentType?: ContentType
   ): {
     source: "curseforge";
     cf_project_id: number;
@@ -543,7 +578,9 @@ export class CurseForgeService {
     filename: string;
     version: string;
     game_version: string;
+    game_versions?: string[];
     loader: string;
+    content_type: "mod" | "resourcepack" | "shader";
     description: string;
     author: string;
     thumbnail_url?: string;
@@ -638,6 +675,35 @@ export class CurseForgeService {
       6: "include",
     };
 
+    // Map content type parameter to library format
+    const contentTypeMap: Record<string, "mod" | "resourcepack" | "shader"> = {
+      mods: "mod",
+      resourcepacks: "resourcepack",
+      shaders: "shader",
+    };
+    const mappedContentType = contentType ? contentTypeMap[contentType] : "mod";
+
+    // Website URL path based on content type
+    const urlPaths: Record<string, string> = {
+      mods: "mc-mods",
+      resourcepacks: "texture-packs",
+      shaders: "shaders",
+    };
+    const urlPath = contentType ? urlPaths[contentType] : "mc-mods";
+
+    // Store all compatible game versions for shaders/resourcepacks
+    // Sort versions for consistent display (newest first)
+    const sortedGameVersions = [...foundVersions].sort((a, b) => {
+      const aParts = a.split(".").map(Number);
+      const bParts = b.split(".").map(Number);
+      for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+        const aVal = aParts[i] || 0;
+        const bVal = bParts[i] || 0;
+        if (aVal !== bVal) return bVal - aVal;
+      }
+      return 0;
+    });
+
     return {
       source: "curseforge",
       cf_project_id: mod.id,
@@ -647,7 +713,9 @@ export class CurseForgeService {
       filename: file.fileName,
       version,
       game_version,
+      game_versions: sortedGameVersions.length > 0 ? sortedGameVersions : undefined,
       loader,
+      content_type: mappedContentType,
       description: mod.summary,
       author: mod.authors.map((a) => a.name).join(", "),
       thumbnail_url: mod.logo?.thumbnailUrl || undefined,
@@ -663,7 +731,7 @@ export class CurseForgeService {
       file_size: file.fileLength,
       date_created: mod.dateCreated,
       date_modified: mod.dateModified,
-      website_url: `https://www.curseforge.com/minecraft/mc-mods/${mod.slug}`,
+      website_url: `https://www.curseforge.com/minecraft/${urlPath}/${mod.slug}`,
     };
   }
 
@@ -682,13 +750,17 @@ export class CurseForgeService {
     return result.mods;
   }
 
-  async getCategories(): Promise<CFCategory[]> {
+  async getCategories(contentType?: ContentType): Promise<CFCategory[]> {
     if (!this.apiKey) {
       throw new Error("CurseForge API key not set");
     }
 
+    const classId = contentType
+      ? CONTENT_CLASS_IDS[contentType]
+      : this.MODS_CLASS_ID;
+
     const response = await fetch(
-      `${this.apiUrl}/categories?gameId=${this.MINECRAFT_GAME_ID}&classId=${this.MODS_CLASS_ID}`,
+      `${this.apiUrl}/categories?gameId=${this.MINECRAFT_GAME_ID}&classId=${classId}`,
       {
         headers: {
           "x-api-key": this.apiKey,

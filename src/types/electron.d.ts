@@ -75,6 +75,7 @@ export interface ElectronAPI {
       index?: number;
       sortField?: number;
       sortOrder?: "asc" | "desc";
+      contentType?: "mods" | "resourcepacks" | "shaders";
     }) => Promise<{ mods: CFMod[]; pagination: CFPagination }>;
     getMod: (modId: number) => Promise<CFMod | null>;
     getModFiles: (
@@ -84,13 +85,14 @@ export interface ElectronAPI {
         modLoader?: string;
       }
     ) => Promise<CFFile[]>;
-    getCategories: () => Promise<CFCategory[]>;
+    getCategories: (contentType?: "mods" | "resourcepacks" | "shaders") => Promise<CFCategory[]>;
     getPopular: (gameVersion?: string, modLoader?: string) => Promise<CFMod[]>;
     /** Add a mod from CurseForge to library (metadata only, no download) */
     addToLibrary: (
       projectId: number,
       fileId: number,
-      preferredLoader?: string
+      preferredLoader?: string,
+      contentType?: "mods" | "resourcepacks" | "shaders"
     ) => Promise<Mod | null>;
   };
 
@@ -191,9 +193,9 @@ export interface ElectronAPI {
       }>;
       partialData?: any;
       manifest?: any;
-      changes?: { 
-        added: number; 
-        removed: number; 
+      changes?: {
+        added: number;
+        removed: number;
         unchanged: number;
         updated: number;
         downloaded: number;
@@ -237,9 +239,9 @@ export interface ElectronAPI {
       modpackId: string;
       code: string;
       isUpdate: boolean;
-      changes?: { 
-        added: number; 
-        removed: number; 
+      changes?: {
+        added: number;
+        removed: number;
         unchanged: number;
         updated: number;
         downloaded: number;
@@ -453,4 +455,4 @@ declare global {
   }
 }
 
-export {};
+export { };

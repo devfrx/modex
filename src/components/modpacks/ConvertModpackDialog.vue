@@ -148,6 +148,9 @@ async function convertModpack() {
                 modName: mod.name
             };
 
+            // Check if this is a mod or resourcepack/shader
+            const isModContent = !mod.content_type || mod.content_type === "mod";
+
             try {
                 // Skip if not from CurseForge
                 if (mod.source !== "curseforge" || !mod.cf_project_id) {
@@ -161,70 +164,116 @@ async function convertModpack() {
                 }
 
                 // Search for compatible file
+                // For shaders/resourcepacks, don't filter by loader
                 const files = await window.api.curseforge.getModFiles(mod.cf_project_id, {
                     gameVersion: targetVersion.value,
-                    modLoader: targetLoader.value,
+                    modLoader: isModContent ? targetLoader.value : undefined,
                 });
 
                 if (files.length === 0) {
+                    const reasonSuffix = isModContent ? ` ${targetLoader.value}` : "";
                     results.push({
                         modName: mod.name,
                         status: "failed",
-                        reason: `No files found for ${targetVersion.value} ${targetLoader.value}`,
+                        reason: `No files found for ${targetVersion.value}${reasonSuffix}`,
                     });
                     failedCount++;
                     continue;
                 }
 
-                // Find file that EXACTLY matches the target version AND loader in gameVersions array
-                // STRICT: The file must explicitly list the target loader - no cross-loader compatibility
+                // Find compatible file
+                // For mods: must match EXACTLY the target version AND loader in gameVersions array
+                // For shaders/resourcepacks: only check version compatibility
                 const targetLoaderLower = targetLoader.value.toLowerCase();
-                const file = files.find(f => {
-                    const gameVersions = (f.gameVersions || []).map((v: string) => v.toLowerCase());
-                    // Must have the exact MC version
-                    const hasVersion = gameVersions.includes(targetVersion.value.toLowerCase());
-                    // Must have the EXACT loader - strict match only
-                    const hasLoader = gameVersions.includes(targetLoaderLower);
-                    return hasVersion && hasLoader;
-                });
+                let file;
+                
+                if (isModContent) {
+                    // STRICT: The file must explicitly list the target loader - no cross-loader compatibility
+                    file = files.find(f => {
+                        const gameVersions = (f.gameVersions || []).map((v: string) => v.toLowerCase());
+                        // Must have the exact MC version
+                        const hasVersion = gameVersions.includes(targetVersion.value.toLowerCase());
+                        // Must have the EXACT loader - strict match only
+                        const hasLoader = gameVersions.includes(targetLoaderLower);
+                        return hasVersion && hasLoader;
+                    });
+                } else {
+                    // For shaders/resourcepacks: only check if version is in gameVersions list
+                    file = files.find(f => {
+                        const gameVersions = f.gameVersions || [];
+                        return gameVersions.some((gv: string) => 
+                            gv === targetVersion.value || 
+                            gv.startsWith(targetVersion.value + ".") ||
+                            targetVersion.value.startsWith(gv + ".")
+                        );
+                    });
+                    // If no exact match, try first release file
+                    if (!file) {
+                        file = files.find((f: any) => f.releaseType === 1) || files[0];
+                    }
+                }
 
                 if (!file) {
                     // Check if any file has the loader but wrong version, or version but wrong loader
-                    const filesWithLoader = files.filter(f =>
-                        (f.gameVersions || []).some((v: string) => v.toLowerCase() === targetLoaderLower)
-                    );
-                    const filesWithVersion = files.filter(f =>
-                        (f.gameVersions || []).includes(targetVersion.value)
-                    );
+                    if (isModContent) {
+                        const filesWithLoader = files.filter(f =>
+                            (f.gameVersions || []).some((v: string) => v.toLowerCase() === targetLoaderLower)
+                        );
+                        const filesWithVersion = files.filter(f =>
+                            (f.gameVersions || []).includes(targetVersion.value)
+                        );
 
-                    let reason = `No compatible file for ${targetVersion.value} ${targetLoader.value}`;
-                    if (filesWithVersion.length > 0 && filesWithLoader.length === 0) {
-                        reason = `Version ${targetVersion.value} available but not for ${targetLoader.value}`;
-                    } else if (filesWithLoader.length > 0 && filesWithVersion.length === 0) {
-                        const availableVersions = filesWithLoader
+                        let reason = `No compatible file for ${targetVersion.value} ${targetLoader.value}`;
+                        if (filesWithVersion.length > 0 && filesWithLoader.length === 0) {
+                            reason = `Version ${targetVersion.value} available but not for ${targetLoader.value}`;
+                        } else if (filesWithLoader.length > 0 && filesWithVersion.length === 0) {
+                            const availableVersions = filesWithLoader
+                                .flatMap(f => f.gameVersions || [])
+                                .filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v))
+                                .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
+                                .slice(0, 3)
+                                .join(', ');
+                            reason = `${targetLoader.value} available for: ${availableVersions || 'unknown versions'}`;
+                        }
+
+                        results.push({
+                            modName: mod.name,
+                            status: "failed",
+                            reason,
+                        });
+                    } else {
+                        // For shaders/resourcepacks - version mismatch
+                        const availableVersions = files
                             .flatMap(f => f.gameVersions || [])
                             .filter((v: string) => /^1\.\d+(\.\d+)?$/.test(v))
                             .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
-                            .slice(0, 3)
+                            .slice(0, 5)
                             .join(', ');
-                        reason = `${targetLoader.value} available for: ${availableVersions || 'unknown versions'}`;
+                        results.push({
+                            modName: mod.name,
+                            status: "failed",
+                            reason: `Not available for ${targetVersion.value}. Available: ${availableVersions || 'unknown'}`,
+                        });
                     }
-
-                    results.push({
-                        modName: mod.name,
-                        status: "failed",
-                        reason,
-                    });
                     failedCount++;
                     continue;
                 }
 
                 console.log(`[Convert] Found file ${file.id} for ${mod.name} - gameVersions: ${file.gameVersions?.join(', ')}`);
 
+                // Map content_type to API format
+                const contentTypeMap: Record<string, "mods" | "resourcepacks" | "shaders"> = {
+                    mod: "mods",
+                    resourcepack: "resourcepacks",
+                    shader: "shaders",
+                };
+                const apiContentType = mod.content_type ? contentTypeMap[mod.content_type] : "mods";
+
                 const addedMod = await window.api.curseforge.addToLibrary(
                     mod.cf_project_id,
                     file.id,
-                    targetLoader.value
+                    isModContent ? targetLoader.value : undefined,
+                    apiContentType
                 );
 
                 if (addedMod) {

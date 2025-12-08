@@ -197,8 +197,8 @@ async function initializeBackend() {
     }
   );
 
-  ipcMain.handle("curseforge:getCategories", async () => {
-    return curseforgeService.getCategories();
+  ipcMain.handle("curseforge:getCategories", async (_, contentType?: string) => {
+    return curseforgeService.getCategories(contentType as any);
   });
 
   ipcMain.handle(
@@ -211,7 +211,7 @@ async function initializeBackend() {
   // Add mod from CurseForge to library (metadata only)
   ipcMain.handle(
     "curseforge:addToLibrary",
-    async (_, projectId: number, fileId: number, preferredLoader?: string) => {
+    async (_, projectId: number, fileId: number, preferredLoader?: string, contentType?: string) => {
       try {
         // Check if mod already exists in library
         const existingMod = await metadataManager.findModByCFIds(
@@ -231,11 +231,13 @@ async function initializeBackend() {
         const cfFile = await curseforgeService.getFile(projectId, fileId);
         if (!cfFile) return null;
 
-        // Pass preferredLoader to get correct loader detection
+        // Pass preferredLoader and contentType to get correct detection
         const modData = curseforgeService.modToLibraryFormat(
           cfMod,
           cfFile,
-          preferredLoader
+          preferredLoader,
+          undefined,
+          contentType as any
         );
 
         const mod = await metadataManager.addMod({
@@ -243,7 +245,9 @@ async function initializeBackend() {
           slug: modData.slug,
           version: modData.version,
           game_version: modData.game_version,
+          game_versions: modData.game_versions,
           loader: modData.loader,
+          content_type: modData.content_type,
           description: modData.description,
           author: modData.author,
           thumbnail_url: modData.thumbnail_url || undefined,
@@ -503,11 +507,17 @@ async function initializeBackend() {
 
             // Add to library
             const modpack = await metadataManager.getModpackById(modpackId);
+            // Detect content type from classId
+            const { getContentTypeFromClassId } = await import(
+              "./services/CurseForgeService"
+            );
+            const contentType = getContentTypeFromClassId(cfMod.classId);
             const formattedMod = curseforgeService.modToLibraryFormat(
               cfMod,
               cfFile,
               modpack?.loader || "forge",
-              modpack?.minecraft_version || "1.20.1"
+              modpack?.minecraft_version || "1.20.1",
+              contentType
             );
 
             // addMod will generate the same ID based on cf_project_id and cf_file_id
@@ -1004,11 +1014,17 @@ async function initializeBackend() {
 
     try {
       // Get latest file for this mod's game version and loader
+      // For resourcepacks/shaders, loader is ignored
       const latestFile = await curseforgeService.getBestFile(
         mod.cf_project_id,
         mod.game_version,
-        mod.loader
+        mod.loader,
+        mod.content_type
       );
+
+      // Determine URL path based on content type
+      const urlPath = mod.content_type === "resourcepack" ? "texture-packs" :
+        mod.content_type === "shader" ? "shaders" : "mc-mods";
 
       if (!latestFile) {
         return {
@@ -1032,7 +1048,7 @@ async function initializeBackend() {
         currentVersion: mod.version,
         latestVersion: hasUpdate ? latestFile.displayName : mod.version,
         hasUpdate,
-        updateUrl: `https://www.curseforge.com/minecraft/mc-mods/${mod.slug}`,
+        updateUrl: `https://www.curseforge.com/minecraft/${urlPath}/${mod.slug}`,
         source: "curseforge",
         projectId: mod.cf_project_id.toString(),
         projectName: mod.name,
@@ -1073,10 +1089,12 @@ async function initializeBackend() {
       });
 
       try {
+        // Pass content_type to handle resourcepacks/shaders without loader filter
         const latestFile = await curseforgeService.getBestFile(
           mod.cf_project_id!,
           mod.game_version,
-          mod.loader
+          mod.loader,
+          mod.content_type
         );
 
         results.push({
@@ -1115,7 +1133,7 @@ async function initializeBackend() {
 
     const mcVersion = modpack.minecraft_version || "1.20.1";
     const loader = modpack.loader || "forge";
-    
+
     const cfMods = mods.filter(m => m.source === "curseforge" && m.cf_project_id);
     let current = 0;
 
@@ -1129,10 +1147,12 @@ async function initializeBackend() {
       });
 
       try {
+        // Pass content_type to handle resourcepacks/shaders without loader filter
         const latestFile = await curseforgeService.getBestFile(
           mod.cf_project_id!,
           mcVersion,
-          loader
+          loader,
+          mod.content_type
         );
 
         results.push({
@@ -1185,12 +1205,19 @@ async function initializeBackend() {
         if (!cfMod)
           return { success: false, error: "Mod not found on CurseForge" };
 
+        // Detect content type from classId or preserve existing
+        const { getContentTypeFromClassId } = await import(
+          "./services/CurseForgeService"
+        );
+        const contentType = getContentTypeFromClassId(cfMod.classId);
+
         // Preserve the original loader preference when converting
         const modData = curseforgeService.modToLibraryFormat(
           cfMod,
           cfFile,
           mod.loader,
-          mod.game_version
+          mod.game_version,
+          contentType
         );
 
         // Update mod in library with all new metadata
@@ -1346,12 +1373,19 @@ async function initializeBackend() {
           ? await metadataManager.getModpackById(modpackId)
           : null;
 
+        // Detect content type from classId
+        const { getContentTypeFromClassId } = await import(
+          "./services/CurseForgeService"
+        );
+        const contentType = getContentTypeFromClassId(cfMod.classId);
+
         // Convert to library format and save
         const modData = curseforgeService.modToLibraryFormat(
           cfMod,
           cfFile,
           modpack?.loader || "forge",
-          modpack?.minecraft_version || "1.20.1"
+          modpack?.minecraft_version || "1.20.1",
+          contentType
         );
         const savedMod = await metadataManager.addMod(modData);
 

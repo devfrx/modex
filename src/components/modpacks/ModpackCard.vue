@@ -7,9 +7,11 @@ import {
   Image,
   Copy,
   FolderOpen,
-  Star,
+  Heart,
   Share2,
   RefreshCw,
+  Calendar,
+  Clock,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 
@@ -22,6 +24,7 @@ interface ModpackWithCount {
   description?: string;
   image_url?: string;
   created_at?: string;
+  updated_at?: string;
   modCount: number;
 }
 
@@ -46,6 +49,24 @@ function handleImageError(event: Event) {
   const target = event.target as HTMLImageElement;
   target.style.display = "none";
 }
+
+function formatDate(dateStr?: string) {
+  if (!dateStr) return "Unknown";
+  try {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return "just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    
+    return date.toLocaleDateString();
+  } catch {
+    return "Unknown";
+  }
+}
 </script>
 
 <template>
@@ -53,7 +74,9 @@ function handleImageError(event: Event) {
     :class="{ 'ring-2 ring-primary bg-primary/5': selected }" @click="$emit('toggle-select', modpack.id)">
     <!-- Image Background -->
     <div v-if="modpack.image_url" class="absolute inset-0 z-0 overflow-hidden rounded-lg">
-      <img :src="'atom:///' + modpack.image_url.replace(/\\\\/g, '/')"
+      <img :src="modpack.image_url.startsWith('http') || modpack.image_url.startsWith('file:')
+        ? modpack.image_url
+        : 'atom:///' + modpack.image_url.replace(/\\/g, '/')"
         class="w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity" alt=""
         @error="handleImageError" />
       <div class="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
@@ -64,12 +87,12 @@ function handleImageError(event: Event) {
       class="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
     <!-- Favorite Button -->
-    <button class="absolute top-3 left-3 z-20 transition-all duration-200"
+    <button class="absolute top-3 left-3 z-20 transition-all duration-200 p-1.5 rounded-full bg-background/20 backdrop-blur-sm border border-white/10 hover:bg-background/40"
       :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
       @click.stop="$emit('toggle-favorite', modpack.id)" title="Toggle favorite">
-      <Star class="w-5 h-5 transition-colors" :class="favorite
-          ? 'fill-yellow-500 text-yellow-500'
-          : 'text-muted-foreground hover:text-yellow-500'
+      <Heart class="w-4 h-4 transition-colors" :class="favorite
+          ? 'fill-rose-500 text-rose-500'
+          : 'text-muted-foreground hover:text-rose-500'
         " />
     </button>
 
@@ -120,6 +143,18 @@ function handleImageError(event: Event) {
           class="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-medium capitalize">
           {{ modpack.loader }}
         </span>
+      </div>
+
+      <!-- Dates -->
+      <div class="flex items-center gap-3 text-[10px] text-muted-foreground mb-3 opacity-70">
+        <div class="flex items-center gap-1" title="Last updated">
+          <Clock class="w-3 h-3" />
+          <span>{{ formatDate(modpack.updated_at || modpack.created_at) }}</span>
+        </div>
+        <div class="flex items-center gap-1" title="Created">
+          <Calendar class="w-3 h-3" />
+          <span>{{ formatDate(modpack.created_at) }}</span>
+        </div>
       </div>
 
       <!-- Actions Row -->

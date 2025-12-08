@@ -22,6 +22,8 @@ import {
   Star,
   Share2,
   RefreshCw,
+  Search,
+  Copy,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
 
@@ -45,6 +47,8 @@ const favoriteModpacks = ref<Set<string>>(new Set());
 
 // Quick filter
 const quickFilter = ref<"all" | "favorites">("all");
+const searchQuery = ref("");
+const sortBy = ref<"name" | "updated">("name");
 
 // Editor State
 const showEditor = ref(false);
@@ -180,6 +184,31 @@ async function deleteSelectedModpacks() {
     clearSelection();
   } catch (err) {
     toast.error("Delete Failed", (err as Error).message);
+  } finally {
+    showProgress.value = false;
+  }
+}
+
+async function duplicateSelectedModpacks() {
+  showProgress.value = true;
+  progressTitle.value = "Duplicating Modpacks";
+  
+  const ids = Array.from(selectedModpackIds.value);
+  let count = 0;
+
+  try {
+    for (const id of ids) {
+      progressMessage.value = `Duplicating ${++count} of ${ids.length}...`;
+      const original = modpacks.value.find(p => p.id === id);
+      if (original) {
+        await window.api.modpacks.clone(id, `${original.name} (Copy)`);
+      }
+    }
+    await loadModpacks();
+    clearSelection();
+    toast.success("Success", `Duplicated ${count} modpacks`);
+  } catch (err) {
+    toast.error("Duplicate Failed", (err as Error).message);
   } finally {
     showProgress.value = false;
   }
@@ -519,16 +548,25 @@ function toggleFavoriteModpack(id: string) {
 const sortedModpacks = computed(() => {
   let result = [...modpacks.value];
 
+  // Search
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase();
+    result = result.filter(p => p.name.toLowerCase().includes(q));
+  }
+
   // Apply quick filter
   if (quickFilter.value === "favorites") {
     result = result.filter((p) => favoriteModpacks.value.has(p.id));
   }
 
-  // Sort - favorites first, then by name
+  // Sort - favorites first, then by selected sort
   return result.sort((a, b) => {
     const aFav = favoriteModpacks.value.has(a.id) ? 0 : 1;
     const bFav = favoriteModpacks.value.has(b.id) ? 0 : 1;
     if (aFav !== bFav) return aFav - bFav;
+    
+    if (sortBy.value === 'name') return a.name.localeCompare(b.name);
+    // Fallback
     return a.name.localeCompare(b.name);
   });
 });
@@ -614,6 +652,21 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- Search & Sort -->
+        <div class="hidden md:flex items-center gap-2 flex-1 max-w-xs mx-auto">
+          <div class="relative flex-1">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <input v-model="searchQuery" placeholder="Search packs..." 
+              class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
+          </div>
+          <select v-model="sortBy" 
+            class="text-xs bg-muted/50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:bg-muted transition-colors appearance-none"
+            style="background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 0.65em auto;">
+            <option value="name">Name</option>
+            <option value="updated">Updated</option>
+          </select>
+        </div>
+
         <!-- Right: Actions -->
         <div class="flex items-center gap-1.5 sm:gap-2">
           <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
@@ -690,6 +743,10 @@ onMounted(() => {
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModpackIds.size > 0" :count="selectedModpackIds.size" label="modpacks"
       @clear="clearSelection">
+      <Button variant="secondary" size="sm" class="gap-2" @click="duplicateSelectedModpacks">
+        <Copy class="w-4 h-4" />
+        Duplicate
+      </Button>
       <Button variant="destructive" size="sm" class="gap-2" @click="confirmBulkDelete">
         <Trash2 class="w-4 h-4" />
         Delete

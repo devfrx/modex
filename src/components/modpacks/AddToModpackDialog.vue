@@ -19,6 +19,27 @@ const modpacks = ref<Modpack[]>([]);
 const selectedModpackId = ref<string | null>(null);
 const isLoading = ref(false);
 
+// Helper function to check version compatibility
+function isVersionCompatible(mod: Mod, packVersion: string): boolean {
+  const modContentType = mod.content_type || "mod";
+  const modVersion = mod.game_version;
+  
+  // For shaders/resourcepacks with game_versions array, check if packVersion is in the list
+  if (modContentType !== "mod" && mod.game_versions && mod.game_versions.length > 0) {
+    return mod.game_versions.some(gv => 
+      gv === packVersion ||
+      gv.startsWith(packVersion) ||
+      packVersion.startsWith(gv)
+    );
+  }
+  
+  // Standard single version check
+  return modVersion === packVersion ||
+    modVersion?.startsWith(packVersion) ||
+    packVersion?.startsWith(modVersion || '') ||
+    (modVersion || '').includes(packVersion);
+}
+
 // Calculate compatibility for each modpack
 const modpacksWithCompatibility = computed(() => {
   return modpacks.value.map(pack => {
@@ -26,8 +47,12 @@ const modpacksWithCompatibility = computed(() => {
     const incompatible: Mod[] = [];
 
     for (const mod of props.mods) {
-      const versionMatch = mod.game_version === pack.minecraft_version;
-      const loaderMatch = (mod.loader || '').toLowerCase() === (pack.loader || '').toLowerCase();
+      const modContentType = mod.content_type || "mod";
+      const versionMatch = isVersionCompatible(mod, pack.minecraft_version || '');
+      
+      // Only check loader for mods (shaders/resourcepacks don't have loaders)
+      const loaderMatch = modContentType !== "mod" || 
+        (mod.loader || '').toLowerCase() === (pack.loader || '').toLowerCase();
 
       if (versionMatch && loaderMatch) {
         compatible.push(mod);

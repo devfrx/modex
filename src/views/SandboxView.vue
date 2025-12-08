@@ -75,12 +75,30 @@
         </button>
         <button
           class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+          :class="showResourcepacks
+            ? 'bg-blue-500/20 text-blue-500'
+            : 'text-muted-foreground hover:text-foreground'
+            " @click="showResourcepacks = !showResourcepacks">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+          <span class="hidden xs:inline">Packs</span>
+        </button>
+        <button
+          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+          :class="showShaders
+            ? 'bg-purple-500/20 text-purple-500'
+            : 'text-muted-foreground hover:text-foreground'
+            " @click="showShaders = !showShaders">
+          <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+          <span class="hidden xs:inline">Shaders</span>
+        </button>
+        <button
+          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
           :class="showModpacks
             ? 'bg-violet-500/20 text-violet-500'
             : 'text-muted-foreground hover:text-foreground'
             " @click="showModpacks = !showModpacks">
           <span class="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
-          <span class="hidden xs:inline">Packs</span>
+          <span class="hidden xs:inline">Modpacks</span>
         </button>
       </div>
 
@@ -92,6 +110,20 @@
 
       <!-- Spacer -->
       <div class="flex-1 hidden sm:block"></div>
+
+      <!-- Performance Mode Toggle -->
+      <button
+        class="hidden sm:flex items-center gap-1.5 px-2 py-1 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all"
+        :class="performanceMode 
+          ? 'bg-amber-500/20 text-amber-500' 
+          : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'"
+        @click="performanceMode = !performanceMode"
+        :title="performanceMode ? 'Performance mode ON (simplified rendering)' : 'Performance mode OFF'">
+        <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+        <span class="hidden lg:inline">{{ performanceMode ? 'Fast' : 'Quality' }}</span>
+      </button>
 
       <!-- Zoom Controls -->
       <div class="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-muted/50">
@@ -179,7 +211,9 @@
           <!-- Arrow marker for default links -->
           <marker id="arrow-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
             orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" :fill="linkColor" />
+            <path d="M 0 0 L 10 5 L 0 10 z" :fill="isLightMode 
+              ? 'rgba(100, 116, 139, 0.7)' 
+              : linkColor" />
           </marker>
         </defs>
 
@@ -197,27 +231,45 @@
           <g class="links">
             <line v-for="link in renderedLinks" :key="`${link.source.id}-${link.target.id}`" :x1="getLinkStartX(link)"
               :y1="getLinkStartY(link)" :x2="getLinkEndX(link)" :y2="getLinkEndY(link)" :stroke="getLinkColor(link)"
-              stroke-width="1.5" :marker-end="getLinkMarker(link)" class="link-line transition-opacity duration-300"
-              :class="{
-                'opacity-20': hoveredNodeId && !isLinkConnectedToHovered(link),
-                'opacity-100': !hoveredNodeId || isLinkConnectedToHovered(link),
-              }" />
+              stroke-width="1.5" :marker-end="performanceMode ? '' : getLinkMarker(link)" 
+              class="link-line"
+              :class="performanceMode ? '' : 'transition-opacity duration-300'"
+              :style="{ opacity: getNodeOpacity(link.source.id) }" />
           </g>
 
-          <!-- Nodes -->
-          <g class="nodes">
+          <!-- Nodes - Performance Mode (simple circles) -->
+          <g v-if="performanceMode" class="nodes-fast">
+            <g v-for="node in visibleNodes" :key="node.id" :transform="`translate(${node.x ?? 0}, ${node.y ?? 0})`"
+              class="node-group cursor-pointer"
+              @mousedown="onDragStart($event, node)" @touchstart.prevent="onDragStart($event, node)"
+              @mouseenter="hoveredNodeId = node.id" @mouseleave="hoveredNodeId = null"
+              @contextmenu.prevent.stop="openContextMenu($event, node)">
+              
+              <!-- Simple colored circle -->
+              <circle 
+                :r="node.type === 'folder' ? 16 : node.type === 'modpack' ? 14 : 10"
+                :fill="node.type === 'folder' ? '#fbbf24' : node.type === 'modpack' ? '#8b5cf6' : node.type === 'resourcepack' ? '#3b82f6' : node.type === 'shader' ? '#ec4899' : '#34d399'"
+                :stroke="hoveredNodeId === node.id ? '#fff' : 'transparent'"
+                stroke-width="2"
+                :style="{ opacity: getNodeOpacity(node.id) }" />
+              
+              <!-- Label only on hover -->
+              <text v-if="hoveredNodeId === node.id" y="24" text-anchor="middle" 
+                :fill="node.type === 'folder' ? '#fbbf24' : node.type === 'mod' ? '#34d399' : node.type === 'resourcepack' ? '#3b82f6' : node.type === 'shader' ? '#ec4899' : '#8b5cf6'" 
+                font-size="10" font-weight="600" pointer-events="none" class="select-none">
+                {{ node.label }}
+              </text>
+            </g>
+          </g>
+
+          <!-- Nodes - Quality Mode (detailed icons) -->
+          <g v-else class="nodes">
             <g v-for="node in visibleNodes" :key="node.id" :transform="`translate(${node.x ?? 0}, ${node.y ?? 0})`"
               class="node-group transition-opacity duration-300" :class="{
                 'drop-target': dropTarget?.id === node.id,
-                'opacity-20':
-                  hoveredNodeId &&
-                  hoveredNodeId !== node.id &&
-                  !isNodeConnectedToHovered(node.id),
-                'opacity-100':
-                  !hoveredNodeId ||
-                  hoveredNodeId === node.id ||
-                  isNodeConnectedToHovered(node.id),
-              }" @mousedown="onDragStart($event, node)" @touchstart.prevent="onDragStart($event, node)"
+              }" 
+              :style="{ opacity: getNodeOpacity(node.id) }"
+              @mousedown="onDragStart($event, node)" @touchstart.prevent="onDragStart($event, node)"
               @mouseenter="hoveredNodeId = node.id" @mouseleave="hoveredNodeId = null"
               @contextmenu.prevent.stop="openContextMenu($event, node)">
               <!-- Drop target highlight ring -->
@@ -226,7 +278,7 @@
 
               <!-- Folder icon -->
               <template v-if="node.type === 'folder'">
-                <circle r="20" fill="rgba(251, 191, 36, 0.1)" class="node-bg" />
+                <circle r="20" fill="rgba(251, 191, 36, 0.15)" stroke="rgba(251, 191, 36, 0.3)" stroke-width="1" class="node-bg" />
                 <g transform="translate(-10, -10) scale(0.85)">
                   <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" fill="#fbbf24"
                     filter="url(#softGlow)" />
@@ -235,30 +287,58 @@
 
               <!-- Mod icon (cube) -->
               <template v-else-if="node.type === 'mod'">
-                <circle r="14" fill="rgba(52, 211, 153, 0.1)" class="node-bg" />
+                <circle r="14" fill="rgba(52, 211, 153, 0.15)" stroke="rgba(52, 211, 153, 0.3)" stroke-width="1" class="node-bg" />
                 <g transform="translate(-8, -8) scale(0.7)">
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="#34d399"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" filter="url(#softGlow)" />
                 </g>
               </template>
 
+              <!-- Resource Pack icon (image) -->
+              <template v-else-if="node.type === 'resourcepack'">
+                <circle r="14" fill="rgba(59, 130, 246, 0.15)" stroke="rgba(59, 130, 246, 0.3)" stroke-width="1" class="node-bg" />
+                <g transform="translate(-8, -8) scale(0.7)">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="none" stroke="#3b82f6" stroke-width="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" fill="#3b82f6" />
+                  <path d="M21 15l-5-5L5 21" fill="none" stroke="#3b82f6" stroke-width="2" />
+                </g>
+              </template>
+
+              <!-- Shader icon (sparkles) -->
+              <template v-else-if="node.type === 'shader'">
+                <circle r="14" fill="rgba(236, 72, 153, 0.15)" stroke="rgba(236, 72, 153, 0.3)" stroke-width="1" class="node-bg" />
+                <g transform="translate(-8, -8) scale(0.7)">
+                  <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" fill="#ec4899" />
+                  <path d="M5 19l1 3 1-3-3-1 3-1-1-3-1 3-3 1 3 1z" fill="#ec4899" opacity="0.7" />
+                </g>
+              </template>
+
               <!-- Modpack icon (package) -->
               <template v-else>
-                <circle r="18" fill="rgba(139, 92, 246, 0.1)" class="node-bg" />
+                <circle r="18" fill="rgba(139, 92, 246, 0.15)" stroke="rgba(139, 92, 246, 0.3)" stroke-width="1" class="node-bg" />
                 <g transform="translate(-10, -10) scale(0.85)">
+                  <!-- Package box outline -->
                   <path
-                    d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"
-                    fill="none" stroke="#8b5cf6" stroke-width="1.5" filter="url(#softGlow)" />
-                  <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke="#8b5cf6" stroke-width="1.5" />
+                    d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"
+                    fill="none" stroke="#8b5cf6" stroke-width="1.5" />
+                  <!-- Package inner lines -->
+                  <path d="M3.27 6.96L12 12.01l8.73-5.05" fill="none" stroke="#8b5cf6" stroke-width="1.5" />
+                  <path d="M12 22.08V12" fill="none" stroke="#8b5cf6" stroke-width="1.5" />
+                  <!-- Top flap line -->
+                  <path d="M7.5 4.21L16.5 9.4" fill="none" stroke="#8b5cf6" stroke-width="1.5" />
                 </g>
               </template>
 
               <!-- Label below -->
-              <text :y="node.type === 'folder' ? 32 : node.type === 'mod' ? 26 : 30" text-anchor="middle" :fill="node.type === 'folder'
+              <text :y="node.type === 'folder' ? 32 : node.type === 'modpack' ? 30 : 26" text-anchor="middle" :fill="node.type === 'folder'
                 ? 'rgba(251, 191, 36, 0.9)'
                 : node.type === 'mod'
                   ? 'rgba(52, 211, 153, 0.9)'
-                  : 'rgba(139, 92, 246, 0.9)'
+                  : node.type === 'resourcepack'
+                    ? 'rgba(59, 130, 246, 0.9)'
+                    : node.type === 'shader'
+                      ? 'rgba(236, 72, 153, 0.9)'
+                      : 'rgba(139, 92, 246, 0.9)'
                 " font-size="9" font-weight="500" pointer-events="none" class="select-none">
                 {{ node.label }}
               </text>
@@ -277,7 +357,11 @@
               ? '#fbbf24'
               : node.type === 'mod'
                 ? '#34d399'
-                : '#8b5cf6'
+                : node.type === 'resourcepack'
+                  ? '#3b82f6'
+                  : node.type === 'shader'
+                    ? '#ec4899'
+                    : '#8b5cf6'
               " />
         </svg>
       </div>
@@ -553,7 +637,7 @@ const POSITIONS_KEY = "modex:sandbox:positions";
 
 interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
-  type: "folder" | "mod" | "modpack";
+  type: "folder" | "mod" | "modpack" | "resourcepack" | "shader";
   label: string;
   color: string;
   data: any;
@@ -597,6 +681,11 @@ const themeObserver = new MutationObserver(() => {
 const showFolders = ref(true);
 const showMods = ref(true);
 const showModpacks = ref(true);
+const showResourcepacks = ref(true);
+const showShaders = ref(true);
+
+// Performance mode - simplifies rendering for large graphs
+const performanceMode = ref(false);
 
 // Search
 const searchQuery = ref("");
@@ -645,6 +734,14 @@ function isNodeConnectedToHovered(nodeId: string): boolean {
   );
 }
 
+// Calculate opacity based on hover state - cached for performance
+function getNodeOpacity(nodeId: string): number {
+  if (!hoveredNodeId.value) return 1;
+  if (nodeId === hoveredNodeId.value) return 1;
+  if (isNodeConnectedToHovered(nodeId)) return 1;
+  return 0.2;
+}
+
 // Zoom level tracking
 const currentZoomScale = ref(1);
 const zoomLevel = computed(() => Math.round(currentZoomScale.value * 100));
@@ -658,6 +755,8 @@ const filteredNodes = computed(() => {
     if (n.type === "folder" && !showFolders.value) return false;
     if (n.type === "mod" && !showMods.value) return false;
     if (n.type === "modpack" && !showModpacks.value) return false;
+    if (n.type === "resourcepack" && !showResourcepacks.value) return false;
+    if (n.type === "shader" && !showShaders.value) return false;
     return true;
   });
 });
@@ -727,7 +826,11 @@ const renderedLinks = computed(() => {
 // Theme colors
 const bgColor = computed(() => "hsl(var(--background))");
 const dotColor = computed(() => "hsl(var(--muted-foreground) / 0.1)");
-const linkColor = computed(() => "hsl(var(--border))");
+const linkColor = computed(() => 
+  isLightMode.value 
+    ? "rgba(100, 116, 139, 0.5)" // slate-500 with opacity for light mode
+    : "hsl(var(--border))"
+);
 const textColor = computed(() => "hsl(var(--foreground))");
 const textMuted = computed(() => "hsl(var(--muted-foreground))");
 
@@ -881,7 +984,10 @@ function clearSavedPositions() {
 }
 
 function nodeRadius(node: GraphNode) {
-  return node.type === "folder" ? 24 : node.type === "modpack" ? 22 : 18;
+  if (node.type === "folder") return 24;
+  if (node.type === "modpack") return 22;
+  // mods, resourcepacks, shaders all have same radius
+  return 18;
 }
 
 async function loadData() {
@@ -925,11 +1031,17 @@ async function loadData() {
     const angle = (i / Math.max(mods.length, 1)) * Math.PI * 2;
     const radius = 300;
     const saved = savedPositions[m.id];
+    
+    // Determine node type based on content_type
+    const contentType = m.content_type || "mod";
+    const nodeType: "mod" | "resourcepack" | "shader" = contentType === "resourcepack" ? "resourcepack" : contentType === "shader" ? "shader" : "mod";
+    const nodeColor = contentType === "resourcepack" ? "#3b82f6" : contentType === "shader" ? "#ec4899" : "#10b981";
+    
     const n: GraphNode = {
       id: m.id,
-      type: "mod",
+      type: nodeType,
       label: (m.name || "mod").slice(0, 10),
-      color: "#10b981",
+      color: nodeColor,
       data: m,
       x:
         saved?.x ??
@@ -1001,13 +1113,18 @@ function initSimulation() {
   const isLargeGraph = nodeCount > 100;
   const isVeryLargeGraph = nodeCount > 300;
 
+  // Auto-enable performance mode for large graphs
+  if (isVeryLargeGraph && !performanceMode.value) {
+    performanceMode.value = true;
+  }
+
   // Adjust simulation parameters for better performance with many nodes
-  const chargeStrength = isVeryLargeGraph ? -50 : isLargeGraph ? -100 : -150;
-  const linkDistance = isVeryLargeGraph ? 50 : isLargeGraph ? 60 : 80;
-  const linkStrength = isVeryLargeGraph ? 0.1 : isLargeGraph ? 0.2 : 0.3;
-  const alphaDecay = isVeryLargeGraph ? 0.05 : isLargeGraph ? 0.03 : 0.01;
-  const velocityDecay = isVeryLargeGraph ? 0.5 : isLargeGraph ? 0.4 : 0.3;
-  const collisionRadius = isVeryLargeGraph ? 8 : isLargeGraph ? 10 : 12;
+  const chargeStrength = isVeryLargeGraph ? -30 : isLargeGraph ? -80 : -150;
+  const linkDistance = isVeryLargeGraph ? 40 : isLargeGraph ? 50 : 80;
+  const linkStrength = isVeryLargeGraph ? 0.05 : isLargeGraph ? 0.15 : 0.3;
+  const alphaDecay = isVeryLargeGraph ? 0.08 : isLargeGraph ? 0.05 : 0.01;
+  const velocityDecay = isVeryLargeGraph ? 0.6 : isLargeGraph ? 0.5 : 0.3;
+  const collisionRadius = isVeryLargeGraph ? 5 : isLargeGraph ? 8 : 12;
 
   simulation = d3
     .forceSimulation<GraphNode>(nodes.value)
@@ -1024,7 +1141,7 @@ function initSimulation() {
       d3
         .forceManyBody()
         .strength(chargeStrength)
-        .distanceMax(isLargeGraph ? 200 : 400)
+        .distanceMax(isVeryLargeGraph ? 150 : isLargeGraph ? 200 : 400)
     )
     .force("center", d3.forceCenter(centerX, centerY).strength(0.05))
     .force(
@@ -1045,7 +1162,11 @@ function initSimulation() {
   if (isVeryLargeGraph) {
     setTimeout(() => {
       if (simulation) simulation.stop();
-    }, 3000);
+    }, 2000);
+  } else if (isLargeGraph) {
+    setTimeout(() => {
+      if (simulation) simulation.stop();
+    }, 4000);
   }
 }
 
@@ -1053,16 +1174,33 @@ function initSimulation() {
 let lastTickTime = 0;
 const tickThrottleMs = computed(() => {
   const nodeCount = nodes.value.length;
+  // More aggressive throttling in performance mode
+  if (performanceMode.value) {
+    if (nodeCount > 300) return 150; // ~7 fps
+    if (nodeCount > 100) return 80; // ~12 fps
+    return 33; // ~30 fps
+  }
   if (nodeCount > 300) return 100; // 10 fps
   if (nodeCount > 100) return 50; // 20 fps
   return 16; // ~60 fps
 });
+
+// Skip render frames counter for very large graphs
+let frameSkipCounter = 0;
 
 function onTick() {
   const now = Date.now();
   if (now - lastTickTime < tickThrottleMs.value) return;
   lastTickTime = now;
 
+  // For very large graphs, only update every other allowed frame
+  const nodeCount = nodes.value.length;
+  if (nodeCount > 500) {
+    frameSkipCounter++;
+    if (frameSkipCounter % 2 !== 0) return;
+  }
+
+  // Trigger reactivity update (shallow copy triggers Vue to re-render)
   nodes.value = [...nodes.value];
   links.value = [...links.value];
   debouncedSavePositions();
@@ -1074,6 +1212,15 @@ function initZoom() {
   zoom = d3
     .zoom<SVGSVGElement, unknown>()
     .scaleExtent([0.1, 4])
+    .filter((event) => {
+      // Allow wheel (for zoom)
+      if (event.type === 'wheel') return true;
+      // Allow middle click (button 1) for pan
+      if (event.button === 1) return true;
+      // Allow touch
+      if (event.type === 'touchstart') return true;
+      return false;
+    })
     .on("zoom", (event) => {
       d3.select(zoomGroup.value).attr("transform", event.transform);
       currentZoomScale.value = event.transform.k;
@@ -1224,6 +1371,9 @@ function resetLayout() {
 function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
   if (!simulation) return;
 
+  // Only allow left click for drag (button 0) or touch
+  if (event instanceof MouseEvent && event.button !== 0) return;
+
   const isTouch = event.type === "touchstart";
   const clientX = isTouch
     ? (event as TouchEvent).touches[0].clientX
@@ -1247,7 +1397,12 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
   node.fy = node.y;
   draggedNode.value = node;
 
+  let lastMoveTime = 0;
   const onMove = (e: MouseEvent | TouchEvent) => {
+    const now = Date.now();
+    if (now - lastMoveTime < 16) return; // Cap at ~60fps checks
+    lastMoveTime = now;
+
     const cx = e.type.startsWith("touch")
       ? (e as TouchEvent).touches[0].clientX
       : (e as MouseEvent).clientX;
@@ -1262,7 +1417,7 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
     node.fy = newFy;
 
     // Check for drop target (mod over modpack OR folder)
-    if (node.type === "mod") {
+    if (['mod', 'resourcepack', 'shader'].includes(node.type)) {
       const nodeX = node.fx!;
       const nodeY = node.fy!;
       let foundTarget: GraphNode | null = null;
@@ -1306,8 +1461,8 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
     // Save references before async operation (they might become null)
     const targetNode = dropTarget.value;
 
-    // Handle drop: mod onto modpack
-    if (node.type === "mod" && targetNode?.type === "modpack") {
+    // Handle drop: mod/resource/shader onto modpack
+    if (['mod', 'resourcepack', 'shader'].includes(node.type) && targetNode?.type === "modpack") {
       const modpackId = targetNode.data.id;
       const modId = node.data.id;
       const modLabel = node.label;
@@ -1322,8 +1477,11 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
       const modVersion = mod.game_version || "";
       const packVersion = pack.minecraft_version || "";
 
+      const isNonMod = node.type === 'shader' || node.type === 'resourcepack';
+
       // Check if modpack is linked (Read-Only)
-      if (pack.remote_source?.url) {
+      // Allow shaders/resourcepacks even if read-only
+      if (pack.remote_source?.url && !isNonMod) {
         feedbackMessage.value = `⚠️ Restricted: "${pack.name}" is managed remotely. Cannot add mods manually.`;
 
         // Reset interaction
@@ -1345,6 +1503,7 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
 
       // Check validation logic...
       const isLoaderCompatible =
+        isNonMod || // Shaders/resourcepacks don't need loader compatibility
         !packLoader ||
         !modLoader ||
         modLoader === "unknown" ||
@@ -1352,12 +1511,14 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
         (packLoader === "neoforge" && modLoader === "forge") ||
         (packLoader === "forge" && modLoader === "neoforge");
 
-      const isVersionCompatible =
-        !packVersion ||
-        !modVersion ||
-        modVersion === "unknown" ||
-        modVersion === packVersion ||
-        packVersion.startsWith(modVersion);
+      // For shaders/resourcepacks, use game_versions array
+      const isVersionCompatible = isNonMod
+        ? (!packVersion || !mod.game_versions?.length || mod.game_versions.includes(packVersion))
+        : (!packVersion ||
+           !modVersion ||
+           modVersion === "unknown" ||
+           modVersion === packVersion ||
+           packVersion.startsWith(modVersion));
 
       if (!isLoaderCompatible || !isVersionCompatible) {
         const reason = !isLoaderCompatible
@@ -1413,8 +1574,8 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
       }
     }
 
-    // Handle drop: mod onto folder
-    if (node.type === "mod" && targetNode?.type === "folder") {
+    // Handle drop: mod/resource/shader onto folder
+    if (['mod', 'resourcepack', 'shader'].includes(node.type) && targetNode?.type === "folder") {
       const folderId = targetNode.data.id;
       const modId = node.data.id;
       const modLabel = node.label;

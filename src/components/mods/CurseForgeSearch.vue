@@ -17,6 +17,9 @@ import {
   Filter,
   ArrowDownToLine,
   Package,
+  Image,
+  Sparkles,
+  Layers,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -43,6 +46,7 @@ const emit = defineEmits<{
 const searchQuery = ref("");
 const selectedVersion = ref(props.gameVersion || "");
 const selectedLoader = ref(props.modLoader || "");
+const selectedContentType = ref<"mods" | "resourcepacks" | "shaders">("mods");
 const searchResults = ref<any[]>([]);
 const isSearching = ref(false);
 const isAddingMod = ref<number | null>(null);
@@ -183,7 +187,7 @@ onMounted(async () => {
 
   if (hasApiKey.value) {
     try {
-      const cfCategories = await window.api.curseforge.getCategories();
+      const cfCategories = await window.api.curseforge.getCategories(selectedContentType.value);
       categories.value = [
         { value: 0, label: "All Categories" },
         ...cfCategories.map((cat: any) => ({ value: cat.id, label: cat.name })),
@@ -192,6 +196,32 @@ onMounted(async () => {
       console.error("Failed to load categories:", err);
     }
     if (props.open) loadPopular();
+  }
+});
+
+// Reload categories and results when content type changes
+watch(selectedContentType, async (newType) => {
+  if (!hasApiKey.value) return;
+  
+  // Reset category selection
+  selectedCategory.value = 0;
+  
+  // Reload categories for new content type
+  try {
+    const cfCategories = await window.api.curseforge.getCategories(newType);
+    categories.value = [
+      { value: 0, label: "All Categories" },
+      ...cfCategories.map((cat: any) => ({ value: cat.id, label: cat.name })),
+    ];
+  } catch (err) {
+    console.error("Failed to load categories:", err);
+  }
+  
+  // Reload search results
+  if (searchQuery.value.trim()) {
+    searchMods();
+  } else {
+    loadPopular();
   }
 });
 
@@ -275,15 +305,34 @@ async function addSelectedMods() {
         const mod = searchResults.value.find((m) => m.id === modId);
         if (!mod) continue;
 
+        // For shaders/resourcepacks, don't filter by loader
+        const isModContent = selectedContentType.value === "mods";
+        
         // Fetch latest release
         const files = await window.api.curseforge.getModFiles(mod.id, {
           gameVersion: selectedVersion.value || undefined,
-          modLoader: selectedLoader.value || undefined,
+          modLoader: isModContent ? (selectedLoader.value || undefined) : undefined,
         });
 
         // Filter for Release type specifically for "Quick Download"
-        const releaseFile =
-          files.find((f: any) => f.releaseType === 1) || files[0]; // Fallback to whatever is first/latest if no release
+        // Also filter by game version for shaders/resourcepacks
+        let releaseFile = files.find((f: any) => {
+          if (f.releaseType !== 1) return false;
+          // For non-mods, verify game version is in the file's gameVersions list
+          if (!isModContent && selectedVersion.value) {
+            return f.gameVersions?.some((gv: string) => 
+              gv === selectedVersion.value || 
+              gv.startsWith(selectedVersion.value + ".") ||
+              selectedVersion.value.startsWith(gv + ".")
+            );
+          }
+          return true;
+        });
+        
+        // Fallback to first file if no release found
+        if (!releaseFile) {
+          releaseFile = files[0];
+        }
 
         if (!releaseFile) {
           failCount.value++;
@@ -293,7 +342,8 @@ async function addSelectedMods() {
         const addedMod = await window.api.curseforge.addToLibrary(
           mod.id,
           releaseFile.id,
-          selectedLoader.value || undefined
+          isModContent ? (selectedLoader.value || undefined) : undefined,
+          selectedContentType.value
         );
 
         if (addedMod) {
@@ -369,6 +419,9 @@ async function executeBulkAdd() {
     ? allModpacks.value.find(p => p.id === targetModpackId.value)
     : null;
 
+  // For shaders/resourcepacks, don't use loader
+  const isModContent = selectedContentType.value === "mods";
+
   try {
     // 1. Header Selections
     for (const modId of selectedModIds.value) {
@@ -376,15 +429,29 @@ async function executeBulkAdd() {
       if (!mod) continue;
       const files = await window.api.curseforge.getModFiles(mod.id, {
         gameVersion: selectedVersion.value || undefined,
-        modLoader: selectedLoader.value || undefined,
+        modLoader: isModContent ? (selectedLoader.value || undefined) : undefined,
       });
-      const releaseFile =
-        files.find((f: any) => f.releaseType === 1) || files[0];
+      
+      // Find release file with proper version matching for non-mods
+      let releaseFile = files.find((f: any) => {
+        if (f.releaseType !== 1) return false;
+        if (!isModContent && selectedVersion.value) {
+          return f.gameVersions?.some((gv: string) => 
+            gv === selectedVersion.value || 
+            gv.startsWith(selectedVersion.value + ".") ||
+            selectedVersion.value.startsWith(gv + ".")
+          );
+        }
+        return true;
+      });
+      if (!releaseFile) releaseFile = files[0];
+      
       if (releaseFile) {
         const added = await window.api.curseforge.addToLibrary(
           mod.id,
           releaseFile.id,
-          selectedLoader.value || undefined
+          isModContent ? (selectedLoader.value || undefined) : undefined,
+          selectedContentType.value
         );
         if (added) {
           addedModIds.push(added.id);
@@ -405,7 +472,8 @@ async function executeBulkAdd() {
       const added = await window.api.curseforge.addToLibrary(
         mod.id,
         fileId,
-        selectedLoader.value || undefined
+        isModContent ? (selectedLoader.value || undefined) : undefined,
+        selectedContentType.value
       );
       if (added) {
         addedModIds.push(added.id);
@@ -469,6 +537,7 @@ async function loadPopular() {
       sortField: selectedSortField.value,
       pageSize,
       index: 0,
+      contentType: selectedContentType.value,
     });
     searchResults.value = result.mods;
     totalResults.value = result.pagination.totalCount;
@@ -492,6 +561,7 @@ async function searchMods() {
       sortField: selectedSortField.value,
       pageSize,
       index: 0,
+      contentType: selectedContentType.value,
     });
     searchResults.value = result.mods;
     totalResults.value = result.pagination.totalCount;
@@ -515,6 +585,7 @@ async function loadMore() {
       sortField: selectedSortField.value,
       pageSize,
       index: currentPage.value * pageSize,
+      contentType: selectedContentType.value,
     });
     searchResults.value = [...searchResults.value, ...result.mods];
   } catch (err) {
@@ -539,9 +610,11 @@ async function toggleExpand(mod: any) {
 async function fetchModFiles(modId: number) {
   isLoadingFiles.value = true;
   try {
+    // For shaders/resourcepacks, don't filter by loader
+    const isModContent = selectedContentType.value === "mods";
     const files = await window.api.curseforge.getModFiles(modId, {
       gameVersion: selectedVersion.value || undefined,
-      modLoader: selectedLoader.value || undefined,
+      modLoader: isModContent ? (selectedLoader.value || undefined) : undefined,
     });
     // Sort by date desc
     modFiles.value = files.sort(
@@ -555,20 +628,36 @@ async function fetchModFiles(modId: number) {
   }
 }
 
-// Filtered Files (Release Type + Loader Strict Filter)
+// Filtered Files (Release Type + Loader Strict Filter - only for mods)
 const filteredModFiles = computed(() => {
+  const isModContent = selectedContentType.value === 'mods';
+  
   return modFiles.value.filter((f) => {
     // Filter by release type
     if (f.releaseType === 1 && !filterRelease.value) return false;
     if (f.releaseType === 2 && !filterBeta.value) return false;
     if (f.releaseType === 3 && !filterAlpha.value) return false;
 
-    // Strict loader filter: if a loader is selected, the file MUST contain it
-    // No fuzzy matching - exact match only
-    if (selectedLoader.value) {
+    // Strict loader filter: only apply for mods content type
+    // Resourcepacks and shaders don't have loaders
+    if (isModContent && selectedLoader.value) {
       const loaderLower = selectedLoader.value.toLowerCase();
       const fileLoaders = (f.gameVersions || []).map((gv: string) => gv.toLowerCase());
       if (!fileLoaders.includes(loaderLower)) {
+        return false;
+      }
+    }
+    
+    // For shaders/resourcepacks, filter by game version if selected
+    // Check if the file's gameVersions list contains the selected version
+    if (!isModContent && selectedVersion.value) {
+      const fileVersions = f.gameVersions || [];
+      const hasMatchingVersion = fileVersions.some((gv: string) => 
+        gv === selectedVersion.value || 
+        gv.startsWith(selectedVersion.value + ".") ||
+        selectedVersion.value.startsWith(gv + ".")
+      );
+      if (!hasMatchingVersion) {
         return false;
       }
     }
@@ -588,10 +677,14 @@ function isModInstalled(modId: number): boolean {
 async function addFileToLibrary(mod: any, file: any) {
   isAddingMod.value = mod.id;
   try {
+    // For shaders/resourcepacks, don't pass loader
+    const isModContent = selectedContentType.value === "mods";
+    
     const addedMod = await window.api.curseforge.addToLibrary(
       mod.id,
       file.id,
-      selectedLoader.value || undefined
+      isModContent ? (selectedLoader.value || undefined) : undefined,
+      selectedContentType.value
     );
     if (addedMod) {
       if (targetFolderId.value)
@@ -622,17 +715,35 @@ async function addFileToLibrary(mod: any, file: any) {
 async function quickDownload(mod: any) {
   isAddingMod.value = mod.id;
   try {
+    // For shaders/resourcepacks, don't filter by loader
+    const isModContent = selectedContentType.value === "mods";
+    
     const files = await window.api.curseforge.getModFiles(mod.id, {
       gameVersion: selectedVersion.value || undefined,
-      modLoader: selectedLoader.value || undefined,
+      modLoader: isModContent ? (selectedLoader.value || undefined) : undefined,
     });
-    const releaseFile = files.find((f: any) => f.releaseType === 1) || files[0];
+    
+    // Find release file with proper version matching for non-mods
+    let releaseFile = files.find((f: any) => {
+      if (f.releaseType !== 1) return false;
+      if (!isModContent && selectedVersion.value) {
+        return f.gameVersions?.some((gv: string) => 
+          gv === selectedVersion.value || 
+          gv.startsWith(selectedVersion.value + ".") ||
+          selectedVersion.value.startsWith(gv + ".")
+        );
+      }
+      return true;
+    });
+    if (!releaseFile) releaseFile = files[0];
+    
     if (!releaseFile) return;
 
     const addedMod = await window.api.curseforge.addToLibrary(
       mod.id,
       releaseFile.id,
-      selectedLoader.value || undefined
+      isModContent ? (selectedLoader.value || undefined) : undefined,
+      selectedContentType.value
     );
     if (addedMod) {
       if (targetFolderId.value)
@@ -661,8 +772,14 @@ async function quickDownload(mod: any) {
 
 function openModPage(mod: any) {
   if (mod.slug) {
+    const urlPaths: Record<string, string> = {
+      mods: "mc-mods",
+      resourcepacks: "texture-packs",
+      shaders: "shaders",
+    };
+    const path = urlPaths[selectedContentType.value] || "mc-mods";
     window.open(
-      `https://www.curseforge.com/minecraft/mc-mods/${mod.slug}`,
+      `https://www.curseforge.com/minecraft/${path}/${mod.slug}`,
       "_blank"
     );
   }
@@ -715,6 +832,43 @@ function getReleaseColor(type: number) {
         </div>
 
         <div class="flex-1 overflow-y-auto p-4 space-y-6">
+          <!-- Content Type -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Type</label>
+            <div class="flex flex-wrap gap-1">
+              <button
+                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
+                :class="selectedContentType === 'mods' 
+                  ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30' 
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'"
+                @click="selectedContentType = 'mods'"
+              >
+                <Layers class="w-3 h-3" />
+                Mods
+              </button>
+              <button
+                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
+                :class="selectedContentType === 'resourcepacks' 
+                  ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30' 
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'"
+                @click="selectedContentType = 'resourcepacks'"
+              >
+                <Image class="w-3 h-3" />
+                Packs
+              </button>
+              <button
+                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
+                :class="selectedContentType === 'shaders' 
+                  ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30' 
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'"
+                @click="selectedContentType = 'shaders'"
+              >
+                <Sparkles class="w-3 h-3" />
+                Shaders
+              </button>
+            </div>
+          </div>
+
           <!-- Game Version -->
           <div class="space-y-2">
             <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Game Version</label>
@@ -734,8 +888,8 @@ function getReleaseColor(type: number) {
             </div>
           </div>
 
-          <!-- Mod Loader -->
-          <div class="space-y-2">
+          <!-- Mod Loader (only for mods) -->
+          <div v-if="selectedContentType === 'mods'" class="space-y-2">
             <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mod Loader</label>
             <div class="relative">
               <select v-model="selectedLoader"
@@ -1043,9 +1197,21 @@ function getReleaseColor(type: number) {
                     </div>
 
                     <div class="flex-1 grid grid-cols-12 gap-4 items-center text-sm">
-                      <div class="col-span-6 font-medium truncate" :title="file.displayName">
+                      <div class="col-span-5 font-medium truncate" :title="file.displayName">
                         {{ file.displayName }}
                       </div>
+                      <!-- Game versions for shaders/resourcepacks -->
+                      <div v-if="selectedContentType !== 'mods'" class="col-span-2">
+                        <span v-if="file.gameVersions && file.gameVersions.length > 0" 
+                          class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded"
+                          :title="file.gameVersions.filter((gv: string) => /^1\.\d+(\.\d+)?$/.test(gv)).join(', ')">
+                          {{ file.gameVersions.filter((gv: string) => /^1\.\d+(\.\d+)?$/.test(gv)).slice(0, 2).join(', ') }}
+                          <span v-if="file.gameVersions.filter((gv: string) => /^1\.\d+(\.\d+)?$/.test(gv)).length > 2">
+                            +{{ file.gameVersions.filter((gv: string) => /^1\.\d+(\.\d+)?$/.test(gv)).length - 2 }}
+                          </span>
+                        </span>
+                      </div>
+                      <div v-else class="col-span-2"></div>
                       <div class="col-span-2 text-xs text-muted-foreground">
                         {{ formatDate(file.fileDate) }}
                       </div>
@@ -1061,7 +1227,7 @@ function getReleaseColor(type: number) {
                           }}
                         </span>
                       </div>
-                      <div class="col-span-2 text-xs text-muted-foreground text-right">
+                      <div class="col-span-1 text-xs text-muted-foreground text-right">
                         {{ (file.fileLength / 1024 / 1024).toFixed(1) }} MB
                       </div>
                     </div>

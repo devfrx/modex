@@ -5,8 +5,13 @@ import {
   Edit,
   Check,
   Info,
-  Star,
+  Heart,
   AlertTriangle,
+  Layers,
+  Image,
+  Sparkles,
+  Globe,
+  Package,
 } from "lucide-vue-next";
 import type { Mod } from "@/types/electron";
 import Button from "@/components/ui/Button.vue";
@@ -17,6 +22,7 @@ const props = defineProps<{
   favorite?: boolean;
   isDuplicate?: boolean;
   showThumbnail?: boolean;
+  usageCount?: number;
 }>();
 
 const emit = defineEmits<{
@@ -32,6 +38,26 @@ function formatDownloads(count: number): string {
   if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
   return count.toString();
 }
+
+function openCurseForge() {
+  if (!props.mod.slug) return;
+  const baseUrl = "https://www.curseforge.com/minecraft";
+  let path = "mc-mods";
+  if (props.mod.content_type === "resourcepack") path = "texture-packs";
+  if (props.mod.content_type === "shader") path = "customization";
+  
+  window.open(`${baseUrl}/${path}/${props.mod.slug}`, "_blank");
+}
+
+// Content type helpers
+const contentTypeConfig = {
+  mod: { label: 'Mod', icon: Layers, class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  resourcepack: { label: 'Resource', icon: Image, class: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  shader: { label: 'Shader', icon: Sparkles, class: 'bg-pink-500/10 text-pink-400 border-pink-500/20' },
+};
+
+const contentType = props.mod.content_type || 'mod';
+const typeConfig = contentTypeConfig[contentType] || contentTypeConfig.mod;
 </script>
 
 <template>
@@ -52,15 +78,25 @@ function formatDownloads(count: number): string {
           ? 'opacity-100 scale-100'
           : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'
         " @click.stop="$emit('toggle-favorite', mod.id)" title="Toggle favorite">
-        <Star class="w-5 h-5 transition-colors" :class="favorite
-            ? 'fill-amber-400 text-amber-400'
-            : 'text-muted-foreground hover:text-amber-400'
+        <Heart class="w-5 h-5 transition-colors" :class="favorite
+            ? 'fill-rose-500 text-rose-500'
+            : 'text-muted-foreground hover:text-rose-500'
           " />
       </button>
 
       <!-- Duplicate Indicator -->
       <div v-if="isDuplicate" title="Potential duplicate mod" class="animate-pulse">
         <AlertTriangle class="w-4 h-4 text-orange-500" />
+      </div>
+    </div>
+
+    <!-- Usage Indicator -->
+    <div v-if="usageCount && usageCount > 0" class="absolute top-3 right-10 z-20 transition-all duration-200"
+      :class="selected ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'"
+      title="Used in modpacks">
+      <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/20 text-primary text-[10px] font-medium border border-primary/30 backdrop-blur-sm">
+        <Package class="w-3 h-3" />
+        <span>{{ usageCount }}</span>
       </div>
     </div>
 
@@ -118,19 +154,36 @@ function formatDownloads(count: number): string {
         <!-- Meta Footer -->
         <div class="flex items-center justify-between pt-3 border-t border-white/5">
           <div class="flex items-center gap-2">
-            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="mod.loader?.toLowerCase().includes('forge')
+            <!-- Content Type Badge -->
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium border flex items-center gap-1" :class="typeConfig.class">
+              <component :is="typeConfig.icon" class="w-3 h-3" />
+              {{ typeConfig.label }}
+            </span>
+            <!-- Loader (only for mods) -->
+            <span v-if="contentType === 'mod'" class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="mod.loader?.toLowerCase().includes('forge')
                 ? 'bg-orange-500/10 text-orange-400'
                 : 'bg-blue-500/10 text-blue-400'
               ">
               {{ mod.loader }}
             </span>
-            <span class="text-[10px] font-medium text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">
+            <!-- Game versions (show list for shaders/resourcepacks if available) -->
+            <span v-if="contentType !== 'mod' && mod.game_versions && mod.game_versions.length >= 1" 
+              class="text-[10px] font-medium text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded"
+              :title="mod.game_versions.join(', ')">
+              {{ mod.game_versions.slice(0, 2).join(', ') }}{{ mod.game_versions.length > 2 ? ` +${mod.game_versions.length - 2}` : '' }}
+            </span>
+            <span v-else class="text-[10px] font-medium text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">
               {{ mod.game_version }}
             </span>
           </div>
 
           <!-- Actions Row -->
           <div class="flex items-center gap-1" @click.stop>
+            <Button v-if="mod.slug" variant="ghost" size="icon"
+              class="h-7 w-7 text-muted-foreground/70 hover:text-primary hover:bg-primary/10"
+              @click.stop="openCurseForge" title="View on CurseForge">
+              <Globe class="w-3.5 h-3.5" />
+            </Button>
             <Button variant="ghost" size="icon"
               class="h-7 w-7 text-muted-foreground/70 hover:text-foreground hover:bg-white/10"
               @click.stop="$emit('show-details', mod)" title="Details">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ModGrid from "@/components/mods/ModGrid.vue";
 import ModCard from "@/components/mods/ModCard.vue";
+import GalleryCard from "@/components/mods/GalleryCard.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -66,7 +67,9 @@ const error = ref<string | null>(null);
 const searchQuery = ref("");
 const selectedLoader = ref<string>("all");
 const selectedGameVersion = ref<string>("all");
-const selectedContentType = ref<"all" | "mod" | "resourcepack" | "shader">("all");
+const selectedContentType = ref<"all" | "mod" | "resourcepack" | "shader">(
+  "all"
+);
 const modpackFilter = ref<string>("all"); // 'all', 'any', 'none', or modpackId
 const searchField = ref<"all" | "name" | "author" | "version" | "description">(
   "all"
@@ -100,15 +103,20 @@ const showThumbnails = ref<boolean>(true); // Toggle for mod thumbnails
 
 // List View Columns
 const availableColumns = [
+  { id: "thumbnail", label: "Image" },
+  { id: "name", label: "Name" },
   { id: "version", label: "Version" },
   { id: "loader", label: "Loader" },
   { id: "author", label: "Author" },
   { id: "game_version", label: "Game Version" },
-  { id: "created_at", label: "Date Added" },
+  { id: "date", label: "Date Added" },
+  { id: "size", label: "Size" },
   { id: "usage", label: "Usage" },
 ] as const;
 
-const visibleColumns = ref<Set<string>>(new Set(["version", "loader", "author"]));
+const visibleColumns = ref<Set<string>>(
+  new Set(["name", "version", "loader", "author"])
+);
 
 // Selection State
 const selectedModIds = ref<Set<string>>(new Set());
@@ -192,54 +200,57 @@ const selectedModsCompatibility = computed(() => {
   }
 
   // Separate mods from non-mods (resourcepacks/shaders)
-  const modItems = selectedMods.filter(m => !m.content_type || m.content_type === "mod");
-  const nonModItems = selectedMods.filter(m => m.content_type && m.content_type !== "mod");
-  
+  const modItems = selectedMods.filter(
+    (m) => !m.content_type || m.content_type === "mod"
+  );
+  const nonModItems = selectedMods.filter(
+    (m) => m.content_type && m.content_type !== "mod"
+  );
+
   // Get game versions from mods only (single version per mod)
   const modGameVersions = new Set(
-    modItems
-      .map(m => m.game_version)
-      .filter(v => v && v !== "unknown")
+    modItems.map((m) => m.game_version).filter((v) => v && v !== "unknown")
   );
-  
+
   // Get loaders from mods only (resourcepacks/shaders don't have loaders)
   const loaders = new Set(
-    modItems
-      .map(m => m.loader)
-      .filter(l => l && l !== "unknown")
+    modItems.map((m) => m.loader).filter((l) => l && l !== "unknown")
   );
-  
+
   // Check compatibility for mods
   const hasSameVersion = modGameVersions.size <= 1;
   const hasSameLoader = loaders.size <= 1;
-  
+
   // For non-mods, check if they have any overlapping versions with the mod game version
   let nonModsCompatible = true;
-  const modGameVersion = modGameVersions.size === 1 ? Array.from(modGameVersions)[0] : null;
-  
+  const modGameVersion =
+    modGameVersions.size === 1 ? Array.from(modGameVersions)[0] : null;
+
   if (modGameVersion && nonModItems.length > 0) {
     // Check if all non-mod items support the mod game version
-    nonModsCompatible = nonModItems.every(item => {
+    nonModsCompatible = nonModItems.every((item) => {
       if (!item.game_versions || item.game_versions.length === 0) return true;
       return item.game_versions.includes(modGameVersion);
     });
   }
-  
+
   // If we have mods with different loaders, it's incompatible
   const compatible = hasSameVersion && hasSameLoader && nonModsCompatible;
-  
+
   // Determine the locked values
   let gameVersion: string | null = null;
   let loader: string | null = null;
-  
+
   if (modGameVersions.size === 1) {
     gameVersion = Array.from(modGameVersions)[0];
   } else if (modItems.length === 0 && nonModItems.length > 0) {
     // Only non-mod items - find common version from game_versions arrays
-    const versionSets = nonModItems.map(item => new Set(item.game_versions || []));
+    const versionSets = nonModItems.map(
+      (item) => new Set(item.game_versions || [])
+    );
     if (versionSets.length > 0 && versionSets[0].size > 0) {
-      const intersection = [...versionSets[0]].filter(v => 
-        versionSets.every(set => set.size === 0 || set.has(v))
+      const intersection = [...versionSets[0]].filter((v) =>
+        versionSets.every((set) => set.size === 0 || set.has(v))
       );
       if (intersection.length > 0) {
         // Use the highest version as the common version
@@ -247,7 +258,7 @@ const selectedModsCompatibility = computed(() => {
       }
     }
   }
-  
+
   if (loaders.size === 1) {
     loader = Array.from(loaders)[0];
   } else if (modItems.length === 0 && nonModItems.length > 0) {
@@ -294,23 +305,28 @@ function matchesSearchQuery(mod: Mod, query: string): boolean {
 const filteredMods = computed(() => {
   let result = mods.value.filter((mod) => {
     const matchesSearch = matchesSearchQuery(mod, searchQuery.value);
-    
+
     // Loader filter only applies to mods (resourcepacks/shaders don't have loaders)
     const modContentType = mod.content_type || "mod";
     const matchesLoader =
-      selectedLoader.value === "all" || 
+      selectedLoader.value === "all" ||
       modContentType !== "mod" || // Skip loader check for non-mods
       mod.loader === selectedLoader.value;
-    
+
     // Version filter - for shaders/resourcepacks, check game_versions array
     let matchesVersion = selectedGameVersion.value === "all";
     if (!matchesVersion) {
-      if (modContentType !== "mod" && mod.game_versions && mod.game_versions.length > 0) {
+      if (
+        modContentType !== "mod" &&
+        mod.game_versions &&
+        mod.game_versions.length > 0
+      ) {
         // For shaders/resourcepacks with game_versions array
-        matchesVersion = mod.game_versions.some(gv => 
-          gv === selectedGameVersion.value ||
-          gv.startsWith(selectedGameVersion.value) ||
-          selectedGameVersion.value.startsWith(gv)
+        matchesVersion = mod.game_versions.some(
+          (gv) =>
+            gv === selectedGameVersion.value ||
+            gv.startsWith(selectedGameVersion.value) ||
+            selectedGameVersion.value.startsWith(gv)
         );
       } else {
         // Standard single version check for mods
@@ -457,9 +473,12 @@ function loadSettings() {
         selectedGameVersion.value = settings.selectedGameVersion;
       if (settings.searchField) searchField.value = settings.searchField;
       if (settings.modpackFilter) modpackFilter.value = settings.modpackFilter;
-      if (settings.selectedContentType) selectedContentType.value = settings.selectedContentType;
-      if (settings.visibleColumns) visibleColumns.value = new Set(settings.visibleColumns);
-      if (settings.showFilters !== undefined) showFilters.value = settings.showFilters;
+      if (settings.selectedContentType)
+        selectedContentType.value = settings.selectedContentType;
+      if (settings.visibleColumns)
+        visibleColumns.value = new Set(settings.visibleColumns);
+      if (settings.showFilters !== undefined)
+        showFilters.value = settings.showFilters;
     }
   } catch (e) {
     console.warn("Failed to load settings", e);
@@ -556,7 +575,7 @@ async function loadMods() {
   try {
     const [allMods, allModpacks] = await Promise.all([
       window.api.mods.getAll(),
-      window.api.modpacks.getAll()
+      window.api.modpacks.getAll(),
     ]);
 
     mods.value = allMods;
@@ -571,12 +590,12 @@ async function loadMods() {
     }
 
     // Actually, let's use checkUsage API for all mods to be accurate
-    const allModIds = allMods.map(m => m.id);
+    const allModIds = allMods.map((m) => m.id);
     // Chunking might be needed if too many mods, but let's try all at once first
     if (allModIds.length > 0) {
       const usageInfo = await window.api.mods.checkUsage(allModIds);
       for (const info of usageInfo) {
-        const packIds = new Set(info.modpacks.map(p => p.id));
+        const packIds = new Set(info.modpacks.map((p) => p.id));
         usage.set(info.modId, packIds);
       }
     }
@@ -963,11 +982,18 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
-    @dragleave="handleDragLeave" @drop="handleDrop">
+  <div
+    class="h-full flex flex-col relative"
+    @dragenter="handleDragEnter"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
     <!-- Drag & Drop Overlay -->
-    <div v-if="isDragging"
-      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
+    <div
+      v-if="isDragging"
+      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none"
+    >
       <div class="text-center">
         <FilePlus class="w-16 h-16 mx-auto text-primary mb-4" />
         <p class="text-xl font-semibold">Drop .jar files here</p>
@@ -978,9 +1004,13 @@ onMounted(() => {
     </div>
 
     <!-- Compact Header -->
-    <div class="shrink-0 px-3 sm:px-8 py-3 sm:py-4 border-b border-border bg-background">
+    <div
+      class="shrink-0 px-3 sm:px-8 py-3 sm:py-4 border-b border-border bg-background"
+    >
       <!-- Mobile: Stack vertically, Desktop: Row -->
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+      <div
+        class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6"
+      >
         <!-- Left: Title & Stats -->
         <div class="flex items-center gap-3 sm:gap-4">
           <div class="flex items-center gap-2 sm:gap-3">
@@ -993,13 +1023,21 @@ onMounted(() => {
               </h1>
               <p class="text-[10px] sm:text-xs text-muted-foreground">
                 {{ mods.length }} mods
-                <span class="hidden md:inline" v-if="Object.keys(loaderStats).length > 1">
+                <span
+                  class="hidden md:inline"
+                  v-if="Object.keys(loaderStats).length > 1"
+                >
                   •
-                  <span v-for="(count, loader, idx) in loaderStats" :key="loader">
+                  <span
+                    v-for="(count, loader, idx) in loaderStats"
+                    :key="loader"
+                  >
                     {{ count }} {{ loader
                     }}{{
-                      idx < Object.keys(loaderStats).length - 1 ? ", " : "" }} </span>
+                      idx < Object.keys(loaderStats).length - 1 ? ", " : ""
+                    }}
                   </span>
+                </span>
               </p>
             </div>
           </div>
@@ -1009,41 +1047,62 @@ onMounted(() => {
 
           <!-- Quick Filters -->
           <div class="flex items-center gap-1 sm:gap-1.5 py-0.5">
-            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
-              ? 'bg-primary text-primary-foreground shadow-md'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              " @click="
+            <button
+              class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
+              :class="
+                quickFilter === 'all'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              "
+              @click="
                 quickFilter = 'all';
-              router.push('/library');
-              ">
+                router.push('/library');
+              "
+            >
               All
             </button>
             <button
               class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
-              :class="quickFilter === 'favorites'
-                ? 'bg-rose-500/20 text-rose-400 shadow-md'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                " @click="
-                  quickFilter = 'favorites';
+              :class="
+                quickFilter === 'favorites'
+                  ? 'bg-rose-500/20 text-rose-400 shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              "
+              @click="
+                quickFilter = 'favorites';
                 router.push('/library?filter=favorites');
-                ">
-              <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
-              <span v-if="favoriteMods.size > 0" class="hidden xs:inline">({{ favoriteMods.size }})</span>
+              "
+            >
+              <Heart
+                class="w-3 h-3"
+                :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''"
+              />
+              <span v-if="favoriteMods.size > 0" class="hidden xs:inline"
+                >({{ favoriteMods.size }})</span
+              >
             </button>
-            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'recent'
-              ? 'bg-blue-500/20 text-blue-400 shadow-md'
-              : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
-              " @click="
+            <button
+              class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
+              :class="
+                quickFilter === 'recent'
+                  ? 'bg-blue-500/20 text-blue-400 shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
+              "
+              @click="
                 quickFilter = 'recent';
-              router.push('/library?filter=recent');
-              ">
+                router.push('/library?filter=recent');
+              "
+            >
               Recent
             </button>
 
             <!-- Duplicate Warning Badge -->
-            <div v-if="duplicateCount > 0"
+            <div
+              v-if="duplicateCount > 0"
               class="flex items-center gap-1 px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs bg-orange-500/20 text-orange-400 rounded-md cursor-pointer hover:bg-orange-500/30 transition-colors"
-              @click="searchQuery = ''" title="Click to show all and review duplicates">
+              @click="searchQuery = ''"
+              title="Click to show all and review duplicates"
+            >
               <AlertTriangle class="w-3 h-3" />
               <span class="hidden sm:inline">{{ duplicateCount }}</span>
             </div>
@@ -1052,13 +1111,25 @@ onMounted(() => {
 
         <!-- Right: Actions -->
         <div class="flex items-center gap-2">
-          <Button @click="showUpdatesDialog = true" :disabled="!isElectron()" variant="secondary" size="sm"
-            class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shadow-sm hover:shadow transition-all" title="Check for mod updates">
+          <Button
+            @click="showUpdatesDialog = true"
+            :disabled="!isElectron()"
+            variant="secondary"
+            size="sm"
+            class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shadow-sm hover:shadow transition-all"
+            title="Check for mod updates"
+          >
             <ArrowUpCircle class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" />
-            <span class="hidden lg:inline text-xs font-medium">Check Updates</span>
+            <span class="hidden lg:inline text-xs font-medium"
+              >Check Updates</span
+            >
           </Button>
-          <Button @click="showCurseForgeSearch = true" variant="default" size="sm"
-            class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
+          <Button
+            @click="showCurseForgeSearch = true"
+            variant="default"
+            size="sm"
+            class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs"
+          >
             <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span class="hidden xs:inline">CurseForge</span>
           </Button>
@@ -1070,14 +1141,23 @@ onMounted(() => {
         <!-- Search -->
         <div class="relative flex-1 max-w-md">
           <Search
-            class="absolute left-2 sm:left-2.5 top-1/2 transform -translate-y-1/2 h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground" />
-          <Input v-model="searchQuery" :placeholder="searchField === 'all' ? 'Search...' : `By ${searchField}...`
-            " class="pl-7 sm:pl-8 h-8 sm:h-9 text-xs sm:text-sm bg-muted/50 border-border" />
+            class="absolute left-2 sm:left-2.5 top-1/2 transform -translate-y-1/2 h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground"
+          />
+          <Input
+            v-model="searchQuery"
+            :placeholder="
+              searchField === 'all' ? 'Search...' : `By ${searchField}...`
+            "
+            class="pl-7 sm:pl-8 h-8 sm:h-9 text-xs sm:text-sm bg-muted/50 border-border"
+          />
         </div>
 
         <!-- Search Field Selector (beside search) -->
-        <select v-model="searchField" title="Search field"
-          class="hidden md:block h-8 sm:h-9 ml-2 rounded-md border border-border bg-muted/50 px-2 text-sm text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+        <select
+          v-model="searchField"
+          title="Search field"
+          class="hidden md:block h-8 sm:h-9 ml-2 rounded-md border border-border bg-muted/50 px-2 text-sm text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        >
           <option value="all">All</option>
           <option value="name">Name</option>
           <option value="author">Author</option>
@@ -1086,12 +1166,26 @@ onMounted(() => {
         </select>
 
         <!-- Filter Toggle -->
-        <Button variant="outline" size="sm" class="h-8 sm:h-9 gap-2" :class="showFilters ? 'bg-primary/10 border-primary/50 text-primary' : ''"
-          @click="showFilters = !showFilters">
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-8 sm:h-9 gap-2"
+          :class="
+            showFilters ? 'bg-primary/10 border-primary/50 text-primary' : ''
+          "
+          @click="showFilters = !showFilters"
+        >
           <Filter class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">Filters</span>
-          <span v-if="selectedLoader !== 'all' || selectedGameVersion !== 'all' || selectedContentType !== 'all' || modpackFilter !== 'all'" 
-            class="flex h-1.5 w-1.5 rounded-full bg-primary" />
+          <span
+            v-if="
+              selectedLoader !== 'all' ||
+              selectedGameVersion !== 'all' ||
+              selectedContentType !== 'all' ||
+              modpackFilter !== 'all'
+            "
+            class="flex h-1.5 w-1.5 rounded-full bg-primary"
+          />
         </Button>
 
         <div class="h-6 w-px bg-border mx-1" />
@@ -1100,53 +1194,100 @@ onMounted(() => {
         <div class="flex items-center gap-1">
           <!-- Column Selector (List View Only) -->
           <div class="relative" v-if="viewMode === 'list'">
-            <Button variant="ghost" size="icon" class="h-8 w-8" :class="showColumnSelector ? 'bg-muted' : ''"
-              @click="showColumnSelector = !showColumnSelector" title="Configure columns">
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-8 w-8"
+              :class="showColumnSelector ? 'bg-muted' : ''"
+              @click="showColumnSelector = !showColumnSelector"
+              title="Configure columns"
+            >
               <Columns class="w-4 h-4" />
             </Button>
-            
+
             <!-- Column Selector Dropdown -->
-            <div v-if="showColumnSelector" 
-              class="absolute top-full right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50 p-2 space-y-1">
-              <div class="text-xs font-medium text-muted-foreground px-2 py-1">Visible Columns</div>
-              <label v-for="col in availableColumns" :key="col.id" 
-                class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer text-sm">
-                <input type="checkbox" 
+            <div
+              v-if="showColumnSelector"
+              class="absolute top-full right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-50 p-2 space-y-1"
+            >
+              <div class="text-xs font-medium text-muted-foreground px-2 py-1">
+                Visible Columns
+              </div>
+              <label
+                v-for="col in availableColumns"
+                :key="col.id"
+                class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer text-sm"
+              >
+                <input
+                  type="checkbox"
                   :checked="visibleColumns.has(col.id)"
-                  @change="visibleColumns.has(col.id) ? visibleColumns.delete(col.id) : visibleColumns.add(col.id)"
-                  class="rounded border-muted-foreground/30 text-primary focus:ring-primary" />
+                  @change="
+                    visibleColumns.has(col.id)
+                      ? visibleColumns.delete(col.id)
+                      : visibleColumns.add(col.id)
+                  "
+                  class="rounded border-muted-foreground/30 text-primary focus:ring-primary"
+                />
                 {{ col.label }}
               </label>
             </div>
-            
+
             <!-- Backdrop for dropdown -->
-            <div v-if="showColumnSelector" class="fixed inset-0 z-40" @click="showColumnSelector = false" />
+            <div
+              v-if="showColumnSelector"
+              class="fixed inset-0 z-40"
+              @click="showColumnSelector = false"
+            />
           </div>
 
           <!-- View Mode Toggle -->
           <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-            <button class="p-1.5 rounded transition-all" :class="viewMode === 'grid'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-              " @click="viewMode = 'grid'" title="Grid view">
+            <button
+              class="p-1.5 rounded transition-all"
+              :class="
+                viewMode === 'grid'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="viewMode = 'grid'"
+              title="Grid view"
+            >
               <LayoutGrid class="w-4 h-4" />
             </button>
-            <button class="p-1.5 rounded transition-all" :class="viewMode === 'gallery'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-              " @click="viewMode = 'gallery'" title="Gallery view">
+            <button
+              class="p-1.5 rounded transition-all"
+              :class="
+                viewMode === 'gallery'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="viewMode = 'gallery'"
+              title="Gallery view"
+            >
               <GalleryVertical class="w-4 h-4" />
             </button>
-            <button class="p-1.5 rounded transition-all" :class="viewMode === 'list'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-              " @click="viewMode = 'list'" title="List view">
+            <button
+              class="p-1.5 rounded transition-all"
+              :class="
+                viewMode === 'list'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="viewMode = 'list'"
+              title="List view"
+            >
               <List class="w-4 h-4" />
             </button>
-            <button class="hidden sm:block p-1.5 rounded transition-all" :class="viewMode === 'compact'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-              " @click="viewMode = 'compact'" title="Compact view">
+            <button
+              class="hidden sm:block p-1.5 rounded transition-all"
+              :class="
+                viewMode === 'compact'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              @click="viewMode = 'compact'"
+              title="Compact view"
+            >
               <LayoutList class="w-4 h-4" />
             </button>
           </div>
@@ -1154,12 +1295,22 @@ onMounted(() => {
 
         <!-- Selection Actions -->
         <div class="hidden md:flex items-center gap-1 ml-auto">
-          <Button variant="ghost" size="sm" class="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-            @click="selectAll" :disabled="filteredMods.length === 0">
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+            @click="selectAll"
+            :disabled="filteredMods.length === 0"
+          >
             Select All
           </Button>
-          <Button variant="ghost" size="sm" class="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-            @click="selectNone" :disabled="selectedModIds.size === 0">
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+            @click="selectNone"
+            :disabled="selectedModIds.size === 0"
+          >
             Clear
           </Button>
         </div>
@@ -1167,39 +1318,65 @@ onMounted(() => {
     </div>
 
     <!-- Filter Sidebar -->
-    <Transition enter-active-class="transition-transform duration-200 ease-out" enter-from-class="-translate-x-full"
-      enter-to-class="translate-x-0" leave-active-class="transition-transform duration-150 ease-in"
-      leave-from-class="translate-x-0" leave-to-class="-translate-x-full">
-      <div v-if="showFilters"
-        class="fixed top-0 left-0 h-full w-56 sm:w-64 bg-background border-r border-border shadow-2xl z-[9999] flex flex-col pt-14 sm:pt-0">
-        <div class="p-4 border-b border-border flex items-center justify-between">
+    <Transition
+      enter-active-class="transition-transform duration-200 ease-out"
+      enter-from-class="-translate-x-full"
+      enter-to-class="translate-x-0"
+      leave-active-class="transition-transform duration-150 ease-in"
+      leave-from-class="translate-x-0"
+      leave-to-class="-translate-x-full"
+    >
+      <div
+        v-if="showFilters"
+        class="fixed top-0 left-0 h-full w-56 sm:w-64 bg-background border-r border-border shadow-2xl z-[9999] flex flex-col pt-14 sm:pt-0"
+      >
+        <div
+          class="p-4 border-b border-border flex items-center justify-between"
+        >
           <h3 class="font-semibold flex items-center gap-2">
             <Filter class="w-4 h-4" />
             Filters
           </h3>
-          <Button variant="ghost" size="icon" class="h-7 w-7" @click="showFilters = false">
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-7 w-7"
+            @click="showFilters = false"
+          >
             <X class="w-4 h-4" />
           </Button>
         </div>
-        
+
         <div class="flex-1 overflow-y-auto p-4 space-y-6">
           <!-- (Search Field moved to toolbar) -->
 
           <!-- Content Type -->
           <div class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Type</label>
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Content Type</label
+            >
             <div class="grid grid-cols-2 gap-2">
               <button
-                v-for="type in ['all', 'mod', 'resourcepack', 'shader']" :key="type"
+                v-for="type in ['all', 'mod', 'resourcepack', 'shader']"
+                :key="type"
                 class="px-3 py-2 rounded-md text-sm border transition-all text-left flex items-center gap-2 capitalize"
                 :class="
                   type === 'all'
-                    ? (selectedContentType === 'all' ? 'bg-primary/10 border-primary text-primary' : 'bg-card border-border hover:border-primary/50')
+                    ? selectedContentType === 'all'
+                      ? 'bg-primary/10 border-primary text-primary'
+                      : 'bg-card border-border hover:border-primary/50'
                     : type === 'mod'
-                    ? (selectedContentType === 'mod' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-card border-border hover:border-emerald-500/30 text-muted-foreground')
+                    ? selectedContentType === 'mod'
+                      ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
+                      : 'bg-card border-border hover:border-emerald-500/30 text-muted-foreground'
                     : type === 'resourcepack'
-                    ? (selectedContentType === 'resourcepack' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-card border-border hover:border-blue-500/30 text-muted-foreground')
-                    : (selectedContentType === 'shader' ? 'bg-pink-500/10 border-pink-500 text-pink-400' : 'bg-card border-border hover:border-pink-500/30 text-muted-foreground')
+                    ? selectedContentType === 'resourcepack'
+                      ? 'bg-blue-500/10 border-blue-500 text-blue-400'
+                      : 'bg-card border-border hover:border-blue-500/30 text-muted-foreground'
+                    : selectedContentType === 'shader'
+                    ? 'bg-pink-500/10 border-pink-500 text-pink-400'
+                    : 'bg-card border-border hover:border-pink-500/30 text-muted-foreground'
                 "
                 @click="selectedContentType = type as any"
               >
@@ -1217,72 +1394,121 @@ onMounted(() => {
                     <Layers class="w-3 h-3" />
                   </template>
                 </span>
-                <span class="truncate">{{ type === 'resourcepack' ? 'Resource Pack' : (type === 'all' ? 'All' : type) }}</span>
+                <span class="truncate">{{
+                  type === "resourcepack"
+                    ? "Resource Pack"
+                    : type === "all"
+                    ? "All"
+                    : type
+                }}</span>
               </button>
             </div>
           </div>
 
           <!-- Game Version -->
           <div class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Game Version</label>
-            <select v-model="selectedGameVersion"
-              class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Game Version</label
+            >
+            <select
+              v-model="selectedGameVersion"
+              class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            >
               <option value="all">All Versions</option>
-              <option v-for="v in gameVersions" :key="v" :value="v">{{ v }}</option>
+              <option v-for="v in gameVersions" :key="v" :value="v">
+                {{ v }}
+              </option>
             </select>
           </div>
 
           <!-- Loader -->
-          <div class="space-y-2" v-if="selectedContentType === 'all' || selectedContentType === 'mod'">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mod Loader</label>
-            <select v-model="selectedLoader"
-              class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+          <div
+            class="space-y-2"
+            v-if="
+              selectedContentType === 'all' || selectedContentType === 'mod'
+            "
+          >
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Mod Loader</label
+            >
+            <select
+              v-model="selectedLoader"
+              class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            >
               <option value="all">All Loaders</option>
-              <option v-for="loader in loaders" :key="loader" :value="loader">{{ loader }}</option>
+              <option v-for="loader in loaders" :key="loader" :value="loader">
+                {{ loader }}
+              </option>
             </select>
           </div>
 
           <!-- Modpack Status -->
           <div class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Modpack Status</label>
-            <select v-model="modpackFilter"
-              class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Modpack Status</label
+            >
+            <select
+              v-model="modpackFilter"
+              class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            >
               <option value="all">All Mods</option>
               <option value="any">In Any Modpack</option>
               <option value="none">Unused</option>
               <optgroup v-if="modpacks.length > 0" label="Specific Modpack">
-                <option v-for="pack in modpacks" :key="pack.id" :value="pack.id">{{ pack.name }}</option>
+                <option
+                  v-for="pack in modpacks"
+                  :key="pack.id"
+                  :value="pack.id"
+                >
+                  {{ pack.name }}
+                </option>
               </optgroup>
             </select>
           </div>
 
           <!-- Sorting -->
           <div class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort By</label>
+            <label
+              class="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+              >Sort By</label
+            >
             <div class="grid grid-cols-2 gap-2">
-              <button v-for="field in sortFields" :key="field" 
+              <button
+                v-for="field in sortFields"
+                :key="field"
                 class="px-3 py-2 rounded-md text-sm border transition-all text-left capitalize flex items-center justify-between"
-                :class="sortBy === field 
-                  ? 'bg-primary/10 border-primary text-primary' 
-                  : 'bg-card border-border hover:border-primary/50'"
+                :class="
+                  sortBy === field
+                    ? 'bg-primary/10 border-primary text-primary'
+                    : 'bg-card border-border hover:border-primary/50'
+                "
                 @click="toggleSort(field)"
               >
                 {{ field === "created_at" ? "Date" : field }}
-                <span v-if="sortBy === field" class="text-xs opacity-70">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                <span v-if="sortBy === field" class="text-xs opacity-70">{{
+                  sortDir === "asc" ? "↑" : "↓"
+                }}</span>
               </button>
             </div>
           </div>
         </div>
-        
+
         <div class="p-4 border-t border-border bg-muted/20">
-          <Button variant="outline" class="w-full" @click="
-            selectedLoader = 'all';
-            selectedGameVersion = 'all';
-            selectedContentType = 'all';
-            modpackFilter = 'all';
-            searchField = 'all';
-            searchQuery = '';
-          ">
+          <Button
+            variant="outline"
+            class="w-full"
+            @click="
+              selectedLoader = 'all';
+              selectedGameVersion = 'all';
+              selectedContentType = 'all';
+              modpackFilter = 'all';
+              searchField = 'all';
+              searchQuery = '';
+            "
+          >
             Reset Filters
           </Button>
         </div>
@@ -1296,25 +1522,37 @@ onMounted(() => {
 
     <div v-else-if="isLoading" class="flex items-center justify-center flex-1">
       <div class="flex flex-col items-center gap-2">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div
+          class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+        ></div>
         <p class="text-muted-foreground">Loading...</p>
       </div>
     </div>
 
-    <div v-else-if="mods.length === 0" class="flex items-center justify-center flex-1 bg-background">
+    <div
+      v-else-if="mods.length === 0"
+      class="flex items-center justify-center flex-1 bg-background"
+    >
       <div class="text-center max-w-sm flex flex-col items-center">
-        <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-6">
+        <div
+          class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-6"
+        >
           <Package class="w-8 h-8 text-muted-foreground" />
         </div>
 
         <h3 class="text-xl font-bold mb-2">Library Empty</h3>
-        <p class="text-muted-foreground mb-8 text-sm max-w-xs mx-auto leading-relaxed">
+        <p
+          class="text-muted-foreground mb-8 text-sm max-w-xs mx-auto leading-relaxed"
+        >
           Your collection is looking a bit light. Start exploring thousands of
           mods on CurseForge.
         </p>
 
-        <Button @click="showCurseForgeSearch = true" size="lg"
-          class="gap-2.5 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
+        <Button
+          @click="showCurseForgeSearch = true"
+          size="lg"
+          class="gap-2.5 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
+        >
           <Globe class="w-5 h-5" />
           <span class="font-semibold">Browse CurseForge</span>
         </Button>
@@ -1322,70 +1560,201 @@ onMounted(() => {
     </div>
 
     <!-- Grid View -->
-    <div v-else-if="viewMode === 'grid'" class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background">
-      <ModGrid :mods="filteredMods" :selected-ids="selectedModIds" :favorite-ids="favoriteMods"
-        :duplicate-ids="duplicateModIds" :show-thumbnails="showThumbnails" :mod-usage-map="modUsageMap"
+    <div
+      v-else-if="viewMode === 'grid'"
+      class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background"
+    >
+      <ModGrid
+        :mods="filteredMods"
+        :selected-ids="selectedModIds"
+        :favorite-ids="favoriteMods"
+        :duplicate-ids="duplicateModIds"
+        :show-thumbnails="showThumbnails"
+        :mod-usage-map="modUsageMap"
         @delete="confirmDelete"
-        @toggle-select="toggleSelection" @show-details="showModDetails" @toggle-favorite="toggleFavorite" />
+        @toggle-select="toggleSelection"
+        @show-details="showModDetails"
+        @toggle-favorite="toggleFavorite"
+      />
     </div>
 
-    <!-- Gallery View -->
-    <div v-else-if="viewMode === 'gallery'" class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <ModCard v-for="mod in filteredMods" :key="mod.id" :mod="mod" 
+    <!-- Gallery View - Image-focused masonry layout -->
+    <div
+      v-else-if="viewMode === 'gallery'"
+      class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background"
+    >
+      <div class="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+        <GalleryCard
+          v-for="mod in filteredMods"
+          :key="mod.id"
+          :mod="mod"
           :selected="selectedModIds.has(mod.id)"
-          :favorite="favoriteMods.has(mod.id)" 
-          :is-duplicate="duplicateModIds.has(mod.id)" 
-          :show-thumbnail="true"
+          :favorite="favoriteMods.has(mod.id)"
+          :is-duplicate="duplicateModIds.has(mod.id)"
           :usage-count="modUsageMap.get(mod.id)?.size || 0"
-          class="h-full transform hover:scale-[1.01] transition-all duration-200"
-          @delete="confirmDelete(mod.id)" 
+          @delete="confirmDelete(mod.id)"
           @toggle-select="toggleSelection(mod.id)"
-          @show-details="showModDetails(mod)" 
-          @toggle-favorite="toggleFavorite(mod.id)" />
+          @show-details="showModDetails(mod)"
+          @toggle-favorite="toggleFavorite(mod.id)"
+        />
       </div>
     </div>
-    
 
     <!-- List View -->
-    <div v-else-if="viewMode === 'list'" class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background">
-      <div class="bg-card/50 rounded-lg border border-border overflow-hidden overflow-x-auto">
+    <div
+      v-else-if="viewMode === 'list'"
+      class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background"
+    >
+      <div
+        class="bg-card/50 rounded-lg border border-border overflow-hidden overflow-x-auto"
+      >
         <table class="w-full text-sm min-w-[600px]">
           <thead class="bg-muted/50 border-b border-border">
             <tr>
-              <th v-if="visibleColumns.has('name')" class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Name</th>
-              <th v-if="visibleColumns.has('version')" class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Version</th>
-              <th v-if="visibleColumns.has('loader')" class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Loader</th>
-              <th v-if="visibleColumns.has('author')" class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Author</th>
-              <th v-if="visibleColumns.has('date')" class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Date</th>
-              <th v-if="visibleColumns.has('size')" class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Size</th>
-              <th v-if="visibleColumns.has('usage')" class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Usage</th>
-              <th class="text-right p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs">Actions</th>
+              <th
+                v-if="visibleColumns.has('thumbnail')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs w-12"
+              >
+                Image
+              </th>
+              <th
+                v-if="visibleColumns.has('name')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Name
+              </th>
+              <th
+                v-if="visibleColumns.has('version')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Version
+              </th>
+              <th
+                v-if="visibleColumns.has('loader')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Loader
+              </th>
+              <th
+                v-if="visibleColumns.has('author')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Author
+              </th>
+              <th
+                v-if="visibleColumns.has('game_version')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Game Ver
+              </th>
+              <th
+                v-if="visibleColumns.has('date')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Date
+              </th>
+              <th
+                v-if="visibleColumns.has('size')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Size
+              </th>
+              <th
+                v-if="visibleColumns.has('usage')"
+                class="text-left p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Usage
+              </th>
+              <th
+                class="text-right p-2 sm:p-3 font-medium text-muted-foreground text-[10px] sm:text-xs"
+              >
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="mod in filteredMods" :key="mod.id"
+            <tr
+              v-for="mod in filteredMods"
+              :key="mod.id"
               class="border-b border-border last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
-              :class="{ 'bg-primary/10': selectedModIds.has(mod.id) }" @click="toggleSelection(mod.id)">
-              
-              <td v-if="visibleColumns.has('name')" class="p-2 sm:p-3 font-medium text-xs sm:text-sm">
-                <div class="flex items-center gap-2">
-                   {{ mod.name }}
+              :class="{ 'bg-primary/10': selectedModIds.has(mod.id) }"
+              @click="toggleSelection(mod.id)"
+            >
+              <td
+                v-if="visibleColumns.has('thumbnail')"
+                class="p-2 sm:p-3 w-12"
+              >
+                <div
+                  class="w-8 h-8 rounded-md overflow-hidden bg-muted border border-border"
+                >
+                  <img
+                    v-if="mod.thumbnail_url || mod.logo_url"
+                    :src="mod.logo_url || mod.thumbnail_url"
+                    class="w-full h-full object-cover"
+                    @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+                  />
+                  <Package
+                    v-else
+                    class="w-4 h-4 m-auto text-muted-foreground/40"
+                  />
                 </div>
               </td>
-              <td v-if="visibleColumns.has('version')" class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs">{{ mod.version }}</td>
-              <td v-if="visibleColumns.has('loader')" class="p-2 sm:p-3">
-                <span class="px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] sm:text-xs bg-muted">{{ mod.loader }}</span>
+              <td
+                v-if="visibleColumns.has('name')"
+                class="p-2 sm:p-3 font-medium text-xs sm:text-sm"
+              >
+                <div class="flex items-center gap-2">
+                  {{ mod.name }}
+                </div>
               </td>
-              <td v-if="visibleColumns.has('author')" class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs">{{ mod.author || "-" }}</td>
-              <td v-if="visibleColumns.has('date')" class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs">
+              <td
+                v-if="visibleColumns.has('version')"
+                class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs"
+              >
+                {{ mod.version }}
+              </td>
+              <td v-if="visibleColumns.has('loader')" class="p-2 sm:p-3">
+                <span
+                  class="px-1.5 sm:px-2 py-0.5 rounded-md text-[10px] sm:text-xs bg-muted"
+                  >{{ mod.loader }}</span
+                >
+              </td>
+              <td
+                v-if="visibleColumns.has('author')"
+                class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs"
+              >
+                {{ mod.author || "-" }}
+              </td>
+              <td
+                v-if="visibleColumns.has('game_version')"
+                class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs"
+              >
+                {{ mod.game_version || "-" }}
+              </td>
+              <td
+                v-if="visibleColumns.has('date')"
+                class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs"
+              >
                 {{ new Date(mod.created_at).toLocaleDateString() }}
               </td>
-              <td v-if="visibleColumns.has('size')" class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs">
-                {{ mod.file_size ? (mod.file_size / 1024 / 1024).toFixed(2) + ' MB' : '-' }}
+              <td
+                v-if="visibleColumns.has('size')"
+                class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs"
+              >
+                {{
+                  mod.file_size
+                    ? (mod.file_size / 1024 / 1024).toFixed(2) + " MB"
+                    : "-"
+                }}
               </td>
-              <td v-if="visibleColumns.has('usage')" class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs">
-                <span v-if="modUsageMap.get(mod.id)?.size" class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary">
+              <td
+                v-if="visibleColumns.has('usage')"
+                class="p-2 sm:p-3 text-muted-foreground text-[10px] sm:text-xs"
+              >
+                <span
+                  v-if="modUsageMap.get(mod.id)?.size"
+                  class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary"
+                >
                   {{ modUsageMap.get(mod.id)?.size }} packs
                 </span>
                 <span v-else class="text-muted-foreground/50">-</span>
@@ -1393,14 +1762,20 @@ onMounted(() => {
 
               <td class="p-2 sm:p-3 text-right">
                 <div class="flex justify-end gap-0.5 sm:gap-1" @click.stop>
-                  <Button variant="ghost" size="icon"
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-foreground"
-                    @click="showModDetails(mod)">
+                    @click="showModDetails(mod)"
+                  >
                     <Info class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon"
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-destructive"
-                    @click="confirmDelete(mod.id)">
+                    @click="confirmDelete(mod.id)"
+                  >
                     <Trash2 class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   </Button>
                 </div>
@@ -1413,12 +1788,19 @@ onMounted(() => {
 
     <!-- Compact View -->
     <div v-else class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background">
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-1.5 sm:gap-2">
-        <div v-for="mod in filteredMods" :key="mod.id"
+      <div
+        class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-1.5 sm:gap-2"
+      >
+        <div
+          v-for="mod in filteredMods"
+          :key="mod.id"
           class="p-2 rounded-lg border border-border cursor-pointer transition-all hover:bg-muted/50 hover:border-border group"
           :class="{
             'ring-1 ring-primary bg-primary/5': selectedModIds.has(mod.id),
-          }" @click="toggleSelection(mod.id)" @dblclick="showModDetails(mod)">
+          }"
+          @click="toggleSelection(mod.id)"
+          @dblclick="showModDetails(mod)"
+        >
           <div class="font-medium text-xs truncate">{{ mod.name }}</div>
           <div class="text-[10px] text-muted-foreground truncate">
             {{ mod.loader }} • {{ mod.version }}
@@ -1428,15 +1810,28 @@ onMounted(() => {
     </div>
 
     <!-- Details Sidebar -->
-    <Transition enter-active-class="transition-transform duration-200 ease-out" enter-from-class="translate-x-full"
-      enter-to-class="translate-x-0" leave-active-class="transition-transform duration-150 ease-in"
-      leave-from-class="translate-x-0" leave-to-class="translate-x-full">
-      <div v-if="showDetails && detailsMod"
-        class="fixed top-0 right-0 h-full w-80 bg-background border-l border-border shadow-2xl z-40 flex flex-col">
-        <div class="p-4 border-b border-border flex items-center justify-between">
+    <Transition
+      enter-active-class="transition-transform duration-200 ease-out"
+      enter-from-class="translate-x-full"
+      enter-to-class="translate-x-0"
+      leave-active-class="transition-transform duration-150 ease-in"
+      leave-from-class="translate-x-0"
+      leave-to-class="translate-x-full"
+    >
+      <div
+        v-if="showDetails && detailsMod"
+        class="fixed top-0 right-0 h-full w-80 bg-background border-l border-border shadow-2xl z-40 flex flex-col"
+      >
+        <div
+          class="p-4 border-b border-border flex items-center justify-between"
+        >
           <h3 class="font-semibold">Mod Details</h3>
-          <Button variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-foreground"
-            @click="closeDetails">
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-7 w-7 text-muted-foreground hover:text-foreground"
+            @click="closeDetails"
+          >
             <X class="w-4 h-4" />
           </Button>
         </div>
@@ -1460,8 +1855,10 @@ onMounted(() => {
             </div>
             <div class="flex justify-between">
               <span class="text-muted-foreground">Game Version</span>
-              <span class="px-2 py-0.5 rounded-md text-xs bg-emerald-500/20 text-emerald-400">{{ detailsMod.game_version
-              }}</span>
+              <span
+                class="px-2 py-0.5 rounded-md text-xs bg-emerald-500/20 text-emerald-400"
+                >{{ detailsMod.game_version }}</span
+              >
             </div>
           </div>
           <div>
@@ -1470,108 +1867,191 @@ onMounted(() => {
               {{ detailsMod.description || "No description" }}
             </p>
           </div>
-          
+
           <!-- Modpack Usage -->
           <div v-if="modUsageMap.get(detailsMod.id)?.size">
             <span class="text-xs text-muted-foreground">Used in Modpacks</span>
             <div class="mt-1 space-y-1">
-              <div v-for="packId in modUsageMap.get(detailsMod.id)" :key="packId" 
-                class="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 text-sm">
+              <div
+                v-for="packId in modUsageMap.get(detailsMod.id)"
+                :key="packId"
+                class="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 text-sm"
+              >
                 <Package class="w-3.5 h-3.5 text-primary" />
-                <span>{{ modpacks.find(p => p.id === packId)?.name || 'Unknown Modpack' }}</span>
+                <span>{{
+                  modpacks.find((p) => p.id === packId)?.name ||
+                  "Unknown Modpack"
+                }}</span>
               </div>
             </div>
           </div>
 
           <div>
             <span class="text-xs text-muted-foreground">Source</span>
-            <p class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5">
+            <p
+              class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5"
+            >
               {{ detailsMod.source }} (ID: {{ detailsMod.cf_project_id }})
             </p>
           </div>
           <div>
             <span class="text-xs text-muted-foreground">Filename</span>
-            <p class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5">
+            <p
+              class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5"
+            >
               {{ detailsMod.filename }}
             </p>
           </div>
         </div>
         <div class="p-4 border-t border-white/5 flex gap-2">
-          <Button variant="destructive" class="flex-1" @click="confirmDelete(detailsMod.id)">Delete</Button>
+          <Button
+            variant="destructive"
+            class="flex-1"
+            @click="confirmDelete(detailsMod.id)"
+            >Delete</Button
+          >
         </div>
       </div>
     </Transition>
 
     <!-- Bulk Action Bar -->
-    <BulkActionBar v-if="selectedModIds.size > 0" :count="selectedModIds.size" label="mods" @clear="clearSelection">
-      <Button variant="destructive" size="sm" class="gap-2" @click="confirmBulkDelete">
+    <BulkActionBar
+      v-if="selectedModIds.size > 0"
+      :count="selectedModIds.size"
+      label="mods"
+      @clear="clearSelection"
+    >
+      <Button
+        variant="destructive"
+        size="sm"
+        class="gap-2"
+        @click="confirmBulkDelete"
+      >
         <Trash2 class="w-4 h-4" />
         Delete
       </Button>
-      <Button variant="secondary" size="sm" class="gap-2" @click="showMoveToFolderDialog = true">
+      <Button
+        variant="secondary"
+        size="sm"
+        class="gap-2"
+        @click="showMoveToFolderDialog = true"
+      >
         <FolderInput class="w-4 h-4" />
         Move to Folder
       </Button>
-      <Button variant="secondary" size="sm" class="gap-2" :disabled="!selectedModsCompatibility.compatible" :title="selectedModsCompatibility.compatible
-        ? 'Create modpack from selected mods'
-        : 'Selected mods have different game versions or loaders'
-        " @click="showCreateModpackDialog = true">
+      <Button
+        variant="secondary"
+        size="sm"
+        class="gap-2"
+        :disabled="!selectedModsCompatibility.compatible"
+        :title="
+          selectedModsCompatibility.compatible
+            ? 'Create modpack from selected mods'
+            : 'Selected mods have different game versions or loaders'
+        "
+        @click="showCreateModpackDialog = true"
+      >
         <PackagePlus class="w-4 h-4" />
         Create Pack
       </Button>
-      <Button variant="secondary" size="sm" class="gap-2" @click="showAddToModpackDialog = true">
+      <Button
+        variant="secondary"
+        size="sm"
+        class="gap-2"
+        @click="showAddToModpackDialog = true"
+      >
         <PlusCircle class="w-4 h-4" />
         Add to Pack
       </Button>
     </BulkActionBar>
 
     <!-- Dialogs -->
-    <Dialog :open="showDeleteDialog" title="Delete Mod" description="This action cannot be undone.">
+    <Dialog
+      :open="showDeleteDialog"
+      title="Delete Mod"
+      description="This action cannot be undone."
+    >
       <template #footer>
-        <Button variant="outline" @click="showDeleteDialog = false">Cancel</Button>
+        <Button variant="outline" @click="showDeleteDialog = false"
+          >Cancel</Button
+        >
         <Button variant="destructive" @click="deleteMod">Delete</Button>
       </template>
     </Dialog>
 
-    <ConfirmDialog :open="showBulkDeleteDialog" title="Delete Selected Mods" :message="`Are you sure you want to delete ${selectedModIds.size
-      } selected mod${selectedModIds.size > 1 ? 's' : ''
-      }? This action cannot be undone.`" confirm-text="Delete" variant="danger" icon="trash"
-      @confirm="deleteSelectedMods" @cancel="showBulkDeleteDialog = false" @close="showBulkDeleteDialog = false" />
+    <ConfirmDialog
+      :open="showBulkDeleteDialog"
+      title="Delete Selected Mods"
+      :message="`Are you sure you want to delete ${
+        selectedModIds.size
+      } selected mod${
+        selectedModIds.size > 1 ? 's' : ''
+      }? This action cannot be undone.`"
+      confirm-text="Delete"
+      variant="danger"
+      icon="trash"
+      @confirm="deleteSelectedMods"
+      @cancel="showBulkDeleteDialog = false"
+      @close="showBulkDeleteDialog = false"
+    />
 
-    <CreateModpackDialog :open="showCreateModpackDialog" :initial-mods-count="selectedModIds.size"
-      :forced-minecraft-version="selectedModsCompatibility.gameVersion || undefined
-        " :forced-loader="selectedModsCompatibility.loader || undefined" @close="showCreateModpackDialog = false"
-      @create="createModpackFromSelection" />
+    <CreateModpackDialog
+      :open="showCreateModpackDialog"
+      :initial-mods-count="selectedModIds.size"
+      :forced-minecraft-version="
+        selectedModsCompatibility.gameVersion || undefined
+      "
+      :forced-loader="selectedModsCompatibility.loader || undefined"
+      @close="showCreateModpackDialog = false"
+      @create="createModpackFromSelection"
+    />
 
-    <AddToModpackDialog :open="showAddToModpackDialog" :mods="mods.filter((m) => selectedModIds.has(m.id))"
-      @close="showAddToModpackDialog = false" @select="addSelectionToModpack" />
+    <AddToModpackDialog
+      :open="showAddToModpackDialog"
+      :mods="mods.filter((m) => selectedModIds.has(m.id))"
+      @close="showAddToModpackDialog = false"
+      @select="addSelectionToModpack"
+    />
 
     <!-- Move to Folder Dialog -->
-    <Dialog :open="showMoveToFolderDialog" title="Move to Folder"
-      :description="`Move ${selectedModIds.size} mod(s) to a folder`">
+    <Dialog
+      :open="showMoveToFolderDialog"
+      title="Move to Folder"
+      :description="`Move ${selectedModIds.size} mod(s) to a folder`"
+    >
       <div class="space-y-2 max-h-64 overflow-auto">
         <!-- Root option (no folder) -->
-        <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
-          @click="moveSelectedToFolder(null)">
+        <button
+          class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
+          @click="moveSelectedToFolder(null)"
+        >
           <Folder class="w-4 h-4 text-muted-foreground" />
           <span class="text-sm">No folder (root)</span>
         </button>
 
         <!-- Folders list -->
-        <button v-for="folder in folders" :key="folder.id"
+        <button
+          v-for="folder in folders"
+          :key="folder.id"
           class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
-          @click="moveSelectedToFolder(folder.id)">
+          @click="moveSelectedToFolder(folder.id)"
+        >
           <Folder class="w-4 h-4" :style="{ color: folder.color }" />
           <span class="text-sm">{{ folder.name }}</span>
         </button>
 
-        <p v-if="folders.length === 0" class="text-sm text-muted-foreground text-center py-4">
+        <p
+          v-if="folders.length === 0"
+          class="text-sm text-muted-foreground text-center py-4"
+        >
           No folders yet. Create one in the Organize view.
         </p>
       </div>
 
       <template #footer>
-        <Button variant="outline" @click="showMoveToFolderDialog = false">Cancel</Button>
+        <Button variant="outline" @click="showMoveToFolderDialog = false"
+          >Cancel</Button
+        >
         <Button variant="outline" @click="router.push('/organize')">
           <FolderPlus class="w-4 h-4 mr-2" />
           New Folder
@@ -1579,19 +2059,29 @@ onMounted(() => {
       </template>
     </Dialog>
 
-    <ProgressDialog :open="showProgress" :title="progressTitle" :message="progressMessage" />
+    <ProgressDialog
+      :open="showProgress"
+      :title="progressTitle"
+      :message="progressMessage"
+    />
 
     <!-- Mod Usage Warning Dialog -->
-    <Dialog :open="showUsageWarningDialog" title="Mods Used in Modpacks"
-      description="The following mods are used in one or more modpacks:">
+    <Dialog
+      :open="showUsageWarningDialog"
+      title="Mods Used in Modpacks"
+      description="The following mods are used in one or more modpacks:"
+    >
       <div class="space-y-3 max-h-64 overflow-auto">
-        <div v-for="usage in modUsageInfo" :key="usage.modId"
-          class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+        <div
+          v-for="usage in modUsageInfo"
+          :key="usage.modId"
+          class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30"
+        >
           <div class="font-medium text-sm text-amber-600 dark:text-amber-400">
             {{ usage.modName }}
           </div>
           <div class="text-xs text-muted-foreground mt-1">
-            Used in: {{usage.modpacks.map((mp) => mp.name).join(", ")}}
+            Used in: {{ usage.modpacks.map((mp) => mp.name).join(", ") }}
           </div>
         </div>
       </div>
@@ -1620,11 +2110,18 @@ onMounted(() => {
     </Dialog>
 
     <!-- Updates Dialog -->
-    <UpdatesDialog :open="showUpdatesDialog" @close="showUpdatesDialog = false" @updated="loadMods" />
+    <UpdatesDialog
+      :open="showUpdatesDialog"
+      @close="showUpdatesDialog = false"
+      @updated="loadMods"
+    />
 
     <!-- CurseForge Search Dialog -->
-    <CurseForgeSearch :open="showCurseForgeSearch" :installed-project-files="installedProjectFiles"
-      @close="showCurseForgeSearch = false" @added="loadMods" />
-  
+    <CurseForgeSearch
+      :open="showCurseForgeSearch"
+      :installed-project-files="installedProjectFiles"
+      @close="showCurseForgeSearch = false"
+      @added="loadMods"
+    />
   </div>
 </template>

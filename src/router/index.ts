@@ -5,6 +5,7 @@ import OrganizeView from "@/views/OrganizeView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 import SandboxView from "@/views/SandboxView.vue";
 import GuideView from "@/views/GuideView.vue";
+import StatsView from "@/views/StatsView.vue";
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: "/library", component: LibraryView },
     { path: "/modpacks", component: ModpackView },
     { path: "/organize", component: OrganizeView },
+    { path: "/stats", component: StatsView },
     { path: "/sandbox", component: SandboxView },
     { path: "/settings", component: SettingsView },
     { path: "/guide", component: GuideView },

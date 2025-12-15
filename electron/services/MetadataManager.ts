@@ -58,6 +58,13 @@ export interface Mod {
   wiki_url?: string; // Wiki URL
 }
 
+export interface ModpackProfile {
+  id: string;
+  name: string;
+  enabled_mod_ids: string[];
+  created_at: string;
+}
+
 export interface Modpack {
   id: string;
   name: string;
@@ -79,6 +86,7 @@ export interface Modpack {
     auto_check: boolean;
     last_checked?: string;
   };
+  profiles?: ModpackProfile[];
 }
 
 export interface CreateModpackData {
@@ -187,7 +195,7 @@ export class MetadataManager {
       await fs.move(tempPath, filePath, { overwrite: true });
     } catch (error) {
       // If move fails, try to clean up temp file
-      await fs.remove(tempPath).catch(() => { });
+      await fs.remove(tempPath).catch(() => {});
       throw error;
     }
   }
@@ -406,7 +414,7 @@ export class MetadataManager {
             const modpackPath = path.join(this.modpacksDir, file);
             try {
               console.log(`Attempting to recover corrupted modpack: ${file}`);
-              const content = await fs.readFile(modpackPath, 'utf-8');
+              const content = await fs.readFile(modpackPath, "utf-8");
               let recovered = false;
 
               // Strategy 1: Use position from error message
@@ -421,7 +429,9 @@ export class MetadataManager {
                     await this.safeWriteJson(modpackPath, modpack);
                     modpack.mod_count = modpack.mod_ids?.length || 0;
                     modpacks.push(modpack);
-                    console.log(`Successfully recovered modpack using position: ${file}`);
+                    console.log(
+                      `Successfully recovered modpack using position: ${file}`
+                    );
                     recovered = true;
                   } catch (e) {
                     console.log(`Position-based recovery failed for ${file}`);
@@ -431,14 +441,16 @@ export class MetadataManager {
 
               // Strategy 2: Find last closing brace (fallback)
               if (!recovered) {
-                const lastBrace = content.lastIndexOf('}');
+                const lastBrace = content.lastIndexOf("}");
                 if (lastBrace !== -1) {
                   const fixedContent = content.substring(0, lastBrace + 1);
                   const modpack = JSON.parse(fixedContent);
                   await this.safeWriteJson(modpackPath, modpack);
                   modpack.mod_count = modpack.mod_ids?.length || 0;
                   modpacks.push(modpack);
-                  console.log(`Successfully recovered modpack using brace search: ${file}`);
+                  console.log(
+                    `Successfully recovered modpack using brace search: ${file}`
+                  );
                   recovered = true;
                 }
               }
@@ -447,12 +459,18 @@ export class MetadataManager {
                 throw new Error("All recovery strategies failed");
               }
             } catch (recoveryError) {
-              console.error(`Failed to recover modpack ${file}, renaming to .corrupted:`, recoveryError);
+              console.error(
+                `Failed to recover modpack ${file}, renaming to .corrupted:`,
+                recoveryError
+              );
               // Rename corrupted file so it doesn't crash the app on next load
               try {
                 await fs.rename(modpackPath, `${modpackPath}.corrupted`);
               } catch (renameError) {
-                console.error(`Failed to rename corrupted file ${file}:`, renameError);
+                console.error(
+                  `Failed to rename corrupted file ${file}:`,
+                  renameError
+                );
               }
             }
           }
@@ -756,6 +774,81 @@ export class MetadataManager {
     const modpack = await this.getModpackById(modpackId);
     if (!modpack) return [];
     return modpack.disabled_mod_ids || [];
+  }
+
+  // ==================== PROFILES ====================
+
+  async createProfile(
+    modpackId: string,
+    name: string
+  ): Promise<ModpackProfile | null> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return null;
+
+    if (!modpack.profiles) {
+      modpack.profiles = [];
+    }
+
+    // Capture currently enabled mods
+    const disabledIds = new Set(modpack.disabled_mod_ids || []);
+    const enabledModIds = modpack.mod_ids.filter((id) => !disabledIds.has(id));
+
+    const profile: ModpackProfile = {
+      id: crypto.randomUUID(),
+      name,
+      enabled_mod_ids: enabledModIds,
+      created_at: new Date().toISOString(),
+    };
+
+    modpack.profiles.push(profile);
+    modpack.updated_at = new Date().toISOString();
+
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return profile;
+  }
+
+  async deleteProfile(modpackId: string, profileId: string): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack || !modpack.profiles) return false;
+
+    const initialLength = modpack.profiles.length;
+    modpack.profiles = modpack.profiles.filter((p) => p.id !== profileId);
+
+    if (modpack.profiles.length === initialLength) return false;
+
+    modpack.updated_at = new Date().toISOString();
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return true;
+  }
+
+  async applyProfile(modpackId: string, profileId: string): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack || !modpack.profiles) return false;
+
+    const profile = modpack.profiles.find((p) => p.id === profileId);
+    if (!profile) return false;
+
+    // Apply profile:
+    // Disabled = All mods NOT in profile.
+    // Note: If a mod is in the profile but NO LONGER in the pack (mod_ids),
+    // it won't affect anything because we iterate over modpack.mod_ids.
+    const profileEnabled = new Set(profile.enabled_mod_ids);
+    const disabledIds = modpack.mod_ids.filter((id) => !profileEnabled.has(id));
+
+    modpack.disabled_mod_ids = disabledIds;
+    modpack.updated_at = new Date().toISOString();
+
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+
+    // Record in version control
+    try {
+      await this.createVersion(modpackId, `Applied profile: ${profile.name}`);
+    } catch (err) {
+      console.error("Failed to create version for profile apply:", err);
+      // Continue even if version control fails
+    }
+
+    return true;
   }
 
   // ==================== VERSION CONTROL ====================
@@ -1315,11 +1408,16 @@ export class MetadataManager {
     const modLinks = sortedMods
       .map((mod) => {
         // Determine URL path based on content type
-        const urlPath = mod.content_type === "resourcepack" ? "texture-packs" :
-          mod.content_type === "shader" ? "shaders" : "mc-mods";
+        const urlPath =
+          mod.content_type === "resourcepack"
+            ? "texture-packs"
+            : mod.content_type === "shader"
+            ? "shaders"
+            : "mc-mods";
         const url =
           mod.website_url ||
-          `https://www.curseforge.com/minecraft/${urlPath}/${mod.slug || mod.cf_project_id
+          `https://www.curseforge.com/minecraft/${urlPath}/${
+            mod.slug || mod.cf_project_id
           }`;
         const author = mod.author || "Unknown";
         return `<li><a href="${url}">${mod.name} (by ${author})</a></li>`;
@@ -1447,14 +1545,16 @@ ${modLinks}
 
       // Sanitize Gist URL: Remove commit hash if present to ensure we get HEAD
       // Format: https://gist.githubusercontent.com/<user>/<id>/raw/<hash>/<file>
-      const gistRegex = /^(https:\/\/gist\.githubusercontent\.com\/[^/]+\/[^/]+\/raw)\/[0-9a-f]{40}\/(.+)$/;
+      const gistRegex =
+        /^(https:\/\/gist\.githubusercontent\.com\/[^/]+\/[^/]+\/raw)\/[0-9a-f]{40}\/(.+)$/;
       const match = urlToFetch.match(gistRegex);
       if (match) {
         urlToFetch = `${match[1]}/${match[2]}`;
       }
 
       // For Gist URLs, use the GitHub API to get the latest content (bypasses caching)
-      const gistApiRegex = /^https:\/\/gist\.githubusercontent\.com\/([^/]+)\/([^/]+)\/raw\/(.+)$/;
+      const gistApiRegex =
+        /^https:\/\/gist\.githubusercontent\.com\/([^/]+)\/([^/]+)\/raw\/(.+)$/;
       const apiMatch = urlToFetch.match(gistApiRegex);
 
       let remoteManifest: any;
@@ -1467,14 +1567,16 @@ ${modLinks}
 
         const apiResponse = await fetch(apiUrl, {
           headers: {
-            'Accept': 'application/vnd.github.v3+json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          }
+            Accept: "application/vnd.github.v3+json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+          },
         });
 
         if (!apiResponse.ok) {
-          throw new Error(`GitHub API request failed: ${apiResponse.statusText}`);
+          throw new Error(
+            `GitHub API request failed: ${apiResponse.statusText}`
+          );
         }
 
         const gistData = await apiResponse.json();
@@ -1482,7 +1584,11 @@ ${modLinks}
         // Find the file in the gist
         const file = gistData.files[filename];
         if (!file) {
-          throw new Error(`File "${filename}" not found in gist. Available: ${Object.keys(gistData.files).join(', ')}`);
+          throw new Error(
+            `File "${filename}" not found in gist. Available: ${Object.keys(
+              gistData.files
+            ).join(", ")}`
+          );
         }
 
         // Parse the content
@@ -1494,11 +1600,14 @@ ${modLinks}
 
         const response = await fetch(urlObj.toString(), {
           headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          }
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+          },
         });
-        if (!response.ok) throw new Error(`Failed to fetch remote manifest: ${response.statusText}`);
+        if (!response.ok)
+          throw new Error(
+            `Failed to fetch remote manifest: ${response.statusText}`
+          );
 
         remoteManifest = await response.json();
       }
@@ -1520,14 +1629,16 @@ ${modLinks}
       const currentProjectMap = new Map<string, Mod>(); // Key: project-id only (to detect updates)
 
       for (const mod of currentMods) {
-        const key = mod.source === 'curseforge'
-          ? `cf-${mod.cf_project_id}-${mod.cf_file_id}`
-          : `mr-${mod.mr_project_id}-${mod.mr_version_id}`;
+        const key =
+          mod.source === "curseforge"
+            ? `cf-${mod.cf_project_id}-${mod.cf_file_id}`
+            : `mr-${mod.mr_project_id}-${mod.mr_version_id}`;
         currentMap.set(key, mod);
 
-        const projectKey = mod.source === 'curseforge'
-          ? `cf-${mod.cf_project_id}`
-          : `mr-${mod.mr_project_id}`;
+        const projectKey =
+          mod.source === "curseforge"
+            ? `cf-${mod.cf_project_id}`
+            : `mr-${mod.mr_project_id}`;
         currentProjectMap.set(projectKey, mod);
       }
 
@@ -1535,13 +1646,15 @@ ${modLinks}
       const remoteProjectKeys = new Set<string>();
 
       for (const rMod of remoteMods) {
-        const key = rMod.source === 'curseforge'
-          ? `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`
-          : `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
+        const key =
+          rMod.source === "curseforge"
+            ? `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`
+            : `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
 
-        const projectKey = rMod.source === 'curseforge'
-          ? `cf-${rMod.cf_project_id}`
-          : `mr-${rMod.mr_project_id}`;
+        const projectKey =
+          rMod.source === "curseforge"
+            ? `cf-${rMod.cf_project_id}`
+            : `mr-${rMod.mr_project_id}`;
 
         remoteProjectKeys.add(projectKey);
 
@@ -1552,7 +1665,9 @@ ${modLinks}
             const oldMod = currentProjectMap.get(projectKey)!;
             // Only report update if version string is different or file ID is different
             // This prevents "phantom" updates if IDs match but something else differs
-            updatedMods.push(`${oldMod.name} (${oldMod.version} → ${rMod.version})`);
+            updatedMods.push(
+              `${oldMod.name} (${oldMod.version} → ${rMod.version})`
+            );
           } else {
             // New project -> Add
             addedMods.push({ name: rMod.name, version: rMod.version });
@@ -1578,7 +1693,7 @@ ${modLinks}
       for (const rMod of remoteMods) {
         // Find the corresponding local mod ID (or what it will be)
         let modId = "";
-        if (rMod.source === 'curseforge') {
+        if (rMod.source === "curseforge") {
           modId = `cf-${rMod.cf_project_id}-${rMod.cf_file_id}`;
         } else {
           modId = `mr-${rMod.mr_project_id}-${rMod.mr_version_id}`;
@@ -1591,9 +1706,10 @@ ${modLinks}
         // But if the mod is being updated, the ID changes.
         // So we should check if the PROJECT was disabled locally.
 
-        const projectKey = rMod.source === 'curseforge'
-          ? `cf-${rMod.cf_project_id}`
-          : `mr-${rMod.mr_project_id}`;
+        const projectKey =
+          rMod.source === "curseforge"
+            ? `cf-${rMod.cf_project_id}`
+            : `mr-${rMod.mr_project_id}`;
 
         const localMod = currentProjectMap.get(projectKey);
 
@@ -1608,29 +1724,37 @@ ${modLinks}
         }
       }
 
-      const hasUpdate = addedMods.length > 0 || removedMods.length > 0 || updatedMods.length > 0 || enabledMods.length > 0 || disabledMods.length > 0;
+      const hasUpdate =
+        addedMods.length > 0 ||
+        removedMods.length > 0 ||
+        updatedMods.length > 0 ||
+        enabledMods.length > 0 ||
+        disabledMods.length > 0;
 
       // Update last_checked timestamp
       if (modpack.remote_source) {
         modpack.remote_source.last_checked = new Date().toISOString();
-        await this.updateModpack(modpackId, { remote_source: modpack.remote_source });
+        await this.updateModpack(modpackId, {
+          remote_source: modpack.remote_source,
+        });
       }
 
       return {
         hasUpdate,
         remoteManifest: hasUpdate ? remoteManifest : undefined,
-        changes: hasUpdate ? {
-          added: addedMods.length,
-          removed: removedMods.length,
-          updated: updatedMods.length,
-          addedMods,
-          removedMods,
-          updatedMods,
-          enabledMods,
-          disabledMods
-        } : undefined
+        changes: hasUpdate
+          ? {
+              added: addedMods.length,
+              removed: removedMods.length,
+              updated: updatedMods.length,
+              addedMods,
+              removedMods,
+              updatedMods,
+              enabledMods,
+              disabledMods,
+            }
+          : undefined,
       };
-
     } catch (error) {
       console.error("Remote update check failed:", error);
       throw error;
@@ -1682,8 +1806,9 @@ ${modLinks}
       version: manifest.version || "1.0.0",
       minecraft_version: mcVersion,
       loader,
-      description: `Imported from CurseForge. Author: ${manifest.author || "Unknown"
-        }`,
+      description: `Imported from CurseForge. Author: ${
+        manifest.author || "Unknown"
+      }`,
     });
 
     const errors: string[] = [];
@@ -1942,7 +2067,8 @@ ${modLinks}
     if (targetModpackId) {
       existingModpack = await this.getModpackById(targetModpackId);
     } else {
-      existingModpack = (await this.findModpackByShareCode(manifest.share_code)) || undefined;
+      existingModpack =
+        (await this.findModpackByShareCode(manifest.share_code)) || undefined;
     }
 
     const isUpdate = !!existingModpack;
@@ -2303,7 +2429,8 @@ ${modLinks}
 
         await this.saveVersionHistory(existingHistory);
         console.log(
-          `[Import] Imported ${importedCount} new version history entries (${manifest.version_history.length - importedCount
+          `[Import] Imported ${importedCount} new version history entries (${
+            manifest.version_history.length - importedCount
           } duplicates skipped)`
         );
       }
@@ -2312,20 +2439,20 @@ ${modLinks}
     // Calculate changes if update
     let changes:
       | {
-        added: number;
-        removed: number;
-        unchanged: number;
-        updated: number;
-        downloaded: number;
-        enabled: number;
-        disabled: number;
-        addedMods: string[];
-        removedMods: string[];
-        updatedMods: string[];
-        downloadedMods: string[];
-        enabledMods: string[];
-        disabledMods: string[];
-      }
+          added: number;
+          removed: number;
+          unchanged: number;
+          updated: number;
+          downloaded: number;
+          enabled: number;
+          disabled: number;
+          addedMods: string[];
+          removedMods: string[];
+          updatedMods: string[];
+          downloadedMods: string[];
+          enabledMods: string[];
+          disabledMods: string[];
+        }
       | undefined;
     if (isUpdate) {
       const oldSet = new Set(oldModIds);
@@ -2575,20 +2702,20 @@ ${modLinks}
     // Calculate changes
     let changes:
       | {
-        added: number;
-        removed: number;
-        unchanged: number;
-        updated: number;
-        downloaded: number;
-        enabled: number;
-        disabled: number;
-        addedMods: string[];
-        removedMods: string[];
-        updatedMods: string[];
-        downloadedMods: string[];
-        enabledMods: string[];
-        disabledMods: string[];
-      }
+          added: number;
+          removed: number;
+          unchanged: number;
+          updated: number;
+          downloaded: number;
+          enabled: number;
+          disabled: number;
+          addedMods: string[];
+          removedMods: string[];
+          updatedMods: string[];
+          downloadedMods: string[];
+          enabledMods: string[];
+          disabledMods: string[];
+        }
       | undefined;
 
     if (isUpdate) {

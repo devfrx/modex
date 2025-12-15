@@ -11,6 +11,7 @@ import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import AddToModpackDialog from "@/components/modpacks/AddToModpackDialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
 import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
+import ModUpdateDialog from "@/components/mods/ModUpdateDialog.vue";
 import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
@@ -132,6 +133,8 @@ const showCreateModpackDialog = ref(false);
 const showAddToModpackDialog = ref(false);
 const showMoveToFolderDialog = ref(false);
 const showUpdatesDialog = ref(false);
+const showSingleModUpdateDialog = ref(false);
+const selectedUpdateMod = ref<any>(null);
 const modToDelete = ref<string | null>(null);
 
 // Mod usage warning state
@@ -791,7 +794,6 @@ async function confirmDelete(modId: string) {
   );
 
   if (usage.length > 0) {
-    // Show usage warning dialog
     modUsageInfo.value = usage;
     pendingDeleteModIds.value = [modId];
     showUsageWarningDialog.value = true;
@@ -800,6 +802,15 @@ async function confirmDelete(modId: string) {
     modToDelete.value = modId;
     showDeleteDialog.value = true;
   }
+}
+
+function openUpdateDialog(mod: any) {
+  selectedUpdateMod.value = mod;
+  showSingleModUpdateDialog.value = true;
+}
+
+function handleModUpdated() {
+  loadMods();
 }
 
 async function deleteMod() {
@@ -1575,6 +1586,7 @@ onMounted(() => {
         @toggle-select="toggleSelection"
         @show-details="showModDetails"
         @toggle-favorite="toggleFavorite"
+        @request-update="openUpdateDialog"
       />
     </div>
 
@@ -2114,6 +2126,15 @@ onMounted(() => {
       :open="showUpdatesDialog"
       @close="showUpdatesDialog = false"
       @updated="loadMods"
+    />
+
+    <ModUpdateDialog
+      :open="showSingleModUpdateDialog"
+      :mod="selectedUpdateMod"
+      :minecraft-version="selectedUpdateMod?.game_version || '1.20.1'"
+      :loader="selectedUpdateMod?.loader || 'forge'"
+      @close="showSingleModUpdateDialog = false"
+      @updated="handleModUpdated"
     />
 
     <!-- CurseForge Search Dialog -->

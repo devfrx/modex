@@ -20,9 +20,11 @@ import {
   Image,
   Sparkles,
   Layers,
+  FileText,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
+import ChangelogDialog from "./ChangelogDialog.vue";
 import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
 import type { Modpack } from "@/types/electron";
@@ -54,6 +56,27 @@ const hasApiKey = ref(false);
 const currentPage = ref(0);
 const totalResults = ref(0);
 const pageSize = 20;
+
+// Changelog State
+const changelogOpen = ref(false);
+const selectedChangelogMod = ref<{
+  id: number;
+  name: string;
+  fileId: number;
+  version: string;
+  slug: string;
+} | null>(null);
+
+function viewChangelog(mod: any, file: any) {
+  selectedChangelogMod.value = {
+    id: mod.id,
+    name: mod.name,
+    fileId: file.id,
+    version: file.displayName,
+    slug: mod.slug,
+  };
+  changelogOpen.value = true;
+}
 
 // Accordion & Files State
 const expandedModId = ref<number | null>(null);
@@ -1506,29 +1529,42 @@ function getReleaseColor(type: number) {
                       </div>
                     </div>
 
-                    <Button
-                      v-if="!isSelectionMode"
-                      size="sm"
-                      :variant="
-                        isFileInstalled(mod.id, file.id) ? 'secondary' : 'ghost'
-                      "
-                      class="h-8 w-24 ml-2 text-xs"
-                      :disabled="
-                        isFileInstalled(mod.id, file.id) ||
-                        isAddingMod === mod.id
-                      "
-                      @click="addFileToLibrary(mod, file)"
-                    >
-                      <Check
-                        v-if="isFileInstalled(mod.id, file.id)"
-                        class="w-3 h-3 mr-1.5"
-                      />
-                      {{
-                        isFileInstalled(mod.id, file.id)
-                          ? "Installed"
-                          : "Install"
-                      }}
-                    </Button>
+                    <div v-if="!isSelectionMode" class="flex items-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-8 w-8 text-muted-foreground mr-1"
+                        title="View Changelog"
+                        @click.stop="viewChangelog(mod, file)"
+                      >
+                        <FileText class="w-4 h-4" />
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        :variant="
+                          isFileInstalled(mod.id, file.id)
+                            ? 'secondary'
+                            : 'ghost'
+                        "
+                        class="h-8 w-24 ml-2 text-xs"
+                        :disabled="
+                          isFileInstalled(mod.id, file.id) ||
+                          isAddingMod === mod.id
+                        "
+                        @click="addFileToLibrary(mod, file)"
+                      >
+                        <Check
+                          v-if="isFileInstalled(mod.id, file.id)"
+                          class="w-3 h-3 mr-1.5"
+                        />
+                        {{
+                          isFileInstalled(mod.id, file.id)
+                            ? "Installed"
+                            : "Install"
+                        }}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1563,6 +1599,16 @@ function getReleaseColor(type: number) {
         </div>
       </div>
     </div>
+    <ChangelogDialog
+      v-if="selectedChangelogMod"
+      :open="changelogOpen"
+      :mod-id="selectedChangelogMod.id"
+      :file-id="selectedChangelogMod.fileId"
+      :mod-name="selectedChangelogMod.name"
+      :version="selectedChangelogMod.version"
+      :slug="selectedChangelogMod.slug"
+      @close="changelogOpen = false"
+    />
   </Dialog>
 </template>
 

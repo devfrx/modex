@@ -106,7 +106,9 @@ contextBridge.exposeInMainWorld("api", {
       options?: { gameVersion?: string; modLoader?: string }
     ): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getModFiles", modId, options),
-    getCategories: (contentType?: "mods" | "resourcepacks" | "shaders"): Promise<any[]> =>
+    getCategories: (
+      contentType?: "mods" | "resourcepacks" | "shaders"
+    ): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getCategories", contentType),
     getPopular: (gameVersion?: string, modLoader?: string): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getPopular", gameVersion, modLoader),
@@ -121,6 +123,27 @@ contextBridge.exposeInMainWorld("api", {
         projectId,
         fileId,
         preferredLoader,
+        contentType
+      ),
+    getChangelog: (modId: number, fileId: number): Promise<string> =>
+      ipcRenderer.invoke("curseforge:getChangelog", modId, fileId),
+    getRecommendations: (
+      installedCategoryIds: number[],
+      gameVersion?: string,
+      modLoader?: string,
+      excludeModIds?: number[],
+      limit?: number,
+      randomize?: boolean,
+      contentType: "mod" | "resourcepack" | "shader" = "mod"
+    ): Promise<Array<{ mod: any; reason: string }>> =>
+      ipcRenderer.invoke(
+        "curseforge:getRecommendations",
+        installedCategoryIds,
+        gameVersion,
+        modLoader,
+        excludeModIds,
+        limit,
+        randomize,
         contentType
       ),
   },
@@ -173,6 +196,16 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:setImage", modpackId, imageUrl),
     openFolder: (modpackId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:openFolder", modpackId),
+
+    // Profiles
+    createProfile: (modpackId: string, name: string): Promise<any | null> =>
+      ipcRenderer.invoke("modpacks:createProfile", modpackId, name),
+
+    deleteProfile: (modpackId: string, profileId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:deleteProfile", modpackId, profileId),
+
+    applyProfile: (modpackId: string, profileId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:applyProfile", modpackId, profileId),
   },
 
   // ========== VERSION CONTROL ==========
@@ -301,7 +334,8 @@ contextBridge.exposeInMainWorld("api", {
       conflicts?: any[];
       isUpdate?: boolean;
       changes?: any;
-    } | null> => ipcRenderer.invoke("import:modex:manifest", manifest, modpackId),
+    } | null> =>
+      ipcRenderer.invoke("import:modex:manifest", manifest, modpackId),
     resolveConflicts: (data: {
       modpackId: string;
       conflicts: Array<{
@@ -353,7 +387,9 @@ contextBridge.exposeInMainWorld("api", {
   remote: {
     exportManifest: (modpackId: string): Promise<string> =>
       ipcRenderer.invoke("remote:exportManifest", modpackId),
-    checkUpdate: (modpackId: string): Promise<{
+    checkUpdate: (
+      modpackId: string
+    ): Promise<{
       hasUpdate: boolean;
       remoteManifest?: any;
       changes?: {
@@ -379,20 +415,18 @@ contextBridge.exposeInMainWorld("api", {
     getApiKey: (source: "curseforge" | "modrinth"): Promise<string> =>
       ipcRenderer.invoke("updates:getApiKey", source),
     checkMod: (
-      modId: string
-    ): Promise<{
-      modId: string;
-      currentVersion: string;
-      latestVersion: string | null;
-      hasUpdate: boolean;
-      updateUrl: string | null;
-      source: string;
-      projectId: string | null;
-      projectName: string | null;
-      changelog: string | null;
-      releaseDate: string | null;
-      newFileId?: number;
-    }> => ipcRenderer.invoke("updates:checkMod", modId),
+      modId: number,
+      gameVersion: string,
+      loader: string,
+      contentType: "mod" | "resourcepack" | "shader"
+    ) =>
+      ipcRenderer.invoke(
+        "updates:checkMod",
+        modId,
+        gameVersion,
+        loader,
+        contentType
+      ),
     checkAll: (): Promise<
       Array<{
         modId: string;

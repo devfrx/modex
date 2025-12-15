@@ -12,6 +12,7 @@ import {
   Sparkles,
   Globe,
   Package,
+  RefreshCw,
 } from "lucide-vue-next";
 import type { Mod } from "@/types/electron";
 import Button from "@/components/ui/Button.vue";
@@ -31,6 +32,7 @@ const emit = defineEmits<{
   (e: "toggle-select", id: string): void;
   (e: "show-details", mod: Mod): void;
   (e: "toggle-favorite", id: string): void;
+  (e: "request-update", mod: Mod): void;
 }>();
 
 function formatDownloads(count: number): string {
@@ -258,6 +260,16 @@ const typeConfig = contentTypeConfig[contentType] || contentTypeConfig.mod;
 
           <!-- Actions Row -->
           <div class="flex items-center gap-1" @click.stop>
+            <Button
+              v-if="mod.cf_project_id"
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7 text-muted-foreground/70 hover:text-green-500 hover:bg-green-500/10"
+              @click.stop="$emit('request-update', mod)"
+              title="Check for Update"
+            >
+              <RefreshCw class="w-3.5 h-3.5" />
+            </Button>
             <Button
               v-if="mod.slug"
               variant="ghost"

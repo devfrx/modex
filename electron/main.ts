@@ -197,9 +197,19 @@ async function initializeBackend() {
     }
   );
 
-  ipcMain.handle("curseforge:getCategories", async (_, contentType?: string) => {
-    return curseforgeService.getCategories(contentType as any);
-  });
+  ipcMain.handle(
+    "curseforge:getChangelog",
+    async (_, modId: number, fileId: number) => {
+      return curseforgeService.getFileChangelog(modId, fileId);
+    }
+  );
+
+  ipcMain.handle(
+    "curseforge:getCategories",
+    async (_, contentType?: string) => {
+      return curseforgeService.getCategories(contentType as any);
+    }
+  );
 
   ipcMain.handle(
     "curseforge:getPopular",
@@ -208,10 +218,40 @@ async function initializeBackend() {
     }
   );
 
+  ipcMain.handle(
+    "curseforge:getRecommendations",
+    async (
+      _,
+      installedCategoryIds: number[],
+      gameVersion?: string,
+      modLoader?: string,
+      excludeModIds?: number[],
+      limit?: number,
+      randomize?: boolean,
+      contentType: "mod" | "resourcepack" | "shader" = "mod"
+    ) => {
+      return curseforgeService.getRecommendations(
+        installedCategoryIds,
+        gameVersion,
+        modLoader,
+        excludeModIds || [],
+        limit,
+        randomize,
+        contentType
+      );
+    }
+  );
+
   // Add mod from CurseForge to library (metadata only)
   ipcMain.handle(
     "curseforge:addToLibrary",
-    async (_, projectId: number, fileId: number, preferredLoader?: string, contentType?: string) => {
+    async (
+      _,
+      projectId: number,
+      fileId: number,
+      preferredLoader?: string,
+      contentType?: string
+    ) => {
       try {
         // Check if mod already exists in library
         const existingMod = await metadataManager.findModByCFIds(
@@ -370,6 +410,29 @@ async function initializeBackend() {
       return false;
     }
   });
+
+  // ========== MODPACK PROFILES ==========
+
+  ipcMain.handle(
+    "modpacks:createProfile",
+    async (_, modpackId: string, name: string) => {
+      return metadataManager.createProfile(modpackId, name);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:deleteProfile",
+    async (_, modpackId: string, profileId: string) => {
+      return metadataManager.deleteProfile(modpackId, profileId);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:applyProfile",
+    async (_, modpackId: string, profileId: string) => {
+      return metadataManager.applyProfile(modpackId, profileId);
+    }
+  );
 
   // ========== VERSION CONTROL IPC HANDLERS ==========
 
@@ -892,28 +955,39 @@ async function initializeBackend() {
     }
   });
 
-  ipcMain.handle("import:modex:manifest", async (_, manifest: any, modpackId?: string) => {
-    if (!win) return null;
+  ipcMain.handle(
+    "import:modex:manifest",
+    async (_, manifest: any, modpackId?: string) => {
+      if (!win) return null;
 
-    try {
-      // Progress callback that sends events to renderer
-      const onProgress = (current: number, total: number, modName: string) => {
-        if (win) {
-          win.webContents.send("import:progress", { current, total, modName });
-        }
-      };
+      try {
+        // Progress callback that sends events to renderer
+        const onProgress = (
+          current: number,
+          total: number,
+          modName: string
+        ) => {
+          if (win) {
+            win.webContents.send("import:progress", {
+              current,
+              total,
+              modName,
+            });
+          }
+        };
 
-      return metadataManager.importFromModex(
-        manifest,
-        curseforgeService,
-        onProgress,
-        modpackId
-      );
-    } catch (error: any) {
-      console.log("[IPC] Import manifest error:", error.message);
-      throw new Error(error.message);
+        return metadataManager.importFromModex(
+          manifest,
+          curseforgeService,
+          onProgress,
+          modpackId
+        );
+      } catch (error: any) {
+        console.log("[IPC] Import manifest error:", error.message);
+        throw new Error(error.message);
+      }
     }
-  });
+  );
 
   // Handler for resolving MODEX import conflicts
   ipcMain.handle(
@@ -993,90 +1067,12 @@ async function initializeBackend() {
     }
   );
 
-  ipcMain.handle("updates:checkMod", async (_, modId: string) => {
-    const mod = await metadataManager.getModById(modId);
-    if (!mod) throw new Error("Mod not found");
-
-    if (mod.source !== "curseforge" || !mod.cf_project_id || !mod.cf_file_id) {
-      return {
-        modId,
-        currentVersion: mod.version,
-        latestVersion: null,
-        hasUpdate: false,
-        updateUrl: null,
-        source: mod.source,
-        projectId: null,
-        projectName: null,
-        changelog: null,
-        releaseDate: null,
-      };
-    }
-
-    try {
-      // Get latest file for this mod's game version and loader
-      // For resourcepacks/shaders, loader is ignored
-      const latestFile = await curseforgeService.getBestFile(
-        mod.cf_project_id,
-        mod.game_version,
-        mod.loader,
-        mod.content_type
-      );
-
-      // Determine URL path based on content type
-      const urlPath = mod.content_type === "resourcepack" ? "texture-packs" :
-        mod.content_type === "shader" ? "shaders" : "mc-mods";
-
-      if (!latestFile) {
-        return {
-          modId,
-          currentVersion: mod.version,
-          latestVersion: null,
-          hasUpdate: false,
-          updateUrl: null,
-          source: "curseforge",
-          projectId: mod.cf_project_id.toString(),
-          projectName: mod.name,
-          changelog: null,
-          releaseDate: null,
-        };
-      }
-
-      const hasUpdate = latestFile.id !== mod.cf_file_id;
-
-      return {
-        modId,
-        currentVersion: mod.version,
-        latestVersion: hasUpdate ? latestFile.displayName : mod.version,
-        hasUpdate,
-        updateUrl: `https://www.curseforge.com/minecraft/${urlPath}/${mod.slug}`,
-        source: "curseforge",
-        projectId: mod.cf_project_id.toString(),
-        projectName: mod.name,
-        changelog: null,
-        releaseDate: latestFile.fileDate,
-        newFileId: hasUpdate ? latestFile.id : undefined,
-      };
-    } catch (error) {
-      console.error("Error checking mod update:", error);
-      return {
-        modId,
-        currentVersion: mod.version,
-        latestVersion: null,
-        hasUpdate: false,
-        updateUrl: null,
-        source: "curseforge",
-        projectId: mod.cf_project_id.toString(),
-        projectName: mod.name,
-        changelog: null,
-        releaseDate: null,
-      };
-    }
-  });
-
   ipcMain.handle("updates:checkAll", async (event) => {
     const mods = await metadataManager.getAllMods();
     const results = [];
-    const cfMods = mods.filter(m => m.source === "curseforge" && m.cf_project_id);
+    const cfMods = mods.filter(
+      (m) => m.source === "curseforge" && m.cf_project_id
+    );
     let current = 0;
 
     for (const mod of cfMods) {
@@ -1085,7 +1081,7 @@ async function initializeBackend() {
       event.sender.send("updates:progress", {
         current,
         total: cfMods.length,
-        modName: mod.name
+        modName: mod.name,
       });
 
       try {
@@ -1124,6 +1120,30 @@ async function initializeBackend() {
     return results;
   });
 
+  ipcMain.handle(
+    "updates:checkMod",
+    async (
+      _,
+      modId: number,
+      gameVersion: string,
+      loader: string,
+      contentType: "mod" | "resourcepack" | "shader" = "mod"
+    ) => {
+      try {
+        const latestFile = await curseforgeService.getBestFile(
+          modId,
+          gameVersion,
+          loader,
+          contentType
+        );
+        return latestFile; // Return full file object or null
+      } catch (err) {
+        console.error(`[IPC] Failed to check mod update for ${modId}:`, err);
+        return null;
+      }
+    }
+  );
+
   ipcMain.handle("updates:checkModpack", async (event, modpackId: string) => {
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) throw new Error("Modpack not found");
@@ -1134,7 +1154,9 @@ async function initializeBackend() {
     const mcVersion = modpack.minecraft_version || "1.20.1";
     const loader = modpack.loader || "forge";
 
-    const cfMods = mods.filter(m => m.source === "curseforge" && m.cf_project_id);
+    const cfMods = mods.filter(
+      (m) => m.source === "curseforge" && m.cf_project_id
+    );
     let current = 0;
 
     for (const mod of cfMods) {
@@ -1143,7 +1165,7 @@ async function initializeBackend() {
       event.sender.send("updates:progress", {
         current,
         total: cfMods.length,
-        modName: mod.name
+        modName: mod.name,
       });
 
       try {

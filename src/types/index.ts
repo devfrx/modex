@@ -176,6 +176,16 @@ export interface Modpack {
     /** Last time updates were checked */
     last_checked?: string;
   };
+
+  /** Saved configuration profiles (sets of enabled mods) */
+  profiles?: ModpackProfile[];
+}
+
+export interface ModpackProfile {
+  id: string;
+  name: string;
+  enabled_mod_ids: string[];
+  created_at: string;
 }
 
 // ==================== MODPACK CREATION ====================

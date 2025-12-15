@@ -14,7 +14,9 @@ import {
   Key,
   Settings,
   ArrowUpCircle,
+  FileText,
 } from "lucide-vue-next";
+import ChangelogDialog from "./ChangelogDialog.vue";
 import type { ModUpdateInfo } from "@/types/electron";
 
 const props = defineProps<{
@@ -37,6 +39,39 @@ const updatingMods = ref<Set<string>>(new Set());
 const showSettings = ref(false);
 const curseforgeApiKey = ref("");
 const savingKey = ref(false);
+
+// Changelog
+const changelogOpen = ref(false);
+const selectedChangelogMod = ref<{
+  id: number;
+  name: string;
+  fileId: number;
+  version: string;
+  slug: string;
+} | null>(null);
+
+function getSlugFromUrl(url: string | null): string {
+  if (!url) return "";
+  try {
+    const match = url.match(/\/mc-mods\/([^\/]+)/);
+    return match ? match[1] : "";
+  } catch {
+    return "";
+  }
+}
+
+function viewChangelog(update: ModUpdateInfo) {
+  if (!update.projectId || !update.newFileId) return;
+
+  selectedChangelogMod.value = {
+    id: parseInt(update.projectId),
+    fileId: update.newFileId,
+    name: update.projectName || "Unknown Mod",
+    version: update.latestVersion || "",
+    slug: getSlugFromUrl(update.updateUrl),
+  };
+  changelogOpen.value = true;
+}
 
 // Computed
 const availableUpdates = computed(() =>
@@ -68,7 +103,11 @@ async function checkForUpdates() {
   checkProgress.value = { current: 0, total: 0, modName: "" };
 
   // Listen for progress updates
-  const progressHandler = (data: { current: number; total: number; modName: string }) => {
+  const progressHandler = (data: {
+    current: number;
+    total: number;
+    modName: string;
+  }) => {
     checkProgress.value = data;
   };
   window.api.on("updates:progress", progressHandler);
@@ -133,7 +172,10 @@ async function saveApiKey() {
   try {
     await window.api.updates.setApiKey("curseforge", curseforgeApiKey.value);
     showSettings.value = false;
-    toast.success("API Key Saved", "CurseForge API key has been saved successfully.");
+    toast.success(
+      "API Key Saved",
+      "CurseForge API key has been saved successfully."
+    );
   } catch (err) {
     toast.error("Save Failed", (err as Error).message);
   } finally {
@@ -171,62 +213,107 @@ function getSourceLabel(source: string) {
 </script>
 
 <template>
-  <Dialog :open="open" title="Aggiornamenti Mod" maxWidth="2xl" @close="$emit('close')">
+  <Dialog
+    :open="open"
+    title="Aggiornamenti Mod"
+    maxWidth="2xl"
+    @close="$emit('close')"
+  >
     <div class="max-h-[70vh] flex flex-col overflow-hidden">
       <!-- Header Actions -->
-      <div class="flex items-center justify-between mb-4 pb-4 border-b border-border">
+      <div
+        class="flex items-center justify-between mb-4 pb-4 border-b border-border"
+      >
         <div class="flex items-center gap-2">
           <Button @click="checkForUpdates" :disabled="isLoading" class="gap-2">
             <RefreshCw :class="['w-4 h-4', isLoading && 'animate-spin']" />
             {{ isLoading ? "Controllo..." : "Controlla Aggiornamenti" }}
           </Button>
 
-          <Button v-if="updateCount > 0" @click="applyAllUpdates" variant="secondary" class="gap-2">
+          <Button
+            v-if="updateCount > 0"
+            @click="applyAllUpdates"
+            variant="secondary"
+            class="gap-2"
+          >
             <Download class="w-4 h-4" />
             Aggiorna Tutti ({{ updateCount }})
           </Button>
         </div>
 
-        <Button variant="ghost" size="icon" @click="showSettings = !showSettings" title="Impostazioni API">
+        <Button
+          variant="ghost"
+          size="icon"
+          @click="showSettings = !showSettings"
+          title="Impostazioni API"
+        >
           <Settings class="w-4 h-4" />
         </Button>
       </div>
 
       <!-- Settings Panel -->
-      <div v-if="showSettings" class="mb-4 p-4 rounded-lg bg-muted/50 border border-border space-y-3">
+      <div
+        v-if="showSettings"
+        class="mb-4 p-4 rounded-lg bg-muted/50 border border-border space-y-3"
+      >
         <div class="text-sm font-medium flex items-center gap-2">
           <Key class="w-4 h-4" />
           API Keys
         </div>
 
         <!-- Progress indicator during check -->
-        <div v-if="isLoading && checkProgress.total > 0" class="mb-4 p-3 rounded-lg bg-muted/30 border border-border">
+        <div
+          v-if="isLoading && checkProgress.total > 0"
+          class="mb-4 p-3 rounded-lg bg-muted/30 border border-border"
+        >
           <div class="flex items-center justify-between text-sm mb-2">
-            <span class="text-muted-foreground">Controllo aggiornamenti...</span>
-            <span class="font-medium">{{ checkProgress.current }} / {{ checkProgress.total }}</span>
+            <span class="text-muted-foreground"
+              >Controllo aggiornamenti...</span
+            >
+            <span class="font-medium"
+              >{{ checkProgress.current }} / {{ checkProgress.total }}</span
+            >
           </div>
           <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
-            <div class="bg-primary h-full transition-all duration-300"
-              :style="{ width: `${(checkProgress.current / checkProgress.total) * 100}%` }">
-            </div>
+            <div
+              class="bg-primary h-full transition-all duration-300"
+              :style="{
+                width: `${
+                  (checkProgress.current / checkProgress.total) * 100
+                }%`,
+              }"
+            ></div>
           </div>
-          <div v-if="checkProgress.modName" class="text-xs text-muted-foreground mt-1.5 truncate">
+          <div
+            v-if="checkProgress.modName"
+            class="text-xs text-muted-foreground mt-1.5 truncate"
+          >
             {{ checkProgress.modName }}
           </div>
         </div>
 
         <div class="space-y-2">
-          <label class="text-xs text-muted-foreground">CurseForge API Key</label>
+          <label class="text-xs text-muted-foreground"
+            >CurseForge API Key</label
+          >
           <div class="flex gap-2">
-            <Input v-model="curseforgeApiKey" type="password" placeholder="Inserisci la tua API key..."
-              class="flex-1" />
+            <Input
+              v-model="curseforgeApiKey"
+              type="password"
+              placeholder="Inserisci la tua API key..."
+              class="flex-1"
+            />
             <Button @click="saveApiKey" :disabled="savingKey" size="sm">
               {{ savingKey ? "Salvo..." : "Salva" }}
             </Button>
           </div>
           <p class="text-xs text-muted-foreground">
             Ottieni una API key gratuita su
-            <a href="https://console.curseforge.com/" target="_blank" class="text-primary hover:underline">
+            <a
+              href="https://console.curseforge.com/"
+              target="_blank"
+              class="text-primary hover:underline"
+            >
               console.curseforge.com
             </a>
           </p>
@@ -238,8 +325,10 @@ function getSourceLabel(source: string) {
       </div>
 
       <!-- No API Key Warning -->
-      <div v-if="!curseforgeApiKey && !showSettings"
-        class="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-sm flex items-start gap-2">
+      <div
+        v-if="!curseforgeApiKey && !showSettings"
+        class="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-sm flex items-start gap-2"
+      >
         <AlertCircle class="w-4 h-4 mt-0.5 flex-shrink-0" />
         <div>
           <div class="font-medium">API Key CurseForge mancante</div>
@@ -260,14 +349,22 @@ function getSourceLabel(source: string) {
       <div v-if="isLoading && checkProgress.total > 0" class="mb-4 space-y-2">
         <div class="flex items-center justify-between text-sm">
           <span class="text-muted-foreground">Controllo aggiornamenti...</span>
-          <span class="font-medium">{{ checkProgress.current }} / {{ checkProgress.total }}</span>
+          <span class="font-medium"
+            >{{ checkProgress.current }} / {{ checkProgress.total }}</span
+          >
         </div>
         <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
-          <div class="bg-primary h-full transition-all duration-300"
-            :style="{ width: `${(checkProgress.current / checkProgress.total) * 100}%` }">
-          </div>
+          <div
+            class="bg-primary h-full transition-all duration-300"
+            :style="{
+              width: `${(checkProgress.current / checkProgress.total) * 100}%`,
+            }"
+          ></div>
         </div>
-        <div v-if="checkProgress.modName" class="text-xs text-muted-foreground truncate">
+        <div
+          v-if="checkProgress.modName"
+          class="text-xs text-muted-foreground truncate"
+        >
           {{ checkProgress.modName }}
         </div>
       </div>
@@ -275,13 +372,19 @@ function getSourceLabel(source: string) {
       <!-- Update List -->
       <div class="flex-1 overflow-auto space-y-2">
         <!-- Empty State -->
-        <div v-if="!isLoading && updates.length === 0" class="text-center py-8 text-muted-foreground">
+        <div
+          v-if="!isLoading && updates.length === 0"
+          class="text-center py-8 text-muted-foreground"
+        >
           <ArrowUpCircle class="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p>Clicca "Controlla Aggiornamenti" per cercare nuove versioni</p>
         </div>
 
         <!-- No Updates -->
-        <div v-else-if="!isLoading && updateCount === 0 && updates.length > 0" class="text-center py-8">
+        <div
+          v-else-if="!isLoading && updateCount === 0 && updates.length > 0"
+          class="text-center py-8"
+        >
           <Check class="w-12 h-12 mx-auto mb-3 text-green-500" />
           <p class="text-green-600 dark:text-green-400 font-medium">
             Tutte le mod sono aggiornate!
@@ -289,8 +392,11 @@ function getSourceLabel(source: string) {
         </div>
 
         <!-- Update Items -->
-        <div v-for="update in availableUpdates" :key="update.modId"
-          class="p-3 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors overflow-hidden">
+        <div
+          v-for="update in availableUpdates"
+          :key="update.modId"
+          class="p-3 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors overflow-hidden"
+        >
           <div class="flex items-start justify-between gap-3 min-w-0">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
@@ -312,28 +418,61 @@ function getSourceLabel(source: string) {
                 }}</span>
               </div>
 
-              <div v-if="update.releaseDate" class="text-xs text-muted-foreground mt-1">
+              <div
+                v-if="update.releaseDate"
+                class="text-xs text-muted-foreground mt-1"
+              >
                 Rilasciato:
                 {{ new Date(update.releaseDate).toLocaleDateString() }}
               </div>
             </div>
 
             <div class="flex items-center gap-1">
-              <Button v-if="update.updateUrl" variant="ghost" size="icon" class="h-8 w-8"
-                @click="openUrl(update.updateUrl)" title="Apri pagina mod">
+              <Button
+                v-if="update.updateUrl"
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8"
+                @click="openUrl(update.updateUrl)"
+                title="Apri pagina mod"
+              >
                 <ExternalLink class="w-4 h-4" />
               </Button>
 
-              <Button v-if="update.newFileId" size="sm" class="gap-1" :disabled="updatingMods.has(update.modId)"
-                @click="applyUpdate(update)">
-                <RefreshCw v-if="updatingMods.has(update.modId)" class="w-3 h-3 animate-spin" />
+              <Button
+                v-if="update.projectId && update.newFileId"
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8 text-muted-foreground"
+                @click="viewChangelog(update)"
+                title="Vedi Changelog"
+              >
+                <FileText class="w-4 h-4" />
+              </Button>
+
+              <Button
+                v-if="update.newFileId"
+                size="sm"
+                class="gap-1"
+                :disabled="updatingMods.has(update.modId)"
+                @click="applyUpdate(update)"
+              >
+                <RefreshCw
+                  v-if="updatingMods.has(update.modId)"
+                  class="w-3 h-3 animate-spin"
+                />
                 <Download v-else class="w-3 h-3" />
                 {{
                   updatingMods.has(update.modId) ? "Aggiorno..." : "Aggiorna"
                 }}
               </Button>
 
-              <Button v-else variant="outline" size="sm" @click="openUrl(update.updateUrl)">
+              <Button
+                v-else
+                variant="outline"
+                size="sm"
+                @click="openUrl(update.updateUrl)"
+              >
                 <ExternalLink class="w-3 h-3 mr-1" />
                 Manuale
               </Button>
@@ -342,9 +481,12 @@ function getSourceLabel(source: string) {
         </div>
 
         <!-- Unknown Source Mods -->
-        <div v-if="updates.filter((u) => u.source === 'unknown').length > 0" class="mt-4 pt-4 border-t border-border">
+        <div
+          v-if="updates.filter((u) => u.source === 'unknown').length > 0"
+          class="mt-4 pt-4 border-t border-border"
+        >
           <div class="text-xs text-muted-foreground mb-2">
-            {{updates.filter((u) => u.source === "unknown").length}} mod non
+            {{ updates.filter((u) => u.source === "unknown").length }} mod non
             riconosciute (fonte sconosciuta)
           </div>
         </div>
@@ -355,4 +497,15 @@ function getSourceLabel(source: string) {
       <Button variant="outline" @click="$emit('close')">Chiudi</Button>
     </template>
   </Dialog>
+
+  <ChangelogDialog
+    v-if="selectedChangelogMod"
+    :open="changelogOpen"
+    :mod-id="selectedChangelogMod.id"
+    :file-id="selectedChangelogMod.fileId"
+    :mod-name="selectedChangelogMod.name"
+    :version="selectedChangelogMod.version"
+    :slug="selectedChangelogMod.slug"
+    @close="changelogOpen = false"
+  />
 </template>

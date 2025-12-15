@@ -14,6 +14,7 @@ import type {
   ModpackVersion,
   ModpackVersionHistory,
   ModpackChange,
+  ModpackProfile,
 } from "./index";
 
 // Re-export core types
@@ -27,6 +28,7 @@ export type {
   ModpackVersion,
   ModpackVersionHistory,
   ModpackChange,
+  ModpackProfile,
 };
 
 // ==================== MOD USAGE ====================
@@ -60,7 +62,10 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<boolean>;
     bulkDelete: (ids: string[]) => Promise<number>;
     checkUsage: (modIds: string[]) => Promise<ModUsageInfo[]>;
-    deleteWithModpackCleanup: (modIds: string[], removeFromModpacks: boolean) => Promise<number>;
+    deleteWithModpackCleanup: (
+      modIds: string[],
+      removeFromModpacks: boolean
+    ) => Promise<number>;
   };
 
   // ========== CURSEFORGE ==========
@@ -85,7 +90,9 @@ export interface ElectronAPI {
         modLoader?: string;
       }
     ) => Promise<CFFile[]>;
-    getCategories: (contentType?: "mods" | "resourcepacks" | "shaders") => Promise<CFCategory[]>;
+    getCategories: (
+      contentType?: "mods" | "resourcepacks" | "shaders"
+    ) => Promise<CFCategory[]>;
     getPopular: (gameVersion?: string, modLoader?: string) => Promise<CFMod[]>;
     /** Add a mod from CurseForge to library (metadata only, no download) */
     addToLibrary: (
@@ -94,6 +101,17 @@ export interface ElectronAPI {
       preferredLoader?: string,
       contentType?: "mods" | "resourcepacks" | "shaders"
     ) => Promise<Mod | null>;
+    /** Get changelog HTML for a specific file */
+    getChangelog: (modId: number, fileId: number) => Promise<string>;
+    /** Get smart mod recommendations based on installed mod categories */
+    getRecommendations: (
+      installedCategoryIds: number[],
+      gameVersion?: string,
+      modLoader?: string,
+      excludeModIds?: number[],
+      limit?: number,
+      randomize?: boolean
+    ) => Promise<Array<{ mod: CFMod; reason: string }>>;
   };
 
   // ========== MODPACKS ==========
@@ -107,14 +125,28 @@ export interface ElectronAPI {
     addMod: (modpackId: string, modId: string) => Promise<boolean>;
     removeMod: (modpackId: string, modId: string) => Promise<boolean>;
     /** Toggle a mod's enabled/disabled state */
-    toggleMod: (modpackId: string, modId: string) => Promise<{ enabled: boolean } | null>;
+    toggleMod: (
+      modpackId: string,
+      modId: string
+    ) => Promise<{ enabled: boolean } | null>;
     /** Set a mod's enabled state explicitly */
-    setModEnabled: (modpackId: string, modId: string, enabled: boolean) => Promise<boolean>;
+    setModEnabled: (
+      modpackId: string,
+      modId: string,
+      enabled: boolean
+    ) => Promise<boolean>;
     /** Get list of disabled mod IDs */
     getDisabledMods: (modpackId: string) => Promise<string[]>;
     clone: (modpackId: string, newName: string) => Promise<string | null>;
     setImage: (modpackId: string, imageUrl: string) => Promise<boolean>;
     openFolder: (modpackId: string) => Promise<boolean>;
+    // Profiles
+    createProfile: (
+      modpackId: string,
+      name: string
+    ) => Promise<ModpackProfile | null>;
+    deleteProfile: (modpackId: string, profileId: string) => Promise<boolean>;
+    applyProfile: (modpackId: string, profileId: string) => Promise<boolean>;
   };
 
   // ========== VERSION CONTROL ==========
@@ -122,15 +154,29 @@ export interface ElectronAPI {
     /** Get version history for a modpack */
     getHistory: (modpackId: string) => Promise<ModpackVersionHistory | null>;
     /** Initialize version control for a modpack */
-    initialize: (modpackId: string, message?: string) => Promise<ModpackVersion | null>;
+    initialize: (
+      modpackId: string,
+      message?: string
+    ) => Promise<ModpackVersion | null>;
     /** Create a new version (commit) */
-    create: (modpackId: string, message: string, tag?: string) => Promise<ModpackVersion | null>;
+    create: (
+      modpackId: string,
+      message: string,
+      tag?: string
+    ) => Promise<ModpackVersion | null>;
     /** Rollback to a specific version */
     rollback: (modpackId: string, versionId: string) => Promise<RollbackResult>;
     /** Compare two versions */
-    compare: (modpackId: string, fromVersionId: string, toVersionId: string) => Promise<ModpackChange[] | null>;
+    compare: (
+      modpackId: string,
+      fromVersionId: string,
+      toVersionId: string
+    ) => Promise<ModpackChange[] | null>;
     /** Get a specific version */
-    get: (modpackId: string, versionId: string) => Promise<ModpackVersion | null>;
+    get: (
+      modpackId: string,
+      versionId: string
+    ) => Promise<ModpackVersion | null>;
   };
 
   // ========== EXPORT/IMPORT ==========
@@ -230,7 +276,7 @@ export interface ElectronAPI {
       conflicts: Array<{
         modEntry: any;
         existingMod: any;
-        resolution: 'use_existing' | 'use_new';
+        resolution: "use_existing" | "use_new";
       }>;
       partialData: any;
       manifest: any;
@@ -262,7 +308,7 @@ export interface ElectronAPI {
         projectID: number;
         fileID: number;
         existingModId: string;
-        resolution: 'use_existing' | 'use_new';
+        resolution: "use_existing" | "use_new";
       }>;
     }) => Promise<{
       success: boolean;
@@ -298,7 +344,12 @@ export interface ElectronAPI {
       apiKey: string
     ) => Promise<{ success: boolean }>;
     getApiKey: (source: "curseforge" | "modrinth") => Promise<string>;
-    checkMod: (modId: string) => Promise<ModUpdateInfo>;
+    checkMod: (
+      modId: number,
+      gameVersion: string,
+      loader: string,
+      contentType: "mod" | "resourcepack" | "shader"
+    ) => Promise<CFFile | null>;
     checkAll: () => Promise<ModUpdateInfo[]>;
     checkModpack: (modpackId: string) => Promise<ModUpdateInfo[]>;
     /** Apply update by storing new file ID in metadata */
@@ -408,7 +459,7 @@ export interface ModAnalysis {
   dependencies: Array<{
     modId: number;
     name: string;
-    type: 'required' | 'optional' | 'embedded' | 'incompatible';
+    type: "required" | "optional" | "embedded" | "incompatible";
     slug?: string;
   }>;
   conflicts: Array<{
@@ -416,7 +467,7 @@ export interface ModAnalysis {
     name: string;
     reason: string;
   }>;
-  performanceImpact: 'positive' | 'neutral' | 'negative' | 'unknown';
+  performanceImpact: "positive" | "neutral" | "negative" | "unknown";
 }
 
 export interface DependencyInfo {
@@ -455,4 +506,4 @@ declare global {
   }
 }
 
-export { };
+export {};

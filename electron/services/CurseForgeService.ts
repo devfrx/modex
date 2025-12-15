@@ -298,8 +298,9 @@ export class CurseForgeService {
     const params = new URLSearchParams();
     if (options?.stripped) params.append("stripped", "true");
 
-    const url = `${this.apiUrl}/mods/${modId}/description${params.toString() ? "?" + params : ""
-      }`;
+    const url = `${this.apiUrl}/mods/${modId}/description${
+      params.toString() ? "?" + params : ""
+    }`;
     const response = await fetch(url, {
       headers: {
         "x-api-key": this.apiKey,
@@ -315,6 +316,37 @@ export class CurseForgeService {
     const description = data.data || "";
     this.setCache(cacheKey, description);
     return description;
+  }
+
+  /**
+   * Get file changelog (HTML)
+   */
+  async getFileChangelog(modId: number, fileId: number): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    const cacheKey = `changelog:${modId}:${fileId}`;
+    const cached = this.getCached<string>(cacheKey);
+    if (cached) return cached;
+
+    const url = `${this.apiUrl}/mods/${modId}/files/${fileId}/changelog`;
+    const response = await fetch(url, {
+      headers: {
+        "x-api-key": this.apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) return "<p>No changelog available</p>";
+      throw new Error(`CurseForge API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const changelog = data.data || "<p>No changelog available</p>";
+    this.setCache(cacheKey, changelog);
+    return changelog;
   }
 
   /**
@@ -384,7 +416,10 @@ export class CurseForgeService {
     }
 
     // Only apply mod loader filter for mods (not for resourcepacks/shaders)
-    if (options.modLoader && (!options.contentType || options.contentType === "mods")) {
+    if (
+      options.modLoader &&
+      (!options.contentType || options.contentType === "mods")
+    ) {
       const loaderNum = MODLOADER_REVERSE_MAP[options.modLoader.toLowerCase()];
       if (loaderNum !== undefined) {
         params.append("modLoaderType", loaderNum.toString());
@@ -528,9 +563,9 @@ export class CurseForgeService {
     // First try exact match with version and loader (for mods only)
     const files = isModContent
       ? await this.getModFiles(modId, {
-        gameVersion,
-        modLoader,
-      })
+          gameVersion,
+          modLoader,
+        })
       : await this.getModFiles(modId, { gameVersion }); // No loader filter for non-mods
 
     if (files.length === 0) {
@@ -713,7 +748,8 @@ export class CurseForgeService {
       filename: file.fileName,
       version,
       game_version,
-      game_versions: sortedGameVersions.length > 0 ? sortedGameVersions : undefined,
+      game_versions:
+        sortedGameVersions.length > 0 ? sortedGameVersions : undefined,
       loader,
       content_type: mappedContentType,
       description: mod.summary,
@@ -812,5 +848,140 @@ export class CurseForgeService {
 
     const data = await response.json();
     return data.data || [];
+  }
+
+  /**
+   * Get smart mod recommendations based on installed mods' categories
+   */
+  /**
+   * Get smart mod recommendations based on installed mods' categories
+   */
+  async getRecommendations(
+    installedCategoryIds: number[],
+    gameVersion?: string,
+    modLoader?: string,
+    excludeModIds: number[] = [],
+    limit: number = 20, // Increased default limit
+    randomize: boolean = false,
+    contentType: "mod" | "resourcepack" | "shader" = "mod"
+  ): Promise<{ mod: CFMod; reason: string }[]> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    const typeMap: Record<string, "mods" | "resourcepacks" | "shaders"> = {
+      mod: "mods",
+      resourcepack: "resourcepacks",
+      shader: "shaders",
+    };
+    const searchType = typeMap[contentType] || "mods";
+
+    if (installedCategoryIds.length === 0) {
+      // No categories - return popular instead
+      // Pass contentType to getPopularMods if possible, but getPopularMods calls searchMods which supports it
+      const result = await this.searchMods({
+        gameVersion,
+        modLoader,
+        pageSize: 50,
+        sortField: 2, // Popularity
+        sortOrder: "desc",
+        contentType: searchType, // Pass plural content type
+      });
+
+      const popular = result.mods;
+      let candidates = popular.filter((m) => !excludeModIds.includes(m.id));
+
+      if (randomize) {
+        // Shuffle candidates
+        candidates = candidates.sort(() => Math.random() - 0.5);
+      }
+
+      return candidates.slice(0, limit).map((mod) => ({
+        mod,
+        reason: randomize
+          ? "Random discovery"
+          : `Popular ${
+              contentType === "mod"
+                ? "Mod"
+                : contentType === "resourcepack"
+                ? "Resource Pack"
+                : "Shader"
+            }`,
+      }));
+    }
+
+    // Count category frequency
+    const catCounts = new Map<number, number>();
+    for (const catId of installedCategoryIds) {
+      catCounts.set(catId, (catCounts.get(catId) || 0) + 1);
+    }
+
+    // Get top 5 most common categories (increased from 3)
+    const topCategories = Array.from(catCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([catId]) => catId);
+
+    // If randomize, shuffle the categories order slightly to vary what we look for first
+    if (randomize) {
+      topCategories.sort(() => Math.random() - 0.5);
+    }
+
+    const recommendations: { mod: CFMod; reason: string }[] = [];
+    const seenIds = new Set(excludeModIds);
+
+    // We want to fetch more than we need so we can shuffle the results
+    const perCategoryLimit = randomize ? 10 : 5;
+
+    // Search for mods in each top category
+    for (const categoryId of topCategories) {
+      if (recommendations.length >= limit * 2) break; // Fetch extra to shuffle later
+
+      try {
+        const result = await this.searchMods({
+          gameVersion,
+          modLoader,
+          categoryId,
+          pageSize: 20, // Fetch more
+          sortField: randomize ? undefined : 2,
+          sortOrder: "desc",
+          contentType: searchType, // Pass plural content type
+        });
+
+        const categoryName =
+          result.mods[0]?.categories.find((c) => c.id === categoryId)?.name ||
+          "Related";
+
+        // Shuffle the results for this category if randomized
+        let modsToAdd = result.mods;
+        if (randomize) {
+          modsToAdd = modsToAdd.sort(() => Math.random() - 0.5);
+        }
+
+        let addedForCat = 0;
+        for (const mod of modsToAdd) {
+          if (!seenIds.has(mod.id) && addedForCat < perCategoryLimit) {
+            seenIds.add(mod.id);
+            recommendations.push({
+              mod,
+              reason: `Popular in ${categoryName}`,
+            });
+            addedForCat++;
+          }
+        }
+      } catch (err) {
+        console.warn(
+          `[CurseForge] Failed to get recommendations for category ${categoryId}:`,
+          err
+        );
+      }
+    }
+
+    // Final shuffle and slice
+    if (randomize) {
+      recommendations.sort(() => Math.random() - 0.5);
+    }
+
+    return recommendations.slice(0, limit);
   }
 }

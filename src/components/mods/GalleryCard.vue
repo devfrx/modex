@@ -10,6 +10,7 @@ import {
   Trash2,
   Info,
   Check,
+  RefreshCw,
 } from "lucide-vue-next";
 import type { Mod } from "@/types/electron";
 import Button from "@/components/ui/Button.vue";
@@ -27,6 +28,7 @@ const emit = defineEmits<{
   (e: "toggle-select", id: string): void;
   (e: "show-details", mod: Mod): void;
   (e: "toggle-favorite", id: string): void;
+  (e: "request-update", mod: Mod): void;
 }>();
 
 function openCurseForge() {
@@ -235,6 +237,16 @@ const hasThumbnail = props.mod.thumbnail_url || props.mod.logo_url;
           class="flex items-center gap-1 mt-3 pt-3 border-t border-white/10 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0"
           @click.stop
         >
+          <Button
+            v-if="mod.cf_project_id"
+            variant="ghost"
+            size="icon"
+            class="h-7 w-7 text-white/60 hover:text-green-400 hover:bg-green-500/10"
+            @click.stop="$emit('request-update', mod)"
+            title="Check for Update"
+          >
+            <RefreshCw class="w-3.5 h-3.5" />
+          </Button>
           <Button
             v-if="mod.slug"
             variant="ghost"

@@ -280,9 +280,8 @@ async function mergeSelectedModpacks() {
   const names = ids
     .map((id) => modpacks.value.find((p) => p.id === id)?.name || "Unknown")
     .join(" + ");
-  mergeModpackName.value = `Merged: ${
-    names.length > 30 ? names.substring(0, 30) + "..." : names
-  }`;
+  mergeModpackName.value = `Merged: ${names.length > 30 ? names.substring(0, 30) + "..." : names
+    }`;
   showMergeDialog.value = true;
 }
 
@@ -335,9 +334,8 @@ async function confirmMerge() {
     // Add all mods to new modpack
     let addedCount = 0;
     for (const modId of allModIds) {
-      progressMessage.value = `Adding mod ${++addedCount} of ${
-        allModIds.size
-      }...`;
+      progressMessage.value = `Adding mod ${++addedCount} of ${allModIds.size
+        }...`;
       await window.api.modpacks.addMod(newPackId, modId);
       const info = modInfoMap.get(modId);
       if (info) collectedMods.push(info);
@@ -746,6 +744,39 @@ watch(
   { immediate: true }
 );
 
+// Handle URL id parameter (open specific modpack editor)
+watch(
+  () => route.query.id,
+  async (id) => {
+    if (id && typeof id === "string") {
+      // Wait for modpacks to load if not already
+      if (modpacks.value.length === 0) {
+        await loadModpacks();
+      }
+      // Check if modpack exists
+      if (modpacks.value.some((m) => m.id === id)) {
+        openEditor(id);
+      }
+      // Clear the query param after opening
+      router.replace({ query: { ...route.query, id: undefined } });
+    }
+  },
+  { immediate: true }
+);
+
+// Handle URL create parameter (open create dialog)
+watch(
+  () => route.query.create,
+  (create) => {
+    if (create === "true") {
+      showCreateDialog.value = true;
+      // Clear the query param after opening
+      router.replace({ query: { ...route.query, create: undefined } });
+    }
+  },
+  { immediate: true }
+);
+
 onMounted(() => {
   loadFavoriteModpacks();
   loadModpacks();
@@ -753,18 +784,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    class="h-full flex flex-col relative"
-    @dragenter="handleDragEnter"
-    @dragover="handleDragOver"
-    @dragleave="handleDragLeave"
-    @drop="handleDrop"
-  >
+  <div class="h-full flex flex-col relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
+    @dragleave="handleDragLeave" @drop="handleDrop">
     <!-- Drag & Drop Overlay -->
-    <div
-      v-if="isDragging"
-      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none"
-    >
+    <div v-if="isDragging"
+      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
       <div class="text-center">
         <Download class="w-16 h-16 mx-auto text-primary mb-4" />
         <p class="text-xl font-semibold">Drop modpack .zip here</p>
@@ -773,13 +797,9 @@ onMounted(() => {
     </div>
 
     <!-- Compact Header -->
-    <div
-      class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-border bg-background"
-    >
+    <div class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-border bg-background">
       <!-- Mobile: Stack vertically, Desktop: Row -->
-      <div
-        class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6"
-      >
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
         <!-- Left: Title & Stats -->
         <div class="flex items-center gap-3 sm:gap-4">
           <div class="flex items-center gap-2 sm:gap-3">
@@ -801,39 +821,26 @@ onMounted(() => {
 
           <!-- Quick Filters -->
           <div class="flex items-center gap-1 sm:gap-1.5">
-            <button
-              class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
-              :class="
-                quickFilter === 'all'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              "
-              @click="
+            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              " @click="
                 quickFilter = 'all';
-                router.push('/modpacks');
-              "
-            >
+              router.push('/modpacks');
+              ">
               All
             </button>
             <button
               class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
-              :class="
-                quickFilter === 'favorites'
+              :class="quickFilter === 'favorites'
                   ? 'bg-yellow-500/20 text-yellow-400 shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              "
-              @click="
+                " @click="
                 quickFilter = 'favorites';
-                router.push('/modpacks?filter=favorites');
-              "
-            >
-              <Star
-                class="w-3 h-3"
-                :class="quickFilter === 'favorites' ? 'fill-yellow-400' : ''"
-              />
-              <span v-if="favoriteModpacks.size > 0" class="hidden xs:inline"
-                >({{ favoriteModpacks.size }})</span
-              >
+              router.push('/modpacks?filter=favorites');
+              ">
+              <Star class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-yellow-400' : ''" />
+              <span v-if="favoriteModpacks.size > 0" class="hidden xs:inline">({{ favoriteModpacks.size }})</span>
             </button>
           </div>
         </div>
@@ -841,25 +848,18 @@ onMounted(() => {
         <!-- Search & Sort -->
         <div class="hidden md:flex items-center gap-2 flex-1 max-w-xs mx-auto">
           <div class="relative flex-1">
-            <Search
-              class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground"
-            />
-            <input
-              v-model="searchQuery"
-              placeholder="Search packs..."
-              class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted"
-            />
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <input v-model="searchQuery" placeholder="Search packs..."
+              class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
           </div>
-          <select
-            v-model="sortBy"
+          <select v-model="sortBy"
             class="text-xs bg-muted/50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:bg-muted transition-colors appearance-none"
             style="
               background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
               background-repeat: no-repeat;
               background-position: right 0.5rem center;
               background-size: 0.65em auto;
-            "
-          >
+            ">
             <option value="name">Name</option>
             <option value="updated">Updated</option>
           </select>
@@ -867,67 +867,36 @@ onMounted(() => {
 
         <!-- Right: Actions -->
         <div class="flex items-center gap-1.5 sm:gap-2">
-          <Button
-            @click="showCompare = true"
-            :disabled="modpacks.length < 2"
-            variant="ghost"
-            size="sm"
-            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3"
-          >
+          <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
+            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3">
             <ArrowLeftRight class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span class="hidden lg:inline text-xs">Compare</span>
           </Button>
 
           <!-- Selection Actions -->
-          <div
-            class="hidden md:flex items-center gap-1 border-l border-border pl-2 ml-1"
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-              @click="selectAll"
-              :disabled="modpacks.length === 0"
-            >
+          <div class="hidden md:flex items-center gap-1 border-l border-border pl-2 ml-1">
+            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              @click="selectAll" :disabled="modpacks.length === 0">
               Select All
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-              @click="clearSelection"
-              :disabled="selectedModpackIds.size === 0"
-            >
+            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              @click="clearSelection" :disabled="selectedModpackIds.size === 0">
               Clear
             </Button>
           </div>
 
-          <Button
-            @click="openShareImport"
-            :disabled="!isElectron()"
-            variant="ghost"
-            size="sm"
-            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex"
-          >
+          <Button @click="openShareImport" :disabled="!isElectron()" variant="ghost" size="sm"
+            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex">
             <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span class="hidden lg:inline text-xs">.modex</span>
           </Button>
-          <Button
-            @click="importCurseForgeModpack"
-            :disabled="!isElectron()"
-            variant="secondary"
-            size="sm"
-            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs"
-          >
+          <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
+            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
             <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span class="hidden xs:inline">Import</span>
           </Button>
-          <Button
-            @click="showCreateDialog = true"
-            :disabled="!isElectron()"
-            size="sm"
-            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs"
-          >
+          <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
+            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
             <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span class="hidden xs:inline">Create</span>
           </Button>
@@ -936,59 +905,36 @@ onMounted(() => {
     </div>
 
     <!-- Content -->
-    <div
-      v-if="error"
-      class="flex items-center justify-center flex-1 bg-background"
-    >
+    <div v-if="error" class="flex items-center justify-center flex-1 bg-background">
       <p class="text-destructive">{{ error }}</p>
     </div>
 
-    <div
-      v-else-if="isLoading"
-      class="flex items-center justify-center flex-1 bg-background"
-    >
+    <div v-else-if="isLoading" class="flex items-center justify-center flex-1 bg-background">
       <div class="flex flex-col items-center gap-2">
-        <div
-          class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
-        ></div>
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         <p class="text-muted-foreground">Loading...</p>
       </div>
     </div>
 
-    <div
-      v-else-if="modpacks.length === 0"
-      class="flex items-center justify-center flex-1 bg-background"
-    >
+    <div v-else-if="modpacks.length === 0" class="flex items-center justify-center flex-1 bg-background">
       <div class="text-center max-w-sm flex flex-col items-center">
-        <div
-          class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-6"
-        >
+        <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-6">
           <Package class="w-8 h-8 text-muted-foreground" />
         </div>
 
         <h3 class="text-xl font-bold mb-2">No Modpacks</h3>
-        <p
-          class="text-muted-foreground mb-8 text-sm max-w-xs mx-auto leading-relaxed"
-        >
+        <p class="text-muted-foreground mb-8 text-sm max-w-xs mx-auto leading-relaxed">
           Create your first custom modpack or import one from CurseForge to get
           started.
         </p>
 
         <div class="flex justify-center gap-3">
-          <Button
-            @click="importCurseForgeModpack"
-            variant="secondary"
-            size="lg"
-            class="gap-2 h-11 px-5"
-          >
+          <Button @click="importCurseForgeModpack" variant="secondary" size="lg" class="gap-2 h-11 px-5">
             <Download class="w-5 h-5" />
             Import CF
           </Button>
-          <Button
-            @click="showCreateDialog = true"
-            size="lg"
-            class="gap-2 h-11 px-5 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
-          >
+          <Button @click="showCreateDialog = true" size="lg"
+            class="gap-2 h-11 px-5 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
             <PackagePlus class="w-5 h-5" />
             Create
           </Button>
@@ -997,178 +943,84 @@ onMounted(() => {
     </div>
 
     <div v-else class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background">
-      <div
-        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4"
-      >
-        <ModpackCard
-          v-for="pack in sortedModpacks"
-          :key="pack.id"
-          :modpack="pack"
-          :selected="selectedModpackIds.has(pack.id)"
-          :favorite="favoriteModpacks.has(pack.id)"
-          @delete="confirmDelete"
-          @edit="openEditor"
-          @toggle-select="toggleSelection"
-          @clone="cloneModpack"
-          @open-folder="openInExplorer"
-          @toggle-favorite="toggleFavoriteModpack"
-          @share="openShareExport"
-          @convert="openConvertDialog"
-        />
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+        <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
+          :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete"
+          @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
+          @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog" />
       </div>
     </div>
 
     <!-- Bulk Action Bar -->
-    <BulkActionBar
-      v-if="selectedModpackIds.size > 0"
-      :count="selectedModpackIds.size"
-      label="modpacks"
-      @clear="clearSelection"
-    >
-      <Button
-        variant="secondary"
-        size="sm"
-        class="gap-2"
-        @click="exportSelectedModpacks"
-        title="Export all as CurseForge"
-      >
+    <BulkActionBar v-if="selectedModpackIds.size > 0" :count="selectedModpackIds.size" label="modpacks"
+      @clear="clearSelection">
+      <Button variant="secondary" size="sm" class="gap-2" @click="exportSelectedModpacks"
+        title="Export all as CurseForge">
         <Upload class="w-4 h-4" />
         Export
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        class="gap-2"
-        :disabled="selectedModpackIds.size !== 2"
-        @click="openCompareWithSelected"
-        title="Compare selected modpacks"
-      >
+      <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size !== 2"
+        @click="openCompareWithSelected" title="Compare selected modpacks">
         <ArrowLeftRight class="w-4 h-4" />
         Compare
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        class="gap-2"
-        :disabled="selectedModpackIds.size < 2"
-        @click="mergeSelectedModpacks"
-        title="Merge into new modpack"
-      >
+      <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size < 2"
+        @click="mergeSelectedModpacks" title="Merge into new modpack">
         <Merge class="w-4 h-4" />
         Merge
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        class="gap-2"
-        @click="openSelectedFolders"
-        title="Open all in Explorer"
-      >
+      <Button variant="secondary" size="sm" class="gap-2" @click="openSelectedFolders" title="Open all in Explorer">
         <FolderOpen class="w-4 h-4" />
         Folders
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        class="gap-2"
-        @click="duplicateSelectedModpacks"
-      >
+      <Button variant="secondary" size="sm" class="gap-2" @click="duplicateSelectedModpacks">
         <Copy class="w-4 h-4" />
         Duplicate
       </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        class="gap-2"
-        @click="confirmBulkDelete"
-      >
+      <Button variant="destructive" size="sm" class="gap-2" @click="confirmBulkDelete">
         <Trash2 class="w-4 h-4" />
         Delete
       </Button>
     </BulkActionBar>
 
     <!-- Modpack Editor Modal -->
-    <ModpackEditor
-      v-if="selectedModpackId"
-      :modpack-id="selectedModpackId"
-      :is-open="showEditor"
-      @close="showEditor = false"
-      @update="loadModpacks"
-      @export="exportModpack(selectedModpackId || '')"
-      @exportToGame="exportModpackToGame(selectedModpackId || '')"
-    />
+    <ModpackEditor v-if="selectedModpackId" :modpack-id="selectedModpackId" :is-open="showEditor"
+      @close="showEditor = false" @update="loadModpacks" @export="exportModpack(selectedModpackId || '')"
+      @exportToGame="exportModpackToGame(selectedModpackId || '')" />
 
     <!-- Compare Dialog -->
-    <ModpackCompareDialog
-      :open="showCompare"
-      :pre-selected-pack-a="comparePackA || undefined"
-      :pre-selected-pack-b="comparePackB || undefined"
-      @close="
+    <ModpackCompareDialog :open="showCompare" :pre-selected-pack-a="comparePackA || undefined"
+      :pre-selected-pack-b="comparePackB || undefined" @close="
         showCompare = false;
-        comparePackA = null;
-        comparePackB = null;
-      "
-    />
+      comparePackA = null;
+      comparePackB = null;
+      " />
 
     <!-- Create Dialog -->
-    <CreateModpackDialog
-      :open="showCreateDialog"
-      @close="showCreateDialog = false"
-      @create="createModpack"
-    />
+    <CreateModpackDialog :open="showCreateDialog" @close="showCreateDialog = false" @create="createModpack" />
 
     <!-- Delete Confirmation -->
-    <Dialog
-      :open="showDeleteDialog"
-      title="Delete Modpack"
-      description="This will not delete the mods inside."
-    >
+    <Dialog :open="showDeleteDialog" title="Delete Modpack" description="This will not delete the mods inside.">
       <template #footer>
-        <Button variant="outline" @click="showDeleteDialog = false"
-          >Cancel</Button
-        >
+        <Button variant="outline" @click="showDeleteDialog = false">Cancel</Button>
         <Button variant="destructive" @click="deleteModpack">Delete</Button>
       </template>
     </Dialog>
 
-    <ConfirmDialog
-      :open="showBulkDeleteDialog"
-      title="Delete Selected Modpacks"
-      :message="`Are you sure you want to delete ${
-        selectedModpackIds.size
-      } selected modpack${
-        selectedModpackIds.size > 1 ? 's' : ''
-      }? This will not delete the mods inside.`"
-      confirm-text="Delete"
-      variant="danger"
-      icon="trash"
-      @confirm="deleteSelectedModpacks"
-      @cancel="showBulkDeleteDialog = false"
-      @close="showBulkDeleteDialog = false"
-    />
+    <ConfirmDialog :open="showBulkDeleteDialog" title="Delete Selected Modpacks" :message="`Are you sure you want to delete ${selectedModpackIds.size
+      } selected modpack${selectedModpackIds.size > 1 ? 's' : ''
+      }? This will not delete the mods inside.`" confirm-text="Delete" variant="danger" icon="trash"
+      @confirm="deleteSelectedModpacks" @cancel="showBulkDeleteDialog = false" @close="showBulkDeleteDialog = false" />
 
-    <ProgressDialog
-      :open="showProgress"
-      :title="progressTitle"
-      :message="progressMessage"
-    />
+    <ProgressDialog :open="showProgress" :title="progressTitle" :message="progressMessage" />
 
     <!-- Share Dialog -->
-    <ShareDialog
-      :open="showShareDialog"
-      :modpack-id="shareModpackId ?? undefined"
-      :modpack-name="shareModpackName"
-      @close="showShareDialog = false"
-      @refresh="loadModpacks"
-    />
+    <ShareDialog :open="showShareDialog" :modpack-id="shareModpackId ?? undefined" :modpack-name="shareModpackName"
+      @close="showShareDialog = false" @refresh="loadModpacks" />
 
     <!-- Convert Dialog -->
-    <ConvertModpackDialog
-      :open="showConvertDialog"
-      :modpack="convertModpack"
-      @close="closeConvertDialog"
-      @success="handleConvertSuccess"
-    />
+    <ConvertModpackDialog :open="showConvertDialog" :modpack="convertModpack" @close="closeConvertDialog"
+      @success="handleConvertSuccess" />
 
     <!-- CF Import Conflict Resolution Dialog -->
     <Dialog :open="showCFConflictDialog" @close="showCFConflictDialog = false">
@@ -1182,15 +1034,9 @@ onMounted(() => {
           Choose which version to use:
         </p>
 
-        <div
-          v-if="pendingCFConflicts"
-          class="space-y-3 max-h-96 overflow-y-auto"
-        >
-          <div
-            v-for="(conflict, idx) in pendingCFConflicts.conflicts"
-            :key="idx"
-            class="p-4 rounded-lg border bg-card space-y-3"
-          >
+        <div v-if="pendingCFConflicts" class="space-y-3 max-h-96 overflow-y-auto">
+          <div v-for="(conflict, idx) in pendingCFConflicts.conflicts" :key="idx"
+            class="p-4 rounded-lg border bg-card space-y-3">
             <div class="flex items-center justify-between">
               <div class="font-semibold">{{ conflict.modName }}</div>
               <div class="text-xs text-muted-foreground">
@@ -1199,33 +1045,20 @@ onMounted(() => {
             </div>
 
             <!-- Use Existing Version -->
-            <label
-              class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all"
-              :class="
-                conflict.resolution === 'use_existing'
-                  ? 'bg-primary/10 border-primary'
-                  : 'bg-muted/50 border-border hover:bg-muted'
-              "
-            >
-              <input
-                type="radio"
-                :name="`cf-conflict-${idx}`"
-                value="use_existing"
-                v-model="conflict.resolution"
-                class="mt-1"
-              />
+            <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all" :class="conflict.resolution === 'use_existing'
+                ? 'bg-primary/10 border-primary'
+                : 'bg-muted/50 border-border hover:bg-muted'
+              ">
+              <input type="radio" :name="`cf-conflict-${idx}`" value="use_existing" v-model="conflict.resolution"
+                class="mt-1" />
               <div class="flex-1">
                 <div class="font-medium text-sm">Keep existing version</div>
                 <div class="flex items-center gap-2 mt-1">
-                  <span
-                    class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400"
-                    >{{ conflict.existingGameVersion || "unknown" }}</span
-                  >
-                  <span
-                    class="text-xs text-muted-foreground truncate max-w-[200px]"
-                    :title="conflict.existingVersion"
-                    >{{ conflict.existingVersion }}</span
-                  >
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{
+                    conflict.existingGameVersion || "unknown" }}</span>
+                  <span class="text-xs text-muted-foreground truncate max-w-[200px]"
+                    :title="conflict.existingVersion">{{
+                      conflict.existingVersion }}</span>
                 </div>
                 <div class="text-xs text-muted-foreground mt-1">
                   Already in your library
@@ -1234,33 +1067,20 @@ onMounted(() => {
             </label>
 
             <!-- Use New Version -->
-            <label
-              class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all"
-              :class="
-                conflict.resolution === 'use_new'
-                  ? 'bg-primary/10 border-primary'
-                  : 'bg-muted/50 border-border hover:bg-muted'
-              "
-            >
-              <input
-                type="radio"
-                :name="`cf-conflict-${idx}`"
-                value="use_new"
-                v-model="conflict.resolution"
-                class="mt-1"
-              />
+            <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all" :class="conflict.resolution === 'use_new'
+                ? 'bg-primary/10 border-primary'
+                : 'bg-muted/50 border-border hover:bg-muted'
+              ">
+              <input type="radio" :name="`cf-conflict-${idx}`" value="use_new" v-model="conflict.resolution"
+                class="mt-1" />
               <div class="flex-1">
                 <div class="font-medium text-sm">Download new version</div>
                 <div class="flex items-center gap-2 mt-1">
-                  <span
-                    class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400"
-                    >{{ conflict.newGameVersion || "unknown" }}</span
-                  >
-                  <span
-                    class="text-xs text-muted-foreground truncate max-w-[200px]"
-                    :title="conflict.newVersion"
-                    >{{ conflict.newVersion }}</span
-                  >
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{
+                    conflict.newGameVersion
+                    || "unknown" }}</span>
+                  <span class="text-xs text-muted-foreground truncate max-w-[200px]" :title="conflict.newVersion">{{
+                    conflict.newVersion }}</span>
                 </div>
                 <div class="text-xs text-muted-foreground mt-1">
                   From the imported modpack
@@ -1273,13 +1093,10 @@ onMounted(() => {
 
       <template #footer>
         <div class="flex gap-2">
-          <Button
-            variant="outline"
-            @click="
-              showCFConflictDialog = false;
-              pendingCFConflicts = null;
-            "
-          >
+          <Button variant="outline" @click="
+            showCFConflictDialog = false;
+          pendingCFConflicts = null;
+          ">
             Cancel
           </Button>
           <Button @click="resolveCFConflicts"> Apply Choices </Button>
@@ -1304,12 +1121,9 @@ onMounted(() => {
 
         <div class="space-y-2">
           <label class="text-sm font-medium">New Modpack Name</label>
-          <input
-            v-model="mergeModpackName"
-            type="text"
+          <input v-model="mergeModpackName" type="text"
             class="w-full px-3 py-2 rounded-md bg-muted border border-border focus:ring-1 focus:ring-primary outline-none"
-            placeholder="Enter name for merged modpack"
-          />
+            placeholder="Enter name for merged modpack" />
         </div>
 
         <div class="p-3 rounded-lg bg-muted/50 border border-border">
@@ -1334,11 +1148,7 @@ onMounted(() => {
     </Dialog>
 
     <!-- Merge Summary Dialog -->
-    <Dialog
-      :open="showMergeSummary"
-      @close="showMergeSummary = false"
-      maxWidth="2xl"
-    >
+    <Dialog :open="showMergeSummary" @close="showMergeSummary = false" maxWidth="2xl">
       <template #header>
         <h2 class="text-xl font-bold flex items-center gap-2 text-green-500">
           <Package class="w-5 h-5" />
@@ -1355,20 +1165,14 @@ onMounted(() => {
 
         <div class="border border-border rounded-lg overflow-hidden">
           <div
-            class="bg-muted/50 px-4 py-2 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider"
-          >
+            class="bg-muted/50 px-4 py-2 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider">
             All Mods Added ({{ mergedModsList.length }})
           </div>
           <div class="max-h-[300px] overflow-y-auto divide-y divide-border">
-            <div
-              v-for="(mod, idx) in mergedModsList"
-              :key="idx"
-              class="px-4 py-2 flex items-center justify-between hover:bg-muted/30"
-            >
+            <div v-for="(mod, idx) in mergedModsList" :key="idx"
+              class="px-4 py-2 flex items-center justify-between hover:bg-muted/30">
               <span class="font-medium text-sm">{{ mod.name }}</span>
-              <span
-                class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded"
-              >
+              <span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
                 from {{ mod.sourcePack }}
               </span>
             </div>

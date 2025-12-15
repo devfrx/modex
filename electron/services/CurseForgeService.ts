@@ -861,7 +861,7 @@ export class CurseForgeService {
     gameVersion?: string,
     modLoader?: string,
     excludeModIds: number[] = [],
-    limit: number = 20, // Increased default limit
+    limit: number = 20,
     randomize: boolean = false,
     contentType: "mod" | "resourcepack" | "shader" = "mod"
   ): Promise<{ mod: CFMod; reason: string }[]> {
@@ -876,31 +876,61 @@ export class CurseForgeService {
     };
     const searchType = typeMap[contentType] || "mods";
 
+    // Library category IDs to exclude (API, Library, Utility - often dependencies)
+    const libraryCategoryIds = [421, 423, 435, 6945]; // Fabric, Forge APIs, Library, Utility
+
+    // Helper to check if mod is a library/dependency
+    const isLibraryMod = (mod: CFMod): boolean => {
+      if (!mod.categories) return false;
+      const catIds = mod.categories.map((c) => c.id);
+      return libraryCategoryIds.some((libCatId) => catIds.includes(libCatId));
+    };
+
+    // Helper to filter candidates
+    const filterCandidates = (mods: CFMod[]): CFMod[] => {
+      return mods.filter(
+        (m) => !excludeModIds.includes(m.id) && !isLibraryMod(m)
+      );
+    };
+
+    // Sorting options for variety
+    const sortOptions = [
+      { field: 2, name: "Popular" }, // Popularity
+      { field: 3, name: "Last Updated" }, // Recently Updated
+      { field: 1, name: "Featured" }, // Featured
+      { field: 6, name: "Total Downloads" }, // Total Downloads
+    ];
+
     if (installedCategoryIds.length === 0) {
-      // No categories - return popular instead
-      // Pass contentType to getPopularMods if possible, but getPopularMods calls searchMods which supports it
+      // No categories - return varied content with different sorting
+      const selectedSort = randomize
+        ? sortOptions[Math.floor(Math.random() * sortOptions.length)]
+        : sortOptions[0];
+
+      // Random index offset for pagination (explore deeper pages)
+      const randomIndex = randomize ? Math.floor(Math.random() * 200) : 0;
+
       const result = await this.searchMods({
         gameVersion,
         modLoader,
         pageSize: 50,
-        sortField: 2, // Popularity
+        sortField: selectedSort.field,
         sortOrder: "desc",
-        contentType: searchType, // Pass plural content type
+        index: randomIndex,
+        contentType: searchType,
       });
 
-      const popular = result.mods;
-      let candidates = popular.filter((m) => !excludeModIds.includes(m.id));
+      let candidates = filterCandidates(result.mods);
 
       if (randomize) {
-        // Shuffle candidates
         candidates = candidates.sort(() => Math.random() - 0.5);
       }
 
       return candidates.slice(0, limit).map((mod) => ({
         mod,
         reason: randomize
-          ? "Random discovery"
-          : `Popular ${
+          ? this.getDiscoveryReason(mod)
+          : `${selectedSort.name} ${
               contentType === "mod"
                 ? "Mod"
                 : contentType === "resourcepack"
@@ -910,50 +940,66 @@ export class CurseForgeService {
       }));
     }
 
+    // Filter out library categories from installed ones
+    const filteredCategoryIds = installedCategoryIds.filter(
+      (id) => !libraryCategoryIds.includes(id)
+    );
+
     // Count category frequency
     const catCounts = new Map<number, number>();
-    for (const catId of installedCategoryIds) {
+    for (const catId of filteredCategoryIds) {
       catCounts.set(catId, (catCounts.get(catId) || 0) + 1);
     }
 
-    // Get top 5 most common categories (increased from 3)
-    const topCategories = Array.from(catCounts.entries())
+    // Get top categories
+    const sortedCategories = Array.from(catCounts.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
       .map(([catId]) => catId);
 
-    // If randomize, shuffle the categories order slightly to vary what we look for first
+    // Pick different categories based on randomization
+    let topCategories: number[];
     if (randomize) {
-      topCategories.sort(() => Math.random() - 0.5);
+      // Shuffle and pick a random subset
+      const shuffled = [...sortedCategories].sort(() => Math.random() - 0.5);
+      topCategories = shuffled.slice(0, 5);
+    } else {
+      topCategories = sortedCategories.slice(0, 5);
     }
 
     const recommendations: { mod: CFMod; reason: string }[] = [];
     const seenIds = new Set(excludeModIds);
 
-    // We want to fetch more than we need so we can shuffle the results
-    const perCategoryLimit = randomize ? 10 : 5;
+    const perCategoryLimit = randomize ? 8 : 5;
 
-    // Search for mods in each top category
     for (const categoryId of topCategories) {
-      if (recommendations.length >= limit * 2) break; // Fetch extra to shuffle later
+      if (recommendations.length >= limit * 2) break;
 
       try {
+        // Use different sort for each category when randomizing
+        const sortForCategory = randomize
+          ? sortOptions[Math.floor(Math.random() * sortOptions.length)]
+          : sortOptions[0];
+
+        // Random pagination offset
+        const randomIndex = randomize ? Math.floor(Math.random() * 100) : 0;
+
         const result = await this.searchMods({
           gameVersion,
           modLoader,
           categoryId,
-          pageSize: 20, // Fetch more
-          sortField: randomize ? undefined : 2,
+          pageSize: 30,
+          sortField: sortForCategory.field,
           sortOrder: "desc",
-          contentType: searchType, // Pass plural content type
+          index: randomIndex,
+          contentType: searchType,
         });
 
         const categoryName =
           result.mods[0]?.categories.find((c) => c.id === categoryId)?.name ||
           "Related";
 
-        // Shuffle the results for this category if randomized
-        let modsToAdd = result.mods;
+        // Filter out libraries and shuffle if needed
+        let modsToAdd = filterCandidates(result.mods);
         if (randomize) {
           modsToAdd = modsToAdd.sort(() => Math.random() - 0.5);
         }
@@ -964,7 +1010,7 @@ export class CurseForgeService {
             seenIds.add(mod.id);
             recommendations.push({
               mod,
-              reason: `Popular in ${categoryName}`,
+              reason: this.getCategoryReason(categoryName, randomize),
             });
             addedForCat++;
           }
@@ -983,5 +1029,33 @@ export class CurseForgeService {
     }
 
     return recommendations.slice(0, limit);
+  }
+
+  // Generate varied discovery reasons
+  private getDiscoveryReason(mod: CFMod): string {
+    const reasons = [
+      "Hidden gem",
+      "Worth checking out",
+      "You might like this",
+      "Trending now",
+      "Community favorite",
+      "Fresh discovery",
+      "Explore something new",
+    ];
+    return reasons[Math.floor(Math.random() * reasons.length)];
+  }
+
+  // Generate category-based reasons
+  private getCategoryReason(categoryName: string, randomize: boolean): string {
+    if (!randomize) return `Popular in ${categoryName}`;
+
+    const templates = [
+      `Great for ${categoryName}`,
+      `${categoryName} enthusiast pick`,
+      `Matches your ${categoryName} style`,
+      `Popular in ${categoryName}`,
+      `${categoryName} community favorite`,
+    ];
+    return templates[Math.floor(Math.random() * templates.length)];
   }
 }

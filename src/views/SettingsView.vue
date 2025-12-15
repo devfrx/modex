@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
-import { useTheme } from "@/composables/useTheme";
+import { useTheme, stylePresets } from "@/composables/useTheme";
 import { useToast } from "@/composables/useToast";
 import { useDialog } from "@/composables/useDialog";
 import Button from "@/components/ui/Button.vue";
@@ -23,6 +23,11 @@ import {
   Globe,
   Key,
   Check,
+  Sliders,
+  RotateCcw,
+  Square,
+  Circle,
+  Sparkles,
 } from "lucide-vue-next";
 
 // App version from package.json
@@ -32,7 +37,15 @@ const { confirm } = useDialog();
 
 // Settings State
 const libraryPath = ref("");
-const { currentTheme, setTheme, themes } = useTheme();
+const {
+  currentTheme,
+  setTheme,
+  themes,
+  customization,
+  updateCustomization,
+  applyStylePreset,
+  resetCustomization
+} = useTheme();
 const accentColor = ref("purple");
 const modCount = ref(0);
 const modpackCount = ref(0);
@@ -75,6 +88,12 @@ const shortcuts = [
   { keys: "Delete", action: "Delete selected" },
   { keys: "Escape", action: "Clear selection / Close" },
 ];
+
+// Helper function for slider input handling
+function handleSliderInput(event: Event, property: keyof typeof customization.value) {
+  const target = event.target as HTMLInputElement;
+  updateCustomization({ [property]: parseInt(target.value) });
+}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -196,9 +215,7 @@ onMounted(() => {
 <template>
   <div class="flex h-full bg-background text-foreground overflow-hidden">
     <!-- Sidebar -->
-    <div
-      class="w-64 flex-shrink-0 border-r border-border bg-card/30 flex flex-col"
-    >
+    <div class="w-64 flex-shrink-0 border-r border-border bg-card/30 flex flex-col">
       <div class="p-6 pb-4">
         <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
           <SettingsIcon class="w-6 h-6 text-primary" />
@@ -210,17 +227,12 @@ onMounted(() => {
       </div>
 
       <nav class="flex-1 px-3 space-y-1 overflow-y-auto">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          @click="currentTab = tab.id"
+        <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id"
           class="w-full text-left px-3 py-2.5 rounded-md flex items-center gap-3 transition-all duration-200 text-sm font-medium"
-          :class="
-            currentTab === tab.id
+          :class="currentTab === tab.id
               ? 'bg-primary/10 text-primary'
               : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-          "
-        >
+            ">
           <component :is="tab.icon" class="w-4 h-4" />
           {{ tab.name }}
         </button>
@@ -228,9 +240,7 @@ onMounted(() => {
 
       <div class="p-4 border-t border-border">
         <div class="flex items-center gap-3">
-          <div
-            class="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center"
-          >
+          <div class="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
             <span class="text-sm font-bold text-primary">M</span>
           </div>
           <div>
@@ -254,10 +264,8 @@ onMounted(() => {
         </div>
 
         <!-- API Warning Banner -->
-        <div
-          v-if="!apiAvailable"
-          class="mb-6 bg-destructive/10 border border-destructive text-destructive rounded-lg p-4 flex items-center gap-3"
-        >
+        <div v-if="!apiAvailable"
+          class="mb-6 bg-destructive/10 border border-destructive text-destructive rounded-lg p-4 flex items-center gap-3">
           <AlertTriangle class="w-5 h-5 flex-shrink-0" />
           <div>
             <p class="font-medium">Backend API not available</p>
@@ -280,15 +288,9 @@ onMounted(() => {
                     CurseForge API Key
                   </label>
                   <div class="flex gap-2">
-                    <Input
-                      v-model="cfApiKey"
-                      type="password"
-                      placeholder="Enter your API Key (Optional)"
-                      class="flex-1"
-                    />
-                    <Button variant="outline" @click="saveCfApiKey"
-                      >Save</Button
-                    >
+                    <Input v-model="cfApiKey" type="password" placeholder="Enter your API Key (Optional)"
+                      class="flex-1" />
+                    <Button variant="outline" @click="saveCfApiKey">Save</Button>
                   </div>
                   <p class="text-xs text-muted-foreground">
                     Leave empty to use the built-in shared key. Required only
@@ -313,16 +315,8 @@ onMounted(() => {
                     Check for the latest version of ModEx
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  @click="checkForAppUpdates"
-                  :disabled="isCheckingUpdate"
-                  class="gap-2"
-                >
-                  <RefreshCw
-                    class="w-4 h-4"
-                    :class="{ 'animate-spin': isCheckingUpdate }"
-                  />
+                <Button variant="outline" @click="checkForAppUpdates" :disabled="isCheckingUpdate" class="gap-2">
+                  <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingUpdate }" />
                   {{ isCheckingUpdate ? "Checking..." : "Check Now" }}
                 </Button>
               </div>
@@ -339,27 +333,142 @@ onMounted(() => {
             </h3>
             <div class="p-5 rounded-xl border border-border bg-card/50">
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <button
-                  v-for="t in themes"
-                  :key="t.id"
+                <button v-for="t in themes" :key="t.id"
                   class="flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all hover:bg-muted/50 relative overflow-hidden group"
-                  :class="
-                    currentTheme === t.id
+                  :class="currentTheme === t.id
                       ? 'border-primary bg-primary/5'
                       : 'border-border/50'
-                  "
-                  @click="setTheme(t.id)"
-                >
+                    " @click="setTheme(t.id)">
                   <div
                     class="w-12 h-12 rounded-full shadow-sm mb-1 relative flex items-center justify-center border border-border/20"
-                    :class="t.color"
-                  >
-                    <Check
-                      v-if="currentTheme === t.id"
-                      class="w-6 h-6 text-white drop-shadow-md"
-                    />
+                    :class="t.color">
+                    <Check v-if="currentTheme === t.id" class="w-6 h-6 text-white drop-shadow-md" />
                   </div>
                   <span class="text-sm font-medium">{{ t.name }}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Style Presets -->
+          <section class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-medium flex items-center gap-2">
+                <Sparkles class="w-4 h-4 text-primary" />
+                Style Presets
+              </h3>
+              <Button variant="ghost" size="sm" @click="resetCustomization" class="gap-2">
+                <RotateCcw class="w-4 h-4" />
+                Reset
+              </Button>
+            </div>
+            <div class="p-5 rounded-xl border border-border bg-card/50">
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <button v-for="preset in stylePresets" :key="preset.id"
+                  class="flex flex-col items-start gap-2 p-4 rounded-lg border-2 transition-all hover:bg-muted/50 text-left"
+                  :class="customization.stylePreset === preset.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border/50'
+                    " @click="applyStylePreset(preset.id)">
+                  <div class="flex items-center gap-2 w-full">
+                    <div class="w-4 h-4 rounded" :style="{
+                      backgroundColor: preset.preview,
+                      borderRadius: preset.config.borderRadius !== undefined ? preset.config.borderRadius + 'px' : '4px'
+                    }" />
+                    <span class="text-sm font-medium flex-1">{{ preset.name }}</span>
+                    <Check v-if="customization.stylePreset === preset.id" class="w-4 h-4 text-primary" />
+                  </div>
+                  <span class="text-xs text-muted-foreground">{{ preset.description }}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Custom Controls -->
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <Sliders class="w-4 h-4 text-primary" />
+              Custom Adjustments
+            </h3>
+            <div class="p-5 rounded-xl border border-border bg-card/50 space-y-6">
+              <!-- Primary Color Hue -->
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="text-sm font-medium">Primary Color</label>
+                  <div class="w-6 h-6 rounded-full border border-border"
+                    :style="{ backgroundColor: `hsl(${customization.primaryHue}, ${customization.primarySaturation}%, 50%)` }" />
+                </div>
+                <input type="range" min="0" max="360" :value="customization.primaryHue"
+                  @input="handleSliderInput($event, 'primaryHue')"
+                  class="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                  style="background: linear-gradient(to right, hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%), hsl(360,80%,50%))" />
+                <div class="flex justify-between text-xs text-muted-foreground">
+                  <span>Red</span>
+                  <span>Yellow</span>
+                  <span>Green</span>
+                  <span>Cyan</span>
+                  <span>Blue</span>
+                  <span>Magenta</span>
+                </div>
+              </div>
+
+              <!-- Border Radius -->
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="text-sm font-medium">Border Radius</label>
+                  <span class="text-sm text-muted-foreground">{{ customization.borderRadius }}px</span>
+                </div>
+                <div class="flex items-center gap-4">
+                  <Square class="w-4 h-4 text-muted-foreground" />
+                  <input type="range" min="0" max="24" :value="customization.borderRadius"
+                    @input="handleSliderInput($event, 'borderRadius')"
+                    class="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
+                  <Circle class="w-4 h-4 text-muted-foreground" />
+                </div>
+                <!-- Preview boxes -->
+                <div class="flex gap-3 justify-center pt-2">
+                  <div class="w-12 h-12 bg-primary/20 border border-primary/40"
+                    :style="{ borderRadius: customization.borderRadius + 'px' }" />
+                  <div class="w-16 h-8 bg-primary/20 border border-primary/40"
+                    :style="{ borderRadius: customization.borderRadius + 'px' }" />
+                  <div class="w-8 h-8 bg-primary/20 border border-primary/40"
+                    :style="{ borderRadius: customization.borderRadius + 'px' }" />
+                </div>
+              </div>
+
+              <!-- Border Width -->
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="text-sm font-medium">Border Width</label>
+                  <span class="text-sm text-muted-foreground">{{ customization.borderWidth }}px</span>
+                </div>
+                <input type="range" min="0" max="4" :value="customization.borderWidth"
+                  @input="handleSliderInput($event, 'borderWidth')"
+                  class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
+              </div>
+
+              <!-- Shadow Intensity -->
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="text-sm font-medium">Shadow Intensity</label>
+                  <span class="text-sm text-muted-foreground">{{ customization.shadowIntensity }}%</span>
+                </div>
+                <input type="range" min="0" max="100" :value="customization.shadowIntensity"
+                  @input="handleSliderInput($event, 'shadowIntensity')"
+                  class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
+              </div>
+
+              <!-- Glass Effect Toggle -->
+              <div class="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                <div>
+                  <label class="text-sm font-medium">Glass Effect</label>
+                  <p class="text-xs text-muted-foreground">Enable glassmorphism blur effects</p>
+                </div>
+                <button @click="updateCustomization({ glassEffect: !customization.glassEffect })"
+                  class="relative w-12 h-6 rounded-full transition-colors"
+                  :class="customization.glassEffect ? 'bg-primary' : 'bg-muted'">
+                  <div class="absolute top-1 w-4 h-4 rounded-full bg-white transition-transform"
+                    :class="customization.glassEffect ? 'translate-x-7' : 'translate-x-1'" />
                 </button>
               </div>
             </div>
@@ -374,12 +483,7 @@ onMounted(() => {
                 <Database class="w-4 h-4 text-primary" />
                 Statistics
               </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                @click="refreshLibrary"
-                class="gap-2"
-              >
+              <Button variant="ghost" size="sm" @click="refreshLibrary" class="gap-2">
                 <RefreshCw class="w-4 h-4" />
                 Refresh
               </Button>
@@ -387,24 +491,21 @@ onMounted(() => {
 
             <div class="grid grid-cols-3 gap-4">
               <div
-                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center"
-              >
+                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
                 <div class="text-3xl font-bold text-primary">
                   {{ modCount }}
                 </div>
                 <div class="text-sm text-muted-foreground mt-1">Total Mods</div>
               </div>
               <div
-                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center"
-              >
+                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
                 <div class="text-3xl font-bold text-primary">
                   {{ modpackCount }}
                 </div>
                 <div class="text-sm text-muted-foreground mt-1">Modpacks</div>
               </div>
               <div
-                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center"
-              >
+                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
                 <div class="text-3xl font-bold text-primary">
                   {{ totalSize }}
                 </div>
@@ -422,11 +523,7 @@ onMounted(() => {
               <div class="space-y-2">
                 <label class="text-sm font-medium">Mod Library Path</label>
                 <div class="flex gap-2">
-                  <Input
-                    v-model="libraryPath"
-                    readonly
-                    class="flex-1 font-mono text-sm"
-                  />
+                  <Input v-model="libraryPath" readonly class="flex-1 font-mono text-sm" />
                   <Button variant="outline" @click="openLibraryFolder">
                     <ExternalLink class="w-4 h-4 mr-2" />
                     Open
@@ -437,15 +534,11 @@ onMounted(() => {
           </section>
 
           <section class="space-y-4">
-            <h3
-              class="text-lg font-medium flex items-center gap-2 text-destructive"
-            >
+            <h3 class="text-lg font-medium flex items-center gap-2 text-destructive">
               <AlertTriangle class="w-4 h-4" />
               Danger Zone
             </h3>
-            <div
-              class="p-5 rounded-xl border border-destructive/30 bg-destructive/5"
-            >
+            <div class="p-5 rounded-xl border border-destructive/30 bg-destructive/5">
               <div class="flex items-center justify-between">
                 <div>
                   <div class="font-medium text-destructive">Clear All Data</div>
@@ -454,11 +547,7 @@ onMounted(() => {
                     undone.
                   </div>
                 </div>
-                <Button
-                  variant="destructive"
-                  @click="clearAllData"
-                  :disabled="isClearingData"
-                >
+                <Button variant="destructive" @click="clearAllData" :disabled="isClearingData">
                   <Trash2 class="w-4 h-4 mr-2" />
                   {{ isClearingData ? "Clearing..." : "Clear All Data" }}
                 </Button>
@@ -474,19 +563,12 @@ onMounted(() => {
               <Keyboard class="w-4 h-4 text-primary" />
               Keyboard Shortcuts
             </h3>
-            <div
-              class="rounded-xl border border-border bg-card/50 overflow-hidden"
-            >
+            <div class="rounded-xl border border-border bg-card/50 overflow-hidden">
               <div class="divide-y divide-border">
-                <div
-                  v-for="shortcut in shortcuts"
-                  :key="shortcut.keys"
-                  class="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                >
+                <div v-for="shortcut in shortcuts" :key="shortcut.keys"
+                  class="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
                   <span class="text-sm font-medium">{{ shortcut.action }}</span>
-                  <kbd
-                    class="px-2 py-1 bg-muted text-xs rounded-md font-mono border border-border shadow-sm"
-                  >
+                  <kbd class="px-2 py-1 bg-muted text-xs rounded-md font-mono border border-border shadow-sm">
                     {{ shortcut.keys }}
                   </kbd>
                 </div>
@@ -497,12 +579,8 @@ onMounted(() => {
 
         <!-- About Tab -->
         <div v-if="currentTab === 'about'" class="space-y-8">
-          <div
-            class="flex flex-col items-center justify-center py-12 text-center space-y-6"
-          >
-            <div
-              class="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center mb-4"
-            >
+          <div class="flex flex-col items-center justify-center py-12 text-center space-y-6">
+            <div class="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center mb-4">
               <span class="text-5xl font-bold text-primary">M</span>
             </div>
 

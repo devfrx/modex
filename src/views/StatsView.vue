@@ -3,22 +3,123 @@ import { ref, onMounted, computed } from "vue";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
 import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  RadialLinearScale,
+  Filler,
+} from "chart.js";
+import { Doughnut, Bar, Line, PolarArea, Radar } from "vue-chartjs";
+import {
   BarChart3,
   PieChart,
   Package,
   Layers,
   RefreshCw,
   TrendingUp,
-  Clock,
   HardDrive,
+  Palette,
 } from "lucide-vue-next";
 import type { Mod, Modpack } from "@/types/electron";
+
+// Register Chart.js components
+ChartJS.register(
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  RadialLinearScale,
+  Filler
+);
 
 const toast = useToast();
 
 const isLoading = ref(true);
 const mods = ref<Mod[]>([]);
 const modpacks = ref<Modpack[]>([]);
+
+// Chart style options
+const chartStyles = [
+  { id: "default", name: "Default" },
+  { id: "gradient", name: "Gradient" },
+  { id: "neon", name: "Neon" },
+  { id: "pastel", name: "Pastel" },
+];
+const selectedStyle = ref("default");
+
+// Chart type toggles
+const loaderChartType = ref<"doughnut" | "polar" | "bar">("doughnut");
+const versionChartType = ref<"bar" | "line" | "radar">("bar");
+const contentChartType = ref<"doughnut" | "polar" | "bar">("doughnut");
+
+// Chart type options for v-for
+const loaderChartTypes = ["doughnut", "polar", "bar"] as const;
+const versionChartTypes = ["bar", "line", "radar"] as const;
+const contentChartTypes = ["doughnut", "polar", "bar"] as const;
+
+// Color palettes based on style
+const colorPalettes = {
+  default: {
+    primary: ["#f97316", "#3b82f6", "#a855f7", "#ef4444", "#22c55e", "#eab308"],
+    background: [
+      "rgba(249, 115, 22, 0.8)",
+      "rgba(59, 130, 246, 0.8)",
+      "rgba(168, 85, 247, 0.8)",
+      "rgba(239, 68, 68, 0.8)",
+      "rgba(34, 197, 94, 0.8)",
+      "rgba(234, 179, 8, 0.8)",
+    ],
+  },
+  gradient: {
+    primary: ["#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7", "#dfe6e9"],
+    background: [
+      "rgba(255, 107, 107, 0.8)",
+      "rgba(78, 205, 196, 0.8)",
+      "rgba(69, 183, 209, 0.8)",
+      "rgba(150, 206, 180, 0.8)",
+      "rgba(255, 234, 167, 0.8)",
+      "rgba(223, 230, 233, 0.8)",
+    ],
+  },
+  neon: {
+    primary: ["#00ff87", "#ff00ff", "#00ffff", "#ffff00", "#ff6600", "#ff0066"],
+    background: [
+      "rgba(0, 255, 135, 0.7)",
+      "rgba(255, 0, 255, 0.7)",
+      "rgba(0, 255, 255, 0.7)",
+      "rgba(255, 255, 0, 0.7)",
+      "rgba(255, 102, 0, 0.7)",
+      "rgba(255, 0, 102, 0.7)",
+    ],
+  },
+  pastel: {
+    primary: ["#b8e0d2", "#d6eadf", "#eac4d5", "#95b8d1", "#edafb8", "#f7e1d7"],
+    background: [
+      "rgba(184, 224, 210, 0.9)",
+      "rgba(214, 234, 223, 0.9)",
+      "rgba(234, 196, 213, 0.9)",
+      "rgba(149, 184, 209, 0.9)",
+      "rgba(237, 175, 184, 0.9)",
+      "rgba(247, 225, 215, 0.9)",
+    ],
+  },
+};
+
+const currentPalette = computed(
+  () => colorPalettes[selectedStyle.value as keyof typeof colorPalettes]
+);
 
 // Stats computed
 const totalMods = computed(() => mods.value.length);
@@ -66,7 +167,7 @@ const versionStats = computed(() => {
       percentage: (count / totalMods.value) * 100,
     }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 10); // Top 10
+    .slice(0, 10);
 });
 
 // Content type distribution
@@ -78,14 +179,20 @@ const contentTypeStats = computed(() => {
   }
   return Object.entries(counts)
     .map(([name, count]) => ({
-      name,
+      name:
+        name === "resourcepack"
+          ? "Resource Packs"
+          : name.charAt(0).toUpperCase() + name.slice(1) + "s",
       count,
       percentage: (count / totalMods.value) * 100,
     }))
     .filter((item) => item.count > 0);
 });
 
-// Most used mods (appears in most modpacks)
+// Modpack mod counts
+const modpackModCounts = ref<{ name: string; count: number }[]>([]);
+
+// Most used mods
 const modUsage = ref<Map<string, string[]>>(new Map());
 const mostUsedMods = computed(() => {
   return Array.from(modUsage.value.entries())
@@ -100,19 +207,246 @@ const mostUsedMods = computed(() => {
     })
     .filter((item) => item.packCount > 1)
     .sort((a, b) => b.packCount - a.packCount)
-    .slice(0, 15);
+    .slice(0, 10);
 });
 
-// Modpack sizes
-const modpackSizes = computed(() => {
-  return modpacks.value
-    .map((pack) => ({
-      id: pack.id,
-      name: pack.name,
-      modCount: 0, // Will be populated
-    }))
-    .sort((a, b) => b.modCount - a.modCount);
-});
+// Chart data computed
+const loaderChartData = computed(() => ({
+  labels: loaderStats.value.map((s) => s.name),
+  datasets: [
+    {
+      data: loaderStats.value.map((s) => s.count),
+      backgroundColor: currentPalette.value.background.slice(
+        0,
+        loaderStats.value.length
+      ),
+      borderColor: currentPalette.value.primary.slice(
+        0,
+        loaderStats.value.length
+      ),
+      borderWidth: 2,
+    },
+  ],
+}));
+
+const versionChartData = computed(() => ({
+  labels: versionStats.value.map((s) => s.name),
+  datasets: [
+    {
+      label: "Mods",
+      data: versionStats.value.map((s) => s.count),
+      backgroundColor:
+        versionChartType.value === "line"
+          ? "rgba(139, 92, 246, 0.2)"
+          : currentPalette.value.background,
+      borderColor:
+        versionChartType.value === "line"
+          ? "#8b5cf6"
+          : currentPalette.value.primary,
+      borderWidth: 2,
+      fill: versionChartType.value === "line",
+      tension: 0.4,
+    },
+  ],
+}));
+
+const contentChartData = computed(() => ({
+  labels: contentTypeStats.value.map((s) => s.name),
+  datasets: [
+    {
+      data: contentTypeStats.value.map((s) => s.count),
+      backgroundColor: [
+        currentPalette.value.background[4],
+        currentPalette.value.background[1],
+        currentPalette.value.background[2],
+      ],
+      borderColor: [
+        currentPalette.value.primary[4],
+        currentPalette.value.primary[1],
+        currentPalette.value.primary[2],
+      ],
+      borderWidth: 2,
+    },
+  ],
+}));
+
+const modpackChartData = computed(() => ({
+  labels: modpackModCounts.value.map((p) => p.name),
+  datasets: [
+    {
+      label: "Mods in Pack",
+      data: modpackModCounts.value.map((p) => p.count),
+      backgroundColor: "rgba(139, 92, 246, 0.6)",
+      borderColor: "#8b5cf6",
+      borderWidth: 1,
+      borderRadius: 4,
+    },
+  ],
+}));
+
+const mostUsedChartData = computed(() => ({
+  labels: mostUsedMods.value.map((m) => m.name),
+  datasets: [
+    {
+      label: "Used in Packs",
+      data: mostUsedMods.value.map((m) => m.packCount),
+      backgroundColor: currentPalette.value.background,
+      borderColor: currentPalette.value.primary,
+      borderWidth: 2,
+    },
+  ],
+}));
+
+// Chart options
+const doughnutOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: "bottom" as const,
+      labels: {
+        color: "rgba(255,255,255,0.7)",
+        padding: 15,
+        usePointStyle: true,
+      },
+    },
+    tooltip: {
+      backgroundColor: "rgba(0,0,0,0.8)",
+      titleColor: "#fff",
+      bodyColor: "#fff",
+      padding: 12,
+      cornerRadius: 8,
+    },
+  },
+  cutout: "60%",
+}));
+
+const barOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  indexAxis: "y" as const,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: "rgba(0,0,0,0.8)",
+      titleColor: "#fff",
+      bodyColor: "#fff",
+      padding: 12,
+      cornerRadius: 8,
+    },
+  },
+  scales: {
+    x: {
+      grid: { color: "rgba(255,255,255,0.05)" },
+      ticks: { color: "rgba(255,255,255,0.5)" },
+    },
+    y: {
+      grid: { display: false },
+      ticks: { color: "rgba(255,255,255,0.7)" },
+    },
+  },
+}));
+
+const verticalBarOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: "rgba(0,0,0,0.8)",
+      titleColor: "#fff",
+      bodyColor: "#fff",
+      padding: 12,
+      cornerRadius: 8,
+    },
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+      ticks: { color: "rgba(255,255,255,0.5)", maxRotation: 45 },
+    },
+    y: {
+      grid: { color: "rgba(255,255,255,0.05)" },
+      ticks: { color: "rgba(255,255,255,0.7)" },
+    },
+  },
+}));
+
+const lineOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: "rgba(0,0,0,0.8)",
+      titleColor: "#fff",
+      bodyColor: "#fff",
+      padding: 12,
+      cornerRadius: 8,
+    },
+  },
+  scales: {
+    x: {
+      grid: { color: "rgba(255,255,255,0.05)" },
+      ticks: { color: "rgba(255,255,255,0.5)" },
+    },
+    y: {
+      grid: { color: "rgba(255,255,255,0.05)" },
+      ticks: { color: "rgba(255,255,255,0.7)" },
+    },
+  },
+}));
+
+const radarOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: "rgba(0,0,0,0.8)",
+      titleColor: "#fff",
+      bodyColor: "#fff",
+      padding: 12,
+      cornerRadius: 8,
+    },
+  },
+  scales: {
+    r: {
+      grid: { color: "rgba(255,255,255,0.1)" },
+      angleLines: { color: "rgba(255,255,255,0.1)" },
+      ticks: { display: false },
+      pointLabels: { color: "rgba(255,255,255,0.7)" },
+    },
+  },
+}));
+
+const polarOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: "bottom" as const,
+      labels: {
+        color: "rgba(255,255,255,0.7)",
+        padding: 15,
+        usePointStyle: true,
+      },
+    },
+    tooltip: {
+      backgroundColor: "rgba(0,0,0,0.8)",
+      titleColor: "#fff",
+      bodyColor: "#fff",
+      padding: 12,
+      cornerRadius: 8,
+    },
+  },
+  scales: {
+    r: {
+      grid: { color: "rgba(255,255,255,0.1)" },
+      ticks: { display: false },
+    },
+  },
+}));
 
 async function loadData() {
   isLoading.value = true;
@@ -126,8 +460,12 @@ async function loadData() {
 
     // Calculate mod usage across modpacks
     const usage = new Map<string, string[]>();
+    const packCounts: { name: string; count: number }[] = [];
+
     for (const pack of modpacksData) {
       const packMods = await window.api.modpacks.getMods(pack.id);
+      packCounts.push({ name: pack.name, count: packMods.length });
+
       for (const mod of packMods) {
         if (!usage.has(mod.id)) {
           usage.set(mod.id, []);
@@ -135,7 +473,9 @@ async function loadData() {
         usage.get(mod.id)?.push(pack.name);
       }
     }
+
     modUsage.value = usage;
+    modpackModCounts.value = packCounts.sort((a, b) => b.count - a.count);
   } catch (err) {
     toast.error("Load Failed", (err as Error).message);
   } finally {
@@ -144,28 +484,6 @@ async function loadData() {
 }
 
 onMounted(loadData);
-
-// Bar chart helper
-const maxValue = (items: { count: number }[]) =>
-  Math.max(...items.map((i) => i.count), 1);
-
-// Loader colors
-const loaderColor = (loader: string) => {
-  const l = loader.toLowerCase();
-  if (l.includes("forge")) return "bg-orange-500";
-  if (l.includes("fabric")) return "bg-blue-500";
-  if (l.includes("quilt")) return "bg-purple-500";
-  if (l.includes("neoforge")) return "bg-red-500";
-  return "bg-gray-500";
-};
-
-// Content type colors
-const contentTypeColor = (type: string) => {
-  if (type === "mod") return "bg-emerald-500";
-  if (type === "resourcepack") return "bg-blue-500";
-  if (type === "shader") return "bg-pink-500";
-  return "bg-gray-500";
-};
 </script>
 
 <template>
@@ -184,18 +502,25 @@ const contentTypeColor = (type: string) => {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          @click="loadData"
-          :disabled="isLoading"
-        >
-          <RefreshCw
-            class="w-4 h-4 mr-2"
-            :class="{ 'animate-spin': isLoading }"
-          />
-          Refresh
-        </Button>
+
+        <div class="flex items-center gap-3">
+          <!-- Style Selector -->
+          <div class="relative">
+            <select v-model="selectedStyle"
+              class="appearance-none bg-card border border-border rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+              <option v-for="style in chartStyles" :key="style.id" :value="style.id">
+                {{ style.name }}
+              </option>
+            </select>
+            <Palette
+              class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          </div>
+
+          <Button variant="outline" size="sm" @click="loadData" :disabled="isLoading">
+            <RefreshCw class="w-4 h-4 mr-2" :class="{ 'animate-spin': isLoading }" />
+            Refresh
+          </Button>
+        </div>
       </div>
     </div>
 
@@ -259,132 +584,103 @@ const contentTypeColor = (type: string) => {
         </div>
       </div>
 
-      <!-- Charts Row -->
+      <!-- Charts Grid -->
       <div class="grid lg:grid-cols-2 gap-6">
         <!-- Loader Distribution -->
         <div class="rounded-xl border border-border bg-card p-4">
-          <h3 class="font-semibold mb-4 flex items-center gap-2">
-            <PieChart class="w-4 h-4 text-primary" />
-            Mods by Loader
-          </h3>
-          <div class="space-y-3">
-            <div v-for="stat in loaderStats" :key="stat.name" class="space-y-1">
-              <div class="flex items-center justify-between text-sm">
-                <span class="font-medium capitalize">{{ stat.name }}</span>
-                <span class="text-muted-foreground"
-                  >{{ stat.count }} ({{ stat.percentage.toFixed(0) }}%)</span
-                >
-              </div>
-              <div class="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  class="h-full rounded-full transition-all duration-500"
-                  :class="loaderColor(stat.name)"
-                  :style="{ width: `${stat.percentage}%` }"
-                />
-              </div>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold flex items-center gap-2">
+              <PieChart class="w-4 h-4 text-primary" />
+              Mods by Loader
+            </h3>
+            <div class="flex gap-1">
+              <button v-for="type in loaderChartTypes" :key="type" @click="loaderChartType = type"
+                class="px-2 py-1 text-xs rounded transition-colors" :class="loaderChartType === type
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted hover:bg-muted/80'
+                  ">
+                {{ type === 'doughnut' ? 'Donut' : type === 'polar' ? 'Polar' : 'Bar' }}
+              </button>
             </div>
+          </div>
+          <div class="h-[280px]">
+            <Doughnut v-if="loaderChartType === 'doughnut'" :data="loaderChartData" :options="doughnutOptions" />
+            <PolarArea v-else-if="loaderChartType === 'polar'" :data="loaderChartData" :options="polarOptions" />
+            <Bar v-else :data="loaderChartData" :options="barOptions" />
           </div>
         </div>
 
         <!-- Game Version Distribution -->
         <div class="rounded-xl border border-border bg-card p-4">
-          <h3 class="font-semibold mb-4 flex items-center gap-2">
-            <BarChart3 class="w-4 h-4 text-primary" />
-            Top Game Versions
-          </h3>
-          <div class="space-y-2">
-            <div
-              v-for="stat in versionStats"
-              :key="stat.name"
-              class="flex items-center gap-3"
-            >
-              <span
-                class="w-16 text-xs font-mono text-muted-foreground shrink-0"
-                >{{ stat.name }}</span
-              >
-              <div class="flex-1 h-6 bg-muted rounded overflow-hidden">
-                <div
-                  class="h-full bg-primary/80 rounded flex items-center justify-end pr-2 transition-all duration-500"
-                  :style="{
-                    width: `${(stat.count / maxValue(versionStats)) * 100}%`,
-                  }"
-                >
-                  <span class="text-[10px] text-primary-foreground font-bold">{{
-                    stat.count
-                  }}</span>
-                </div>
-              </div>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold flex items-center gap-2">
+              <BarChart3 class="w-4 h-4 text-primary" />
+              Top Game Versions
+            </h3>
+            <div class="flex gap-1">
+              <button v-for="type in versionChartTypes" :key="type" @click="versionChartType = type"
+                class="px-2 py-1 text-xs rounded transition-colors" :class="versionChartType === type
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted hover:bg-muted/80'
+                  ">
+                {{ type === 'bar' ? 'Bar' : type === 'line' ? 'Line' : 'Radar' }}
+              </button>
             </div>
+          </div>
+          <div class="h-[280px]">
+            <Bar v-if="versionChartType === 'bar'" :data="versionChartData" :options="barOptions" />
+            <Line v-else-if="versionChartType === 'line'" :data="versionChartData" :options="lineOptions" />
+            <Radar v-else :data="versionChartData" :options="radarOptions" />
+          </div>
+        </div>
+
+        <!-- Content Type Distribution -->
+        <div class="rounded-xl border border-border bg-card p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold flex items-center gap-2">
+              <Layers class="w-4 h-4 text-primary" />
+              Content Types
+            </h3>
+            <div class="flex gap-1">
+              <button v-for="type in contentChartTypes" :key="type" @click="contentChartType = type"
+                class="px-2 py-1 text-xs rounded transition-colors" :class="contentChartType === type
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted hover:bg-muted/80'
+                  ">
+                {{ type === 'doughnut' ? 'Donut' : type === 'polar' ? 'Polar' : 'Bar' }}
+              </button>
+            </div>
+          </div>
+          <div class="h-[280px]">
+            <Doughnut v-if="contentChartType === 'doughnut'" :data="contentChartData" :options="doughnutOptions" />
+            <PolarArea v-else-if="contentChartType === 'polar'" :data="contentChartData" :options="polarOptions" />
+            <Bar v-else :data="contentChartData" :options="barOptions" />
+          </div>
+        </div>
+
+        <!-- Modpack Sizes -->
+        <div class="rounded-xl border border-border bg-card p-4">
+          <h3 class="font-semibold flex items-center gap-2 mb-4">
+            <Package class="w-4 h-4 text-primary" />
+            Mods per Modpack
+          </h3>
+          <div class="h-[280px]">
+            <Bar :data="modpackChartData" :options="verticalBarOptions" />
           </div>
         </div>
       </div>
 
-      <!-- Content Type & Most Used -->
-      <div class="grid lg:grid-cols-2 gap-6">
-        <!-- Content Type Distribution -->
-        <div class="rounded-xl border border-border bg-card p-4">
-          <h3 class="font-semibold mb-4 flex items-center gap-2">
-            <Layers class="w-4 h-4 text-primary" />
-            Content Types
-          </h3>
-          <div class="flex gap-4">
-            <div
-              v-for="stat in contentTypeStats"
-              :key="stat.name"
-              class="flex-1 p-4 rounded-lg border border-border bg-muted/30 text-center"
-            >
-              <div
-                class="w-3 h-3 rounded-full mx-auto mb-2"
-                :class="contentTypeColor(stat.name)"
-              />
-              <p class="text-2xl font-bold">{{ stat.count }}</p>
-              <p class="text-xs text-muted-foreground capitalize">
-                {{
-                  stat.name === "resourcepack"
-                    ? "Resource Packs"
-                    : stat.name + "s"
-                }}
-              </p>
-              <p class="text-[10px] text-muted-foreground/60">
-                {{ stat.percentage.toFixed(0) }}%
-              </p>
-            </div>
-          </div>
+      <!-- Most Used Mods -->
+      <div class="rounded-xl border border-border bg-card p-4">
+        <h3 class="font-semibold flex items-center gap-2 mb-4">
+          <TrendingUp class="w-4 h-4 text-primary" />
+          Most Used Mods (across modpacks)
+        </h3>
+        <div class="h-[300px]" v-if="mostUsedMods.length > 0">
+          <Bar :data="mostUsedChartData" :options="barOptions" />
         </div>
-
-        <!-- Most Used Mods -->
-        <div class="rounded-xl border border-border bg-card p-4">
-          <h3 class="font-semibold mb-4 flex items-center gap-2">
-            <TrendingUp class="w-4 h-4 text-primary" />
-            Most Used Mods
-          </h3>
-          <div class="space-y-2 max-h-[200px] overflow-y-auto">
-            <div
-              v-for="(item, idx) in mostUsedMods"
-              :key="item.id"
-              class="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50"
-            >
-              <span
-                class="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground"
-              >
-                {{ idx + 1 }}
-              </span>
-              <span class="flex-1 truncate text-sm font-medium">{{
-                item.name
-              }}</span>
-              <span
-                class="text-xs text-muted-foreground bg-primary/10 text-primary px-2 py-0.5 rounded-full"
-              >
-                {{ item.packCount }} packs
-              </span>
-            </div>
-            <div
-              v-if="mostUsedMods.length === 0"
-              class="text-center py-8 text-muted-foreground text-sm"
-            >
-              No mods are used in multiple modpacks yet
-            </div>
-          </div>
+        <div v-else class="h-[300px] flex items-center justify-center text-muted-foreground">
+          No mods are used in multiple modpacks yet
         </div>
       </div>
     </div>

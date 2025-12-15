@@ -24,7 +24,16 @@
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
-    --radius: 0.5rem;
+    
+    /* Theme customization variables */
+    --radius: 12px;
+    --border-width: 1px;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    --shadow: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -2px var(--shadow-color);
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-blur: 12px;
+    --primary-hue: 262;
+    --primary-sat: 83%;
   }
 
   [data-theme="light"] {
@@ -169,4 +178,85 @@
 
 .glass-card {
   @apply bg-card/50 backdrop-blur-md border border-border hover:border-primary/50 transition-all duration-300;
+}
+
+/* Range Slider Styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: hsl(var(--muted));
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  margin-top: -5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: hsl(var(--muted));
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Glass effect conditional styles */
+.glass-enabled .glass-bg {
+  background: var(--glass-bg, rgba(255, 255, 255, 0.03));
+  backdrop-filter: blur(var(--glass-blur, 12px));
+}
+
+/* Glass effect applied to card backgrounds when enabled */
+.glass-enabled .bg-card {
+  background: var(--glass-bg, rgba(255, 255, 255, 0.03));
+  backdrop-filter: blur(var(--glass-blur, 12px));
+}
+
+/* Dynamic border radius using CSS variables */
+.rounded-dynamic {
+  border-radius: var(--radius, 12px);
+}
+
+/* Apply dynamic border width to bordered elements */
+.border {
+  border-width: var(--border-width, 1px);
+}
+
+/* Apply shadow intensity to shadow elements */
+.shadow, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl {
+  box-shadow: var(--shadow);
+}
+
+.rounded-dynamic-sm {
+  border-radius: var(--radius-sm, 8px);
+}
+
+.rounded-dynamic-lg {
+  border-radius: var(--radius-lg, 16px);
 }

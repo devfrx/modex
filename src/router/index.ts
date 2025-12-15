@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from "vue-router";
+import HomeView from "@/views/HomeView.vue";
 import LibraryView from "@/views/LibraryView.vue";
 import ModpackView from "@/views/ModpackView.vue";
 import OrganizeView from "@/views/OrganizeView.vue";
@@ -10,7 +11,8 @@ import StatsView from "@/views/StatsView.vue";
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: "/", redirect: "/library" },
+    { path: "/", redirect: "/home" },
+    { path: "/home", component: HomeView },
     { path: "/library", component: LibraryView },
     { path: "/modpacks", component: ModpackView },
     { path: "/organize", component: OrganizeView },

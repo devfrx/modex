@@ -110,7 +110,8 @@ export interface ElectronAPI {
       modLoader?: string,
       excludeModIds?: number[],
       limit?: number,
-      randomize?: boolean
+      randomize?: boolean,
+      contentType?: "mod" | "resourcepack" | "shader"
     ) => Promise<Array<{ mod: CFMod; reason: string }>>;
   };
 

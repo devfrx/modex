@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld("api", {
       index?: number;
       sortField?: number;
       sortOrder?: "asc" | "desc";
+      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks";
     }): Promise<{ mods: any[]; pagination: any }> =>
       ipcRenderer.invoke("curseforge:search", options),
     getMod: (modId: number): Promise<any | null> =>
@@ -197,6 +198,40 @@ contextBridge.exposeInMainWorld("api", {
     openFolder: (modpackId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:openFolder", modpackId),
 
+    // Import from CurseForge URL (for CF Browse feature)
+    importFromCurseForgeUrl: (
+      downloadUrl: string,
+      modpackName: string,
+      cfProjectId?: number,
+      cfFileId?: number,
+      cfSlug?: string,
+      onProgress?: (current: number, total: number, modName: string) => void
+    ): Promise<{
+      success: boolean;
+      modpackId?: string;
+      modsImported: number;
+      modsSkipped: number;
+      errors: string[];
+    }> => {
+      // Set up progress listener if callback provided
+      if (onProgress) {
+        const progressHandler = (
+          _event: any,
+          data: { current: number; total: number; modName: string }
+        ) => {
+          onProgress(data.current, data.total, data.modName);
+        };
+        ipcRenderer.on("import:progress", progressHandler);
+        // Clean up after import completes
+        return ipcRenderer
+          .invoke("import:curseforgeUrl", downloadUrl, modpackName, cfProjectId, cfFileId, cfSlug)
+          .finally(() => {
+            ipcRenderer.removeListener("import:progress", progressHandler);
+          });
+      }
+      return ipcRenderer.invoke("import:curseforgeUrl", downloadUrl, modpackName, cfProjectId, cfFileId, cfSlug);
+    },
+
     // Profiles
     createProfile: (modpackId: string, name: string): Promise<any | null> =>
       ipcRenderer.invoke("modpacks:createProfile", modpackId, name),
@@ -206,6 +241,77 @@ contextBridge.exposeInMainWorld("api", {
 
     applyProfile: (modpackId: string, profileId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:applyProfile", modpackId, profileId),
+
+    // CurseForge update checking
+    checkCFUpdate: (
+      modpackId: string
+    ): Promise<{
+      hasUpdate: boolean;
+      currentVersion?: string;
+      latestVersion?: string;
+      latestFileId?: number;
+      changelog?: string;
+      releaseDate?: string;
+      downloadUrl?: string;
+    }> => ipcRenderer.invoke("modpacks:checkCFUpdate", modpackId),
+
+    getCFChangelog: (cfProjectId: number, cfFileId: number): Promise<string> =>
+      ipcRenderer.invoke("modpacks:getCFChangelog", cfProjectId, cfFileId),
+
+    updateCFModpack: (
+      modpackId: string,
+      newFileId: number,
+      createNew: boolean,
+      onProgress?: (current: number, total: number, modName: string) => void
+    ): Promise<{
+      success: boolean;
+      modpackId?: string;
+      modsImported: number;
+      modsSkipped: number;
+      errors: string[];
+    }> => {
+      if (onProgress) {
+        const progressHandler = (
+          _event: any,
+          data: { current: number; total: number; modName: string }
+        ) => {
+          onProgress(data.current, data.total, data.modName);
+        };
+        ipcRenderer.on("import:progress", progressHandler);
+        return ipcRenderer
+          .invoke("modpacks:updateCFModpack", modpackId, newFileId, createNew)
+          .finally(() => {
+            ipcRenderer.removeListener("import:progress", progressHandler);
+          });
+      }
+      return ipcRenderer.invoke("modpacks:updateCFModpack", modpackId, newFileId, createNew);
+    },
+
+    reSearchIncompatible: (
+      modpackId: string,
+      onProgress?: (current: number, total: number, modName: string) => void
+    ): Promise<{
+      found: number;
+      notFound: number;
+      added: string[];
+      stillIncompatible: string[];
+    }> => {
+      if (onProgress) {
+        const progressHandler = (
+          _event: any,
+          data: { current: number; total: number; modName: string }
+        ) => {
+          onProgress(data.current, data.total, data.modName);
+        };
+        ipcRenderer.on("import:progress", progressHandler);
+        return ipcRenderer
+          .invoke("modpacks:reSearchIncompatible", modpackId)
+          .finally(() => {
+            ipcRenderer.removeListener("import:progress", progressHandler);
+          });
+      }
+      return ipcRenderer.invoke("modpacks:reSearchIncompatible", modpackId);
+    },
   },
 
   // ========== VERSION CONTROL ==========

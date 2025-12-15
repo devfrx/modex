@@ -17,6 +17,7 @@ import {
   Settings,
   Layers,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Share2,
   Globe,
@@ -28,8 +29,11 @@ import {
   Image,
   Sparkles,
   Users,
+  History,
+  ExternalLink,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
+import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ProgressDialog from "@/components/ui/ProgressDialog.vue";
 import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
@@ -97,6 +101,29 @@ const progressState = ref({
   message: "Starting update...",
   percent: 0,
 });
+
+// CurseForge modpack updates
+const cfUpdateInfo = ref<{
+  hasUpdate: boolean;
+  currentVersion?: string;
+  latestVersion?: string;
+  latestFileId?: number;
+  releaseDate?: string;
+  downloadUrl?: string;
+} | null>(null);
+const isCheckingCFUpdate = ref(false);
+const showCFChangelog = ref(false);
+const cfChangelog = ref("");
+const isLoadingChangelog = ref(false);
+
+// CF modpack update dialog
+const showCFUpdateDialog = ref(false);
+const isApplyingCFUpdate = ref(false);
+const cfUpdateProgress = ref({ current: 0, total: 0, currentMod: "" });
+
+// Incompatible mods re-search
+const isReSearching = ref(false);
+const reSearchProgress = ref({ current: 0, total: 0, currentMod: "" });
 
 // Editable form fields
 const editForm = ref({
@@ -967,6 +994,149 @@ async function applyRemoteUpdate() {
   }
 }
 
+// CurseForge modpack update checking
+async function checkForCFUpdate() {
+  if (!modpack.value?.cf_project_id) return;
+
+  isCheckingCFUpdate.value = true;
+  try {
+    const result = await window.api.modpacks.checkCFUpdate(props.modpackId);
+    cfUpdateInfo.value = result;
+
+    if (result.hasUpdate) {
+      toast.success(
+        "Update Available",
+        `New version: ${result.latestVersion}`
+      );
+    } else {
+      toast.success("Up to Date", "You have the latest version");
+    }
+  } catch (error) {
+    console.error("Failed to check CF update:", error);
+    toast.error("Check Failed", (error as Error).message);
+  } finally {
+    isCheckingCFUpdate.value = false;
+  }
+}
+
+async function viewCFChangelog(fileId?: number) {
+  if (!modpack.value?.cf_project_id) return;
+
+  const targetFileId = fileId || modpack.value.cf_file_id;
+  if (!targetFileId) return;
+
+  isLoadingChangelog.value = true;
+  showCFChangelog.value = true;
+
+  try {
+    cfChangelog.value = await window.api.modpacks.getCFChangelog(
+      modpack.value.cf_project_id,
+      targetFileId
+    );
+  } catch (error) {
+    console.error("Failed to load changelog:", error);
+    cfChangelog.value = "Failed to load changelog";
+  } finally {
+    isLoadingChangelog.value = false;
+  }
+}
+
+// Check if modpack is from CurseForge
+const isCFModpack = computed(() => {
+  return !!modpack.value?.cf_project_id;
+});
+
+function openCFUpdateDialog() {
+  showCFUpdateDialog.value = true;
+}
+
+async function applyCFUpdate(createNew: boolean) {
+  if (!cfUpdateInfo.value?.latestFileId) return;
+
+  isApplyingCFUpdate.value = true;
+  cfUpdateProgress.value = { current: 0, total: 100, currentMod: "Starting update..." };
+
+  try {
+    const result = await window.api.modpacks.updateCFModpack(
+      props.modpackId,
+      cfUpdateInfo.value.latestFileId,
+      createNew,
+      (current, total, modName) => {
+        cfUpdateProgress.value = { current, total, currentMod: modName };
+      }
+    );
+
+    showCFUpdateDialog.value = false;
+
+    if (result.success) {
+      toast.success(
+        "Update Complete",
+        createNew
+          ? `Created new modpack with ${result.modsImported} mods`
+          : `Updated modpack with ${result.modsImported} mods`
+      );
+
+      // Reload data if we updated the current modpack
+      if (!createNew) {
+        await loadData();
+        cfUpdateInfo.value = null;
+      } else {
+        // Emit event to refresh modpack list
+        emit("updated");
+      }
+    } else {
+      toast.error("Update Failed", result.errors[0] || "Unknown error");
+    }
+  } catch (error) {
+    console.error("Failed to apply CF update:", error);
+    toast.error("Update Failed", (error as Error).message);
+  } finally {
+    isApplyingCFUpdate.value = false;
+    cfUpdateProgress.value = { current: 0, total: 0, currentMod: "" };
+  }
+}
+
+// Re-search incompatible mods on CurseForge
+async function reSearchIncompatibleMods() {
+  if (!modpack.value?.incompatible_mods?.length) {
+    toast.success("No incompatible mods", "There are no incompatible mods to search for");
+    return;
+  }
+
+  isReSearching.value = true;
+  reSearchProgress.value = { current: 0, total: modpack.value.incompatible_mods.length, currentMod: "" };
+
+  try {
+    const result = await window.api.modpacks.reSearchIncompatible(
+      props.modpackId,
+      (current, total, modName) => {
+        reSearchProgress.value = { current, total, currentMod: modName };
+      }
+    );
+
+    // Reload modpack data to get updated incompatible_mods list
+    await loadData();
+
+    if (result.added.length > 0) {
+      toast.success(
+        "Re-search Complete",
+        `Found and added ${result.added.length} compatible version(s). ${result.stillIncompatible.length} mod(s) still incompatible.`
+      );
+    } else {
+      toast.info(
+        "Re-search Complete",
+        `No compatible versions found. ${result.stillIncompatible.length} mod(s) still incompatible.`
+      );
+    }
+  } catch (error) {
+    console.error("Failed to re-search incompatible mods:", error);
+    toast.error("Re-search Failed", (error as Error).message);
+  } finally {
+    isReSearching.value = false;
+    reSearchProgress.value = { current: 0, total: 0, currentMod: "" };
+  }
+}
+
 watch(
   () => props.isOpen,
   (newVal) => {
@@ -997,9 +1167,9 @@ watch(
             <!-- Thumbnail -->
             <div v-if="modpack?.image_url" class="w-10 h-10 rounded-lg overflow-hidden ring-2 ring-primary/20 shrink-0">
               <img :src="modpack.image_url.startsWith('http') ||
-                  modpack.image_url.startsWith('file:')
-                  ? modpack.image_url
-                  : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
+                modpack.image_url.startsWith('file:')
+                ? modpack.image_url
+                : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
                 " class="w-full h-full object-cover" />
             </div>
             <div v-else
@@ -1014,7 +1184,7 @@ watch(
                   {{ modpack?.name || "Loading..." }}
                 </h2>
                 <span v-if="modpack?.version" class="text-xs text-muted-foreground font-mono">v{{ modpack.version
-                  }}</span>
+                }}</span>
                 <span v-if="modpack?.remote_source?.url"
                   class="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-500 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
                   title="This modpack is linked to a remote source">
@@ -1046,8 +1216,8 @@ watch(
             </Button>
             <Button variant="ghost" size="sm" class="h-8 px-2.5 gap-1.5"
               :disabled="!modpack?.minecraft_version || !modpack?.loader" :title="!modpack?.minecraft_version || !modpack?.loader
-                  ? 'Set version and loader first'
-                  : 'Check updates'
+                ? 'Set version and loader first'
+                : 'Check updates'
                 " @click="showUpdatesDialog = true">
               <ArrowUpCircle class="w-4 h-4" />
             </Button>
@@ -1070,8 +1240,8 @@ watch(
         <!-- Tab Navigation -->
         <div class="px-5 flex items-center gap-1">
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'mods'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'mods'">
             <div class="flex items-center gap-1.5">
               <Layers class="w-4 h-4" />
@@ -1080,8 +1250,8 @@ watch(
             <div v-if="activeTab === 'mods'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'discover'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'discover'">
             <div class="flex items-center gap-1.5">
               <Sparkles class="w-4 h-4" />
@@ -1091,8 +1261,8 @@ watch(
               class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'health'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'health'">
             <div class="flex items-center gap-1.5">
               <AlertCircle class="w-4 h-4" />
@@ -1101,8 +1271,8 @@ watch(
             <div v-if="activeTab === 'health'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'versions'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'versions'">
             <div class="flex items-center gap-1.5">
               <GitBranch class="w-4 h-4" />
@@ -1112,8 +1282,8 @@ watch(
               class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'profiles'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'profiles'">
             <div class="flex items-center gap-1.5">
               <Users class="w-4 h-4" />
@@ -1123,8 +1293,8 @@ watch(
               class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'remote'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'remote'">
             <div class="flex items-center gap-1.5">
               <Globe class="w-4 h-4" />
@@ -1133,8 +1303,8 @@ watch(
             <div v-if="activeTab === 'remote'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           </button>
           <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'settings'
-              ? 'text-primary'
-              : 'text-muted-foreground hover:text-foreground'
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground'
             " @click="activeTab = 'settings'">
             <div class="flex items-center gap-1.5">
               <Settings class="w-4 h-4" />
@@ -1153,8 +1323,8 @@ watch(
           <!-- Content Type Sub-tabs -->
           <div class="shrink-0 px-4 py-2 border-b border-border/30 bg-muted/10 flex items-center gap-1">
             <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5" :class="contentTypeTab === 'mods'
-                ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
-                : 'hover:bg-muted text-muted-foreground'
+              ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+              : 'hover:bg-muted text-muted-foreground'
               " @click="contentTypeTab = 'mods'">
               <Layers class="w-3.5 h-3.5" />
               Mods
@@ -1163,8 +1333,8 @@ watch(
               }}</span>
             </button>
             <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5" :class="contentTypeTab === 'resourcepacks'
-                ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
-                : 'hover:bg-muted text-muted-foreground'
+              ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
+              : 'hover:bg-muted text-muted-foreground'
               " @click="contentTypeTab = 'resourcepacks'">
               <Image class="w-3.5 h-3.5" />
               Resource Packs
@@ -1173,8 +1343,8 @@ watch(
               }}</span>
             </button>
             <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5" :class="contentTypeTab === 'shaders'
-                ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
-                : 'hover:bg-muted text-muted-foreground'
+              ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
+              : 'hover:bg-muted text-muted-foreground'
               " @click="contentTypeTab = 'shaders'">
               <Sparkles class="w-3.5 h-3.5" />
               Shaders
@@ -1222,21 +1392,21 @@ watch(
                 <!-- Quick Filters -->
                 <div class="flex items-center gap-1 mb-2">
                   <button class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'all'
-                      ? 'bg-primary/15 text-primary font-medium'
-                      : 'hover:bg-muted text-muted-foreground'
+                    ? 'bg-primary/15 text-primary font-medium'
+                    : 'hover:bg-muted text-muted-foreground'
                     " @click="modsFilter = 'all'">
                     All
                   </button>
                   <button v-if="incompatibleModCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'incompatible'
-                      ? 'bg-red-500/15 text-red-500 font-medium'
-                      : 'hover:bg-muted text-muted-foreground'
+                    ? 'bg-red-500/15 text-red-500 font-medium'
+                    : 'hover:bg-muted text-muted-foreground'
                     " @click="modsFilter = 'incompatible'">
                     <AlertCircle class="w-3 h-3 inline mr-0.5" />
                     Incompatible ({{ incompatibleModCount }})
                   </button>
                   <button v-if="disabledModCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'disabled'
-                      ? 'bg-amber-500/15 text-amber-500 font-medium'
-                      : 'hover:bg-muted text-muted-foreground'
+                    ? 'bg-amber-500/15 text-amber-500 font-medium'
+                    : 'hover:bg-muted text-muted-foreground'
                     " @click="modsFilter = 'disabled'">
                     Disabled ({{ disabledModCount }})
                   </button>
@@ -1257,14 +1427,14 @@ watch(
                   </div>
                   <div class="flex rounded-lg border border-border/50 overflow-hidden">
                     <button class="h-8 text-xs px-3 transition-colors" :class="sortBy === 'name'
-                        ? 'bg-primary/10 text-primary font-medium'
-                        : 'hover:bg-muted'
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'hover:bg-muted'
                       " @click="toggleSort('name')">
                       Name
                     </button>
                     <button class="h-8 text-xs px-3 border-l border-border/50 transition-colors" :class="sortBy === 'version'
-                        ? 'bg-primary/10 text-primary font-medium'
-                        : 'hover:bg-muted'
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'hover:bg-muted'
                       " @click="toggleSort('version')">
                       Version
                     </button>
@@ -1287,8 +1457,8 @@ watch(
                   <!-- Checkbox -->
                   <div v-if="!isLinked"
                     class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors" :class="selectedModIds.has(mod.id)
-                        ? 'bg-primary border-primary'
-                        : 'border-muted-foreground/30 group-hover:border-muted-foreground/50'
+                      ? 'bg-primary border-primary'
+                      : 'border-muted-foreground/30 group-hover:border-muted-foreground/50'
                       ">
                     <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3 text-primary-foreground" />
                   </div>
@@ -1303,11 +1473,11 @@ watch(
                       : 'bg-emerald-500',
                     isLinked ? 'opacity-50 cursor-not-allowed' : '',
                   ]" @click.stop="!isLinked && toggleModEnabled(mod.id)" :title="isLinked
-                        ? 'Managed by remote source'
-                        : disabledModIds.has(mod.id)
-                          ? 'Click to enable mod'
-                          : 'Click to disable mod'
-                      " :disabled="isLinked">
+                    ? 'Managed by remote source'
+                    : disabledModIds.has(mod.id)
+                      ? 'Click to enable mod'
+                      : 'Click to disable mod'
+                    " :disabled="isLinked">
                     <span class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all" :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-4'
                       " />
                   </button>
@@ -1332,9 +1502,9 @@ watch(
                         mod.game_versions &&
                         mod.game_versions.length >= 1
                       " class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
-                            ? 'bg-emerald-500/15 text-emerald-500'
-                            : 'bg-red-500/15 text-red-500'
-                          " :title="mod.game_versions.join(', ')">
+                        ? 'bg-emerald-500/15 text-emerald-500'
+                        : 'bg-red-500/15 text-red-500'
+                        " :title="mod.game_versions.join(', ')">
                         {{ mod.game_versions.slice(0, 2).join(", ")
                         }}{{
                           mod.game_versions.length > 2
@@ -1345,15 +1515,15 @@ watch(
                       <span v-else-if="
                         mod.game_version && mod.game_version !== 'unknown'
                       " class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
-                            ? 'bg-emerald-500/15 text-emerald-500'
-                            : 'bg-red-500/15 text-red-500'
-                          ">
+                        ? 'bg-emerald-500/15 text-emerald-500'
+                        : 'bg-red-500/15 text-red-500'
+                        ">
                         {{ mod.game_version }}
                       </span>
                       <span v-if="mod.loader && mod.loader !== 'unknown'"
                         class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize" :class="mod.isCompatible
-                            ? 'bg-blue-500/15 text-blue-500'
-                            : 'bg-red-500/15 text-red-500'
+                          ? 'bg-blue-500/15 text-blue-500'
+                          : 'bg-red-500/15 text-red-500'
                           ">
                         {{ mod.loader }}
                       </span>
@@ -1464,8 +1634,8 @@ watch(
               <div class="flex-1 overflow-y-auto p-2 space-y-1">
                 <div v-for="mod in filteredAvailableMods" :key="mod.id"
                   class="flex items-center justify-between p-2.5 rounded-lg transition-all relative" :class="mod.isCompatible
-                      ? 'hover:bg-accent/50 cursor-pointer group'
-                      : 'opacity-40'
+                    ? 'hover:bg-accent/50 cursor-pointer group'
+                    : 'opacity-40'
                     ">
                   <!-- Mod Info -->
                   <div class="min-w-0 flex-1">
@@ -1655,6 +1825,122 @@ watch(
         <!-- Remote Tab -->
         <div v-else-if="activeTab === 'remote'" class="flex-1 p-6 overflow-auto">
           <div class="max-w-2xl mx-auto space-y-6">
+            <!-- CurseForge Updates Section (for CF imported modpacks) -->
+            <div v-if="isCFModpack">
+              <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Download class="w-5 h-5 text-orange-500" />
+                CurseForge Updates
+              </h3>
+
+              <div class="space-y-4">
+                <!-- Current version info -->
+                <div class="p-4 bg-orange-500/10 rounded-lg border border-orange-500/20">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="font-medium text-sm">Installed from CurseForge</div>
+                      <div class="text-xs text-muted-foreground mt-1">
+                        Version: {{ modpack?.version || 'Unknown' }}
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <Button variant="ghost" size="sm" @click="viewCFChangelog()" :disabled="isLoadingChangelog">
+                        <History class="w-3.5 h-3.5 mr-1.5" />
+                        Changelog
+                      </Button>
+                      <Button variant="secondary" size="sm" @click="checkForCFUpdate" :disabled="isCheckingCFUpdate">
+                        <RefreshCw class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': isCheckingCFUpdate }" />
+                        Check Updates
+                      </Button>
+                    </div>
+                  </div>
+
+                  <!-- Update available banner -->
+                  <div v-if="cfUpdateInfo?.hasUpdate"
+                    class="mt-4 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <div class="font-medium text-green-400 text-sm flex items-center gap-2">
+                          <ArrowUpCircle class="w-4 h-4" />
+                          Update Available
+                        </div>
+                        <div class="text-xs text-muted-foreground mt-1">
+                          {{ cfUpdateInfo.currentVersion }} → {{ cfUpdateInfo.latestVersion }}
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" @click="viewCFChangelog(cfUpdateInfo.latestFileId)">
+                          <History class="w-3.5 h-3.5 mr-1.5" />
+                          View Changes
+                        </Button>
+                        <Button size="sm" @click="openCFUpdateDialog">
+                          <Download class="w-3.5 h-3.5 mr-1.5" />
+                          Apply Update
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Incompatible Mods Section (for CF imported modpacks with incompatible mods) -->
+            <div v-if="isCFModpack && modpack?.incompatible_mods?.length">
+              <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <AlertTriangle class="w-5 h-5 text-amber-500" />
+                Incompatible Mods ({{ modpack.incompatible_mods.length }})
+              </h3>
+
+              <div class="space-y-4">
+                <div class="p-4 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <div class="flex items-center justify-between gap-4 mb-3">
+                    <div class="min-w-0">
+                      <div class="font-medium text-sm">Mods Not Imported</div>
+                      <div class="text-xs text-muted-foreground mt-1">
+                        These mods were not imported due to version/loader incompatibility
+                      </div>
+                    </div>
+                    <Button variant="secondary" size="sm" class="shrink-0 whitespace-nowrap"
+                      @click="reSearchIncompatibleMods" :disabled="isReSearching">
+                      <RefreshCw class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': isReSearching }" />
+                      {{ isReSearching ? 'Searching...' : 'Re-search' }}
+                    </Button>
+                  </div>
+
+                  <!-- Progress indicator -->
+                  <div v-if="isReSearching" class="mb-3 p-2 bg-background/50 rounded-md">
+                    <div class="flex items-center justify-between text-xs mb-1">
+                      <span class="text-muted-foreground truncate max-w-[70%]">{{ reSearchProgress.currentMod ||
+                        'Starting...'
+                        }}</span>
+                      <span class="text-muted-foreground shrink-0">{{ reSearchProgress.current }}/{{
+                        reSearchProgress.total
+                        }}</span>
+                    </div>
+                    <div class="h-1.5 bg-background rounded-full overflow-hidden">
+                      <div class="h-full bg-amber-500 transition-all duration-300"
+                        :style="{ width: `${reSearchProgress.total > 0 ? (reSearchProgress.current / reSearchProgress.total) * 100 : 0}%` }">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Incompatible mods list -->
+                  <div class="max-h-48 overflow-y-auto space-y-1.5">
+                    <div v-for="(mod, index) in modpack.incompatible_mods" :key="index"
+                      class="flex items-center justify-between gap-2 p-2 bg-background/30 rounded-md text-sm">
+                      <span class="font-medium truncate min-w-0 flex-1">{{ mod.name }}</span>
+                      <span class="text-xs text-muted-foreground shrink-0 max-w-[40%] truncate" :title="mod.reason">{{
+                        mod.reason }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="text-xs text-muted-foreground">
+                  Click "Re-search CurseForge" to check if compatible versions have become available.
+                  Found mods will be automatically added to your library and modpack.
+                </p>
+              </div>
+            </div>
+
             <div>
               <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Globe class="w-5 h-5 text-primary" />
@@ -1757,6 +2043,89 @@ watch(
     <ModUpdateDialog :open="showSingleModUpdateDialog" :mod="selectedUpdateMod" :modpack-id="modpackId"
       :minecraft-version="modpack?.minecraft_version" :loader="modpack?.loader"
       @close="showSingleModUpdateDialog = false" @updated="handleSingleModUpdated" />
+
+    <!-- CurseForge Changelog Dialog -->
+    <Dialog :open="showCFChangelog" @close="showCFChangelog = false" title="Modpack Changelog" size="lg">
+      <div class="max-h-[60vh] overflow-auto">
+        <div v-if="isLoadingChangelog" class="flex items-center justify-center py-8">
+          <RefreshCw class="w-6 h-6 animate-spin text-primary" />
+        </div>
+        <div v-else-if="cfChangelog" class="prose prose-invert prose-sm max-w-none" v-html="cfChangelog"></div>
+        <div v-else class="text-center py-8 text-muted-foreground">
+          No changelog available
+        </div>
+      </div>
+      <template #footer>
+        <Button variant="secondary" @click="showCFChangelog = false">Close</Button>
+      </template>
+    </Dialog>
+
+    <!-- CurseForge Update Dialog -->
+    <Dialog :open="showCFUpdateDialog" @close="showCFUpdateDialog = false" title="Apply Modpack Update" size="md">
+      <div class="space-y-4">
+        <div class="p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+          <div class="flex items-center gap-3">
+            <ArrowUpCircle class="w-8 h-8 text-green-500 shrink-0" />
+            <div>
+              <div class="font-medium">Update Available</div>
+              <div class="text-sm text-muted-foreground mt-1">
+                {{ cfUpdateInfo?.currentVersion }} → {{ cfUpdateInfo?.latestVersion }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="isApplyingCFUpdate" class="p-4 bg-muted/30 rounded-lg">
+          <div class="flex items-center justify-between text-sm mb-2">
+            <span class="text-muted-foreground truncate">{{ cfUpdateProgress.currentMod || 'Starting...' }}</span>
+            <span class="text-muted-foreground shrink-0">{{ cfUpdateProgress.current }}/{{ cfUpdateProgress.total
+              }}</span>
+          </div>
+          <div class="h-2 bg-background rounded-full overflow-hidden">
+            <div class="h-full bg-primary transition-all duration-300"
+              :style="{ width: `${cfUpdateProgress.total > 0 ? (cfUpdateProgress.current / cfUpdateProgress.total) * 100 : 0}%` }">
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="space-y-3">
+          <p class="text-sm text-muted-foreground">
+            Choose how you want to apply this update:
+          </p>
+
+          <div class="grid gap-3">
+            <button
+              class="p-4 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-primary/5 text-left transition-colors"
+              @click="applyCFUpdate(false)">
+              <div class="font-medium flex items-center gap-2">
+                <RefreshCw class="w-4 h-4 text-primary" />
+                Replace Current Modpack
+              </div>
+              <div class="text-xs text-muted-foreground mt-1">
+                Updates this modpack in place. Your current mods will be replaced with the new version's mods.
+              </div>
+            </button>
+
+            <button
+              class="p-4 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-primary/5 text-left transition-colors"
+              @click="applyCFUpdate(true)">
+              <div class="font-medium flex items-center gap-2">
+                <Plus class="w-4 h-4 text-primary" />
+                Create New Modpack
+              </div>
+              <div class="text-xs text-muted-foreground mt-1">
+                Creates a separate modpack with the new version. Keeps your current modpack unchanged.
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <Button variant="secondary" @click="showCFUpdateDialog = false" :disabled="isApplyingCFUpdate">
+          Cancel
+        </Button>
+      </template>
+    </Dialog>
   </div>
 </template>
 

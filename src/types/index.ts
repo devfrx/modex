@@ -179,6 +179,21 @@ export interface Modpack {
 
   /** Saved configuration profiles (sets of enabled mods) */
   profiles?: ModpackProfile[];
+  
+  /** Mods that failed to import due to incompatibility */
+  incompatible_mods?: Array<{
+    cf_project_id: number;
+    name: string;
+    reason: string;
+  }>;
+  
+  // CurseForge source tracking for imported modpacks
+  /** CurseForge project ID (if imported from CF) */
+  cf_project_id?: number;
+  /** CurseForge file ID (specific version imported) */
+  cf_file_id?: number;
+  /** CurseForge modpack slug */
+  cf_slug?: string;
 }
 
 export interface ModpackProfile {

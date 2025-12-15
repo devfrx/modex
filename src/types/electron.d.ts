@@ -80,7 +80,7 @@ export interface ElectronAPI {
       index?: number;
       sortField?: number;
       sortOrder?: "asc" | "desc";
-      contentType?: "mods" | "resourcepacks" | "shaders";
+      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks";
     }) => Promise<{ mods: CFMod[]; pagination: CFPagination }>;
     getMod: (modId: number) => Promise<CFMod | null>;
     getModFiles: (
@@ -91,7 +91,7 @@ export interface ElectronAPI {
       }
     ) => Promise<CFFile[]>;
     getCategories: (
-      contentType?: "mods" | "resourcepacks" | "shaders"
+      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks"
     ) => Promise<CFCategory[]>;
     getPopular: (gameVersion?: string, modLoader?: string) => Promise<CFMod[]>;
     /** Add a mod from CurseForge to library (metadata only, no download) */
@@ -141,6 +141,21 @@ export interface ElectronAPI {
     clone: (modpackId: string, newName: string) => Promise<string | null>;
     setImage: (modpackId: string, imageUrl: string) => Promise<boolean>;
     openFolder: (modpackId: string) => Promise<boolean>;
+    /** Import modpack from CurseForge download URL */
+    importFromCurseForgeUrl: (
+      downloadUrl: string,
+      modpackName: string,
+      cfProjectId?: number,
+      cfFileId?: number,
+      cfSlug?: string,
+      onProgress?: (current: number, total: number, modName: string) => void
+    ) => Promise<{
+      success: boolean;
+      modpackId?: string;
+      modsImported: number;
+      modsSkipped: number;
+      errors: string[];
+    }>;
     // Profiles
     createProfile: (
       modpackId: string,
@@ -148,6 +163,43 @@ export interface ElectronAPI {
     ) => Promise<ModpackProfile | null>;
     deleteProfile: (modpackId: string, profileId: string) => Promise<boolean>;
     applyProfile: (modpackId: string, profileId: string) => Promise<boolean>;
+    
+    // CurseForge update checking
+    /** Check for CurseForge modpack updates */
+    checkCFUpdate: (modpackId: string) => Promise<{
+      hasUpdate: boolean;
+      currentVersion?: string;
+      latestVersion?: string;
+      latestFileId?: number;
+      changelog?: string;
+      releaseDate?: string;
+      downloadUrl?: string;
+    }>;
+    /** Get changelog for a CurseForge modpack file */
+    getCFChangelog: (cfProjectId: number, cfFileId: number) => Promise<string>;
+    /** Update CurseForge modpack to a new version */
+    updateCFModpack: (
+      modpackId: string,
+      newFileId: number,
+      createNew: boolean,
+      onProgress?: (current: number, total: number, modName: string) => void
+    ) => Promise<{
+      success: boolean;
+      modpackId?: string;
+      modsImported: number;
+      modsSkipped: number;
+      errors: string[];
+    }>;
+    /** Re-search CurseForge for compatible versions of incompatible mods */
+    reSearchIncompatible: (
+      modpackId: string,
+      onProgress?: (current: number, total: number, modName: string) => void
+    ) => Promise<{
+      found: number;
+      notFound: number;
+      added: string[];
+      stillIncompatible: string[];
+    }>;
   };
 
   // ========== VERSION CONTROL ==========

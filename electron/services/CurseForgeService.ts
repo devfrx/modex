@@ -134,6 +134,7 @@ export const CONTENT_CLASS_IDS = {
   mods: 6,
   resourcepacks: 12,
   shaders: 6552,
+  modpacks: 4471,
 } as const;
 
 export type ContentType = keyof typeof CONTENT_CLASS_IDS;
@@ -142,6 +143,7 @@ export type ContentType = keyof typeof CONTENT_CLASS_IDS;
 export function getContentTypeFromClassId(classId?: number): ContentType {
   if (classId === CONTENT_CLASS_IDS.resourcepacks) return "resourcepacks";
   if (classId === CONTENT_CLASS_IDS.shaders) return "shaders";
+  if (classId === CONTENT_CLASS_IDS.modpacks) return "modpacks";
   return "mods"; // Default to mods
 }
 
@@ -716,7 +718,14 @@ export class CurseForgeService {
       resourcepacks: "resourcepack",
       shaders: "shader",
     };
-    const mappedContentType = contentType ? contentTypeMap[contentType] : "mod";
+    
+    // Auto-detect content type from mod.classId if not provided
+    let detectedContentType = contentType;
+    if (!detectedContentType && mod.classId) {
+      detectedContentType = getContentTypeFromClassId(mod.classId);
+    }
+    
+    const mappedContentType = detectedContentType ? contentTypeMap[detectedContentType] : "mod";
 
     // Website URL path based on content type
     const urlPaths: Record<string, string> = {
@@ -724,7 +733,7 @@ export class CurseForgeService {
       resourcepacks: "texture-packs",
       shaders: "shaders",
     };
-    const urlPath = contentType ? urlPaths[contentType] : "mc-mods";
+    const urlPath = detectedContentType ? urlPaths[detectedContentType] : "mc-mods";
 
     // Store all compatible game versions for shaders/resourcepacks
     // Sort versions for consistent display (newest first)

@@ -12,6 +12,9 @@ import {
   RefreshCw,
   Calendar,
   Clock,
+  Flame,
+  Globe,
+  Link2,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 
@@ -26,6 +29,11 @@ interface ModpackWithCount {
   created_at?: string;
   updated_at?: string;
   modCount: number;
+  // Source tracking
+  cf_project_id?: number;
+  cf_file_id?: number;
+  cf_slug?: string;
+  share_code?: string;
 }
 
 defineProps<{
@@ -78,9 +86,9 @@ function formatDate(dateStr?: string) {
     <!-- Image Background -->
     <div v-if="modpack.image_url" class="absolute inset-0 z-0 overflow-hidden rounded-xl">
       <img :src="modpack.image_url.startsWith('http') ||
-          modpack.image_url.startsWith('file:')
-          ? modpack.image_url
-          : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
+        modpack.image_url.startsWith('file:')
+        ? modpack.image_url
+        : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
         "
         class="w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-all duration-500 scale-100 group-hover:scale-105"
         alt="" @error="handleImageError" />
@@ -95,12 +103,12 @@ function formatDate(dateStr?: string) {
     <button
       class="absolute top-3 left-3 z-20 transition-all duration-200 p-2 rounded-full bg-background/40 backdrop-blur-md border border-white/10 hover:bg-background/60 hover:scale-110"
       :class="favorite
-          ? 'opacity-100 scale-100'
-          : 'opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100'
+        ? 'opacity-100 scale-100'
+        : 'opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100'
         " @click.stop="$emit('toggle-favorite', modpack.id)" title="Toggle favorite">
       <Heart class="w-4 h-4 transition-colors" :class="favorite
-          ? 'fill-rose-500 text-rose-500'
-          : 'text-muted-foreground hover:text-rose-500'
+        ? 'fill-rose-500 text-rose-500'
+        : 'text-muted-foreground hover:text-rose-500'
         " />
     </button>
 
@@ -108,8 +116,8 @@ function formatDate(dateStr?: string) {
     <div class="absolute top-3 right-3 z-20 transition-all duration-200"
       :class="selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
       <div class="w-6 h-6 rounded-md border flex items-center justify-center transition-colors shadow-sm" :class="selected
-          ? 'bg-primary border-primary'
-          : 'bg-background/50 border-border hover:border-primary'
+        ? 'bg-primary border-primary'
+        : 'bg-background/50 border-border hover:border-primary'
         ">
         <Check v-if="selected" class="w-4 h-4 text-primary-foreground" />
       </div>
@@ -152,6 +160,19 @@ function formatDate(dateStr?: string) {
             class="px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-medium capitalize border border-blue-500/20">
             {{ modpack.loader }}
           </span>
+          <!-- Source indicators -->
+          <span v-if="modpack.cf_project_id"
+            class="px-2 py-1 rounded-md bg-orange-500/10 text-orange-500 text-[10px] font-medium border border-orange-500/20 flex items-center gap-1"
+            title="Imported from CurseForge">
+            <Flame class="w-3 h-3" />
+            CF
+          </span>
+          <span v-if="modpack.share_code"
+            class="px-2 py-1 rounded-md bg-purple-500/10 text-purple-500 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
+            title="Linked with Gist">
+            <Link2 class="w-3 h-3" />
+            Gist
+          </span>
         </div>
       </div>
 
@@ -171,6 +192,17 @@ function formatDate(dateStr?: string) {
             class="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
             @click.stop="$emit('open-folder', modpack.id)" title="Open Folder">
             <FolderOpen class="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon"
+            class="h-8 w-8 text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10 rounded-lg transition-colors"
+            @click.stop="$emit('share', modpack.id, modpack.name)" title="Share / Export">
+            <Share2 class="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon"
+            class="h-8 w-8 text-muted-foreground hover:text-cyan-500 hover:bg-cyan-500/10 rounded-lg transition-colors"
+            @click.stop="$emit('clone', modpack.id)"
+            :title="modpack.cf_project_id ? 'Clone (detach from CurseForge)' : 'Clone Modpack'">
+            <Copy class="w-4 h-4" />
           </Button>
           <Button variant="ghost" size="icon"
             class="h-8 w-8 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-colors"

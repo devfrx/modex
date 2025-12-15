@@ -87,6 +87,16 @@ export interface Modpack {
     last_checked?: string;
   };
   profiles?: ModpackProfile[];
+  // Track mods that failed to import due to incompatibility
+  incompatible_mods?: Array<{
+    cf_project_id: number;
+    name: string;
+    reason: string;
+  }>;
+  // CurseForge source tracking for imported modpacks
+  cf_project_id?: number;
+  cf_file_id?: number;
+  cf_slug?: string;
 }
 
 export interface CreateModpackData {
@@ -1816,13 +1826,11 @@ ${modLinks}
     const addedModNames: string[] = [];
     // Track which mods are marked as not required (disabled) in manifest
     const disabledModIds: string[] = [];
-    const conflicts: Array<{
-      projectID: number;
-      fileID: number;
-      modName: string;
-      existingMod: Mod;
-      cfMod: any;
-      cfFile: any;
+    // Track incompatible mods for later re-search
+    const incompatibleMods: Array<{
+      cf_project_id: number;
+      name: string;
+      reason: string;
     }> = [];
 
     const totalFiles = manifest.files?.length || 0;
@@ -1884,29 +1892,10 @@ ${modLinks}
           continue;
         }
 
-        // Check for version conflict
-        const conflictingMod =
-          allMods.find(
-            (m) =>
-              m.source === "curseforge" &&
-              m.cf_project_id === projectID &&
-              m.cf_file_id !== fileID
-          ) || null;
-
-        if (conflictingMod) {
-          console.log(
-            `[CF Import] Version conflict detected: ${conflictingMod.name} (existing file: ${conflictingMod.cf_file_id} vs new file: ${fileID})`
-          );
-          conflicts.push({
-            projectID,
-            fileID,
-            modName: cfMod.name,
-            existingMod: conflictingMod,
-            cfMod,
-            cfFile,
-          });
-          continue;
-        }
+        // Note: We no longer treat different versions of the same mod as "conflicts".
+        // Different modpacks can have different versions of the same mod.
+        // If a different version exists in the library, we simply add the new version
+        // as a separate entry. The library can hold multiple versions.
 
         // Detect content type from CF mod classId
         const contentType = getContentTypeFromClassId(cfMod.classId);
@@ -1921,31 +1910,11 @@ ${modLinks}
           contentType
         );
 
-        // Check for loader mismatch - warn if mod doesn't support modpack's loader
-        // Only skip if:
-        // 1. Modpack has a known loader (not "unknown")
-        // 2. Mod has a known loader (not "unknown")
-        // 3. They don't match
-        // Note: Skip loader check for resourcepacks/shaders as they don't require loaders
-        const modpackLoaderKnown = loader !== "unknown";
-        const modLoaderKnown = formattedMod.loader !== "unknown";
-        const isModContent = contentType === "mods";
-
-        if (
-          isModContent &&
-          modpackLoaderKnown &&
-          modLoaderKnown &&
-          formattedMod.loader !== loader
-        ) {
-          console.warn(
-            `[CF Import] Loader mismatch for ${cfMod.name}: modpack uses ${loader}, mod supports ${formattedMod.loader}`
-          );
-          errors.push(
-            `${cfMod.name}: incompatible loader (requires ${formattedMod.loader}, modpack uses ${loader})`
-          );
-          // Skip this mod instead of adding with wrong loader
-          continue;
-        }
+        // NOTE: We trust the CurseForge manifest completely.
+        // The manifest specifies exactly which files to use, and these were
+        // chosen by the modpack author to work together. We don't apply
+        // additional loader/version checks that could incorrectly reject mods
+        // due to metadata inconsistencies in the CF API.
 
         const mod = await this.addMod({
           name: formattedMod.name,
@@ -1986,38 +1955,31 @@ ${modLinks}
       }
     }
 
-    // If there are conflicts, throw an error with conflict data
-    if (conflicts.length > 0) {
-      console.log(
-        `[CF Import] ${conflicts.length} version conflicts detected, throwing error`
-      );
-      const error: any = new Error("Version conflicts detected");
-      error.code = "VERSION_CONFLICTS";
-      error.conflicts = conflicts;
-      error.partialData = {
-        modpackId,
-        newModIds,
-        addedModNames,
-      };
-      error.manifest = manifest;
-      throw error;
-    }
-
     // Add all mods to modpack
     for (const modId of newModIds) {
       await this.addModToModpack(modpackId, modId);
     }
 
-    // Set disabled mods if any were marked as not required in manifest
-    if (disabledModIds.length > 0) {
-      const modpack = await this.getModpackById(modpackId);
-      if (modpack) {
+    // Save modpack settings
+    const modpack = await this.getModpackById(modpackId);
+    if (modpack) {
+      // Set disabled mods if any were marked as not required in manifest
+      if (disabledModIds.length > 0) {
         modpack.disabled_mod_ids = disabledModIds;
-        await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
         console.log(
           `[CF Import] Set ${disabledModIds.length} mods as disabled`
         );
       }
+      
+      // Save incompatible mods for re-search feature
+      if (incompatibleMods.length > 0) {
+        modpack.incompatible_mods = incompatibleMods;
+        console.log(
+          `[CF Import] Tracked ${incompatibleMods.length} incompatible mods for re-search`
+        );
+      }
+      
+      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     }
 
     return {
@@ -2025,6 +1987,163 @@ ${modLinks}
       modsImported: addedModNames.length,
       modsSkipped: errors.length,
       errors,
+    };
+  }
+
+  /**
+   * Re-search CurseForge for compatible versions of incompatible mods
+   * This finds mods that were marked incompatible during import and tries to find
+   * versions that match the modpack's MC version and loader
+   */
+  async reSearchIncompatibleMods(
+    modpackId: string,
+    cfService: any,
+    onProgress?: (current: number, total: number, modName: string) => void
+  ): Promise<{
+    found: number;
+    notFound: number;
+    added: string[];
+    stillIncompatible: string[];
+  }> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) {
+      throw new Error("Modpack not found");
+    }
+    
+    const incompatible = modpack.incompatible_mods || [];
+    if (incompatible.length === 0) {
+      return { found: 0, notFound: 0, added: [], stillIncompatible: [] };
+    }
+    
+    const mcVersion = modpack.minecraft_version;
+    const loader = modpack.loader;
+    const added: string[] = [];
+    const stillIncompatible: string[] = [];
+    
+    console.log(`[Re-search] Searching for ${incompatible.length} incompatible mods`);
+    console.log(`[Re-search] Target: MC ${mcVersion}, Loader: ${loader}`);
+    
+    let processed = 0;
+    const total = incompatible.length;
+    
+    for (const incompMod of incompatible) {
+      processed++;
+      onProgress?.(processed, total, incompMod.name);
+      
+      try {
+        console.log(`[Re-search] Searching for compatible version of ${incompMod.name} (${incompMod.cf_project_id})`);
+        
+        // Get all files for this mod
+        const files = await cfService.getModFiles(incompMod.cf_project_id, {
+          gameVersion: mcVersion,
+          modLoader: loader,
+        });
+        
+        if (!files || files.length === 0) {
+          console.log(`[Re-search] No compatible files found for ${incompMod.name}`);
+          stillIncompatible.push(incompMod.name);
+          continue;
+        }
+        
+        // Find the best matching file (prefer release, then most recent)
+        const releaseFiles = files.filter((f: any) => f.releaseType === 1);
+        const bestFile = releaseFiles.length > 0 ? releaseFiles[0] : files[0];
+        
+        // Get mod info
+        const cfMod = await cfService.getMod(incompMod.cf_project_id);
+        if (!cfMod) {
+          stillIncompatible.push(incompMod.name);
+          continue;
+        }
+        
+        // Detect content type
+        const contentType = getContentTypeFromClassId(cfMod.classId);
+        
+        // Format the mod
+        const formattedMod = cfService.modToLibraryFormat(
+          cfMod,
+          bestFile,
+          loader,
+          mcVersion,
+          contentType
+        );
+        
+        // Verify it actually matches (strict check)
+        const modGameVersions = formattedMod.game_versions || [formattedMod.game_version];
+        const supportsExactVersion = modGameVersions.includes(mcVersion);
+        const loaderMatches = contentType !== "mods" || formattedMod.loader === loader || formattedMod.loader === "unknown";
+        
+        if (!supportsExactVersion || !loaderMatches) {
+          console.log(`[Re-search] Found file but still incompatible: ${incompMod.name}`);
+          stillIncompatible.push(incompMod.name);
+          continue;
+        }
+        
+        // Check if this exact file already exists
+        const allMods = await this.getAllMods();
+        let existingMod = allMods.find(
+          (m) =>
+            m.source === "curseforge" &&
+            m.cf_project_id === incompMod.cf_project_id &&
+            m.cf_file_id === bestFile.id
+        );
+        
+        if (!existingMod) {
+          // Add the new mod to library
+          console.log(`[Re-search] Adding compatible version of ${incompMod.name}`);
+          existingMod = await this.addMod({
+            name: formattedMod.name,
+            slug: formattedMod.slug,
+            version: formattedMod.version,
+            game_version: formattedMod.game_version,
+            game_versions: formattedMod.game_versions,
+            loader: formattedMod.loader,
+            content_type: formattedMod.content_type,
+            filename: formattedMod.filename,
+            source: "curseforge",
+            cf_project_id: formattedMod.cf_project_id,
+            cf_file_id: formattedMod.cf_file_id,
+            description: formattedMod.description,
+            author: formattedMod.author,
+            thumbnail_url: formattedMod.thumbnail_url,
+            logo_url: formattedMod.logo_url,
+            download_count: formattedMod.download_count,
+            release_type: formattedMod.release_type,
+            date_released: formattedMod.date_released,
+            dependencies: formattedMod.dependencies,
+            categories: formattedMod.categories,
+            file_size: formattedMod.file_size,
+            date_created: formattedMod.date_created,
+            date_modified: formattedMod.date_modified,
+            website_url: formattedMod.website_url,
+          });
+        }
+        
+        // Add to modpack
+        await this.addModToModpack(modpackId, existingMod.id);
+        added.push(incompMod.name);
+        console.log(`[Re-search] Successfully added ${incompMod.name}`);
+        
+      } catch (error: any) {
+        console.error(`[Re-search] Error processing ${incompMod.name}:`, error);
+        stillIncompatible.push(incompMod.name);
+      }
+    }
+    
+    // Update the modpack's incompatible list (only keep those still incompatible)
+    const updatedModpack = await this.getModpackById(modpackId);
+    if (updatedModpack) {
+      updatedModpack.incompatible_mods = incompatible.filter(
+        (m) => stillIncompatible.includes(m.name)
+      );
+      await this.safeWriteJson(this.getModpackPath(modpackId), updatedModpack);
+    }
+    
+    return {
+      found: added.length,
+      notFound: stillIncompatible.length,
+      added,
+      stillIncompatible,
     };
   }
 

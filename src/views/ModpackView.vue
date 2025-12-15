@@ -8,6 +8,7 @@ import ModpackCompareDialog from "@/components/modpacks/ModpackCompareDialog.vue
 import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import ShareDialog from "@/components/modpacks/ShareDialog.vue";
 import ConvertModpackDialog from "@/components/modpacks/ConvertModpackDialog.vue";
+import CurseForgeModpackSearch from "@/components/modpacks/CurseForgeModpackSearch.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
@@ -28,6 +29,7 @@ import {
   FolderOpen,
   Merge,
   Package,
+  Globe,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
 
@@ -79,6 +81,9 @@ const shareModpackName = ref<string>("");
 // Convert State
 const showConvertDialog = ref(false);
 const convertModpack = ref<Modpack | null>(null);
+
+// CurseForge Browse State
+const showCFBrowse = ref(false);
 
 // Import State
 const showProgress = ref(false);
@@ -827,9 +832,9 @@ onMounted(() => {
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 " @click="
-                quickFilter = 'all';
-              router.push('/modpacks');
-              ">
+                  quickFilter = 'all';
+                router.push('/modpacks');
+                ">
                 All
               </button>
               <button
@@ -838,9 +843,9 @@ onMounted(() => {
                   ? 'bg-rose-500/20 text-rose-400 shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   " @click="
-                  quickFilter = 'favorites';
-                router.push('/modpacks?filter=favorites');
-                ">
+                    quickFilter = 'favorites';
+                  router.push('/modpacks?filter=favorites');
+                  ">
                 <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
                 <span v-if="favoriteModpacks.size > 0" class="hidden xs:inline">({{ favoriteModpacks.size }})</span>
               </button>
@@ -892,6 +897,11 @@ onMounted(() => {
               <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span class="hidden lg:inline text-xs">.modex</span>
             </Button>
+            <Button @click="showCFBrowse = true" :disabled="!isElectron()" variant="outline" size="sm"
+              class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
+              <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden xs:inline">Browse CF</span>
+            </Button>
             <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
               class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
               <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -932,9 +942,13 @@ onMounted(() => {
         </p>
 
         <div class="flex justify-center gap-3">
+          <Button @click="showCFBrowse = true" variant="outline" size="lg" class="gap-2 h-11 px-5">
+            <Globe class="w-5 h-5" />
+            Browse CF
+          </Button>
           <Button @click="importCurseForgeModpack" variant="secondary" size="lg" class="gap-2 h-11 px-5">
             <Download class="w-5 h-5" />
-            Import CF
+            Import ZIP
           </Button>
           <Button @click="showCreateDialog = true" size="lg"
             class="gap-2 h-11 px-5 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
@@ -1024,6 +1038,9 @@ onMounted(() => {
     <!-- Convert Dialog -->
     <ConvertModpackDialog :open="showConvertDialog" :modpack="convertModpack" @close="closeConvertDialog"
       @success="handleConvertSuccess" />
+
+    <!-- CurseForge Modpack Browse Dialog -->
+    <CurseForgeModpackSearch :open="showCFBrowse" @close="showCFBrowse = false" @imported="loadModpacks" />
 
     <!-- CF Import Conflict Resolution Dialog -->
     <Dialog :open="showCFConflictDialog" @close="showCFConflictDialog = false">

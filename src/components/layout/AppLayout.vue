@@ -3,9 +3,11 @@ import { ref } from 'vue';
 import Sidebar from "./Sidebar.vue";
 import Toast from "@/components/ui/Toast.vue";
 import { useToast } from "@/composables/useToast";
+import { useSidebar } from "@/composables/useSidebar";
 import { Menu } from "lucide-vue-next";
 
 const { messages, remove } = useToast();
+const { settings: sidebarSettings } = useSidebar();
 const sidebarOpen = ref(false);
 
 function closeSidebar() {
@@ -14,11 +16,12 @@ function closeSidebar() {
 </script>
 
 <template>
-  <div class="flex h-screen bg-background text-foreground">
+  <div class="flex h-screen bg-background text-foreground"
+    :class="sidebarSettings.position === 'right' ? 'flex-row-reverse' : ''">
     <!-- Mobile menu button -->
     <button @click="sidebarOpen = true"
-      class="fixed top-2 left-2 z-40 sm:hidden p-2 rounded-lg bg-card border border-border shadow-lg"
-      aria-label="Open menu">
+      class="fixed top-2 z-40 sm:hidden p-2 rounded-lg bg-card border border-border shadow-lg"
+      :class="sidebarSettings.position === 'right' ? 'right-2' : 'left-2'" aria-label="Open menu">
       <Menu class="w-5 h-5" />
     </button>
 
@@ -28,9 +31,13 @@ function closeSidebar() {
     </Transition>
 
     <!-- Sidebar - hidden on mobile, visible as drawer when open -->
-    <div
-      class="fixed sm:relative inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-out sm:transform-none"
-      :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'">
+    <div class="fixed sm:relative inset-y-0 z-50 transform transition-transform duration-200 ease-out sm:transform-none"
+      :class="[
+        sidebarSettings.position === 'right' ? 'right-0' : 'left-0',
+        sidebarSettings.position === 'right'
+          ? (sidebarOpen ? 'translate-x-0' : 'translate-x-full sm:translate-x-0')
+          : (sidebarOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0')
+      ]">
       <Sidebar :is-open="sidebarOpen" @close="closeSidebar" />
     </div>
 

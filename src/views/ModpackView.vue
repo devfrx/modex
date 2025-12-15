@@ -19,7 +19,7 @@ import {
   Trash2,
   ArrowLeftRight,
   BarChart3,
-  Star,
+  Heart,
   Share2,
   RefreshCw,
   Search,
@@ -797,109 +797,112 @@ onMounted(() => {
     </div>
 
     <!-- Compact Header -->
-    <div class="shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-b border-border bg-background">
-      <!-- Mobile: Stack vertically, Desktop: Row -->
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
-        <!-- Left: Title & Stats -->
-        <div class="flex items-center gap-3 sm:gap-4">
-          <div class="flex items-center gap-2 sm:gap-3">
-            <div class="p-1.5 sm:p-2 bg-primary/10 rounded-lg">
-              <PackagePlus class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+    <div class="shrink-0 relative overflow-hidden border-b border-border">
+      <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
+        <!-- Mobile: Stack vertically, Desktop: Row -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+          <!-- Left: Title & Stats -->
+          <div class="flex items-center gap-3 sm:gap-4">
+            <div class="flex items-center gap-2 sm:gap-3">
+              <div
+                class="p-2 sm:p-2.5 bg-gradient-to-br from-blue-500/20 to-violet-500/10 rounded-xl border border-blue-500/20">
+                <Package class="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+              </div>
+              <div>
+                <h1 class="text-base sm:text-lg font-semibold tracking-tight">
+                  Modpacks
+                </h1>
+                <p class="text-[10px] sm:text-xs text-muted-foreground">
+                  {{ modpacks.length }} packs • {{ totalMods }} mods
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 class="text-base sm:text-lg font-semibold tracking-tight">
-                Modpacks
-              </h1>
-              <p class="text-[10px] sm:text-xs text-muted-foreground">
-                {{ modpacks.length }} packs • {{ totalMods }} mods
-              </p>
-            </div>
-          </div>
 
-          <!-- Separator - hidden on mobile -->
-          <div class="hidden sm:block h-8 w-px bg-border" />
+            <!-- Separator - hidden on mobile -->
+            <div class="hidden sm:block h-8 w-px bg-border" />
 
-          <!-- Quick Filters -->
-          <div class="flex items-center gap-1 sm:gap-1.5">
-            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
+            <!-- Quick Filters -->
+            <div class="flex items-center gap-1 sm:gap-1.5">
+              <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              " @click="
+                " @click="
                 quickFilter = 'all';
               router.push('/modpacks');
               ">
-              All
-            </button>
-            <button
-              class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
-              :class="quickFilter === 'favorites'
-                  ? 'bg-yellow-500/20 text-yellow-400 shadow-sm'
+                All
+              </button>
+              <button
+                class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
+                :class="quickFilter === 'favorites'
+                  ? 'bg-rose-500/20 text-rose-400 shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                " @click="
-                quickFilter = 'favorites';
-              router.push('/modpacks?filter=favorites');
-              ">
-              <Star class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-yellow-400' : ''" />
-              <span v-if="favoriteModpacks.size > 0" class="hidden xs:inline">({{ favoriteModpacks.size }})</span>
-            </button>
+                  " @click="
+                  quickFilter = 'favorites';
+                router.push('/modpacks?filter=favorites');
+                ">
+                <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
+                <span v-if="favoriteModpacks.size > 0" class="hidden xs:inline">({{ favoriteModpacks.size }})</span>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <!-- Search & Sort -->
-        <div class="hidden md:flex items-center gap-2 flex-1 max-w-xs mx-auto">
-          <div class="relative flex-1">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <input v-model="searchQuery" placeholder="Search packs..."
-              class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
-          </div>
-          <select v-model="sortBy"
-            class="text-xs bg-muted/50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:bg-muted transition-colors appearance-none"
-            style="
+          <!-- Search & Sort -->
+          <div class="hidden md:flex items-center gap-2 flex-1 max-w-xs mx-auto">
+            <div class="relative flex-1">
+              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input v-model="searchQuery" placeholder="Search packs..."
+                class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
+            </div>
+            <select v-model="sortBy"
+              class="text-xs bg-muted/50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:bg-muted transition-colors appearance-none"
+              style="
               background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
               background-repeat: no-repeat;
               background-position: right 0.5rem center;
               background-size: 0.65em auto;
             ">
-            <option value="name">Name</option>
-            <option value="updated">Updated</option>
-          </select>
-        </div>
-
-        <!-- Right: Actions -->
-        <div class="flex items-center gap-1.5 sm:gap-2">
-          <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
-            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3">
-            <ArrowLeftRight class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span class="hidden lg:inline text-xs">Compare</span>
-          </Button>
-
-          <!-- Selection Actions -->
-          <div class="hidden md:flex items-center gap-1 border-l border-border pl-2 ml-1">
-            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-              @click="selectAll" :disabled="modpacks.length === 0">
-              Select All
-            </Button>
-            <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-              @click="clearSelection" :disabled="selectedModpackIds.size === 0">
-              Clear
-            </Button>
+              <option value="name">Name</option>
+              <option value="updated">Updated</option>
+            </select>
           </div>
 
-          <Button @click="openShareImport" :disabled="!isElectron()" variant="ghost" size="sm"
-            class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex">
-            <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span class="hidden lg:inline text-xs">.modex</span>
-          </Button>
-          <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
-            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
-            <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span class="hidden xs:inline">Import</span>
-          </Button>
-          <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
-            class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
-            <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span class="hidden xs:inline">Create</span>
-          </Button>
+          <!-- Right: Actions -->
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
+              class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3">
+              <ArrowLeftRight class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden lg:inline text-xs">Compare</span>
+            </Button>
+
+            <!-- Selection Actions -->
+            <div class="hidden md:flex items-center gap-1 border-l border-border pl-2 ml-1">
+              <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                @click="selectAll" :disabled="modpacks.length === 0">
+                Select All
+              </Button>
+              <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                @click="clearSelection" :disabled="selectedModpackIds.size === 0">
+                Clear
+              </Button>
+            </div>
+
+            <Button @click="openShareImport" :disabled="!isElectron()" variant="ghost" size="sm"
+              class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex">
+              <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden lg:inline text-xs">.modex</span>
+            </Button>
+            <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
+              class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
+              <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden xs:inline">Import</span>
+            </Button>
+            <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
+              class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
+              <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden xs:inline">Create</span>
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -1046,8 +1049,8 @@ onMounted(() => {
 
             <!-- Use Existing Version -->
             <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all" :class="conflict.resolution === 'use_existing'
-                ? 'bg-primary/10 border-primary'
-                : 'bg-muted/50 border-border hover:bg-muted'
+              ? 'bg-primary/10 border-primary'
+              : 'bg-muted/50 border-border hover:bg-muted'
               ">
               <input type="radio" :name="`cf-conflict-${idx}`" value="use_existing" v-model="conflict.resolution"
                 class="mt-1" />
@@ -1068,8 +1071,8 @@ onMounted(() => {
 
             <!-- Use New Version -->
             <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all" :class="conflict.resolution === 'use_new'
-                ? 'bg-primary/10 border-primary'
-                : 'bg-muted/50 border-border hover:bg-muted'
+              ? 'bg-primary/10 border-primary'
+              : 'bg-muted/50 border-border hover:bg-muted'
               ">
               <input type="radio" :name="`cf-conflict-${idx}`" value="use_new" v-model="conflict.resolution"
                 class="mt-1" />

@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from "vue";
 import { useTheme, stylePresets } from "@/composables/useTheme";
 import { useToast } from "@/composables/useToast";
 import { useDialog } from "@/composables/useDialog";
+import { useSidebar } from "@/composables/useSidebar";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import {
@@ -28,7 +29,40 @@ import {
   Square,
   Circle,
   Sparkles,
+  PanelLeft,
+  PanelRight,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Home,
+  Library,
+  Package,
+  FolderTree,
+  BarChart3,
+  LayoutGrid,
+  BookOpen,
 } from "lucide-vue-next";
+
+// Sidebar settings
+const {
+  settings: sidebarSettings,
+  setPosition,
+  setCollapsed,
+  toggleItemEnabled,
+  resetSettings: resetSidebarSettings,
+  defaultItems
+} = useSidebar();
+
+// Icon mapping for sidebar items
+const sidebarIconMap: Record<string, any> = {
+  Home,
+  Library,
+  Package,
+  FolderTree,
+  BarChart3,
+  LayoutGrid,
+  BookOpen,
+};
 
 // App version from package.json
 const appVersion = __APP_VERSION__;
@@ -60,6 +94,7 @@ const currentTab = ref("general");
 const tabs = [
   { id: "general", name: "General", icon: SettingsIcon },
   { id: "appearance", name: "Appearance", icon: Palette },
+  { id: "sidebar", name: "Sidebar", icon: Sliders },
   { id: "library", name: "Library", icon: Database },
   { id: "shortcuts", name: "Shortcuts", icon: Keyboard },
   { id: "about", name: "About", icon: Info },
@@ -230,8 +265,8 @@ onMounted(() => {
         <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id"
           class="w-full text-left px-3 py-2.5 rounded-md flex items-center gap-3 transition-all duration-200 text-sm font-medium"
           :class="currentTab === tab.id
-              ? 'bg-primary/10 text-primary'
-              : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
             ">
           <component :is="tab.icon" class="w-4 h-4" />
           {{ tab.name }}
@@ -336,8 +371,8 @@ onMounted(() => {
                 <button v-for="t in themes" :key="t.id"
                   class="flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all hover:bg-muted/50 relative overflow-hidden group"
                   :class="currentTheme === t.id
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border/50'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border/50'
                     " @click="setTheme(t.id)">
                   <div
                     class="w-12 h-12 rounded-full shadow-sm mb-1 relative flex items-center justify-center border border-border/20"
@@ -367,8 +402,8 @@ onMounted(() => {
                 <button v-for="preset in stylePresets" :key="preset.id"
                   class="flex flex-col items-start gap-2 p-4 rounded-lg border-2 transition-all hover:bg-muted/50 text-left"
                   :class="customization.stylePreset === preset.id
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border/50'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border/50'
                     " @click="applyStylePreset(preset.id)">
                   <div class="flex items-center gap-2 w-full">
                     <div class="w-4 h-4 rounded" :style="{
@@ -552,6 +587,96 @@ onMounted(() => {
                   {{ isClearingData ? "Clearing..." : "Clear All Data" }}
                 </Button>
               </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Sidebar Tab -->
+        <div v-if="currentTab === 'sidebar'" class="space-y-8">
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <PanelLeft class="w-4 h-4 text-primary" />
+              Sidebar Layout
+            </h3>
+            <p class="text-sm text-muted-foreground">
+              Customize the sidebar appearance and behavior.
+            </p>
+
+            <div class="space-y-6">
+              <!-- Position Selection -->
+              <div class="space-y-3">
+                <label class="text-sm font-medium">Position</label>
+                <div class="flex gap-3">
+                  <button @click="setPosition('left')"
+                    class="flex-1 flex items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all" :class="sidebarSettings.position === 'left'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/50'">
+                    <PanelLeft class="w-5 h-5" />
+                    <span class="font-medium">Left</span>
+                  </button>
+                  <button @click="setPosition('right')"
+                    class="flex-1 flex items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all" :class="sidebarSettings.position === 'right'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/50'">
+                    <PanelRight class="w-5 h-5" />
+                    <span class="font-medium">Right</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Collapsed Mode -->
+              <div class="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border">
+                <div>
+                  <p class="font-medium">Collapsed Mode</p>
+                  <p class="text-sm text-muted-foreground">Show only icons in sidebar</p>
+                </div>
+                <button @click="setCollapsed(!sidebarSettings.collapsed)"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                  :class="sidebarSettings.collapsed ? 'bg-primary' : 'bg-muted'">
+                  <span class="inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform"
+                    :class="sidebarSettings.collapsed ? 'translate-x-6' : 'translate-x-1'" />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <Eye class="w-4 h-4 text-primary" />
+              Navigation Items
+            </h3>
+            <p class="text-sm text-muted-foreground">
+              Toggle which items appear in the sidebar navigation.
+            </p>
+
+            <div class="space-y-2">
+              <div v-for="item in sidebarSettings.items" :key="item.id"
+                class="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                <div class="flex items-center gap-3">
+                  <component :is="sidebarIconMap[item.icon] || Package" class="w-5 h-5 text-muted-foreground" />
+                  <span class="font-medium">{{ item.name }}</span>
+                </div>
+                <button @click="toggleItemEnabled(item.id)" class="p-1.5 rounded-md transition-colors" :class="item.enabled
+                  ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                  : 'text-muted-foreground hover:bg-muted'">
+                  <component :is="item.enabled ? Eye : EyeOff" class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-lg font-medium">Reset Sidebar</h3>
+                <p class="text-sm text-muted-foreground">
+                  Restore sidebar to default settings
+                </p>
+              </div>
+              <Button variant="outline" @click="resetSidebarSettings">
+                <RotateCcw class="w-4 h-4 mr-2" />
+                Reset to Default
+              </Button>
             </div>
           </section>
         </div>

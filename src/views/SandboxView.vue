@@ -1,179 +1,187 @@
 <template>
   <div class="h-full flex flex-col bg-background">
     <!-- Header -->
-    <div
-      class="shrink-0 px-2 sm:px-4 py-2 sm:py-2.5 border-b border-border bg-card/50 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
-      <!-- Title -->
-      <div class="flex items-center gap-2">
-        <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center bg-violet-500/10">
-          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 6v6l4 2" />
-          </svg>
-        </div>
-        <h2 class="text-xs sm:text-sm font-semibold text-foreground/80">
-          Sandbox
-        </h2>
-      </div>
-
-      <!-- Divider - hidden on mobile -->
-      <div class="hidden sm:block w-px h-5 bg-border"></div>
-
-      <!-- Search -->
-      <div class="relative flex-1 sm:flex-none order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0">
-        <svg
-          class="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground"
-          fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
-        <input v-model="searchQuery" type="text" placeholder="Search..."
-          class="w-full sm:w-36 pl-7 sm:pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none transition-all bg-muted/50 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:ring-1 focus:ring-ring" />
-
-        <!-- Search Results Dropdown -->
-        <Transition name="fade">
-          <div v-if="searchResults.length > 0"
-            class="absolute top-full left-0 mt-1.5 w-full sm:w-56 rounded-lg shadow-xl z-50 max-h-56 overflow-auto bg-popover border border-border">
-            <button v-for="node in searchResults.slice(0, 8)" :key="node.id"
-              class="w-full px-3 py-2 text-xs text-left flex items-center gap-2.5 transition-colors hover:bg-muted text-foreground"
-              @click="focusOnNode(node)">
-              <span class="w-2 h-2 rounded-full" :class="node.type === 'folder'
-                ? 'bg-amber-500'
-                : node.type === 'mod'
-                  ? 'bg-emerald-500'
-                  : 'bg-violet-500'
-                "></span>
-              <span class="truncate">{{ node.label }}</span>
-              <span class="ml-auto text-[10px] opacity-50 capitalize">{{
-                node.type
-              }}</span>
-            </button>
+    <div class="shrink-0 relative overflow-hidden border-b border-border">
+      <div
+        class="relative px-2 sm:px-4 py-2 sm:py-2.5 bg-background/80 backdrop-blur-sm flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
+        <!-- Title -->
+        <div class="flex items-center gap-2">
+          <div
+            class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-violet-500/20 to-purple-500/10 border border-violet-500/20">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
           </div>
-        </Transition>
-      </div>
+          <h2 class="text-xs sm:text-sm font-semibold text-foreground/80">
+            Sandbox
+          </h2>
+        </div>
 
-      <!-- Filters -->
-      <div class="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-muted/50">
+        <!-- Divider - hidden on mobile -->
+        <div class="hidden sm:block w-px h-5 bg-border"></div>
+
+        <!-- Search -->
+        <div class="relative flex-1 sm:flex-none order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0">
+          <svg
+            class="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground"
+            fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input v-model="searchQuery" type="text" placeholder="Search..."
+            class="w-full sm:w-36 pl-7 sm:pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none transition-all bg-muted/50 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:ring-1 focus:ring-ring" />
+
+          <!-- Search Results Dropdown -->
+          <Transition name="fade">
+            <div v-if="searchResults.length > 0"
+              class="absolute top-full left-0 mt-1.5 w-full sm:w-56 rounded-lg shadow-xl z-50 max-h-56 overflow-auto bg-popover border border-border">
+              <button v-for="node in searchResults.slice(0, 8)" :key="node.id"
+                class="w-full px-3 py-2 text-xs text-left flex items-center gap-2.5 transition-colors hover:bg-muted text-foreground"
+                @click="focusOnNode(node)">
+                <span class="w-2 h-2 rounded-full" :class="node.type === 'folder'
+                  ? 'bg-amber-500'
+                  : node.type === 'mod'
+                    ? 'bg-emerald-500'
+                    : 'bg-violet-500'
+                  "></span>
+                <span class="truncate">{{ node.label }}</span>
+                <span class="ml-auto text-[10px] opacity-50 capitalize">{{
+                  node.type
+                  }}</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-muted/50">
+          <button
+            class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+            :class="showFolders
+              ? 'bg-amber-500/20 text-amber-500'
+              : 'text-muted-foreground hover:text-foreground'
+              " @click="showFolders = !showFolders">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            <span class="hidden xs:inline">Folders</span>
+          </button>
+          <button
+            class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+            :class="showMods
+              ? 'bg-emerald-500/20 text-emerald-500'
+              : 'text-muted-foreground hover:text-foreground'
+              " @click="showMods = !showMods">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span class="hidden xs:inline">Mods</span>
+          </button>
+          <button
+            class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+            :class="showResourcepacks
+              ? 'bg-blue-500/20 text-blue-500'
+              : 'text-muted-foreground hover:text-foreground'
+              " @click="showResourcepacks = !showResourcepacks">
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            <span class="hidden xs:inline">Packs</span>
+          </button>
+          <button
+            class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+            :class="showShaders
+              ? 'bg-purple-500/20 text-purple-500'
+              : 'text-muted-foreground hover:text-foreground'
+              " @click="showShaders = !showShaders">
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            <span class="hidden xs:inline">Shaders</span>
+          </button>
+          <button
+            class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
+            :class="showModpacks
+              ? 'bg-violet-500/20 text-violet-500'
+              : 'text-muted-foreground hover:text-foreground'
+              " @click="showModpacks = !showModpacks">
+            <span class="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
+            <span class="hidden xs:inline">Modpacks</span>
+          </button>
+        </div>
+
+        <!-- Stats - hidden on small screens -->
+        <div class="hidden sm:block text-[11px] tabular-nums text-muted-foreground">
+          {{ filteredNodes.length
+          }}<span class="opacity-50">/{{ nodes.length }}</span> nodes
+        </div>
+
+        <!-- Spacer -->
+        <div class="flex-1 hidden sm:block"></div>
+
+        <!-- Performance Mode Toggle -->
         <button
-          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
-          :class="showFolders
+          class="hidden sm:flex items-center gap-1.5 px-2 py-1 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all"
+          :class="performanceMode
             ? 'bg-amber-500/20 text-amber-500'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="showFolders = !showFolders">
-          <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-          <span class="hidden xs:inline">Folders</span>
-        </button>
-        <button
-          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
-          :class="showMods
-            ? 'bg-emerald-500/20 text-emerald-500'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="showMods = !showMods">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          <span class="hidden xs:inline">Mods</span>
-        </button>
-        <button
-          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
-          :class="showResourcepacks
-            ? 'bg-blue-500/20 text-blue-500'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="showResourcepacks = !showResourcepacks">
-          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-          <span class="hidden xs:inline">Packs</span>
-        </button>
-        <button
-          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
-          :class="showShaders
-            ? 'bg-purple-500/20 text-purple-500'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="showShaders = !showShaders">
-          <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-          <span class="hidden xs:inline">Shaders</span>
-        </button>
-        <button
-          class="px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1 sm:gap-1.5"
-          :class="showModpacks
-            ? 'bg-violet-500/20 text-violet-500'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="showModpacks = !showModpacks">
-          <span class="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
-          <span class="hidden xs:inline">Modpacks</span>
-        </button>
-      </div>
-
-      <!-- Stats - hidden on small screens -->
-      <div class="hidden sm:block text-[11px] tabular-nums text-muted-foreground">
-        {{ filteredNodes.length
-        }}<span class="opacity-50">/{{ nodes.length }}</span> nodes
-      </div>
-
-      <!-- Spacer -->
-      <div class="flex-1 hidden sm:block"></div>
-
-      <!-- Performance Mode Toggle -->
-      <button
-        class="hidden sm:flex items-center gap-1.5 px-2 py-1 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all"
-        :class="performanceMode 
-          ? 'bg-amber-500/20 text-amber-500' 
-          : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'"
-        @click="performanceMode = !performanceMode"
-        :title="performanceMode ? 'Performance mode ON (simplified rendering)' : 'Performance mode OFF'">
-        <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-        </svg>
-        <span class="hidden lg:inline">{{ performanceMode ? 'Fast' : 'Quality' }}</span>
-      </button>
-
-      <!-- Zoom Controls -->
-      <div class="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-muted/50">
-        <button
-          class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors hover:bg-muted text-muted-foreground"
-          @click="zoomOut" title="Zoom Out">
-          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35M8 11h6" />
-          </svg>
-        </button>
-        <span class="w-8 sm:w-10 text-center text-[10px] sm:text-[11px] tabular-nums text-muted-foreground">
-          {{ zoomLevel }}%
-        </span>
-        <button
-          class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors hover:bg-muted text-muted-foreground"
-          @click="zoomIn" title="Zoom In">
-          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35M8 11h6M11 8v6" />
-          </svg>
-        </button>
-        <button
-          class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors hover:bg-muted text-muted-foreground"
-          @click="fitToView" title="Fit to View">
-          <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Layout Controls -->
-      <div class="hidden sm:flex items-center gap-1">
-        <button
-          class="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-          @click="spreadNodes" title="Spread nodes apart">
+            : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'"
+          @click="performanceMode = !performanceMode"
+          :title="performanceMode ? 'Performance mode ON (simplified rendering)' : 'Performance mode OFF'">
           <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
           </svg>
-          <span class="hidden lg:inline">Spread</span>
+          <span class="hidden lg:inline">{{ performanceMode ? 'Fast' : 'Quality' }}</span>
         </button>
-        <button
-          class="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-          @click="resetLayout" title="Reset layout">
-          <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-          <span class="hidden lg:inline">Reset</span>
-        </button>
+
+        <!-- Zoom Controls -->
+        <div class="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-lg bg-muted/50">
+          <button
+            class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors hover:bg-muted text-muted-foreground"
+            @click="zoomOut" title="Zoom Out">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2"
+              viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35M8 11h6" />
+            </svg>
+          </button>
+          <span class="w-8 sm:w-10 text-center text-[10px] sm:text-[11px] tabular-nums text-muted-foreground">
+            {{ zoomLevel }}%
+          </span>
+          <button
+            class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors hover:bg-muted text-muted-foreground"
+            @click="zoomIn" title="Zoom In">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2"
+              viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35M8 11h6M11 8v6" />
+            </svg>
+          </button>
+          <button
+            class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-colors hover:bg-muted text-muted-foreground"
+            @click="fitToView" title="Fit to View">
+            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" stroke-width="2"
+              viewBox="0 0 24 24">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Layout Controls -->
+        <div class="hidden sm:flex items-center gap-1">
+          <button
+            class="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+            @click="spreadNodes" title="Spread nodes apart">
+            <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2"
+              viewBox="0 0 24 24">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
+            <span class="hidden lg:inline">Spread</span>
+          </button>
+          <button
+            class="px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+            @click="resetLayout" title="Reset layout">
+            <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" stroke-width="2"
+              viewBox="0 0 24 24">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+            <span class="hidden lg:inline">Reset</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -211,8 +219,8 @@
           <!-- Arrow marker for default links -->
           <marker id="arrow-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
             orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" :fill="isLightMode 
-              ? 'rgba(100, 116, 139, 0.7)' 
+            <path d="M 0 0 L 10 5 L 0 10 z" :fill="isLightMode
+              ? 'rgba(100, 116, 139, 0.7)'
               : linkColor" />
           </marker>
         </defs>
@@ -231,8 +239,7 @@
           <g class="links">
             <line v-for="link in renderedLinks" :key="`${link.source.id}-${link.target.id}`" :x1="getLinkStartX(link)"
               :y1="getLinkStartY(link)" :x2="getLinkEndX(link)" :y2="getLinkEndY(link)" :stroke="getLinkColor(link)"
-              stroke-width="1.5" :marker-end="performanceMode ? '' : getLinkMarker(link)" 
-              class="link-line"
+              stroke-width="1.5" :marker-end="performanceMode ? '' : getLinkMarker(link)" class="link-line"
               :class="performanceMode ? '' : 'transition-opacity duration-300'"
               :style="{ opacity: getNodeOpacity(link.source.id) }" />
           </g>
@@ -240,22 +247,19 @@
           <!-- Nodes - Performance Mode (simple circles) -->
           <g v-if="performanceMode" class="nodes-fast">
             <g v-for="node in visibleNodes" :key="node.id" :transform="`translate(${node.x ?? 0}, ${node.y ?? 0})`"
-              class="node-group cursor-pointer"
-              @mousedown="onDragStart($event, node)" @touchstart.prevent="onDragStart($event, node)"
-              @mouseenter="hoveredNodeId = node.id" @mouseleave="hoveredNodeId = null"
-              @contextmenu.prevent.stop="openContextMenu($event, node)">
-              
+              class="node-group cursor-pointer" @mousedown="onDragStart($event, node)"
+              @touchstart.prevent="onDragStart($event, node)" @mouseenter="hoveredNodeId = node.id"
+              @mouseleave="hoveredNodeId = null" @contextmenu.prevent.stop="openContextMenu($event, node)">
+
               <!-- Simple colored circle -->
-              <circle 
-                :r="node.type === 'folder' ? 16 : node.type === 'modpack' ? 14 : 10"
+              <circle :r="node.type === 'folder' ? 16 : node.type === 'modpack' ? 14 : 10"
                 :fill="node.type === 'folder' ? '#fbbf24' : node.type === 'modpack' ? '#8b5cf6' : node.type === 'resourcepack' ? '#3b82f6' : node.type === 'shader' ? '#ec4899' : '#34d399'"
-                :stroke="hoveredNodeId === node.id ? '#fff' : 'transparent'"
-                stroke-width="2"
+                :stroke="hoveredNodeId === node.id ? '#fff' : 'transparent'" stroke-width="2"
                 :style="{ opacity: getNodeOpacity(node.id) }" />
-              
+
               <!-- Label only on hover -->
-              <text v-if="hoveredNodeId === node.id" y="24" text-anchor="middle" 
-                :fill="node.type === 'folder' ? '#fbbf24' : node.type === 'mod' ? '#34d399' : node.type === 'resourcepack' ? '#3b82f6' : node.type === 'shader' ? '#ec4899' : '#8b5cf6'" 
+              <text v-if="hoveredNodeId === node.id" y="24" text-anchor="middle"
+                :fill="node.type === 'folder' ? '#fbbf24' : node.type === 'mod' ? '#34d399' : node.type === 'resourcepack' ? '#3b82f6' : node.type === 'shader' ? '#ec4899' : '#8b5cf6'"
                 font-size="10" font-weight="600" pointer-events="none" class="select-none">
                 {{ node.label }}
               </text>
@@ -267,18 +271,17 @@
             <g v-for="node in visibleNodes" :key="node.id" :transform="`translate(${node.x ?? 0}, ${node.y ?? 0})`"
               class="node-group transition-opacity duration-300" :class="{
                 'drop-target': dropTarget?.id === node.id,
-              }" 
-              :style="{ opacity: getNodeOpacity(node.id) }"
-              @mousedown="onDragStart($event, node)" @touchstart.prevent="onDragStart($event, node)"
-              @mouseenter="hoveredNodeId = node.id" @mouseleave="hoveredNodeId = null"
-              @contextmenu.prevent.stop="openContextMenu($event, node)">
+              }" :style="{ opacity: getNodeOpacity(node.id) }" @mousedown="onDragStart($event, node)"
+              @touchstart.prevent="onDragStart($event, node)" @mouseenter="hoveredNodeId = node.id"
+              @mouseleave="hoveredNodeId = null" @contextmenu.prevent.stop="openContextMenu($event, node)">
               <!-- Drop target highlight ring -->
               <circle v-if="dropTarget?.id === node.id" :r="nodeRadius(node) + 8" fill="none" stroke="#8b5cf6"
                 stroke-width="2" stroke-dasharray="4 2" class="animate-pulse" />
 
               <!-- Folder icon -->
               <template v-if="node.type === 'folder'">
-                <circle r="20" fill="rgba(251, 191, 36, 0.15)" stroke="rgba(251, 191, 36, 0.3)" stroke-width="1" class="node-bg" />
+                <circle r="20" fill="rgba(251, 191, 36, 0.15)" stroke="rgba(251, 191, 36, 0.3)" stroke-width="1"
+                  class="node-bg" />
                 <g transform="translate(-10, -10) scale(0.85)">
                   <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" fill="#fbbf24"
                     filter="url(#softGlow)" />
@@ -287,7 +290,8 @@
 
               <!-- Mod icon (cube) -->
               <template v-else-if="node.type === 'mod'">
-                <circle r="14" fill="rgba(52, 211, 153, 0.15)" stroke="rgba(52, 211, 153, 0.3)" stroke-width="1" class="node-bg" />
+                <circle r="14" fill="rgba(52, 211, 153, 0.15)" stroke="rgba(52, 211, 153, 0.3)" stroke-width="1"
+                  class="node-bg" />
                 <g transform="translate(-8, -8) scale(0.7)">
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="#34d399"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" filter="url(#softGlow)" />
@@ -296,9 +300,11 @@
 
               <!-- Resource Pack icon (image) -->
               <template v-else-if="node.type === 'resourcepack'">
-                <circle r="14" fill="rgba(59, 130, 246, 0.15)" stroke="rgba(59, 130, 246, 0.3)" stroke-width="1" class="node-bg" />
+                <circle r="14" fill="rgba(59, 130, 246, 0.15)" stroke="rgba(59, 130, 246, 0.3)" stroke-width="1"
+                  class="node-bg" />
                 <g transform="translate(-8, -8) scale(0.7)">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="none" stroke="#3b82f6" stroke-width="2" />
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="none" stroke="#3b82f6"
+                    stroke-width="2" />
                   <circle cx="8.5" cy="8.5" r="1.5" fill="#3b82f6" />
                   <path d="M21 15l-5-5L5 21" fill="none" stroke="#3b82f6" stroke-width="2" />
                 </g>
@@ -306,7 +312,8 @@
 
               <!-- Shader icon (sparkles) -->
               <template v-else-if="node.type === 'shader'">
-                <circle r="14" fill="rgba(236, 72, 153, 0.15)" stroke="rgba(236, 72, 153, 0.3)" stroke-width="1" class="node-bg" />
+                <circle r="14" fill="rgba(236, 72, 153, 0.15)" stroke="rgba(236, 72, 153, 0.3)" stroke-width="1"
+                  class="node-bg" />
                 <g transform="translate(-8, -8) scale(0.7)">
                   <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" fill="#ec4899" />
                   <path d="M5 19l1 3 1-3-3-1 3-1-1-3-1 3-3 1 3 1z" fill="#ec4899" opacity="0.7" />
@@ -315,7 +322,8 @@
 
               <!-- Modpack icon (package) -->
               <template v-else>
-                <circle r="18" fill="rgba(139, 92, 246, 0.15)" stroke="rgba(139, 92, 246, 0.3)" stroke-width="1" class="node-bg" />
+                <circle r="18" fill="rgba(139, 92, 246, 0.15)" stroke="rgba(139, 92, 246, 0.3)" stroke-width="1"
+                  class="node-bg" />
                 <g transform="translate(-10, -10) scale(0.85)">
                   <!-- Package box outline -->
                   <path
@@ -402,12 +410,12 @@
               <button
                 class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors hover:bg-muted text-foreground"
                 @click="contextAction('viewMod')">
-                <span>📄</span> View Details
+                <FileText class="w-3.5 h-3.5 text-muted-foreground" /> View Details
               </button>
               <button
                 class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors hover:bg-muted text-foreground"
                 @click="contextAction('removeFolderAssignment')">
-                <span>📁</span> Remove from Folder
+                <FolderMinus class="w-3.5 h-3.5 text-muted-foreground" /> Remove from Folder
               </button>
             </template>
 
@@ -416,7 +424,7 @@
               <button
                 class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors hover:bg-muted text-foreground"
                 @click="contextAction('viewFolder')">
-                <span>📂</span> View Folder
+                <FolderOpen class="w-3.5 h-3.5 text-muted-foreground" /> View Folder
               </button>
             </template>
 
@@ -425,12 +433,12 @@
               <button
                 class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors hover:bg-muted text-foreground"
                 @click="contextAction('viewModpack')">
-                <span>📦</span> View Modpack
+                <Package class="w-3.5 h-3.5 text-muted-foreground" /> View Modpack
               </button>
               <button
                 class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors hover:bg-muted text-foreground"
                 @click="contextAction('exportModpack')">
-                <span>📤</span> Export
+                <Upload class="w-3.5 h-3.5 text-muted-foreground" /> Export
               </button>
             </template>
 
@@ -439,7 +447,7 @@
             <button
               class="w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition-colors hover:bg-muted text-foreground"
               @click="contextAction('centerOnNode')">
-              <span>🎯</span> Center View
+              <Crosshair class="w-3.5 h-3.5 text-muted-foreground" /> Center View
             </button>
           </div>
         </div>
@@ -452,20 +460,12 @@
           <!-- Header -->
           <div class="px-4 py-3 border-b flex items-center justify-between border-border bg-muted/30">
             <div class="flex items-center gap-2">
-              <span :class="detailNode.type === 'folder'
-                ? 'text-amber-500'
-                : detailNode.type === 'mod'
-                  ? 'text-emerald-500'
-                  : 'text-violet-500'
-                ">
-                {{
-                  detailNode.type === "folder"
-                    ? "📁"
-                    : detailNode.type === "mod"
-                      ? "📦"
-                      : "🎮"
-                }}
-              </span>
+              <component :is="detailNode.type === 'folder' ? Folder : detailNode.type === 'mod' ? Box : Gamepad2"
+                class="w-4 h-4" :class="detailNode.type === 'folder'
+                  ? 'text-amber-500'
+                  : detailNode.type === 'mod'
+                    ? 'text-emerald-500'
+                    : 'text-violet-500'" />
               <span class="font-medium text-sm text-foreground/90">
                 {{
                   detailNode.type === "folder"
@@ -632,6 +632,17 @@ import { useRouter } from "vue-router";
 import { useFolderTree } from "@/composables/useFolderTree";
 import type { Mod, Modpack } from "@/types/electron";
 import * as d3 from "d3";
+import {
+  FileText,
+  FolderMinus,
+  FolderOpen,
+  Package,
+  Upload,
+  Crosshair,
+  Folder,
+  Box,
+  Gamepad2,
+} from "lucide-vue-next";
 
 const POSITIONS_KEY = "modex:sandbox:positions";
 
@@ -826,8 +837,8 @@ const renderedLinks = computed(() => {
 // Theme colors
 const bgColor = computed(() => "hsl(var(--background))");
 const dotColor = computed(() => "hsl(var(--muted-foreground) / 0.1)");
-const linkColor = computed(() => 
-  isLightMode.value 
+const linkColor = computed(() =>
+  isLightMode.value
     ? "rgba(100, 116, 139, 0.5)" // slate-500 with opacity for light mode
     : "hsl(var(--border))"
 );
@@ -1031,12 +1042,12 @@ async function loadData() {
     const angle = (i / Math.max(mods.length, 1)) * Math.PI * 2;
     const radius = 300;
     const saved = savedPositions[m.id];
-    
+
     // Determine node type based on content_type
     const contentType = m.content_type || "mod";
     const nodeType: "mod" | "resourcepack" | "shader" = contentType === "resourcepack" ? "resourcepack" : contentType === "shader" ? "shader" : "mod";
     const nodeColor = contentType === "resourcepack" ? "#3b82f6" : contentType === "shader" ? "#ec4899" : "#10b981";
-    
+
     const n: GraphNode = {
       id: m.id,
       type: nodeType,
@@ -1515,10 +1526,10 @@ function onDragStart(event: MouseEvent | TouchEvent, node: GraphNode) {
       const isVersionCompatible = isNonMod
         ? (!packVersion || !mod.game_versions?.length || mod.game_versions.includes(packVersion))
         : (!packVersion ||
-           !modVersion ||
-           modVersion === "unknown" ||
-           modVersion === packVersion ||
-           packVersion.startsWith(modVersion));
+          !modVersion ||
+          modVersion === "unknown" ||
+          modVersion === packVersion ||
+          packVersion.startsWith(modVersion));
 
       if (!isLoaderCompatible || !isVersionCompatible) {
         const reason = !isLoaderCompatible

@@ -59,6 +59,7 @@ const emit = defineEmits<{
   (e: "close"): void;
   (e: "update"): void;
   (e: "export"): void;
+  (e: "updated"): void;
 }>();
 
 const toast = useToast();
@@ -1911,10 +1912,10 @@ watch(
                     <div class="flex items-center justify-between text-xs mb-1">
                       <span class="text-muted-foreground truncate max-w-[70%]">{{ reSearchProgress.currentMod ||
                         'Starting...'
-                        }}</span>
+                      }}</span>
                       <span class="text-muted-foreground shrink-0">{{ reSearchProgress.current }}/{{
                         reSearchProgress.total
-                        }}</span>
+                      }}</span>
                     </div>
                     <div class="h-1.5 bg-background rounded-full overflow-hidden">
                       <div class="h-full bg-amber-500 transition-all duration-300"
@@ -2079,7 +2080,7 @@ watch(
           <div class="flex items-center justify-between text-sm mb-2">
             <span class="text-muted-foreground truncate">{{ cfUpdateProgress.currentMod || 'Starting...' }}</span>
             <span class="text-muted-foreground shrink-0">{{ cfUpdateProgress.current }}/{{ cfUpdateProgress.total
-              }}</span>
+            }}</span>
           </div>
           <div class="h-2 bg-background rounded-full overflow-hidden">
             <div class="h-full bg-primary transition-all duration-300"

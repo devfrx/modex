@@ -1065,26 +1065,33 @@ export class ModUpdateService {
 
   /**
    * Controlla aggiornamenti per tutte le mod di un modpack
+   * Optimized with higher concurrency and reduced delays
    */
   async checkModpackUpdates(
-    mods: Array<{ id: string; path: string; version: string; game_version: string; loader: string }>
+    mods: Array<{ id: string; path: string; version: string; game_version: string; loader: string }>,
+    onProgress?: (current: number, total: number) => void
   ): Promise<ModUpdateInfo[]> {
     const results: ModUpdateInfo[] = [];
+    const total = mods.length;
+    let processed = 0;
 
-    // Limita concorrenza per non sovraccaricare le API
-    const batchSize = 5;
+    // Increased concurrency for faster checking
+    const batchSize = 10;
     for (let i = 0; i < mods.length; i += batchSize) {
       const batch = mods.slice(i, i + batchSize);
       const batchResults = await Promise.all(
-        batch.map((mod) =>
-          this.checkForUpdate(mod.id, mod.path, mod.version, mod.game_version, mod.loader)
-        )
+        batch.map(async (mod) => {
+          const result = await this.checkForUpdate(mod.id, mod.path, mod.version, mod.game_version, mod.loader);
+          processed++;
+          onProgress?.(processed, total);
+          return result;
+        })
       );
       results.push(...batchResults);
 
-      // Piccola pausa tra batch
+      // Reduced delay between batches (200ms instead of 500ms)
       if (i + batchSize < mods.length) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
 

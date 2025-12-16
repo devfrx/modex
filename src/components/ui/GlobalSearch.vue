@@ -15,14 +15,30 @@ import {
     FolderTree,
     ArrowRight,
     Command,
+    MoreHorizontal,
+    Eye,
+    PlusCircle,
+    Heart,
+    Copy,
+    Trash2,
+    Edit,
+    FolderOpen,
+    Share2,
+    ExternalLink,
 } from "lucide-vue-next";
 import type { Mod, Modpack } from "@/types/electron";
+import { useToast } from "@/composables/useToast";
 
 const router = useRouter();
+const toast = useToast();
 const isOpen = ref(false);
 const searchQuery = ref("");
 const inputRef = ref<HTMLInputElement | null>(null);
 const selectedIndex = ref(0);
+
+// Context menu state
+const contextMenuTarget = ref<{ id: string; type: string; x: number; y: number } | null>(null);
+const showContextMenu = ref(false);
 
 // Data
 const mods = ref<Mod[]>([]);
@@ -150,6 +166,146 @@ function close() {
     isOpen.value = false;
     searchQuery.value = "";
     selectedIndex.value = 0;
+    closeContextMenu();
+}
+
+// Context menu functions
+function openContextMenu(event: MouseEvent, result: (typeof searchResults.value)[0]) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (result.type === "nav") return; // No context menu for nav items
+
+    contextMenuTarget.value = {
+        id: result.id,
+        type: result.type,
+        x: event.clientX,
+        y: event.clientY,
+    };
+    showContextMenu.value = true;
+}
+
+function closeContextMenu() {
+    showContextMenu.value = false;
+    contextMenuTarget.value = null;
+}
+
+// Context menu actions
+async function handleContextAction(action: string) {
+    if (!contextMenuTarget.value) return;
+
+    const { id, type } = contextMenuTarget.value;
+    const actualId = id.replace(/^(mod-|pack-)/, "");
+
+    closeContextMenu();
+
+    switch (action) {
+        case "view":
+            if (type === "mod") {
+                router.push(`/library?mod=${actualId}`);
+            } else if (type === "modpack") {
+                router.push(`/modpacks?id=${actualId}`);
+            }
+            close();
+            break;
+
+        case "edit":
+            if (type === "modpack") {
+                router.push(`/modpacks?id=${actualId}`);
+                close();
+            }
+            break;
+
+        case "add-to-modpack":
+            if (type === "mod") {
+                router.push(`/library?mod=${actualId}&action=add`);
+                close();
+            }
+            break;
+
+        case "favorite":
+            if (type === "mod") {
+                const favorites = JSON.parse(localStorage.getItem("modex:favorites:mods") || "[]");
+                const favSet = new Set(favorites);
+                if (favSet.has(actualId)) {
+                    favSet.delete(actualId);
+                    toast.success("Removed from favorites");
+                } else {
+                    favSet.add(actualId);
+                    toast.success("Added to favorites");
+                }
+                localStorage.setItem("modex:favorites:mods", JSON.stringify([...favSet]));
+            }
+            break;
+
+        case "copy-name":
+            const result = searchResults.value.find((r) => r.id === id);
+            if (result) {
+                await navigator.clipboard.writeText(result.name);
+                toast.success("Name copied to clipboard");
+            }
+            break;
+
+        case "open-source":
+            if (type === "mod") {
+                const mod = mods.value.find((m) => m.id === actualId);
+                if (mod?.website_url) {
+                    window.open(mod.website_url, "_blank");
+                } else if (mod?.cf_project_id) {
+                    window.open(`https://www.curseforge.com/minecraft/mc-mods/${mod.slug || mod.cf_project_id}`, "_blank");
+                } else if (mod?.mr_project_id) {
+                    window.open(`https://modrinth.com/mod/${mod.slug || mod.mr_project_id}`, "_blank");
+                } else {
+                    toast.error("Source URL not available");
+                }
+            }
+            break;
+
+        case "open-folder":
+            if (type === "modpack" && window.api) {
+                try {
+                    await window.api.modpacks.openFolder(actualId);
+                } catch (err) {
+                    toast.error("Failed to open folder");
+                }
+            }
+            break;
+
+        case "clone":
+            if (type === "modpack" && window.api) {
+                try {
+                    const pack = modpacks.value.find((p) => p.id === actualId);
+                    if (pack) {
+                        await window.api.modpacks.clone(actualId, `${pack.name} (Copy)`);
+                        toast.success("Modpack cloned");
+                        loadData();
+                    }
+                } catch (err) {
+                    toast.error("Failed to clone modpack");
+                }
+            }
+            break;
+
+        case "delete":
+            if (type === "mod" && window.api) {
+                try {
+                    await window.api.mods.delete(actualId);
+                    toast.success("Mod deleted");
+                    loadData();
+                } catch (err) {
+                    toast.error("Failed to delete mod");
+                }
+            } else if (type === "modpack" && window.api) {
+                try {
+                    await window.api.modpacks.delete(actualId);
+                    toast.success("Modpack deleted");
+                    loadData();
+                } catch (err) {
+                    toast.error("Failed to delete modpack");
+                }
+            }
+            break;
+    }
 }
 
 function handleSelect(result: (typeof searchResults.value)[0]) {
@@ -217,7 +373,7 @@ defineExpose({ open, close });
                         <Search class="w-5 h-5 text-muted-foreground shrink-0" />
                         <input ref="inputRef" v-model="searchQuery" type="text"
                             placeholder="Search mods, modpacks, or navigate..."
-                            class="flex-1 px-3 py-4 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
+                            class="flex-1 px-3 py-4 bg-transparent outline-none ring-0 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
                             @keydown="handleKeydown" />
                         <div class="flex items-center gap-1 text-xs text-muted-foreground">
                             <kbd class="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">ESC</kbd>
@@ -244,16 +400,17 @@ defineExpose({ open, close });
                                 </div>
                             </template>
 
-                            <button v-for="(result, index) in searchResults" :key="result.id"
-                                class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors" :class="selectedIndex === index
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'hover:bg-muted/50 text-foreground'
-                                    " @click="handleSelect(result)" @mouseenter="selectedIndex = index">
+                            <div v-for="(result, index) in searchResults" :key="result.id"
+                                class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer"
+                                :class="selectedIndex === index
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
+                                @mouseenter="selectedIndex = index" @contextmenu="openContextMenu($event, result)">
                                 <div class="p-1.5 rounded-lg shrink-0" :class="result.type === 'mod'
-                                        ? 'bg-emerald-500/10 text-emerald-500'
-                                        : result.type === 'modpack'
-                                            ? 'bg-blue-500/10 text-blue-500'
-                                            : 'bg-muted text-muted-foreground'
+                                    ? 'bg-emerald-500/10 text-emerald-500'
+                                    : result.type === 'modpack'
+                                        ? 'bg-blue-500/10 text-blue-500'
+                                        : 'bg-muted text-muted-foreground'
                                     ">
                                     <component :is="result.icon" class="w-4 h-4" />
                                 </div>
@@ -263,8 +420,14 @@ defineExpose({ open, close });
                                         {{ result.subtitle }}
                                     </div>
                                 </div>
-                                <ArrowRight v-if="selectedIndex === index" class="w-4 h-4 text-primary shrink-0" />
-                            </button>
+                                <!-- Action button for non-nav items -->
+                                <button v-if="result.type !== 'nav'" @click.stop="openContextMenu($event, result)"
+                                    class="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
+                                    :class="{ 'opacity-100': selectedIndex === index }">
+                                    <MoreHorizontal class="w-4 h-4" />
+                                </button>
+                                <ArrowRight v-else-if="selectedIndex === index" class="w-4 h-4 text-primary shrink-0" />
+                            </div>
                         </div>
                     </div>
 
@@ -288,6 +451,83 @@ defineExpose({ open, close });
                         </div>
                     </div>
                 </div>
+
+                <!-- Context Menu -->
+                <Transition name="fade">
+                    <div v-if="showContextMenu && contextMenuTarget"
+                        class="fixed z-[110] min-w-[180px] bg-popover border border-border rounded-lg shadow-xl py-1"
+                        :style="{ left: contextMenuTarget.x + 'px', top: contextMenuTarget.y + 'px' }">
+                        <!-- Mod actions -->
+                        <template v-if="contextMenuTarget.type === 'mod'">
+                            <button @click="handleContextAction('view')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <Eye class="w-4 h-4 text-muted-foreground" />
+                                View Details
+                            </button>
+                            <button @click="handleContextAction('add-to-modpack')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <PlusCircle class="w-4 h-4 text-muted-foreground" />
+                                Add to Modpack
+                            </button>
+                            <button @click="handleContextAction('favorite')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <Heart class="w-4 h-4 text-muted-foreground" />
+                                Toggle Favorite
+                            </button>
+                            <button @click="handleContextAction('open-source')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <ExternalLink class="w-4 h-4 text-muted-foreground" />
+                                Open Source Page
+                            </button>
+                            <div class="my-1 border-t border-border"></div>
+                            <button @click="handleContextAction('copy-name')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <Copy class="w-4 h-4 text-muted-foreground" />
+                                Copy Name
+                            </button>
+                            <div class="my-1 border-t border-border"></div>
+                            <button @click="handleContextAction('delete')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
+                                <Trash2 class="w-4 h-4" />
+                                Delete
+                            </button>
+                        </template>
+
+                        <!-- Modpack actions -->
+                        <template v-else-if="contextMenuTarget.type === 'modpack'">
+                            <button @click="handleContextAction('edit')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <Edit class="w-4 h-4 text-muted-foreground" />
+                                Edit Modpack
+                            </button>
+                            <button @click="handleContextAction('open-folder')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <FolderOpen class="w-4 h-4 text-muted-foreground" />
+                                Open in Folder
+                            </button>
+                            <button @click="handleContextAction('clone')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <Copy class="w-4 h-4 text-muted-foreground" />
+                                Clone
+                            </button>
+                            <div class="my-1 border-t border-border"></div>
+                            <button @click="handleContextAction('copy-name')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                                <Copy class="w-4 h-4 text-muted-foreground" />
+                                Copy Name
+                            </button>
+                            <div class="my-1 border-t border-border"></div>
+                            <button @click="handleContextAction('delete')"
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
+                                <Trash2 class="w-4 h-4" />
+                                Delete
+                            </button>
+                        </template>
+                    </div>
+                </Transition>
+
+                <!-- Context menu backdrop -->
+                <div v-if="showContextMenu" class="fixed inset-0 z-[105]" @click="closeContextMenu"></div>
             </div>
         </Transition>
     </Teleport>

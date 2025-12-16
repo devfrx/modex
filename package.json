@@ -20,6 +20,7 @@
     "fs-extra": "^11.3.2",
     "lowdb": "^7.0.1",
     "lucide-vue-next": "^0.555.0",
+    "pixi.js": "^8.14.3",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.4.0",
     "vue": "^3.4.21",

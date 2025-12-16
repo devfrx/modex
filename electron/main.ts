@@ -24,6 +24,7 @@ import {
   AnalysisResult,
   DependencyInfo,
 } from "./services/ModAnalyzerService.js";
+import { getDownloadService } from "./services/DownloadService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -349,10 +350,27 @@ async function initializeBackend() {
     return metadataManager.getModsInModpack(modpackId);
   });
 
+  ipcMain.handle("modpacks:getModsMultiple", async (_, modpackIds: string[]) => {
+    const result = await metadataManager.getModsInMultipleModpacks(modpackIds);
+    // Convert Map to plain object for IPC serialization
+    const obj: Record<string, Mod[]> = {};
+    for (const [key, value] of result) {
+      obj[key] = value;
+    }
+    return obj;
+  });
+
   ipcMain.handle(
     "modpacks:addMod",
     async (_, modpackId: string, modId: string) => {
       return metadataManager.addModToModpack(modpackId, modId);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:addModsBatch",
+    async (_, modpackId: string, modIds: string[]) => {
+      return metadataManager.addModsToModpackBatch(modpackId, modIds);
     }
   );
 
@@ -485,7 +503,7 @@ async function initializeBackend() {
             latestVersion: latestRelease.displayName,
             latestFileId: latestRelease.id,
             releaseDate: latestRelease.fileDate,
-            downloadUrl: latestRelease.downloadUrl,
+            downloadUrl: latestRelease.downloadUrl || undefined,
           };
         }
 
@@ -550,14 +568,13 @@ async function initializeBackend() {
         const downloadUrl = cfFile.downloadUrl || 
           `https://edge.forgecdn.net/files/${Math.floor(newFileId / 1000)}/${newFileId % 1000}/${cfFile.fileName}`;
 
-        // Download the modpack
-        const fs = await import("fs-extra");
-        const path = await import("path");
+        // Download the modpack using optimized DownloadService
+        const pathModule = await import("path");
         const os = await import("os");
 
-        const tempDir = path.join(os.tmpdir(), "modex-cf-update");
+        const tempDir = pathModule.join(os.tmpdir(), "modex-cf-update");
         await fs.ensureDir(tempDir);
-        const tempFile = path.join(tempDir, `${Date.now()}_update.zip`);
+        const tempFile = pathModule.join(tempDir, `${Date.now()}_update.zip`);
 
         win.webContents.send("import:progress", {
           current: 0,
@@ -565,13 +582,23 @@ async function initializeBackend() {
           modName: "Downloading update...",
         });
 
-        const response = await fetch(downloadUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-        }
+        const downloadService = getDownloadService();
+        const downloadResult = await downloadService.downloadFile(downloadUrl, tempFile, {
+          retries: 3,
+          onProgress: (progress) => {
+            if (win) {
+              win.webContents.send("import:progress", {
+                current: Math.round(progress.percentage * 0.1), // 0-10%
+                total: 100,
+                modName: `Downloading update... ${Math.round(progress.percentage)}%`,
+              });
+            }
+          },
+        });
 
-        const arrayBuffer = await response.arrayBuffer();
-        await fs.writeFile(tempFile, Buffer.from(arrayBuffer));
+        if (!downloadResult.success) {
+          throw new Error(`Failed to download: ${downloadResult.error}`);
+        }
 
         win.webContents.send("import:progress", {
           current: 10,
@@ -1367,20 +1394,30 @@ async function initializeBackend() {
         await fs.ensureDir(tempDir);
         const tempFile = path.join(tempDir, `${Date.now()}_${modpackName.replace(/[^a-zA-Z0-9]/g, "_")}.zip`);
 
-        // Download the file
+        // Download the file using optimized DownloadService
         win.webContents.send("import:progress", {
           current: 0,
           total: 100,
           modName: "Downloading modpack...",
         });
 
-        const response = await fetch(downloadUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-        }
+        const downloadService = getDownloadService();
+        const downloadResult = await downloadService.downloadFile(downloadUrl, tempFile, {
+          retries: 3,
+          onProgress: (progress) => {
+            if (win) {
+              win.webContents.send("import:progress", {
+                current: Math.round(progress.percentage * 0.1), // 0-10%
+                total: 100,
+                modName: `Downloading modpack... ${Math.round(progress.percentage)}%`,
+              });
+            }
+          },
+        });
 
-        const arrayBuffer = await response.arrayBuffer();
-        await fs.writeFile(tempFile, Buffer.from(arrayBuffer));
+        if (!downloadResult.success) {
+          throw new Error(`Failed to download: ${downloadResult.error}`);
+        }
 
         win.webContents.send("import:progress", {
           current: 10,
@@ -1640,52 +1677,71 @@ async function initializeBackend() {
 
   ipcMain.handle("updates:checkAll", async (event) => {
     const mods = await metadataManager.getAllMods();
-    const results = [];
     const cfMods = mods.filter(
       (m) => m.source === "curseforge" && m.cf_project_id
     );
-    let current = 0;
+    
+    const results: Array<{
+      modId: string;
+      projectName: string;
+      currentVersion: string;
+      latestVersion: string | null;
+      hasUpdate: boolean;
+      source: string;
+      newFileId?: number;
+    }> = [];
+    
+    // Process in parallel batches for better performance
+    const BATCH_SIZE = 10;
+    let completed = 0;
+    
+    for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
+      const batch = cfMods.slice(i, i + BATCH_SIZE);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (mod) => {
+          try {
+            const latestFile = await curseforgeService.getBestFile(
+              mod.cf_project_id!,
+              mod.game_version,
+              mod.loader,
+              mod.content_type
+            );
 
-    for (const mod of cfMods) {
-      current++;
-      // Send progress update
+            return {
+              modId: mod.id,
+              projectName: mod.name,
+              currentVersion: mod.version,
+              latestVersion: latestFile?.displayName || null,
+              hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
+              source: "curseforge",
+              newFileId:
+                latestFile && latestFile.id !== mod.cf_file_id
+                  ? latestFile.id
+                  : undefined,
+            };
+          } catch (error) {
+            return {
+              modId: mod.id,
+              projectName: mod.name,
+              currentVersion: mod.version,
+              latestVersion: null,
+              hasUpdate: false,
+              source: "curseforge",
+            };
+          }
+        })
+      );
+      
+      results.push(...batchResults);
+      completed += batch.length;
+      
+      // Send progress update after each batch
       event.sender.send("updates:progress", {
-        current,
+        current: completed,
         total: cfMods.length,
-        modName: mod.name,
+        modName: batch[batch.length - 1]?.name || "",
       });
-
-      try {
-        // Pass content_type to handle resourcepacks/shaders without loader filter
-        const latestFile = await curseforgeService.getBestFile(
-          mod.cf_project_id!,
-          mod.game_version,
-          mod.loader,
-          mod.content_type
-        );
-
-        results.push({
-          modId: mod.id,
-          projectName: mod.name,
-          currentVersion: mod.version,
-          latestVersion: latestFile?.displayName || null,
-          hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
-          source: "curseforge",
-          newFileId:
-            latestFile && latestFile.id !== mod.cf_file_id
-              ? latestFile.id
-              : undefined,
-        });
-      } catch (error) {
-        results.push({
-          modId: mod.id,
-          projectName: mod.name,
-          currentVersion: mod.version,
-          latestVersion: null,
-          hasUpdate: false,
-          source: "curseforge",
-        });
-      }
     }
 
     return results;
@@ -1720,56 +1776,74 @@ async function initializeBackend() {
     if (!modpack) throw new Error("Modpack not found");
 
     const mods = await metadataManager.getModsInModpack(modpackId);
-    const results = [];
-
     const mcVersion = modpack.minecraft_version || "1.20.1";
     const loader = modpack.loader || "forge";
 
     const cfMods = mods.filter(
       (m) => m.source === "curseforge" && m.cf_project_id
     );
-    let current = 0;
+    
+    const results: Array<{
+      modId: string;
+      projectName: string;
+      currentVersion: string;
+      latestVersion: string | null;
+      hasUpdate: boolean;
+      source: string;
+      newFileId?: number;
+    }> = [];
+    
+    // Process in parallel batches for better performance
+    const BATCH_SIZE = 10;
+    let completed = 0;
+    
+    for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
+      const batch = cfMods.slice(i, i + BATCH_SIZE);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (mod) => {
+          try {
+            const latestFile = await curseforgeService.getBestFile(
+              mod.cf_project_id!,
+              mcVersion,
+              loader,
+              mod.content_type
+            );
 
-    for (const mod of cfMods) {
-      current++;
-      // Send progress update
+            return {
+              modId: mod.id,
+              projectName: mod.name,
+              currentVersion: mod.version,
+              latestVersion: latestFile?.displayName || null,
+              hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
+              source: "curseforge",
+              newFileId:
+                latestFile && latestFile.id !== mod.cf_file_id
+                  ? latestFile.id
+                  : undefined,
+            };
+          } catch (error) {
+            return {
+              modId: mod.id,
+              projectName: mod.name,
+              currentVersion: mod.version,
+              latestVersion: null,
+              hasUpdate: false,
+              source: "curseforge",
+            };
+          }
+        })
+      );
+      
+      results.push(...batchResults);
+      completed += batch.length;
+      
+      // Send progress update after each batch
       event.sender.send("updates:progress", {
-        current,
+        current: completed,
         total: cfMods.length,
-        modName: mod.name,
+        modName: batch[batch.length - 1]?.name || "",
       });
-
-      try {
-        // Pass content_type to handle resourcepacks/shaders without loader filter
-        const latestFile = await curseforgeService.getBestFile(
-          mod.cf_project_id!,
-          mcVersion,
-          loader,
-          mod.content_type
-        );
-
-        results.push({
-          modId: mod.id,
-          projectName: mod.name,
-          currentVersion: mod.version,
-          latestVersion: latestFile?.displayName || null,
-          hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
-          source: "curseforge",
-          newFileId:
-            latestFile && latestFile.id !== mod.cf_file_id
-              ? latestFile.id
-              : undefined,
-        });
-      } catch (error) {
-        results.push({
-          modId: mod.id,
-          projectName: mod.name,
-          currentVersion: mod.version,
-          latestVersion: null,
-          hasUpdate: false,
-          source: "curseforge",
-        });
-      }
     }
 
     return results;

@@ -123,7 +123,11 @@ export interface ElectronAPI {
     update: (id: string, updates: Partial<Modpack>) => Promise<boolean>;
     delete: (id: string) => Promise<boolean>;
     getMods: (modpackId: string) => Promise<Mod[]>;
+    /** Get mods for multiple modpacks in a single call */
+    getModsMultiple: (modpackIds: string[]) => Promise<Record<string, Mod[]>>;
     addMod: (modpackId: string, modId: string) => Promise<boolean>;
+    /** Add multiple mods to a modpack in a single call */
+    addModsBatch: (modpackId: string, modIds: string[]) => Promise<number>;
     removeMod: (modpackId: string, modId: string) => Promise<boolean>;
     /** Toggle a mod's enabled/disabled state */
     toggleMod: (

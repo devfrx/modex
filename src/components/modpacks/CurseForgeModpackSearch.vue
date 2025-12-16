@@ -315,6 +315,18 @@ function formatDate(dateStr: string): string {
     });
 }
 
+// Get author names from modpack
+function getAuthorNames(modpack: any): string {
+    if (!modpack.authors || !Array.isArray(modpack.authors)) return "Unknown";
+    return modpack.authors.map((a: any) => a.name).join(", ") || "Unknown";
+}
+
+// Get Minecraft versions from file
+function getMinecraftVersions(file: any): string {
+    if (!file.gameVersions || !Array.isArray(file.gameVersions)) return "";
+    return file.gameVersions.filter((v: string) => /^1\.\d+/.test(v)).join(", ");
+}
+
 // Get release type label
 function getReleaseLabel(type: number): string {
     const labels: Record<number, string> = {
@@ -510,7 +522,7 @@ onMounted(async () => {
                                     </span>
                                     <span class="flex items-center gap-1">
                                         <Users class="w-3.5 h-3.5" />
-                                        {{modpack.authors?.map((a: any) => a.name).join(", ") || "Unknown"}}
+                                        {{ getAuthorNames(modpack) }}
                                     </span>
                                     <span class="flex items-center gap-1">
                                         <Calendar class="w-3.5 h-3.5" />
@@ -542,8 +554,7 @@ onMounted(async () => {
                                             </span>
                                         </div>
                                         <div class="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                                            <span>{{file.gameVersions?.filter((v: string) => /^1\.\d+/.test(v)).join(",
-                                                ") }}</span>
+                                            <span>{{ getMinecraftVersions(file) }}</span>
                                             <span>{{ formatDate(file.fileDate) }}</span>
                                         </div>
                                     </div>

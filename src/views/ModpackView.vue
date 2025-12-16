@@ -3,6 +3,8 @@ import { ref, onMounted, computed, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "@/composables/useToast";
 import ModpackCard from "@/components/modpacks/ModpackCard.vue";
+import ModpackListItem from "@/components/modpacks/ModpackListItem.vue";
+import ModpackCompactCard from "@/components/modpacks/ModpackCompactCard.vue";
 import ModpackEditor from "@/components/modpacks/ModpackEditor.vue";
 import ModpackCompareDialog from "@/components/modpacks/ModpackCompareDialog.vue";
 import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
@@ -30,6 +32,12 @@ import {
   Merge,
   Package,
   Globe,
+  LayoutGrid,
+  List,
+  LayoutList,
+  Filter,
+  X,
+  Flame,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
 
@@ -54,7 +62,20 @@ const favoriteModpacks = ref<Set<string>>(new Set());
 // Quick filter
 const quickFilter = ref<"all" | "favorites">("all");
 const searchQuery = ref("");
-const sortBy = ref<"name" | "updated">("name");
+const sortBy = ref<"name" | "updated" | "mods" | "created">("name");
+const sortDir = ref<"asc" | "desc">("asc");
+
+// View Mode
+const viewMode = ref<"grid" | "list" | "compact">("grid");
+
+// Filter State
+const showFilters = ref(false);
+const selectedLoader = ref<string>("all");
+const selectedGameVersion = ref<string>("all");
+const sourceFilter = ref<"all" | "curseforge" | "local">("all");
+
+// Settings persistence key
+const SETTINGS_KEY = "modex:modpacks:settings";
 
 // Editor State
 const showEditor = ref(false);
@@ -296,18 +317,37 @@ async function confirmMerge() {
     return;
   }
 
+  const ids = Array.from(selectedModpackIds.value);
+  const selectedPacks = ids.map((id) => modpacks.value.find((p) => p.id === id)).filter(Boolean);
+
+  // Validate that all modpacks have the same loader and minecraft version
+  const firstPack = selectedPacks[0];
+  if (!firstPack) {
+    toast.error("Merge Failed", "Could not find selected modpacks");
+    return;
+  }
+
+  const incompatiblePacks = selectedPacks.filter(
+    (p) => p!.minecraft_version !== firstPack.minecraft_version || p!.loader !== firstPack.loader
+  );
+
+  if (incompatiblePacks.length > 0) {
+    const incompatibleNames = incompatiblePacks.map((p) => `${p!.name} (${p!.minecraft_version} ${p!.loader})`).join(", ");
+    toast.error(
+      "Incompatible Modpacks",
+      `Cannot merge modpacks with different MC versions or loaders. Base: ${firstPack.minecraft_version} ${firstPack.loader}. Incompatible: ${incompatibleNames}`
+    );
+    return;
+  }
+
   showMergeDialog.value = false;
   showProgress.value = true;
   progressTitle.value = "Merging Modpacks";
   progressMessage.value = "Creating merged modpack...";
 
-  const ids = Array.from(selectedModpackIds.value);
   const collectedMods: { name: string; sourcePack: string }[] = [];
 
   try {
-    // Get first modpack for base settings
-    const firstPack = modpacks.value.find((p) => p.id === ids[0]);
-
     // Create new modpack
     const newPackId = await window.api.modpacks.create({
       name: mergeModpackName.value.trim(),
@@ -321,10 +361,13 @@ async function confirmMerge() {
     const allModIds = new Set<string>();
     const modInfoMap = new Map<string, { name: string; sourcePack: string }>();
 
+    // Use batch API to load mods from all modpacks at once
+    progressMessage.value = `Loading mods from ${ids.length} modpacks...`;
+    const modpackModsMap = await window.api.modpacks.getModsMultiple(ids);
+
     for (const packId of ids) {
-      progressMessage.value = `Loading mods from modpack...`;
       const pack = modpacks.value.find((p) => p.id === packId);
-      const packMods = await window.api.modpacks.getMods(packId);
+      const packMods = modpackModsMap[packId] || [];
       for (const mod of packMods) {
         if (!allModIds.has(mod.id)) {
           allModIds.add(mod.id);
@@ -336,12 +379,13 @@ async function confirmMerge() {
       }
     }
 
-    // Add all mods to new modpack
-    let addedCount = 0;
+    // Add all mods to new modpack using batch API
+    progressMessage.value = `Adding ${allModIds.size} mods to merged modpack...`;
+    const modIdsArray = Array.from(allModIds);
+    await window.api.modpacks.addModsBatch(newPackId, modIdsArray);
+
+    // Build collected mods info for summary
     for (const modId of allModIds) {
-      progressMessage.value = `Adding mod ${++addedCount} of ${allModIds.size
-        }...`;
-      await window.api.modpacks.addMod(newPackId, modId);
       const info = modInfoMap.get(modId);
       if (info) collectedMods.push(info);
     }
@@ -709,6 +753,74 @@ function toggleFavoriteModpack(id: string) {
   saveFavoriteModpacks();
 }
 
+// Computed data for filters
+const loaderOptions = computed(() => {
+  const loaders = new Set<string>();
+  for (const pack of modpacks.value) {
+    if (pack.loader) loaders.add(pack.loader);
+  }
+  return Array.from(loaders).sort();
+});
+
+const gameVersionOptions = computed(() => {
+  const versions = new Set<string>();
+  for (const pack of modpacks.value) {
+    if (pack.minecraft_version) versions.add(pack.minecraft_version);
+  }
+  return Array.from(versions).sort((a, b) =>
+    b.localeCompare(a, undefined, { numeric: true })
+  );
+});
+
+// Save/Load settings
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+    viewMode: viewMode.value,
+    sortBy: sortBy.value,
+    sortDir: sortDir.value,
+    selectedLoader: selectedLoader.value,
+    selectedGameVersion: selectedGameVersion.value,
+    sourceFilter: sourceFilter.value,
+  }));
+}
+
+function loadSettings() {
+  const stored = localStorage.getItem(SETTINGS_KEY);
+  if (stored) {
+    try {
+      const settings = JSON.parse(stored);
+      if (settings.viewMode) viewMode.value = settings.viewMode;
+      if (settings.sortBy) sortBy.value = settings.sortBy;
+      if (settings.sortDir) sortDir.value = settings.sortDir;
+      if (settings.selectedLoader) selectedLoader.value = settings.selectedLoader;
+      if (settings.selectedGameVersion) selectedGameVersion.value = settings.selectedGameVersion;
+      if (settings.sourceFilter) sourceFilter.value = settings.sourceFilter;
+    } catch (e) {
+      console.error("Failed to load modpack settings:", e);
+    }
+  }
+}
+
+// Watch settings changes
+watch([viewMode, sortBy, sortDir, selectedLoader, selectedGameVersion, sourceFilter], saveSettings);
+
+// Count of active filters
+const activeFilterCount = computed(() => {
+  let count = 0;
+  if (selectedLoader.value !== "all") count++;
+  if (selectedGameVersion.value !== "all") count++;
+  if (sourceFilter.value !== "all") count++;
+  return count;
+});
+
+// Clear all filters
+function clearFilters() {
+  selectedLoader.value = "all";
+  selectedGameVersion.value = "all";
+  sourceFilter.value = "all";
+  searchQuery.value = "";
+}
+
 // Sort and filter modpacks
 const sortedModpacks = computed(() => {
   let result = [...modpacks.value];
@@ -716,12 +828,32 @@ const sortedModpacks = computed(() => {
   // Search
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase();
-    result = result.filter((p) => p.name.toLowerCase().includes(q));
+    result = result.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q)
+    );
   }
 
   // Apply quick filter
   if (quickFilter.value === "favorites") {
     result = result.filter((p) => favoriteModpacks.value.has(p.id));
+  }
+
+  // Apply loader filter
+  if (selectedLoader.value !== "all") {
+    result = result.filter((p) => p.loader === selectedLoader.value);
+  }
+
+  // Apply game version filter
+  if (selectedGameVersion.value !== "all") {
+    result = result.filter((p) => p.minecraft_version === selectedGameVersion.value);
+  }
+
+  // Apply source filter
+  if (sourceFilter.value === "curseforge") {
+    result = result.filter((p) => p.cf_project_id);
+  } else if (sourceFilter.value === "local") {
+    result = result.filter((p) => !p.cf_project_id);
   }
 
   // Sort - favorites first, then by selected sort
@@ -730,9 +862,21 @@ const sortedModpacks = computed(() => {
     const bFav = favoriteModpacks.value.has(b.id) ? 0 : 1;
     if (aFav !== bFav) return aFav - bFav;
 
-    if (sortBy.value === "name") return a.name.localeCompare(b.name);
-    // Fallback
-    return a.name.localeCompare(b.name);
+    const dir = sortDir.value === "asc" ? 1 : -1;
+
+    if (sortBy.value === "name") return a.name.localeCompare(b.name) * dir;
+    if (sortBy.value === "mods") return (a.modCount - b.modCount) * dir;
+    if (sortBy.value === "updated") {
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+      return (dateB - dateA) * dir;
+    }
+    if (sortBy.value === "created") {
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+      return (dateB - dateA) * dir;
+    }
+    return a.name.localeCompare(b.name) * dir;
   });
 });
 
@@ -783,6 +927,7 @@ watch(
 );
 
 onMounted(() => {
+  loadSettings();
   loadFavoriteModpacks();
   loadModpacks();
 });
@@ -802,7 +947,7 @@ onMounted(() => {
     </div>
 
     <!-- Compact Header -->
-    <div class="shrink-0 relative overflow-hidden border-b border-border">
+    <div class="shrink-0 relative border-b border-border z-20">
       <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
         <!-- Mobile: Stack vertically, Desktop: Row -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
@@ -853,12 +998,45 @@ onMounted(() => {
           </div>
 
           <!-- Search & Sort -->
-          <div class="hidden md:flex items-center gap-2 flex-1 max-w-xs mx-auto">
+          <div class="hidden md:flex items-center gap-2 flex-1 max-w-md mx-auto">
             <div class="relative flex-1">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input v-model="searchQuery" placeholder="Search packs..."
                 class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
             </div>
+
+            <!-- Filter Button -->
+            <button @click="showFilters = !showFilters"
+              class="relative flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="showFilters || activeFilterCount > 0
+                ? 'bg-primary/20 text-primary'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'">
+              <Filter class="w-3.5 h-3.5" />
+              <span class="hidden lg:inline">Filters</span>
+              <span v-if="activeFilterCount > 0"
+                class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                {{ activeFilterCount }}
+              </span>
+            </button>
+
+            <!-- View Mode Toggle -->
+            <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
+              <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                title="Grid View">
+                <LayoutGrid class="w-3.5 h-3.5" />
+              </button>
+              <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                title="List View">
+                <List class="w-3.5 h-3.5" />
+              </button>
+              <button @click="viewMode = 'compact'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                title="Compact View">
+                <LayoutList class="w-3.5 h-3.5" />
+              </button>
+            </div>
+
             <select v-model="sortBy"
               class="text-xs bg-muted/50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:bg-muted transition-colors appearance-none"
               style="
@@ -869,7 +1047,19 @@ onMounted(() => {
             ">
               <option value="name">Name</option>
               <option value="updated">Updated</option>
+              <option value="created">Created</option>
+              <option value="mods">Mod Count</option>
             </select>
+
+            <!-- Sort Direction -->
+            <button @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
+              class="p-1.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+              :title="sortDir === 'asc' ? 'Ascending' : 'Descending'">
+              <svg class="w-3.5 h-3.5 transition-transform" :class="{ 'rotate-180': sortDir === 'desc' }"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12l7-7 7 7" />
+              </svg>
+            </button>
           </div>
 
           <!-- Right: Actions -->
@@ -959,12 +1149,137 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-else class="flex-1 overflow-auto p-3 sm:p-6 pb-20 bg-background">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-        <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
-          :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete"
-          @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
-          @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog" />
+    <div v-else class="flex-1 flex overflow-hidden bg-background">
+      <!-- Filter Sidebar -->
+      <Transition name="slide">
+        <div v-if="showFilters" class="w-64 shrink-0 border-r border-border bg-card/50 p-4 overflow-y-auto">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-sm">Filters</h3>
+            <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Source Filter -->
+            <div>
+              <label class="text-xs font-medium text-muted-foreground mb-2 block">Source</label>
+              <div class="space-y-1">
+                <button @click="sourceFilter = 'all'"
+                  class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
+                  :class="sourceFilter === 'all' ? 'bg-primary/20 text-primary' : 'hover:bg-muted'">
+                  <span class="w-2 h-2 rounded-full bg-muted-foreground"></span>
+                  All Sources
+                </button>
+                <button @click="sourceFilter = 'curseforge'"
+                  class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
+                  :class="sourceFilter === 'curseforge' ? 'bg-orange-500/20 text-orange-400' : 'hover:bg-muted'">
+                  <Flame class="w-3 h-3 text-orange-500" />
+                  CurseForge
+                </button>
+                <button @click="sourceFilter = 'local'"
+                  class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
+                  :class="sourceFilter === 'local' ? 'bg-blue-500/20 text-blue-400' : 'hover:bg-muted'">
+                  <Package class="w-3 h-3 text-blue-500" />
+                  Local
+                </button>
+              </div>
+            </div>
+
+            <!-- Loader Filter -->
+            <div>
+              <label class="text-xs font-medium text-muted-foreground mb-2 block">Mod Loader</label>
+              <select v-model="selectedLoader"
+                class="w-full px-3 py-2 text-xs rounded-md bg-muted border border-border focus:ring-1 focus:ring-primary outline-none">
+                <option value="all">All Loaders</option>
+                <option v-for="loader in loaderOptions" :key="loader" :value="loader" class="capitalize">
+                  {{ loader }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Game Version Filter -->
+            <div>
+              <label class="text-xs font-medium text-muted-foreground mb-2 block">Minecraft Version</label>
+              <select v-model="selectedGameVersion"
+                class="w-full px-3 py-2 text-xs rounded-md bg-muted border border-border focus:ring-1 focus:ring-primary outline-none">
+                <option value="all">All Versions</option>
+                <option v-for="version in gameVersionOptions" :key="version" :value="version">
+                  {{ version }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Clear Filters -->
+            <button v-if="activeFilterCount > 0" @click="clearFilters"
+              class="w-full px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all">
+              Clear All Filters
+            </button>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- Main Content -->
+      <div class="flex-1 overflow-auto p-3 sm:p-6 pb-20">
+        <!-- Results info -->
+        <div v-if="activeFilterCount > 0 || searchQuery"
+          class="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Showing {{ sortedModpacks.length }} of {{ modpacks.length }} modpacks</span>
+          <button v-if="activeFilterCount > 0" @click="clearFilters" class="text-primary hover:underline">
+            Clear filters
+          </button>
+        </div>
+
+        <!-- Grid View -->
+        <div v-if="viewMode === 'grid'"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
+            :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
+            @delete="confirmDelete" @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack"
+            @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack" @share="openShareExport"
+            @convert="openConvertDialog" />
+        </div>
+
+        <!-- List View -->
+        <div v-else-if="viewMode === 'list'" class="space-y-1">
+          <!-- List Header -->
+          <div
+            class="hidden sm:flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border">
+            <div class="w-5"></div>
+            <div class="w-10"></div>
+            <div class="flex-1">Name</div>
+            <div class="w-20 text-center">Version</div>
+            <div class="hidden md:block w-20 text-center">Loader</div>
+            <div class="hidden lg:block w-16 text-center">Mods</div>
+            <div class="hidden xl:block w-24">Updated</div>
+            <div class="w-8"></div>
+            <div class="w-8"></div>
+          </div>
+          <ModpackListItem v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
+            :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
+            @delete="confirmDelete" @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack"
+            @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack" @share="openShareExport"
+            @convert="openConvertDialog" />
+        </div>
+
+        <!-- Compact View -->
+        <div v-else-if="viewMode === 'compact'"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+          <ModpackCompactCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
+            :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @edit="openEditor"
+            @toggle-select="toggleSelection" @toggle-favorite="toggleFavoriteModpack" />
+        </div>
+
+        <!-- Empty Filtered State -->
+        <div v-if="sortedModpacks.length === 0 && modpacks.length > 0"
+          class="flex flex-col items-center justify-center py-16 text-center">
+          <Filter class="w-12 h-12 text-muted-foreground/30 mb-4" />
+          <h3 class="text-lg font-medium mb-2">No matching modpacks</h3>
+          <p class="text-sm text-muted-foreground mb-4">Try adjusting your filters or search query</p>
+          <Button variant="outline" size="sm" @click="clearFilters">
+            Clear Filters
+          </Button>
+        </div>
       </div>
     </div>
 
@@ -1206,3 +1521,15 @@ onMounted(() => {
     </Dialog>
   </div>
 </template>
+<style scoped>
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+</style>

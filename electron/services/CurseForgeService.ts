@@ -262,6 +262,11 @@ export class CurseForgeService {
 
     if (fileIds.length === 0) return [];
 
+    // Check cache first for each file
+    const cacheKey = `files:${fileIds.sort().join(",")}`;
+    const cached = this.getCached<CFFile[]>(cacheKey);
+    if (cached) return cached;
+
     console.log(`[CurseForge] Batch fetching ${fileIds.length} files`);
 
     const response = await fetch(`${this.apiUrl}/mods/files`, {
@@ -279,7 +284,60 @@ export class CurseForgeService {
     }
 
     const data = await response.json();
-    return data.data || [];
+    const files = data.data || [];
+    this.setCache(cacheKey, files);
+    return files;
+  }
+
+  /**
+   * Batch fetch mod+file pairs for import optimization
+   * Much more efficient than fetching individually
+   */
+  async getModsAndFilesBatch(
+    entries: Array<{ projectID: number; fileID: number }>
+  ): Promise<{
+    mods: Map<number, CFMod>;
+    files: Map<number, CFFile>;
+    errors: string[];
+  }> {
+    const errors: string[] = [];
+    const mods = new Map<number, CFMod>();
+    const files = new Map<number, CFFile>();
+
+    if (entries.length === 0) {
+      return { mods, files, errors };
+    }
+
+    // Extract unique IDs
+    const modIds = [...new Set(entries.map((e) => e.projectID))];
+    const fileIds = [...new Set(entries.map((e) => e.fileID))];
+
+    console.log(`[CurseForge] Batch prefetch: ${modIds.length} mods, ${fileIds.length} files`);
+    const startTime = Date.now();
+
+    // Fetch mods and files in parallel
+    const [modsResult, filesResult] = await Promise.all([
+      this.getModsByIds(modIds).catch((err) => {
+        errors.push(`Failed to batch fetch mods: ${err.message}`);
+        return [] as CFMod[];
+      }),
+      this.getFilesByIds(fileIds).catch((err) => {
+        errors.push(`Failed to batch fetch files: ${err.message}`);
+        return [] as CFFile[];
+      }),
+    ]);
+
+    // Build lookup maps
+    for (const mod of modsResult) {
+      mods.set(mod.id, mod);
+    }
+    for (const file of filesResult) {
+      files.set(file.id, file);
+    }
+
+    console.log(`[CurseForge] Batch prefetch completed in ${Date.now() - startTime}ms`);
+
+    return { mods, files, errors };
   }
 
   /**

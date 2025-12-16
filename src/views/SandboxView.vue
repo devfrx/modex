@@ -1,7 +1,7 @@
 <template>
   <div class="h-full flex flex-col bg-background">
     <!-- Header -->
-    <div class="shrink-0 relative overflow-hidden border-b border-border">
+    <div class="shrink-0 relative border-b border-border z-20">
       <div
         class="relative px-2 sm:px-4 py-2 sm:py-2.5 bg-background/80 backdrop-blur-sm flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
         <!-- Title -->
@@ -36,7 +36,7 @@
           <!-- Search Results Dropdown -->
           <Transition name="fade">
             <div v-if="searchResults.length > 0"
-              class="absolute top-full left-0 mt-1.5 w-full sm:w-56 rounded-lg shadow-xl z-50 max-h-56 overflow-auto bg-popover border border-border">
+              class="absolute top-full left-0 mt-1.5 w-full sm:w-56 rounded-lg shadow-xl z-[100] max-h-56 overflow-auto bg-popover border border-border">
               <button v-for="node in searchResults.slice(0, 8)" :key="node.id"
                 class="w-full px-3 py-2 text-xs text-left flex items-center gap-2.5 transition-colors hover:bg-muted text-foreground"
                 @click="focusOnNode(node)">
@@ -49,7 +49,7 @@
                 <span class="truncate">{{ node.label }}</span>
                 <span class="ml-auto text-[10px] opacity-50 capitalize">{{
                   node.type
-                  }}</span>
+                }}</span>
               </button>
             </div>
           </Transition>
@@ -112,6 +112,33 @@
 
         <!-- Spacer -->
         <div class="flex-1 hidden sm:block"></div>
+
+        <!-- Render Mode Toggle (SVG / WebGL) -->
+        <div class="hidden sm:flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/50">
+          <button
+            class="px-2 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1"
+            :class="!useWebGL
+              ? 'bg-background shadow text-foreground'
+              : 'text-muted-foreground hover:text-foreground'" @click="useWebGL = false"
+            title="SVG Renderer (better quality)">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="12" cy="12" r="4" />
+            </svg>
+            <span class="hidden lg:inline">SVG</span>
+          </button>
+          <button
+            class="px-2 py-1 text-[10px] sm:text-[11px] font-medium rounded-md transition-all flex items-center gap-1"
+            :class="useWebGL
+              ? 'bg-background shadow text-foreground'
+              : 'text-muted-foreground hover:text-foreground'" @click="useWebGL = true"
+            title="WebGL Renderer (better performance)">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+            <span class="hidden lg:inline">WebGL</span>
+          </button>
+        </div>
 
         <!-- Performance Mode Toggle -->
         <button
@@ -187,7 +214,16 @@
 
     <!-- Canvas -->
     <div class="flex-1 relative overflow-hidden" ref="container" @click="closeContextMenu" @contextmenu.prevent>
-      <svg ref="svgEl" :width="width" :height="height" class="w-full h-full">
+      <!-- WebGL Canvas (PixiJS) -->
+      <SandboxPixiCanvas v-if="useWebGL" ref="pixiCanvasRef" :nodes="nodes" :links="links" :width="width"
+        :height="height" :performanceMode="performanceMode" :showFolders="showFolders" :showMods="showMods"
+        :showModpacks="showModpacks" :showResourcepacks="showResourcepacks" :showShaders="showShaders"
+        @nodeClick="onPixiNodeClick" @nodeRightClick="onPixiNodeRightClick" @nodeHover="onPixiNodeHover"
+        @backgroundClick="detailNode = null" @nodeDrag="onPixiNodeDrag" @zoomChange="onPixiZoomChange"
+        @positionsChanged="debouncedSavePositions" />
+
+      <!-- SVG Canvas (D3.js) -->
+      <svg v-else ref="svgEl" :width="width" :height="height" class="w-full h-full">
         <defs>
           <!-- Subtle glow -->
           <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -355,8 +391,8 @@
         </g>
       </svg>
 
-      <!-- Minimap -->
-      <div
+      <!-- Minimap (only for SVG mode) -->
+      <div v-if="!useWebGL"
         class="absolute bottom-4 right-4 w-32 h-24 rounded-lg overflow-hidden border shadow-lg bg-card/90 border-border">
         <svg :viewBox="`0 0 ${width} ${height}`" class="w-full h-full">
           <rect width="100%" height="100%" fill="hsl(var(--background))" />
@@ -398,7 +434,7 @@
       <!-- Context Menu -->
       <Transition name="fade">
         <div v-if="contextMenu.show"
-          class="absolute z-50 min-w-[160px] rounded-lg shadow-xl border overflow-hidden bg-popover border-border"
+          class="absolute z-[100] min-w-[160px] rounded-lg shadow-xl border overflow-hidden bg-popover border-border"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
           <div class="py-1">
             <div class="px-3 py-1.5 text-xs font-medium border-b text-muted-foreground border-border">
@@ -643,6 +679,7 @@ import {
   Box,
   Gamepad2,
 } from "lucide-vue-next";
+import SandboxPixiCanvas from "@/components/SandboxPixiCanvas.vue";
 
 const POSITIONS_KEY = "modex:sandbox:positions";
 
@@ -697,6 +734,10 @@ const showShaders = ref(true);
 
 // Performance mode - simplifies rendering for large graphs
 const performanceMode = ref(false);
+
+// WebGL mode - uses PixiJS for better performance
+const useWebGL = ref(false);
+const pixiCanvasRef = ref<InstanceType<typeof SandboxPixiCanvas> | null>(null);
 
 // Search
 const searchQuery = ref("");
@@ -826,6 +867,22 @@ const filteredLinks = computed(() => {
 // Only render links for visible nodes when there are many
 const renderedLinks = computed(() => {
   const nodeCount = filteredNodes.value.length;
+
+  // For extreme graphs in performance mode, hide all links
+  if (nodeCount > 300 && performanceMode.value) {
+    return [];
+  }
+
+  // For very large graphs, sample links to reduce render load
+  if (nodeCount > 200) {
+    const visibleIds = new Set(visibleNodes.value.map((n) => n.id));
+    const visibleLinks = filteredLinks.value.filter(
+      (l) => visibleIds.has(l.source.id) && visibleIds.has(l.target.id)
+    );
+    // Sample every 3rd link for very large graphs
+    return visibleLinks.filter((_, i) => i % 3 === 0);
+  }
+
   if (nodeCount <= 150) return filteredLinks.value;
 
   const visibleIds = new Set(visibleNodes.value.map((n) => n.id));
@@ -1070,6 +1127,15 @@ async function loadData() {
     }
   });
 
+  // Batch load all modpack mods in a single call for performance
+  const modpackIds = modpacks.map((p) => p.id);
+  let modpackModsMap: Record<string, Mod[]> = {};
+  try {
+    modpackModsMap = await window.api.modpacks.getModsMultiple(modpackIds);
+  } catch (e) {
+    console.warn("Failed to batch load modpack mods:", e);
+  }
+
   // Modpacks - place on right side
   for (let i = 0; i < modpacks.length; i++) {
     const pack = modpacks[i];
@@ -1087,14 +1153,11 @@ async function loadData() {
     nodeList.push(n);
     nodeById.set(n.id, n);
 
-    try {
-      const modsInPack: Mod[] = await window.api.modpacks.getMods(pack.id);
-      modsInPack.forEach((m) => {
-        linkList.push({ source: m.id, target: n.id });
-      });
-    } catch (e) {
-      console.warn("Failed to load mods for modpack:", pack.id, e);
-    }
+    // Use batch-loaded mods
+    const modsInPack = modpackModsMap[pack.id] || [];
+    modsInPack.forEach((m) => {
+      linkList.push({ source: m.id, target: n.id });
+    });
   }
 
   const graphLinks: GraphLink[] = [];
@@ -1122,20 +1185,20 @@ function initSimulation() {
 
   // Performance optimizations based on node count
   const isLargeGraph = nodeCount > 100;
-  const isVeryLargeGraph = nodeCount > 300;
+  const isVeryLargeGraph = nodeCount > 200;
+  const isExtremeGraph = nodeCount > 400;
 
   // Auto-enable performance mode for large graphs
-  if (isVeryLargeGraph && !performanceMode.value) {
+  if (isLargeGraph && !performanceMode.value) {
     performanceMode.value = true;
   }
 
   // Adjust simulation parameters for better performance with many nodes
-  const chargeStrength = isVeryLargeGraph ? -30 : isLargeGraph ? -80 : -150;
-  const linkDistance = isVeryLargeGraph ? 40 : isLargeGraph ? 50 : 80;
-  const linkStrength = isVeryLargeGraph ? 0.05 : isLargeGraph ? 0.15 : 0.3;
-  const alphaDecay = isVeryLargeGraph ? 0.08 : isLargeGraph ? 0.05 : 0.01;
-  const velocityDecay = isVeryLargeGraph ? 0.6 : isLargeGraph ? 0.5 : 0.3;
-  const collisionRadius = isVeryLargeGraph ? 5 : isLargeGraph ? 8 : 12;
+  const chargeStrength = isExtremeGraph ? -15 : isVeryLargeGraph ? -30 : isLargeGraph ? -80 : -150;
+  const linkDistance = isExtremeGraph ? 30 : isVeryLargeGraph ? 40 : isLargeGraph ? 50 : 80;
+  const linkStrength = isExtremeGraph ? 0.02 : isVeryLargeGraph ? 0.05 : isLargeGraph ? 0.15 : 0.3;
+  const alphaDecay = isExtremeGraph ? 0.15 : isVeryLargeGraph ? 0.08 : isLargeGraph ? 0.05 : 0.01;
+  const velocityDecay = isExtremeGraph ? 0.7 : isVeryLargeGraph ? 0.6 : isLargeGraph ? 0.5 : 0.3;
 
   simulation = d3
     .forceSimulation<GraphNode>(nodes.value)
@@ -1152,7 +1215,7 @@ function initSimulation() {
       d3
         .forceManyBody()
         .strength(chargeStrength)
-        .distanceMax(isVeryLargeGraph ? 150 : isLargeGraph ? 200 : 400)
+        .distanceMax(isExtremeGraph ? 100 : isVeryLargeGraph ? 150 : isLargeGraph ? 200 : 400)
     )
     .force("center", d3.forceCenter(centerX, centerY).strength(0.05))
     .force(
@@ -1161,7 +1224,7 @@ function initSimulation() {
         ? null
         : d3
           .forceCollide<GraphNode>()
-          .radius((d) => nodeRadius(d) + collisionRadius)
+          .radius((d) => nodeRadius(d) + (isLargeGraph ? 8 : 12))
     )
     .force("x", d3.forceX(centerX).strength(0.02))
     .force("y", d3.forceY(centerY).strength(0.02))
@@ -1170,7 +1233,11 @@ function initSimulation() {
     .on("tick", onTick);
 
   // For very large graphs, stop simulation earlier
-  if (isVeryLargeGraph) {
+  if (isExtremeGraph) {
+    setTimeout(() => {
+      if (simulation) simulation.stop();
+    }, 1000);
+  } else if (isVeryLargeGraph) {
     setTimeout(() => {
       if (simulation) simulation.stop();
     }, 2000);
@@ -1187,11 +1254,13 @@ const tickThrottleMs = computed(() => {
   const nodeCount = nodes.value.length;
   // More aggressive throttling in performance mode
   if (performanceMode.value) {
-    if (nodeCount > 300) return 150; // ~7 fps
+    if (nodeCount > 400) return 250; // ~4 fps - extreme graphs
+    if (nodeCount > 200) return 150; // ~7 fps
     if (nodeCount > 100) return 80; // ~12 fps
     return 33; // ~30 fps
   }
-  if (nodeCount > 300) return 100; // 10 fps
+  if (nodeCount > 400) return 200; // 5 fps
+  if (nodeCount > 200) return 100; // 10 fps
   if (nodeCount > 100) return 50; // 20 fps
   return 16; // ~60 fps
 });
@@ -1204,11 +1273,14 @@ function onTick() {
   if (now - lastTickTime < tickThrottleMs.value) return;
   lastTickTime = now;
 
-  // For very large graphs, only update every other allowed frame
+  // For very large graphs, skip more frames
   const nodeCount = nodes.value.length;
-  if (nodeCount > 500) {
+  if (nodeCount > 400) {
     frameSkipCounter++;
-    if (frameSkipCounter % 2 !== 0) return;
+    if (frameSkipCounter % 3 !== 0) return; // Only render every 3rd frame
+  } else if (nodeCount > 200) {
+    frameSkipCounter++;
+    if (frameSkipCounter % 2 !== 0) return; // Only render every 2nd frame
   }
 
   // Trigger reactivity update (shallow copy triggers Vue to re-render)
@@ -1244,16 +1316,28 @@ function initZoom() {
 
 // Zoom control functions
 function zoomIn() {
+  if (useWebGL.value && pixiCanvasRef.value) {
+    pixiCanvasRef.value.zoomIn();
+    return;
+  }
   if (!svgEl.value || !zoom) return;
   d3.select(svgEl.value).transition().duration(200).call(zoom.scaleBy, 1.3);
 }
 
 function zoomOut() {
+  if (useWebGL.value && pixiCanvasRef.value) {
+    pixiCanvasRef.value.zoomOut();
+    return;
+  }
   if (!svgEl.value || !zoom) return;
   d3.select(svgEl.value).transition().duration(200).call(zoom.scaleBy, 0.7);
 }
 
 function fitToView() {
+  if (useWebGL.value && pixiCanvasRef.value) {
+    pixiCanvasRef.value.fitToView();
+    return;
+  }
   if (!svgEl.value || !zoom || filteredNodes.value.length === 0) return;
 
   // Calculate bounding box of all visible nodes
@@ -1305,6 +1389,10 @@ function fitToView() {
 }
 
 function spreadNodes() {
+  if (useWebGL.value && pixiCanvasRef.value) {
+    pixiCanvasRef.value.spreadNodes();
+    return;
+  }
   const centerX = width.value / 2;
   const centerY = height.value / 2;
 
@@ -1327,6 +1415,10 @@ function spreadNodes() {
 }
 
 function resetLayout() {
+  if (useWebGL.value && pixiCanvasRef.value) {
+    pixiCanvasRef.value.resetLayout();
+    return;
+  }
   const centerX = width.value / 2;
   const centerY = height.value / 2;
 
@@ -1715,6 +1807,11 @@ async function contextAction(action: string) {
 
 // Search & focus
 function focusOnNode(node: GraphNode) {
+  if (useWebGL.value && pixiCanvasRef.value) {
+    pixiCanvasRef.value.focusOnNode(node);
+    searchQuery.value = "";
+    return;
+  }
   if (!svgEl.value || !zoom) return;
 
   searchQuery.value = "";
@@ -1734,6 +1831,86 @@ function focusOnNode(node: GraphNode) {
     .call(zoom.transform, transform);
 }
 
+// PixiJS event handlers
+function onPixiNodeClick(node: GraphNode) {
+  detailNode.value = node;
+}
+
+function onPixiNodeRightClick(pos: { x: number; y: number }, node: GraphNode) {
+  contextMenu.value = {
+    show: true,
+    x: pos.x,
+    y: pos.y,
+    node,
+  };
+}
+
+function onPixiNodeHover(node: GraphNode | null) {
+  hoveredNodeId.value = node?.id ?? null;
+}
+
+function onPixiZoomChange(level: number) {
+  currentZoomScale.value = level / 100;
+}
+
+async function onPixiNodeDrag(draggedNode: GraphNode, targetNode: GraphNode | null) {
+  if (!targetNode) return;
+
+  // Mod dropped on modpack
+  if (draggedNode.type === "mod" && targetNode.type === "modpack") {
+    const packId = targetNode.data.id;
+    const modId = draggedNode.data.id;
+
+    try {
+      await window.api.modpacks.addMod(packId, modId);
+
+      // Check if link already exists
+      const linkExists = links.value.some(
+        (l) => l.source.id === draggedNode.id && l.target.id === targetNode.id
+      );
+
+      if (!linkExists) {
+        links.value = [
+          ...links.value,
+          { source: draggedNode, target: targetNode },
+        ];
+      }
+
+      feedbackMessage.value = `Added "${draggedNode.label}" to "${targetNode.label}"`;
+      setTimeout(() => { feedbackMessage.value = null; }, 2500);
+    } catch (e) {
+      console.error("Failed to add mod to pack:", e);
+      feedbackMessage.value = "Failed to add mod";
+      setTimeout(() => { feedbackMessage.value = null; }, 2500);
+    }
+  }
+
+  // Mod/resource/shader dropped on folder
+  if (['mod', 'resourcepack', 'shader'].includes(draggedNode.type) && targetNode.type === "folder") {
+    const folderId = targetNode.data.id;
+    const modId = draggedNode.data.id;
+
+    try {
+      moveModToFolder(modId, folderId);
+
+      // Remove old folder link if exists
+      links.value = links.value.filter(
+        (l) => !(l.source.id === draggedNode.id && l.target.type === "folder")
+      );
+
+      // Add new link
+      links.value = [...links.value, { source: draggedNode, target: targetNode }];
+
+      feedbackMessage.value = `Moved "${draggedNode.label}" to "${targetNode.label}"`;
+      setTimeout(() => { feedbackMessage.value = null; }, 2500);
+    } catch (err) {
+      console.error("Error moving mod to folder:", err);
+      feedbackMessage.value = `Error moving mod`;
+      setTimeout(() => { feedbackMessage.value = null; }, 2500);
+    }
+  }
+}
+
 onMounted(async () => {
   // Start observing theme changes
   themeObserver.observe(document.documentElement, {
@@ -1747,7 +1924,22 @@ onMounted(async () => {
   }
 
   await loadData();
-  initZoom();
+
+  // Only init SVG zoom if not using WebGL
+  if (!useWebGL.value) {
+    initZoom();
+  }
+});
+
+// Watch for mode changes to reinit
+watch(useWebGL, (webgl) => {
+  if (!webgl) {
+    // Switching to SVG mode - reinitialize zoom
+    setTimeout(() => {
+      initZoom();
+      initSimulation();
+    }, 100);
+  }
 });
 
 onBeforeUnmount(() => {

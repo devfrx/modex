@@ -11,6 +11,7 @@ import {
   Info,
   Check,
   RefreshCw,
+  ChevronDown,
 } from "lucide-vue-next";
 import type { Mod } from "@/types/electron";
 import Button from "@/components/ui/Button.vue";
@@ -21,6 +22,10 @@ const props = defineProps<{
   favorite?: boolean;
   isDuplicate?: boolean;
   usageCount?: number;
+  // Group related props
+  groupVariantCount?: number;
+  isGroupExpanded?: boolean;
+  isVariant?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -29,6 +34,7 @@ const emit = defineEmits<{
   (e: "show-details", mod: Mod): void;
   (e: "toggle-favorite", id: string): void;
   (e: "request-update", mod: Mod): void;
+  (e: "toggle-group"): void;
 }>();
 
 function openCurseForge() {
@@ -78,6 +84,8 @@ function handleImageError(e: Event) {
     :class="{
       'ring-2 ring-primary ring-offset-2 ring-offset-background': selected,
       'ring-2 ring-orange-500/50': isDuplicate && !selected,
+      'ring-2 ring-primary/50': isGroupExpanded && groupVariantCount,
+      'ring-2 ring-primary/30': isVariant,
     }" @click="$emit('toggle-select', mod.id)" @dblclick.stop="$emit('show-details', mod)">
     <!-- Image Container - Hero Style -->
     <div class="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-muted to-muted/50">
@@ -102,8 +110,8 @@ function handleImageError(e: Event) {
         :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         @click.stop="$emit('toggle-favorite', mod.id)" title="Toggle favorite">
         <Heart class="w-4 h-4 transition-colors" :class="favorite
-            ? 'fill-rose-500 text-rose-500'
-            : 'text-white/70 hover:text-rose-500'
+          ? 'fill-rose-500 text-rose-500'
+          : 'text-white/70 hover:text-rose-500'
           " />
       </button>
 
@@ -128,8 +136,8 @@ function handleImageError(e: Event) {
           ">
           <div class="w-5 h-5 rounded-md border flex items-center justify-center transition-colors backdrop-blur-sm"
             :class="selected
-                ? 'bg-primary border-primary'
-                : 'bg-black/30 border-white/30 hover:border-primary/50'
+              ? 'bg-primary border-primary'
+              : 'bg-black/30 border-white/30 hover:border-primary/50'
               ">
             <Check v-if="selected" class="w-3.5 h-3.5 text-primary-foreground" />
           </div>
@@ -162,8 +170,8 @@ function handleImageError(e: Event) {
           <!-- Loader Badge (mods only) -->
           <span v-if="contentType === 'mod'" class="px-2 py-0.5 rounded-full text-[10px] font-medium backdrop-blur-sm"
             :class="mod.loader?.toLowerCase().includes('forge')
-                ? 'bg-orange-500/30 text-orange-300'
-                : 'bg-blue-500/30 text-blue-300'
+              ? 'bg-orange-500/30 text-orange-300'
+              : 'bg-blue-500/30 text-blue-300'
               ">
             {{ mod.loader }}
           </span>
@@ -192,6 +200,22 @@ function handleImageError(e: Event) {
         <div
           class="flex items-center gap-1 mt-3 pt-3 border-t border-white/10 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0"
           @click.stop>
+          <!-- Group Badge (left side) -->
+          <button v-if="groupVariantCount && groupVariantCount > 0" @click.stop="$emit('toggle-group')"
+            class="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold transition-all mr-1" :class="isGroupExpanded
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-white/20 text-white/80 hover:bg-primary hover:text-primary-foreground'">
+            <Layers class="w-3 h-3" />
+            <span>{{ groupVariantCount }}</span>
+            <ChevronDown class="w-3 h-3 transition-transform" :class="{ 'rotate-180': isGroupExpanded }" />
+          </button>
+          <!-- Variant indicator for sub-items -->
+          <div v-else-if="isVariant"
+            class="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/20 text-primary text-[10px] font-medium mr-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            {{ mod.game_version }}
+          </div>
+
           <Button v-if="mod.cf_project_id" variant="ghost" size="icon"
             class="h-7 w-7 text-white/60 hover:text-green-400 hover:bg-green-500/10"
             @click.stop="$emit('request-update', mod)" title="Check for Update">

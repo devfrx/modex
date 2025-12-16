@@ -174,8 +174,12 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:delete", id),
     getMods: (modpackId: string): Promise<Mod[]> =>
       ipcRenderer.invoke("modpacks:getMods", modpackId),
+    getModsMultiple: (modpackIds: string[]): Promise<Record<string, Mod[]>> =>
+      ipcRenderer.invoke("modpacks:getModsMultiple", modpackIds),
     addMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:addMod", modpackId, modId),
+    addModsBatch: (modpackId: string, modIds: string[]): Promise<number> =>
+      ipcRenderer.invoke("modpacks:addModsBatch", modpackId, modIds),
     removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
     toggleMod: (

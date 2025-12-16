@@ -168,6 +168,9 @@ export class MetadataManager {
   private pendingCFConflicts: Map<string, { partialData: any; manifest: any }> =
     new Map();
 
+  // File locks to prevent race conditions on concurrent writes
+  private fileLocks: Map<string, Promise<void>> = new Map();
+
   constructor() {
     this.baseDir = path.join(app.getPath("userData"), "modex");
     this.modpacksDir = path.join(this.baseDir, "modpacks");
@@ -176,6 +179,30 @@ export class MetadataManager {
     this.libraryPath = path.join(this.baseDir, "library.json");
     this.configPath = path.join(this.baseDir, "config.json");
     this.ensureDirectories();
+  }
+
+  /**
+   * Acquire a lock for a file to prevent concurrent writes
+   * Returns a release function that must be called when done
+   */
+  private async acquireFileLock(filePath: string): Promise<() => void> {
+    // Wait for any existing lock on this file
+    while (this.fileLocks.has(filePath)) {
+      await this.fileLocks.get(filePath);
+    }
+
+    // Create a new lock
+    let releaseLock: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    this.fileLocks.set(filePath, lockPromise);
+
+    return () => {
+      this.fileLocks.delete(filePath);
+      releaseLock!();
+    };
   }
 
   private async ensureDirectories(): Promise<void> {
@@ -199,14 +226,22 @@ export class MetadataManager {
   }
 
   private async safeWriteJson(filePath: string, data: any): Promise<void> {
-    const tempPath = `${filePath}.tmp`;
-    await fs.writeJson(tempPath, data, { spaces: 2 });
+    // Acquire lock for this file to prevent race conditions
+    const releaseLock = await this.acquireFileLock(filePath);
+    
     try {
-      await fs.move(tempPath, filePath, { overwrite: true });
-    } catch (error) {
-      // If move fails, try to clean up temp file
-      await fs.remove(tempPath).catch(() => {});
-      throw error;
+      // Use unique temp file to avoid conflicts
+      const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+      await fs.writeJson(tempPath, data, { spaces: 2 });
+      try {
+        await fs.move(tempPath, filePath, { overwrite: true });
+      } catch (error) {
+        // If move fails, try to clean up temp file
+        await fs.remove(tempPath).catch(() => {});
+        throw error;
+      }
+    } finally {
+      releaseLock();
     }
   }
 
@@ -345,6 +380,62 @@ export class MetadataManager {
     return mod;
   }
 
+  /**
+   * Add multiple mods to the library in a single batch operation
+   * This is much more efficient than calling addMod individually when importing many mods
+   * Returns an array of added mods (or existing mods if they were already in the library)
+   */
+  async addModsBatch(modsData: Array<Omit<Mod, "id" | "created_at">>): Promise<Mod[]> {
+    const library = await this.loadLibrary();
+    const existingIds = new Set(library.mods.map(m => m.id));
+    const results: Mod[] = [];
+
+    for (const modData of modsData) {
+      // Generate ID based on source
+      let id: string;
+      if (
+        modData.source === "curseforge" &&
+        modData.cf_project_id &&
+        modData.cf_file_id
+      ) {
+        id = `cf-${modData.cf_project_id}-${modData.cf_file_id}`;
+      } else if (
+        modData.source === "modrinth" &&
+        modData.mr_project_id &&
+        modData.mr_version_id
+      ) {
+        id = `mr-${modData.mr_project_id}-${modData.mr_version_id}`;
+      } else {
+        id = `unknown-${crypto.randomUUID()}`;
+      }
+
+      // Check if already exists
+      if (existingIds.has(id)) {
+        const existingMod = library.mods.find((m) => m.id === id);
+        if (existingMod) {
+          results.push(existingMod);
+          continue;
+        }
+      }
+
+      // Create new mod
+      const mod: Mod = {
+        ...modData,
+        id,
+        created_at: new Date().toISOString(),
+      };
+
+      library.mods.push(mod);
+      existingIds.add(id);
+      results.push(mod);
+    }
+
+    // Save library once with all new mods
+    await this.saveLibrary(library);
+    console.log(`[MetadataManager] Batch added ${modsData.length} mods to library`);
+    return results;
+  }
+
   async updateMod(id: string, updates: Partial<Mod>): Promise<boolean> {
     const library = await this.loadLibrary();
     const index = library.mods.findIndex((m) => m.id === id);
@@ -380,11 +471,40 @@ export class MetadataManager {
   }
 
   async deleteMods(ids: string[]): Promise<number> {
-    let deleted = 0;
-    for (const id of ids) {
-      if (await this.deleteMod(id)) deleted++;
+    if (ids.length === 0) return 0;
+
+    // Batch delete: single library load/save
+    const library = await this.loadLibrary();
+    const idsToDelete = new Set(ids);
+    const initialLength = library.mods.length;
+    
+    library.mods = library.mods.filter((m) => !idsToDelete.has(m.id));
+    const deletedCount = initialLength - library.mods.length;
+    
+    if (deletedCount === 0) return 0;
+    
+    await this.saveLibrary(library);
+
+    // Batch remove from all modpacks
+    const modpacks = await this.getAllModpacks();
+    const modpackUpdates: Promise<void>[] = [];
+    
+    for (const modpack of modpacks) {
+      const modsToRemove = modpack.mod_ids.filter((id) => idsToDelete.has(id));
+      if (modsToRemove.length > 0) {
+        // Update modpack once with all removed mods
+        modpackUpdates.push(
+          this.updateModpack(modpack.id, {
+            mod_ids: modpack.mod_ids.filter((id) => !idsToDelete.has(id)),
+          }).then(() => {})
+        );
+      }
     }
-    return deleted;
+    
+    // Execute all modpack updates in parallel
+    await Promise.all(modpackUpdates);
+    
+    return deletedCount;
   }
 
   // ==================== MODPACKS ====================
@@ -614,6 +734,48 @@ export class MetadataManager {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /**
+   * Batch get mods for multiple modpacks in a single library load.
+   * Returns a map of modpackId -> Mod[]
+   */
+  async getModsInMultipleModpacks(modpackIds: string[]): Promise<Map<string, Mod[]>> {
+    const result = new Map<string, Mod[]>();
+    if (modpackIds.length === 0) return result;
+
+    // Load library and modpacks once
+    const library = await this.loadLibrary();
+    const modpacks = await this.getAllModpacks();
+    
+    // Create a map of mod id -> mod for fast lookup
+    const modById = new Map<string, Mod>();
+    for (const mod of library.mods) {
+      modById.set(mod.id, mod);
+    }
+
+    // Process each modpack
+    for (const modpackId of modpackIds) {
+      const modpack = modpacks.find(p => p.id === modpackId);
+      if (!modpack) {
+        result.set(modpackId, []);
+        continue;
+      }
+
+      const mods: Mod[] = [];
+      for (const modId of modpack.mod_ids) {
+        const mod = modById.get(modId);
+        if (mod) {
+          mods.push(mod);
+        }
+      }
+      
+      // Sort by name
+      mods.sort((a, b) => a.name.localeCompare(b.name));
+      result.set(modpackId, mods);
+    }
+
+    return result;
+  }
+
   async addModToModpack(modpackId: string, modId: string): Promise<boolean> {
     const modpack = await this.getModpackById(modpackId);
     if (!modpack) return false;
@@ -674,6 +836,83 @@ export class MetadataManager {
 
     await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     return true;
+  }
+
+  /**
+   * Add multiple mods to a modpack in a single batch operation
+   * This is much faster than calling addModToModpack individually
+   */
+  async addModsToModpackBatch(modpackId: string, modIds: string[]): Promise<number> {
+    if (modIds.length === 0) return 0;
+
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return 0;
+
+    // Pre-fetch all mods at once
+    const library = await this.loadLibrary();
+    const modsMap = new Map(library.mods.map(m => [m.id, m]));
+    
+    // Track existing mods in modpack by project ID for conflict detection
+    const existingByProjectId = new Map<number | string, string>();
+    for (const existingModId of modpack.mod_ids) {
+      const existingMod = modsMap.get(existingModId);
+      if (existingMod) {
+        if (existingMod.source === "curseforge" && existingMod.cf_project_id) {
+          existingByProjectId.set(existingMod.cf_project_id, existingModId);
+        } else if (existingMod.source === "modrinth" && existingMod.mr_project_id) {
+          existingByProjectId.set(existingMod.mr_project_id, existingModId);
+        }
+      }
+    }
+
+    const modsToRemove = new Set<string>();
+    const modsToAdd: string[] = [];
+    const existingModIds = new Set(modpack.mod_ids);
+
+    for (const modId of modIds) {
+      // Check mod exists
+      const modToAdd = modsMap.get(modId);
+      if (!modToAdd) continue;
+
+      // Already in modpack?
+      if (existingModIds.has(modId)) continue;
+
+      // Check for conflicts (same project, different version)
+      let conflictId: string | undefined;
+      if (modToAdd.source === "curseforge" && modToAdd.cf_project_id) {
+        conflictId = existingByProjectId.get(modToAdd.cf_project_id);
+      } else if (modToAdd.source === "modrinth" && modToAdd.mr_project_id) {
+        conflictId = existingByProjectId.get(modToAdd.mr_project_id);
+      }
+
+      if (conflictId && conflictId !== modId) {
+        modsToRemove.add(conflictId);
+        // Update the index for subsequent conflicts
+        if (modToAdd.source === "curseforge" && modToAdd.cf_project_id) {
+          existingByProjectId.set(modToAdd.cf_project_id, modId);
+        } else if (modToAdd.source === "modrinth" && modToAdd.mr_project_id) {
+          existingByProjectId.set(modToAdd.mr_project_id, modId);
+        }
+      }
+
+      modsToAdd.push(modId);
+      existingModIds.add(modId);
+    }
+
+    // Remove conflicting mods
+    if (modsToRemove.size > 0) {
+      modpack.mod_ids = modpack.mod_ids.filter(id => !modsToRemove.has(id));
+      if (modpack.disabled_mod_ids) {
+        modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(id => !modsToRemove.has(id));
+      }
+    }
+
+    // Add new mods
+    modpack.mod_ids.push(...modsToAdd);
+    modpack.updated_at = new Date().toISOString();
+
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return modsToAdd.length;
   }
 
   async removeModFromModpack(
@@ -1785,8 +2024,49 @@ ${modLinks}
   // ==================== IMPORT ====================
 
   /**
+   * Parallel processing helper with concurrency limit
+   */
+  private async parallelLimit<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = [];
+    const executing: Promise<void>[] = [];
+
+    for (const item of items) {
+      const p = fn(item).then((result) => {
+        results.push(result);
+      });
+      executing.push(p as Promise<void>);
+
+      if (executing.length >= limit) {
+        await Promise.race(executing);
+        // Remove completed promises
+        for (let i = executing.length - 1; i >= 0; i--) {
+          const status = await Promise.race([
+            executing[i].then(() => "fulfilled"),
+            Promise.resolve("pending"),
+          ]);
+          if (status === "fulfilled") {
+            executing.splice(i, 1);
+          }
+        }
+      }
+    }
+
+    await Promise.all(executing);
+    return results;
+  }
+
+  /**
    * Import mods from CurseForge manifest
    * Returns created modpack ID and import stats
+   * 
+   * Optimized with:
+   * - Batch API calls to fetch all mod/file data upfront
+   * - Parallel processing with concurrency limit
+   * - Pre-cached library lookup
    */
   async importFromCurseForge(
     manifest: any,
@@ -1798,6 +2078,8 @@ ${modLinks}
     modsSkipped: number;
     errors: string[];
   }> {
+    const startTime = Date.now();
+    
     // Extract loader from modLoaders
     let loader = "unknown";
     const primaryLoader = manifest.minecraft?.modLoaders?.find(
@@ -1824,84 +2106,131 @@ ${modLinks}
     const errors: string[] = [];
     const newModIds: string[] = [];
     const addedModNames: string[] = [];
-    // Track which mods are marked as not required (disabled) in manifest
     const disabledModIds: string[] = [];
-    // Track incompatible mods for later re-search
     const incompatibleMods: Array<{
       cf_project_id: number;
       name: string;
       reason: string;
     }> = [];
 
-    const totalFiles = manifest.files?.length || 0;
+    const files = manifest.files || [];
+    const totalFiles = files.length;
+
+    if (totalFiles === 0) {
+      return {
+        modpackId,
+        modsImported: 0,
+        modsSkipped: 0,
+        errors: ["No mods found in manifest"],
+      };
+    }
+
+    // ==================== PHASE 1: Batch Prefetch ====================
+    onProgress?.(0, totalFiles, "Prefetching mod data...");
+    console.log(`[CF Import] Phase 1: Batch prefetching ${totalFiles} mods...`);
+    const prefetchStart = Date.now();
+
+    // Use batch API to fetch all mods and files in 2 requests instead of 2N requests
+    const entries = files.map((f: any) => ({
+      projectID: f.projectID,
+      fileID: f.fileID,
+    }));
+
+    let modsMap: Map<number, any>;
+    let filesMap: Map<number, any>;
+    let prefetchErrors: string[];
+
+    try {
+      const batchResult = await cfService.getModsAndFilesBatch(entries);
+      modsMap = batchResult.mods;
+      filesMap = batchResult.files;
+      prefetchErrors = batchResult.errors;
+      errors.push(...prefetchErrors);
+    } catch (err: any) {
+      console.warn(`[CF Import] Batch prefetch failed, falling back to sequential: ${err.message}`);
+      // Initialize empty maps - will fall back to individual fetches
+      modsMap = new Map();
+      filesMap = new Map();
+      prefetchErrors = [];
+    }
+
+    console.log(`[CF Import] Prefetch completed in ${Date.now() - prefetchStart}ms`);
+
+    // ==================== PHASE 2: Pre-cache library lookup ====================
+    console.log(`[CF Import] Phase 2: Caching library data...`);
+    const allMods = await this.getAllMods();
+    const existingModsIndex = new Map<string, any>();
+    for (const mod of allMods) {
+      if (mod.source === "curseforge" && mod.cf_project_id && mod.cf_file_id) {
+        existingModsIndex.set(`${mod.cf_project_id}:${mod.cf_file_id}`, mod);
+      }
+    }
+
+    // ==================== PHASE 3: Parallel Processing (Data Collection) ====================
+    console.log(`[CF Import] Phase 3: Processing ${totalFiles} mods with parallel limit...`);
+    const processStart = Date.now();
+
+    // Track progress atomically
     let processedCount = 0;
 
-    // Process each file entry
-    for (const file of manifest.files || []) {
+    // Process mod entries - collect data but don't write to library yet
+    const CONCURRENCY_LIMIT = 10; // Process 10 mods simultaneously
+
+    interface ProcessResult {
+      existingMod?: Mod;
+      newModData?: Omit<Mod, "id" | "created_at">;
+      modName?: string;
+      error?: string;
+      isDisabled?: boolean;
+      cacheKey?: string;
+    }
+
+    const processMod = async (file: any): Promise<ProcessResult> => {
       const { projectID, fileID } = file;
-      // Check if mod is marked as not required (disabled) in manifest
-      // Default to true if not specified (backwards compatibility)
       const isRequired = file.required !== false;
-      processedCount++;
-
+      
       try {
-        console.log(
-          `[CF Import] Processing mod: Project ${projectID}, File ${fileID}, required: ${isRequired}`
-        );
-
-        // Get mod info from CF API
-        const cfMod = await cfService.getMod(projectID);
+        // Try to get from prefetched cache first, fallback to individual fetch
+        let cfMod = modsMap.get(projectID);
         if (!cfMod) {
-          onProgress?.(
-            processedCount,
-            totalFiles,
-            `Mod ${projectID} not found`
-          );
-          errors.push(`Mod ${projectID} not found`);
-          continue;
+          cfMod = await cfService.getMod(projectID);
         }
 
-        // Send progress update
-        onProgress?.(processedCount, totalFiles, cfMod.name);
+        // Update progress (atomic increment)
+        const currentProgress = ++processedCount;
+        onProgress?.(currentProgress, totalFiles, cfMod?.name || `Mod ${projectID}`);
 
-        const cfFile = await cfService.getFile(projectID, fileID);
+        if (!cfMod) {
+          return { error: `Mod ${projectID} not found` };
+        }
+
+        // Try to get file from prefetched cache, fallback to individual fetch
+        let cfFile = filesMap.get(fileID);
         if (!cfFile) {
-          errors.push(`File ${fileID} not found for ${cfMod.name}`);
-          continue;
+          cfFile = await cfService.getFile(projectID, fileID);
         }
 
-        // Check if mod already exists in library
-        const allMods = await this.getAllMods();
-        const existingMod =
-          allMods.find(
-            (m) =>
-              m.source === "curseforge" &&
-              m.cf_project_id === projectID &&
-              m.cf_file_id === fileID
-          ) || null;
+        if (!cfFile) {
+          return { error: `File ${fileID} not found for ${cfMod.name}` };
+        }
+
+        // Check if mod already exists in library (using pre-indexed lookup)
+        const cacheKey = `${projectID}:${fileID}`;
+        const existingMod = existingModsIndex.get(cacheKey);
 
         if (existingMod) {
           console.log(`[CF Import] Found exact match: ${existingMod.name}`);
-          newModIds.push(existingMod.id);
-          // Count reused mods as successfully imported (they're added to the modpack)
-          addedModNames.push(existingMod.name);
-          // Track if this mod should be disabled
-          if (!isRequired) {
-            disabledModIds.push(existingMod.id);
-          }
-          continue;
+          return {
+            existingMod,
+            modName: existingMod.name,
+            isDisabled: !isRequired,
+          };
         }
-
-        // Note: We no longer treat different versions of the same mod as "conflicts".
-        // Different modpacks can have different versions of the same mod.
-        // If a different version exists in the library, we simply add the new version
-        // as a separate entry. The library can hold multiple versions.
 
         // Detect content type from CF mod classId
         const contentType = getContentTypeFromClassId(cfMod.classId);
 
         // New mod - use modToLibraryFormat for consistent metadata
-        console.log(`[CF Import] Adding new ${contentType}: ${cfMod.name}`);
         const formattedMod = cfService.modToLibraryFormat(
           cfMod,
           cfFile,
@@ -1910,77 +2239,126 @@ ${modLinks}
           contentType
         );
 
-        // NOTE: We trust the CurseForge manifest completely.
-        // The manifest specifies exactly which files to use, and these were
-        // chosen by the modpack author to work together. We don't apply
-        // additional loader/version checks that could incorrectly reject mods
-        // due to metadata inconsistencies in the CF API.
-
-        const mod = await this.addMod({
-          name: formattedMod.name,
-          slug: formattedMod.slug,
-          version: formattedMod.version,
-          game_version: formattedMod.game_version,
-          game_versions: formattedMod.game_versions,
-          loader: formattedMod.loader,
-          content_type: formattedMod.content_type,
-          filename: formattedMod.filename,
-          source: "curseforge",
-          cf_project_id: formattedMod.cf_project_id,
-          cf_file_id: formattedMod.cf_file_id,
-          description: formattedMod.description,
-          author: formattedMod.author,
-          thumbnail_url: formattedMod.thumbnail_url,
-          logo_url: formattedMod.logo_url,
-          download_count: formattedMod.download_count,
-          release_type: formattedMod.release_type,
-          date_released: formattedMod.date_released,
-          dependencies: formattedMod.dependencies,
-          categories: formattedMod.categories,
-          file_size: formattedMod.file_size,
-          date_created: formattedMod.date_created,
-          date_modified: formattedMod.date_modified,
-          website_url: formattedMod.website_url,
-        });
-
-        newModIds.push(mod.id);
-        addedModNames.push(mod.name);
-        // Track if this mod should be disabled
-        if (!isRequired) {
-          disabledModIds.push(mod.id);
-        }
+        // Return the data for batch insertion
+        return {
+          newModData: {
+            name: formattedMod.name,
+            slug: formattedMod.slug,
+            version: formattedMod.version,
+            game_version: formattedMod.game_version,
+            game_versions: formattedMod.game_versions,
+            loader: formattedMod.loader,
+            content_type: formattedMod.content_type,
+            filename: formattedMod.filename,
+            source: "curseforge",
+            cf_project_id: formattedMod.cf_project_id,
+            cf_file_id: formattedMod.cf_file_id,
+            description: formattedMod.description,
+            author: formattedMod.author,
+            thumbnail_url: formattedMod.thumbnail_url,
+            logo_url: formattedMod.logo_url,
+            download_count: formattedMod.download_count,
+            release_type: formattedMod.release_type,
+            date_released: formattedMod.date_released,
+            dependencies: formattedMod.dependencies,
+            categories: formattedMod.categories,
+            file_size: formattedMod.file_size,
+            date_created: formattedMod.date_created,
+            date_modified: formattedMod.date_modified,
+            website_url: formattedMod.website_url,
+          } as Omit<Mod, "id" | "created_at">,
+          modName: formattedMod.name,
+          isDisabled: !isRequired,
+          cacheKey,
+        };
       } catch (error: any) {
         console.error(`[CF Import] Error processing ${projectID}:`, error);
-        errors.push(`Error processing ${projectID}: ${error.message}`);
+        return { error: `Error processing ${projectID}: ${error.message}` };
+      }
+    };
+
+    // Process all mods with concurrency limit
+    const results = await this.parallelLimit(files, CONCURRENCY_LIMIT, processMod);
+
+    // Collect new mods data for batch insertion
+    const newModsData: Array<Omit<Mod, "id" | "created_at">> = [];
+    const newModsMetadata: Array<{ isDisabled: boolean; cacheKey: string }> = [];
+    
+    for (const result of results) {
+      if (result.error) {
+        errors.push(result.error);
+      } else if (result.existingMod) {
+        // Existing mod - directly add to results
+        newModIds.push(result.existingMod.id);
+        if (result.modName) {
+          addedModNames.push(result.modName);
+        }
+        if (result.isDisabled) {
+          disabledModIds.push(result.existingMod.id);
+        }
+      } else if (result.newModData) {
+        // New mod - collect for batch insertion
+        newModsData.push(result.newModData);
+        newModsMetadata.push({
+          isDisabled: result.isDisabled || false,
+          cacheKey: result.cacheKey || "",
+        });
+        if (result.modName) {
+          addedModNames.push(result.modName);
+        }
       }
     }
 
-    // Add all mods to modpack
-    for (const modId of newModIds) {
-      await this.addModToModpack(modpackId, modId);
+    console.log(`[CF Import] Processing completed in ${Date.now() - processStart}ms`);
+
+    // ==================== PHASE 3.5: Batch Insert New Mods ====================
+    if (newModsData.length > 0) {
+      console.log(`[CF Import] Phase 3.5: Batch inserting ${newModsData.length} new mods to library...`);
+      const batchStart = Date.now();
+      const insertedMods = await this.addModsBatch(newModsData);
+      
+      // Collect inserted mod IDs
+      for (let i = 0; i < insertedMods.length; i++) {
+        const mod = insertedMods[i];
+        const metadata = newModsMetadata[i];
+        newModIds.push(mod.id);
+        if (metadata.isDisabled) {
+          disabledModIds.push(mod.id);
+        }
+        // Update cache
+        if (metadata.cacheKey) {
+          existingModsIndex.set(metadata.cacheKey, mod);
+        }
+      }
+      console.log(`[CF Import] Batch insert completed in ${Date.now() - batchStart}ms`);
     }
+
+    // ==================== PHASE 4: Add mods to modpack ====================
+    console.log(`[CF Import] Phase 4: Adding ${newModIds.length} mods to modpack...`);
+    const phase4Start = Date.now();
+    
+    // Use batch method for efficient modpack updates
+    const addedCount = await this.addModsToModpackBatch(modpackId, newModIds);
+    console.log(`[CF Import] Added ${addedCount} mods to modpack in ${Date.now() - phase4Start}ms`);
 
     // Save modpack settings
     const modpack = await this.getModpackById(modpackId);
     if (modpack) {
-      // Set disabled mods if any were marked as not required in manifest
       if (disabledModIds.length > 0) {
         modpack.disabled_mod_ids = disabledModIds;
-        console.log(
-          `[CF Import] Set ${disabledModIds.length} mods as disabled`
-        );
+        console.log(`[CF Import] Set ${disabledModIds.length} mods as disabled`);
       }
       
-      // Save incompatible mods for re-search feature
       if (incompatibleMods.length > 0) {
         modpack.incompatible_mods = incompatibleMods;
-        console.log(
-          `[CF Import] Tracked ${incompatibleMods.length} incompatible mods for re-search`
-        );
+        console.log(`[CF Import] Tracked ${incompatibleMods.length} incompatible mods for re-search`);
       }
       
       await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     }
+
+    const totalTime = Date.now() - startTime;
+    console.log(`[CF Import] Import completed in ${totalTime}ms (${addedModNames.length} mods imported)`);
 
     return {
       modpackId,
@@ -1994,6 +2372,8 @@ ${modLinks}
    * Re-search CurseForge for compatible versions of incompatible mods
    * This finds mods that were marked incompatible during import and tries to find
    * versions that match the modpack's MC version and loader
+   * 
+   * Optimized with parallel processing for faster re-search
    */
   async reSearchIncompatibleMods(
     modpackId: string,
@@ -2025,11 +2405,27 @@ ${modLinks}
     
     let processed = 0;
     const total = incompatible.length;
-    
-    for (const incompMod of incompatible) {
-      processed++;
-      onProgress?.(processed, total, incompMod.name);
-      
+
+    // Pre-cache library data
+    const allMods = await this.getAllMods();
+    const existingModsIndex = new Map<string, any>();
+    for (const mod of allMods) {
+      if (mod.source === "curseforge" && mod.cf_project_id && mod.cf_file_id) {
+        existingModsIndex.set(`${mod.cf_project_id}:${mod.cf_file_id}`, mod);
+      }
+    }
+
+    interface ReSearchResult {
+      incompMod: { cf_project_id: number; name: string; reason: string };
+      success: boolean;
+      modId?: string;
+      modName?: string;
+    }
+
+    const processIncompMod = async (incompMod: { cf_project_id: number; name: string; reason: string }): Promise<ReSearchResult> => {
+      const currentProgress = ++processed;
+      onProgress?.(currentProgress, total, incompMod.name);
+
       try {
         console.log(`[Re-search] Searching for compatible version of ${incompMod.name} (${incompMod.cf_project_id})`);
         
@@ -2041,8 +2437,7 @@ ${modLinks}
         
         if (!files || files.length === 0) {
           console.log(`[Re-search] No compatible files found for ${incompMod.name}`);
-          stillIncompatible.push(incompMod.name);
-          continue;
+          return { incompMod, success: false };
         }
         
         // Find the best matching file (prefer release, then most recent)
@@ -2052,8 +2447,7 @@ ${modLinks}
         // Get mod info
         const cfMod = await cfService.getMod(incompMod.cf_project_id);
         if (!cfMod) {
-          stillIncompatible.push(incompMod.name);
-          continue;
+          return { incompMod, success: false };
         }
         
         // Detect content type
@@ -2075,18 +2469,12 @@ ${modLinks}
         
         if (!supportsExactVersion || !loaderMatches) {
           console.log(`[Re-search] Found file but still incompatible: ${incompMod.name}`);
-          stillIncompatible.push(incompMod.name);
-          continue;
+          return { incompMod, success: false };
         }
         
-        // Check if this exact file already exists
-        const allMods = await this.getAllMods();
-        let existingMod = allMods.find(
-          (m) =>
-            m.source === "curseforge" &&
-            m.cf_project_id === incompMod.cf_project_id &&
-            m.cf_file_id === bestFile.id
-        );
+        // Check if this exact file already exists (using cached index)
+        const cacheKey = `${incompMod.cf_project_id}:${bestFile.id}`;
+        let existingMod = existingModsIndex.get(cacheKey);
         
         if (!existingMod) {
           // Add the new mod to library
@@ -2117,16 +2505,29 @@ ${modLinks}
             date_modified: formattedMod.date_modified,
             website_url: formattedMod.website_url,
           });
+          // Update index
+          existingModsIndex.set(cacheKey, existingMod);
         }
-        
-        // Add to modpack
-        await this.addModToModpack(modpackId, existingMod.id);
-        added.push(incompMod.name);
-        console.log(`[Re-search] Successfully added ${incompMod.name}`);
-        
+
+        return { incompMod, success: true, modId: existingMod.id, modName: incompMod.name };
       } catch (error: any) {
         console.error(`[Re-search] Error processing ${incompMod.name}:`, error);
-        stillIncompatible.push(incompMod.name);
+        return { incompMod, success: false };
+      }
+    };
+
+    // Process with parallel limit
+    const CONCURRENCY_LIMIT = 8;
+    const results = await this.parallelLimit(incompatible, CONCURRENCY_LIMIT, processIncompMod);
+
+    // Process results and add mods to modpack
+    for (const result of results) {
+      if (result.success && result.modId) {
+        await this.addModToModpack(modpackId, result.modId);
+        added.push(result.modName!);
+        console.log(`[Re-search] Successfully added ${result.modName}`);
+      } else {
+        stillIncompatible.push(result.incompMod.name);
       }
     }
     
@@ -2235,6 +2636,62 @@ ${modLinks}
     const totalMods = manifest.mods?.length || 0;
     let processedCount = 0;
 
+    // ==================== OPTIMIZATION: Pre-cache library data ====================
+    // Load all mods and modpacks once instead of in every iteration
+    const allMods = await this.getAllMods();
+    const allModpacks = await this.getAllModpacks();
+    
+    // Build lookup indexes for fast access
+    const cfExactIndex = new Map<string, Mod>(); // key: "projectId:fileId"
+    const cfProjectIndex = new Map<number, Mod[]>(); // key: projectId -> all versions
+    const mrExactIndex = new Map<string, Mod>(); // key: versionId
+    const mrProjectIndex = new Map<string, Mod[]>(); // key: projectId -> all versions
+    
+    for (const mod of allMods) {
+      if (mod.source === "curseforge" && mod.cf_project_id && mod.cf_file_id) {
+        cfExactIndex.set(`${mod.cf_project_id}:${mod.cf_file_id}`, mod);
+        if (!cfProjectIndex.has(mod.cf_project_id)) {
+          cfProjectIndex.set(mod.cf_project_id, []);
+        }
+        cfProjectIndex.get(mod.cf_project_id)!.push(mod);
+      } else if (mod.source === "modrinth" && mod.mr_version_id) {
+        mrExactIndex.set(mod.mr_version_id, mod);
+        if (mod.mr_project_id) {
+          if (!mrProjectIndex.has(mod.mr_project_id)) {
+            mrProjectIndex.set(mod.mr_project_id, []);
+          }
+          mrProjectIndex.get(mod.mr_project_id)!.push(mod);
+        }
+      }
+    }
+
+    // ==================== OPTIMIZATION: Batch prefetch CF data ====================
+    // Collect all CurseForge entries for batch fetching
+    const cfEntries = (manifest.mods || [])
+      .filter((m: any) => m.source === "curseforge" && m.cf_project_id && m.cf_file_id)
+      .filter((m: any) => !cfExactIndex.has(`${m.cf_project_id}:${m.cf_file_id}`)) // Only new mods
+      .map((m: any) => ({ projectID: m.cf_project_id, fileID: m.cf_file_id }));
+
+    let prefetchedMods = new Map<number, any>();
+    let prefetchedFiles = new Map<number, any>();
+
+    if (cfEntries.length > 0 && cfService.getModsAndFilesBatch) {
+      console.log(`[Import] Batch prefetching ${cfEntries.length} new mods from CurseForge...`);
+      try {
+        const batchResult = await cfService.getModsAndFilesBatch(cfEntries);
+        prefetchedMods = batchResult.mods;
+        prefetchedFiles = batchResult.files;
+        console.log(`[Import] Prefetched ${prefetchedMods.size} mods and ${prefetchedFiles.size} files`);
+      } catch (err) {
+        console.warn(`[Import] Batch prefetch failed, will fetch individually:`, err);
+      }
+    }
+
+    // ==================== PHASE 1: Collect mod data ====================
+    // Collect all new mods data for batch insertion
+    const modsToAdd: Array<Omit<Mod, "id" | "created_at">> = [];
+    const modsToDelete: string[] = [];
+
     for (const modEntry of manifest.mods || []) {
       processedCount++;
 
@@ -2254,34 +2711,21 @@ ${modLinks}
         modEntry.cf_project_id &&
         modEntry.cf_file_id
       ) {
-        const allMods = await this.getAllMods();
-
         console.log(
           `[Import] Checking mod: ${modEntry.name} (Project: ${modEntry.cf_project_id}, File: ${modEntry.cf_file_id})`
         );
 
-        // Exact match (same project ID and file ID)
-        existingMod =
-          allMods.find(
-            (m) =>
-              m.source === "curseforge" &&
-              m.cf_project_id === modEntry.cf_project_id &&
-              m.cf_file_id === modEntry.cf_file_id
-          ) || null;
+        // Exact match using pre-built index (O(1) instead of O(n))
+        existingMod = cfExactIndex.get(`${modEntry.cf_project_id}:${modEntry.cf_file_id}`) || null;
 
         if (existingMod) {
           console.log(`[Import] Found exact match: ${existingMod.name}`);
         }
 
-        // Check for same project but different file (version conflict)
+        // Check for same project but different file (version conflict) using index
         if (!existingMod) {
-          conflictingMod =
-            allMods.find(
-              (m) =>
-                m.source === "curseforge" &&
-                m.cf_project_id === modEntry.cf_project_id &&
-                m.cf_file_id !== modEntry.cf_file_id
-            ) || null;
+          const projectMods = cfProjectIndex.get(modEntry.cf_project_id) || [];
+          conflictingMod = projectMods.find(m => m.cf_file_id !== modEntry.cf_file_id) || null;
 
           if (conflictingMod) {
             console.log(
@@ -2290,23 +2734,13 @@ ${modLinks}
           }
         }
       } else if (modEntry.source === "modrinth" && modEntry.mr_version_id) {
-        const allMods = await this.getAllMods();
-        existingMod =
-          allMods.find(
-            (m) =>
-              m.source === "modrinth" &&
-              m.mr_version_id === modEntry.mr_version_id
-          ) || null;
+        // Exact match using pre-built index
+        existingMod = mrExactIndex.get(modEntry.mr_version_id) || null;
 
         // Check for same project but different version
-        if (!existingMod) {
-          conflictingMod =
-            allMods.find(
-              (m) =>
-                m.source === "modrinth" &&
-                m.mr_project_id === modEntry.mr_project_id &&
-                m.mr_version_id !== modEntry.mr_version_id
-            ) || null;
+        if (!existingMod && modEntry.mr_project_id) {
+          const projectMods = mrProjectIndex.get(modEntry.mr_project_id) || [];
+          conflictingMod = projectMods.find(m => m.mr_version_id !== modEntry.mr_version_id) || null;
         }
       }
 
@@ -2334,17 +2768,21 @@ ${modLinks}
           `${conflictingMod.name} (${conflictingMod.version} → ${modEntry.version})`
         );
 
-        // Remove old version if it's not used in other modpacks
-        const allModpacks = await this.getAllModpacks();
+        // Remove old version if it's not used in other modpacks (using cached modpacks)
         const isUsedElsewhere = allModpacks.some(
           (mp) => mp.id !== modpackId && mp.mod_ids.includes(conflictingMod!.id)
         );
 
         if (!isUsedElsewhere) {
-          await this.deleteMod(conflictingMod.id);
+          // Collect for batch deletion
+          modsToDelete.push(conflictingMod.id);
           console.log(
-            `[Import] Removed old version from library: ${conflictingMod.name}`
+            `[Import] Marked old version for removal: ${conflictingMod.name}`
           );
+          // Update indexes
+          const projectMods = cfProjectIndex.get(conflictingMod.cf_project_id!) || [];
+          const idx = projectMods.findIndex(m => m.id === conflictingMod!.id);
+          if (idx >= 0) projectMods.splice(idx, 1);
         }
 
         // Add new version - will be handled by the fetch logic below
@@ -2357,7 +2795,7 @@ ${modLinks}
           `[Import] Fetching mod from CurseForge: ${modEntry.name} (${modEntry.cf_project_id}/${modEntry.cf_file_id})`
         );
 
-        let newMod: Mod;
+        let newModData: Omit<Mod, "id" | "created_at"> | null = null;
 
         if (
           modEntry.source === "curseforge" &&
@@ -2365,12 +2803,16 @@ ${modLinks}
           modEntry.cf_file_id
         ) {
           try {
-            // Fetch complete data from CurseForge API
-            const cfMod = await cfService.getMod(modEntry.cf_project_id);
-            const cfFile = await cfService.getFile(
-              modEntry.cf_project_id,
-              modEntry.cf_file_id
-            );
+            // Try prefetched data first, then fall back to individual fetch
+            let cfMod = prefetchedMods.get(modEntry.cf_project_id);
+            let cfFile = prefetchedFiles.get(modEntry.cf_file_id);
+            
+            if (!cfMod) {
+              cfMod = await cfService.getMod(modEntry.cf_project_id);
+            }
+            if (!cfFile) {
+              cfFile = await cfService.getFile(modEntry.cf_project_id, modEntry.cf_file_id);
+            }
 
             if (cfMod && cfFile) {
               // Detect content type from CF mod classId
@@ -2385,7 +2827,7 @@ ${modLinks}
                 contentType
               );
 
-              newMod = await this.addMod({
+              newModData = {
                 name: formattedMod.name,
                 slug: formattedMod.slug,
                 version: formattedMod.version,
@@ -2393,7 +2835,7 @@ ${modLinks}
                 loader: formattedMod.loader,
                 content_type: formattedMod.content_type,
                 filename: formattedMod.filename,
-                source: "curseforge",
+                source: "curseforge" as const,
                 cf_project_id: formattedMod.cf_project_id,
                 cf_file_id: formattedMod.cf_file_id,
                 description: formattedMod.description,
@@ -2409,9 +2851,10 @@ ${modLinks}
                 date_created: formattedMod.date_created,
                 date_modified: formattedMod.date_modified,
                 website_url: formattedMod.website_url,
-              });
+              };
+              
               console.log(
-                `[Import] Added ${contentType}: ${newMod.name} v${newMod.version}`
+                `[Import] Collected ${contentType}: ${formattedMod.name} v${formattedMod.version}`
               );
             } else {
               throw new Error("Mod or file not found on CurseForge");
@@ -2422,7 +2865,7 @@ ${modLinks}
               error
             );
             // Fallback to manifest data if API fetch fails
-            newMod = await this.addMod({
+            newModData = {
               name: modEntry.name,
               version: modEntry.version,
               game_version: manifest.modpack.minecraft_version || "unknown",
@@ -2436,11 +2879,11 @@ ${modLinks}
               description: modEntry.description,
               author: modEntry.author,
               thumbnail_url: modEntry.thumbnail_url,
-            });
+            };
           }
         } else {
           // Modrinth or fallback - use manifest data
-          newMod = await this.addMod({
+          newModData = {
             name: modEntry.name,
             version: modEntry.version,
             game_version: manifest.modpack.minecraft_version || "unknown",
@@ -2454,13 +2897,42 @@ ${modLinks}
             description: modEntry.description,
             author: modEntry.author,
             thumbnail_url: modEntry.thumbnail_url,
-          });
+          };
         }
 
-        newModIds.push(newMod.id);
-        addedModNames.push(newMod.name);
-        downloadedModNames.push(newMod.name);
-        console.log(`[Import] Downloaded new mod to library: ${newMod.name}`);
+        if (newModData) {
+          modsToAdd.push(newModData);
+          addedModNames.push(newModData.name);
+          downloadedModNames.push(newModData.name);
+        }
+      }
+    }
+
+    // ==================== PHASE 2: Batch operations ====================
+    // Delete old versions first
+    if (modsToDelete.length > 0) {
+      console.log(`[Import] Deleting ${modsToDelete.length} old mod versions...`);
+      for (const modId of modsToDelete) {
+        await this.deleteMod(modId);
+      }
+    }
+
+    // Batch insert new mods
+    if (modsToAdd.length > 0) {
+      console.log(`[Import] Batch inserting ${modsToAdd.length} new mods to library...`);
+      const insertedMods = await this.addModsBatch(modsToAdd);
+      
+      // Collect the IDs of inserted mods
+      for (const mod of insertedMods) {
+        newModIds.push(mod.id);
+        // Update indexes
+        if (mod.source === "curseforge" && mod.cf_project_id && mod.cf_file_id) {
+          cfExactIndex.set(`${mod.cf_project_id}:${mod.cf_file_id}`, mod);
+          if (!cfProjectIndex.has(mod.cf_project_id)) {
+            cfProjectIndex.set(mod.cf_project_id, []);
+          }
+          cfProjectIndex.get(mod.cf_project_id)!.push(mod);
+        }
       }
     }
 

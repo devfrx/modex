@@ -309,7 +309,7 @@ onUnmounted(() => {
 <template>
     <div class="h-full flex flex-col bg-background overflow-hidden">
         <!-- Compact Header -->
-        <div class="shrink-0 relative overflow-hidden border-b border-border">
+        <div class="shrink-0 relative border-b border-border z-20">
             <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
                     <div class="flex items-center gap-3 sm:gap-4">

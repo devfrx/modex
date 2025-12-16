@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
+import ChartCard from "@/components/stats/ChartCard.vue";
+import ColorPicker from "@/components/stats/ColorPicker.vue";
 import {
   Chart as ChartJS,
   Title,
@@ -16,27 +18,22 @@ import {
   RadialLinearScale,
   Filler,
 } from "chart.js";
-import { Doughnut, Bar, Line, PolarArea, Radar } from "vue-chartjs";
+import { Bar } from "vue-chartjs";
 import {
   BarChart3,
   PieChart,
   Package,
   Layers,
   RefreshCw,
-  TrendingUp,
   HardDrive,
-  Palette,
-  Calendar,
-  Star,
-  Zap,
   Target,
-  Clock,
-  Activity,
   ArrowUpRight,
-  ChevronRight,
-  Circle,
-  TrendingUp as LineChartIcon,
-  Hexagon,
+  Star,
+  Settings,
+  GripVertical,
+  Eye,
+  EyeOff,
+  RotateCcw,
 } from "lucide-vue-next";
 import type { Mod, Modpack } from "@/types/electron";
 
@@ -67,6 +64,72 @@ const animatedTotalModpacks = ref(0);
 const animatedTotalSize = ref(0);
 const animatedLoaders = ref(0);
 
+// Settings
+const SETTINGS_KEY = "modex:stats:settings";
+const showSettings = ref(false);
+
+// Custom colors
+const customColors = ref<string[]>([
+  "#f97316", "#3b82f6", "#a855f7", "#ef4444", "#22c55e", "#eab308", "#06b6d4", "#ec4899"
+]);
+
+const backgroundColors = computed(() =>
+  customColors.value.map(c => c + "cc")
+);
+
+// Chart visibility settings
+const chartVisibility = ref<Record<string, boolean>>({
+  loader: true,
+  version: true,
+  content: true,
+  modpackSizes: true,
+  mostUsed: true,
+});
+
+// Chart types for each chart
+const chartTypes = {
+  loader: ["doughnut", "polar", "bar", "pie"] as const,
+  version: ["bar", "line", "radar", "polar"] as const,
+  content: ["doughnut", "polar", "bar", "pie"] as const,
+  modpackSizes: ["bar", "line"] as const,
+  mostUsed: ["bar", "polar", "radar"] as const,
+};
+
+// Save/Load settings
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+    customColors: customColors.value,
+    chartVisibility: chartVisibility.value,
+  }));
+}
+
+function loadSettings() {
+  const stored = localStorage.getItem(SETTINGS_KEY);
+  if (stored) {
+    try {
+      const settings = JSON.parse(stored);
+      if (settings.customColors) customColors.value = settings.customColors;
+      if (settings.chartVisibility) chartVisibility.value = { ...chartVisibility.value, ...settings.chartVisibility };
+    } catch (e) {
+      console.error("Failed to load stats settings:", e);
+    }
+  }
+}
+
+function resetSettings() {
+  customColors.value = ["#f97316", "#3b82f6", "#a855f7", "#ef4444", "#22c55e", "#eab308", "#06b6d4", "#ec4899"];
+  chartVisibility.value = {
+    loader: true,
+    version: true,
+    content: true,
+    modpackSizes: true,
+    mostUsed: true,
+  };
+  saveSettings();
+}
+
+watch([customColors, chartVisibility], saveSettings, { deep: true });
+
 function animateValue(start: number, end: number, setter: (val: number) => void, duration = 1000) {
   const startTime = performance.now();
   const animate = (currentTime: number) => {
@@ -78,77 +141,6 @@ function animateValue(start: number, end: number, setter: (val: number) => void,
   };
   requestAnimationFrame(animate);
 }
-
-// Chart style options (using icon component names)
-const chartStyles = [
-  { id: "default", name: "Default", icon: "Palette" },
-  { id: "gradient", name: "Gradient", icon: "TrendingUp" },
-  { id: "neon", name: "Neon", icon: "Zap" },
-  { id: "pastel", name: "Pastel", icon: "Star" },
-];
-const selectedStyle = ref("default");
-
-// Chart type toggles
-const loaderChartType = ref<"doughnut" | "polar" | "bar">("doughnut");
-const versionChartType = ref<"bar" | "line" | "radar">("bar");
-const contentChartType = ref<"doughnut" | "polar" | "bar">("doughnut");
-
-// Chart type options for v-for
-const loaderChartTypes = ["doughnut", "polar", "bar"] as const;
-const versionChartTypes = ["bar", "line", "radar"] as const;
-const contentChartTypes = ["doughnut", "polar", "bar"] as const;
-
-// Color palettes based on style
-const colorPalettes = {
-  default: {
-    primary: ["#f97316", "#3b82f6", "#a855f7", "#ef4444", "#22c55e", "#eab308"],
-    background: [
-      "rgba(249, 115, 22, 0.8)",
-      "rgba(59, 130, 246, 0.8)",
-      "rgba(168, 85, 247, 0.8)",
-      "rgba(239, 68, 68, 0.8)",
-      "rgba(34, 197, 94, 0.8)",
-      "rgba(234, 179, 8, 0.8)",
-    ],
-  },
-  gradient: {
-    primary: ["#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7", "#dfe6e9"],
-    background: [
-      "rgba(255, 107, 107, 0.8)",
-      "rgba(78, 205, 196, 0.8)",
-      "rgba(69, 183, 209, 0.8)",
-      "rgba(150, 206, 180, 0.8)",
-      "rgba(255, 234, 167, 0.8)",
-      "rgba(223, 230, 233, 0.8)",
-    ],
-  },
-  neon: {
-    primary: ["#00ff87", "#ff00ff", "#00ffff", "#ffff00", "#ff6600", "#ff0066"],
-    background: [
-      "rgba(0, 255, 135, 0.7)",
-      "rgba(255, 0, 255, 0.7)",
-      "rgba(0, 255, 255, 0.7)",
-      "rgba(255, 255, 0, 0.7)",
-      "rgba(255, 102, 0, 0.7)",
-      "rgba(255, 0, 102, 0.7)",
-    ],
-  },
-  pastel: {
-    primary: ["#b8e0d2", "#d6eadf", "#eac4d5", "#95b8d1", "#edafb8", "#f7e1d7"],
-    background: [
-      "rgba(184, 224, 210, 0.9)",
-      "rgba(214, 234, 223, 0.9)",
-      "rgba(234, 196, 213, 0.9)",
-      "rgba(149, 184, 209, 0.9)",
-      "rgba(237, 175, 184, 0.9)",
-      "rgba(247, 225, 215, 0.9)",
-    ],
-  },
-};
-
-const currentPalette = computed(
-  () => colorPalettes[selectedStyle.value as keyof typeof colorPalettes]
-);
 
 // Stats computed
 const totalMods = computed(() => mods.value.length);
@@ -239,21 +231,12 @@ const mostUsedMods = computed(() => {
     .slice(0, 10);
 });
 
-// Chart data computed
+// Chart data
 const loaderChartData = computed(() => ({
   labels: loaderStats.value.map((s) => s.name),
   datasets: [
     {
       data: loaderStats.value.map((s) => s.count),
-      backgroundColor: currentPalette.value.background.slice(
-        0,
-        loaderStats.value.length
-      ),
-      borderColor: currentPalette.value.primary.slice(
-        0,
-        loaderStats.value.length
-      ),
-      borderWidth: 2,
     },
   ],
 }));
@@ -264,17 +247,6 @@ const versionChartData = computed(() => ({
     {
       label: "Mods",
       data: versionStats.value.map((s) => s.count),
-      backgroundColor:
-        versionChartType.value === "line"
-          ? "rgba(139, 92, 246, 0.2)"
-          : currentPalette.value.background,
-      borderColor:
-        versionChartType.value === "line"
-          ? "#8b5cf6"
-          : currentPalette.value.primary,
-      borderWidth: 2,
-      fill: versionChartType.value === "line",
-      tension: 0.4,
     },
   ],
 }));
@@ -284,17 +256,6 @@ const contentChartData = computed(() => ({
   datasets: [
     {
       data: contentTypeStats.value.map((s) => s.count),
-      backgroundColor: [
-        currentPalette.value.background[4],
-        currentPalette.value.background[1],
-        currentPalette.value.background[2],
-      ],
-      borderColor: [
-        currentPalette.value.primary[4],
-        currentPalette.value.primary[1],
-        currentPalette.value.primary[2],
-      ],
-      borderWidth: 2,
     },
   ],
 }));
@@ -305,10 +266,6 @@ const modpackChartData = computed(() => ({
     {
       label: "Mods in Pack",
       data: modpackModCounts.value.map((p) => p.count),
-      backgroundColor: "rgba(139, 92, 246, 0.6)",
-      borderColor: "#8b5cf6",
-      borderWidth: 1,
-      borderRadius: 4,
     },
   ],
 }));
@@ -319,163 +276,14 @@ const mostUsedChartData = computed(() => ({
     {
       label: "Used in Packs",
       data: mostUsedMods.value.map((m) => m.packCount),
-      backgroundColor: currentPalette.value.background,
-      borderColor: currentPalette.value.primary,
-      borderWidth: 2,
     },
   ],
 }));
 
-// Chart options
-const doughnutOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: "bottom" as const,
-      labels: {
-        color: "rgba(255,255,255,0.7)",
-        padding: 15,
-        usePointStyle: true,
-      },
-    },
-    tooltip: {
-      backgroundColor: "rgba(0,0,0,0.8)",
-      titleColor: "#fff",
-      bodyColor: "#fff",
-      padding: 12,
-      cornerRadius: 8,
-    },
-  },
-  cutout: "60%",
-}));
-
-const barOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  indexAxis: "y" as const,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "rgba(0,0,0,0.8)",
-      titleColor: "#fff",
-      bodyColor: "#fff",
-      padding: 12,
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    x: {
-      grid: { color: "rgba(255,255,255,0.05)" },
-      ticks: { color: "rgba(255,255,255,0.5)" },
-    },
-    y: {
-      grid: { display: false },
-      ticks: { color: "rgba(255,255,255,0.7)" },
-    },
-  },
-}));
-
-const verticalBarOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "rgba(0,0,0,0.8)",
-      titleColor: "#fff",
-      bodyColor: "#fff",
-      padding: 12,
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { color: "rgba(255,255,255,0.5)", maxRotation: 45 },
-    },
-    y: {
-      grid: { color: "rgba(255,255,255,0.05)" },
-      ticks: { color: "rgba(255,255,255,0.7)" },
-    },
-  },
-}));
-
-const lineOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "rgba(0,0,0,0.8)",
-      titleColor: "#fff",
-      bodyColor: "#fff",
-      padding: 12,
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    x: {
-      grid: { color: "rgba(255,255,255,0.05)" },
-      ticks: { color: "rgba(255,255,255,0.5)" },
-    },
-    y: {
-      grid: { color: "rgba(255,255,255,0.05)" },
-      ticks: { color: "rgba(255,255,255,0.7)" },
-    },
-  },
-}));
-
-const radarOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "rgba(0,0,0,0.8)",
-      titleColor: "#fff",
-      bodyColor: "#fff",
-      padding: 12,
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    r: {
-      grid: { color: "rgba(255,255,255,0.1)" },
-      angleLines: { color: "rgba(255,255,255,0.1)" },
-      ticks: { display: false },
-      pointLabels: { color: "rgba(255,255,255,0.7)" },
-    },
-  },
-}));
-
-const polarOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: "bottom" as const,
-      labels: {
-        color: "rgba(255,255,255,0.7)",
-        padding: 15,
-        usePointStyle: true,
-      },
-    },
-    tooltip: {
-      backgroundColor: "rgba(0,0,0,0.8)",
-      titleColor: "#fff",
-      bodyColor: "#fff",
-      padding: 12,
-      cornerRadius: 8,
-    },
-  },
-  scales: {
-    r: {
-      grid: { color: "rgba(255,255,255,0.1)" },
-      ticks: { display: false },
-    },
-  },
-}));
+// Count visible charts
+const visibleChartCount = computed(() =>
+  Object.values(chartVisibility.value).filter(Boolean).length
+);
 
 async function loadData() {
   isLoading.value = true;
@@ -518,13 +326,16 @@ async function loadData() {
   }
 }
 
-onMounted(loadData);
+onMounted(() => {
+  loadSettings();
+  loadData();
+});
 </script>
 
 <template>
   <div class="h-full flex flex-col bg-background overflow-hidden">
     <!-- Compact Header -->
-    <div class="shrink-0 relative overflow-hidden border-b border-border">
+    <div class="shrink-0 relative border-b border-border z-20">
       <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
           <div class="flex items-center gap-3 sm:gap-4">
@@ -542,18 +353,17 @@ onMounted(loadData);
           </div>
 
           <div class="flex items-center gap-2">
-            <!-- Style Selector -->
-            <div class="flex items-center gap-1 p-1 bg-muted/50 rounded-lg border border-border">
-              <button v-for="style in chartStyles" :key="style.id" @click="selectedStyle = style.id"
-                class="px-2 py-1 text-xs rounded-md transition-all flex items-center gap-1.5" :class="selectedStyle === style.id
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'hover:bg-muted text-muted-foreground'">
-                <component
-                  :is="style.icon === 'Palette' ? Palette : style.icon === 'TrendingUp' ? TrendingUp : style.icon === 'Zap' ? Zap : Star"
-                  class="w-3 h-3" />
-                <span class="hidden sm:inline">{{ style.name }}</span>
-              </button>
-            </div>
+            <!-- Color Picker -->
+            <ColorPicker v-model="customColors" />
+
+            <!-- Settings Button -->
+            <button @click="showSettings = !showSettings"
+              class="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-all" :class="showSettings
+                ? 'bg-primary/20 text-primary'
+                : 'bg-muted/50 border border-border hover:bg-muted'">
+              <Settings class="w-4 h-4" />
+              <span class="hidden sm:inline">Charts</span>
+            </button>
 
             <Button variant="outline" size="sm" @click="loadData" :disabled="isLoading"
               class="h-7 sm:h-8 px-2 sm:px-3 text-xs">
@@ -562,6 +372,34 @@ onMounted(loadData);
             </Button>
           </div>
         </div>
+
+        <!-- Settings Panel -->
+        <Transition name="slide-down">
+          <div v-if="showSettings" class="mt-4 p-4 rounded-lg border border-border bg-card/50">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-sm font-medium">Visible Charts</h4>
+              <button @click="resetSettings"
+                class="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                <RotateCcw class="w-3 h-3" />
+                Reset
+              </button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button v-for="(visible, key) in chartVisibility" :key="key" @click="chartVisibility[key] = !visible"
+                class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md border transition-all" :class="visible
+                  ? 'bg-primary/20 border-primary/30 text-primary'
+                  : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'">
+                <Eye v-if="visible" class="w-3.5 h-3.5" />
+                <EyeOff v-else class="w-3.5 h-3.5" />
+                {{ key === 'loader' ? 'Loaders' :
+                  key === 'version' ? 'Versions' :
+                    key === 'content' ? 'Content Types' :
+                      key === 'modpackSizes' ? 'Modpack Sizes' :
+                        'Most Used' }}
+              </button>
+            </div>
+          </div>
+        </Transition>
       </div>
     </div>
 
@@ -632,114 +470,55 @@ onMounted(loadData);
         </div>
 
         <!-- Charts Grid -->
-        <div class="grid lg:grid-cols-2 gap-6">
+        <div v-if="visibleChartCount > 0" class="grid lg:grid-cols-2 gap-6">
           <!-- Loader Distribution -->
-          <div class="rounded-2xl border border-border bg-card p-5 hover:shadow-lg transition-shadow">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold flex items-center gap-2">
-                <PieChart class="w-4 h-4 text-primary" />
-                Mods by Loader
-              </h3>
-              <div class="flex gap-1 p-1 bg-muted/50 rounded-lg">
-                <button v-for="type in loaderChartTypes" :key="type" @click="loaderChartType = type"
-                  class="px-2.5 py-1 text-xs rounded-md transition-all flex items-center justify-center" :class="loaderChartType === type
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'hover:bg-muted/80 text-muted-foreground'"
-                  :title="type === 'doughnut' ? 'Doughnut' : type === 'polar' ? 'Polar' : 'Bar'">
-                  <Circle v-if="type === 'doughnut'" class="w-3.5 h-3.5" />
-                  <Target v-else-if="type === 'polar'" class="w-3.5 h-3.5" />
-                  <BarChart3 v-else class="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-            <div class="h-[300px]">
-              <Doughnut v-if="loaderChartType === 'doughnut'" :data="loaderChartData" :options="doughnutOptions" />
-              <PolarArea v-else-if="loaderChartType === 'polar'" :data="loaderChartData" :options="polarOptions" />
-              <Bar v-else :data="loaderChartData" :options="barOptions" />
-            </div>
-          </div>
+          <ChartCard v-if="chartVisibility.loader" title="Mods by Loader" :icon="PieChart"
+            :chart-types="chartTypes.loader" :data="loaderChartData" :colors="customColors"
+            :background-colors="backgroundColors" default-type="doughnut" />
 
           <!-- Game Version Distribution -->
-          <div class="rounded-2xl border border-border bg-card p-5 hover:shadow-lg transition-shadow">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold flex items-center gap-2">
-                <BarChart3 class="w-4 h-4 text-primary" />
-                Top Game Versions
-              </h3>
-              <div class="flex gap-1 p-1 bg-muted/50 rounded-lg">
-                <button v-for="type in versionChartTypes" :key="type" @click="versionChartType = type"
-                  class="px-2.5 py-1 text-xs rounded-md transition-all flex items-center justify-center" :class="versionChartType === type
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'hover:bg-muted/80 text-muted-foreground'"
-                  :title="type === 'bar' ? 'Bar' : type === 'line' ? 'Line' : 'Radar'">
-                  <BarChart3 v-if="type === 'bar'" class="w-3.5 h-3.5" />
-                  <TrendingUp v-else-if="type === 'line'" class="w-3.5 h-3.5" />
-                  <Hexagon v-else class="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-            <div class="h-[300px]">
-              <Bar v-if="versionChartType === 'bar'" :data="versionChartData" :options="barOptions" />
-              <Line v-else-if="versionChartType === 'line'" :data="versionChartData" :options="lineOptions" />
-              <Radar v-else :data="versionChartData" :options="radarOptions" />
-            </div>
-          </div>
+          <ChartCard v-if="chartVisibility.version" title="Top Game Versions" :icon="BarChart3"
+            :chart-types="chartTypes.version" :data="versionChartData" :colors="customColors"
+            :background-colors="backgroundColors" default-type="bar" />
 
           <!-- Content Type Distribution -->
-          <div class="rounded-2xl border border-border bg-card p-5 hover:shadow-lg transition-shadow">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold flex items-center gap-2">
-                <Layers class="w-4 h-4 text-primary" />
-                Content Types
-              </h3>
-              <div class="flex gap-1 p-1 bg-muted/50 rounded-lg">
-                <button v-for="type in contentChartTypes" :key="type" @click="contentChartType = type"
-                  class="px-2.5 py-1 text-xs rounded-md transition-all flex items-center justify-center" :class="contentChartType === type
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'hover:bg-muted/80 text-muted-foreground'"
-                  :title="type === 'doughnut' ? 'Doughnut' : type === 'polar' ? 'Polar' : 'Bar'">
-                  <Circle v-if="type === 'doughnut'" class="w-3.5 h-3.5" />
-                  <Target v-else-if="type === 'polar'" class="w-3.5 h-3.5" />
-                  <BarChart3 v-else class="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-            <div class="h-[300px]">
-              <Doughnut v-if="contentChartType === 'doughnut'" :data="contentChartData" :options="doughnutOptions" />
-              <PolarArea v-else-if="contentChartType === 'polar'" :data="contentChartData" :options="polarOptions" />
-              <Bar v-else :data="contentChartData" :options="barOptions" />
-            </div>
-          </div>
+          <ChartCard v-if="chartVisibility.content" title="Content Types" :icon="Layers"
+            :chart-types="chartTypes.content" :data="contentChartData" :colors="customColors"
+            :background-colors="backgroundColors" default-type="doughnut" />
 
           <!-- Modpack Sizes -->
-          <div class="rounded-2xl border border-border bg-card p-5 hover:shadow-lg transition-shadow">
-            <h3 class="font-semibold flex items-center gap-2 mb-4">
-              <Package class="w-4 h-4 text-primary" />
-              Mods per Modpack
-            </h3>
-            <div class="h-[300px]">
-              <Bar :data="modpackChartData" :options="verticalBarOptions" />
-            </div>
-          </div>
+          <ChartCard v-if="chartVisibility.modpackSizes" title="Mods per Modpack" :icon="Package"
+            :chart-types="chartTypes.modpackSizes" :data="modpackChartData" :colors="customColors"
+            :background-colors="backgroundColors" default-type="bar" />
         </div>
 
-        <!-- Most Used Mods -->
-        <div class="rounded-2xl border border-border bg-card p-5 hover:shadow-lg transition-shadow">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold flex items-center gap-2">
-              <Star class="w-4 h-4 text-yellow-500" />
-              Most Popular Mods
-              <span class="text-xs text-muted-foreground">(across modpacks)</span>
-            </h3>
-          </div>
-          <div class="h-[300px]" v-if="mostUsedMods.length > 0">
-            <Bar :data="mostUsedChartData" :options="barOptions" />
-          </div>
-          <div v-else class="h-[300px] flex flex-col items-center justify-center text-muted-foreground">
+        <!-- Most Used Mods (Full Width) -->
+        <ChartCard v-if="chartVisibility.mostUsed && mostUsedMods.length > 0" title="Most Popular Mods" :icon="Star"
+          :chart-types="chartTypes.mostUsed" :data="mostUsedChartData" :colors="customColors"
+          :background-colors="backgroundColors" default-type="bar" />
+
+        <div v-else-if="chartVisibility.mostUsed" class="rounded-2xl border border-border bg-card p-5">
+          <h3 class="font-semibold flex items-center gap-2 mb-4">
+            <Star class="w-4 h-4 text-yellow-500" />
+            Most Popular Mods
+            <span class="text-xs text-muted-foreground">(across modpacks)</span>
+          </h3>
+          <div class="h-[200px] flex flex-col items-center justify-center text-muted-foreground">
             <Star class="w-12 h-12 opacity-20 mb-3" />
             <p class="text-sm">No mods are used in multiple modpacks yet</p>
             <p class="text-xs mt-1">Add mods to multiple modpacks to see popularity stats</p>
           </div>
+        </div>
+
+        <!-- No Charts Message -->
+        <div v-if="visibleChartCount === 0" class="flex flex-col items-center justify-center py-16">
+          <EyeOff class="w-16 h-16 text-muted-foreground/30 mb-4" />
+          <h3 class="text-lg font-medium mb-2">No charts visible</h3>
+          <p class="text-sm text-muted-foreground mb-4">Click the "Charts" button to enable some charts</p>
+          <Button variant="outline" size="sm" @click="showSettings = true">
+            <Settings class="w-4 h-4 mr-2" />
+            Configure Charts
+          </Button>
         </div>
 
         <!-- Quick Stats Row -->
@@ -765,3 +544,16 @@ onMounted(loadData);
     </div>
   </div>
 </template>
+
+<style scoped>
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+</style>

@@ -1555,16 +1555,16 @@ onMounted(() => {
           </div>
 
           <div class="p-4 border-t border-border bg-muted/20 mt-auto">
-            <Button variant="outline" class="w-full" @click="
+            <button class="w-full px-3 py-2 text-sm rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all" @click="
               selectedLoader = 'all';
-            selectedGameVersion = 'all';
-            selectedContentType = 'all';
-            modpackFilter = 'all';
-            searchField = 'all';
-            searchQuery = '';
+              selectedGameVersion = 'all';
+              selectedContentType = 'all';
+              modpackFilter = 'all';
+              searchField = 'all';
+              searchQuery = '';
             ">
-              Reset Filters
-            </Button>
+              Clear All Filters
+            </button>
           </div>
         </div>
       </Transition>

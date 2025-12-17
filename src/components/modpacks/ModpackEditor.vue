@@ -572,11 +572,11 @@ async function removeMod(modId: string) {
     );
     return;
   }
-  
+
   // Check dependency impact before removing
   try {
     const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "remove");
-    
+
     if (impact.dependentMods.filter(d => d.willBreak).length > 0 || impact.orphanedDependencies.length > 0) {
       // Show impact dialog
       dependencyImpact.value = { ...impact, action: "remove" };
@@ -584,7 +584,7 @@ async function removeMod(modId: string) {
       showDependencyImpactDialog.value = true;
       return;
     }
-    
+
     // No impact, proceed directly
     await executeModRemoval(modId);
   } catch (err) {
@@ -606,12 +606,12 @@ async function executeModRemoval(modId: string) {
 async function toggleModEnabled(modId: string) {
   // Check if we're disabling (mod is currently enabled)
   const isCurrentlyEnabled = !disabledModIds.value.has(modId);
-  
+
   if (isCurrentlyEnabled) {
     // We're about to disable - check dependency impact
     try {
       const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "disable");
-      
+
       if (impact.dependentMods.filter(d => d.willBreak).length > 0) {
         // Show impact dialog
         dependencyImpact.value = { ...impact, action: "disable" };
@@ -623,7 +623,7 @@ async function toggleModEnabled(modId: string) {
       console.error("Failed to check dependency impact:", err);
     }
   }
-  
+
   // No impact or enabling, proceed
   await executeModToggle(modId);
 }
@@ -774,17 +774,17 @@ async function confirmRemoveIncompatibleMods() {
 // Confirm action after dependency impact warning
 async function confirmDependencyImpactAction() {
   showDependencyImpactDialog.value = false;
-  
+
   if (!pendingModAction.value) return;
-  
+
   const { modId, action } = pendingModAction.value;
-  
+
   if (action === "remove") {
     await executeModRemoval(modId);
   } else {
     await executeModToggle(modId);
   }
-  
+
   pendingModAction.value = null;
   dependencyImpact.value = null;
 }
@@ -1338,81 +1338,42 @@ watch(
             " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
         </div>
 
-        <!-- Tab Navigation -->
-        <div class="px-5 flex items-center gap-1">
-          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'mods'
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="activeTab = 'mods'">
-            <div class="flex items-center gap-1.5">
-              <Layers class="w-4 h-4" />
-              Resources
-            </div>
-            <div v-if="activeTab === 'mods'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+        <!-- Tab Navigation - Modern Pill Style -->
+        <div class="px-5 pb-3 flex items-center gap-1 overflow-x-auto scrollbar-none">
+          <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            @click="activeTab = 'mods'">
+            <Layers class="w-4 h-4" />
+            <span>Resources</span>
           </button>
-          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'discover'
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="activeTab = 'discover'">
-            <div class="flex items-center gap-1.5">
-              <Sparkles class="w-4 h-4" />
-              Discover
-            </div>
-            <div v-if="activeTab === 'discover'"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          <button class="tab-pill" :class="activeTab === 'discover' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            @click="activeTab = 'discover'">
+            <Sparkles class="w-4 h-4" />
+            <span>Discover</span>
           </button>
-          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'health'
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="activeTab = 'health'">
-            <div class="flex items-center gap-1.5">
-              <AlertCircle class="w-4 h-4" />
-              Health
-            </div>
-            <div v-if="activeTab === 'health'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            @click="activeTab = 'health'">
+            <AlertCircle class="w-4 h-4" />
+            <span>Health</span>
           </button>
-          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'versions'
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="activeTab = 'versions'">
-            <div class="flex items-center gap-1.5">
-              <GitBranch class="w-4 h-4" />
-              History
-            </div>
-            <div v-if="activeTab === 'versions'"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          <button class="tab-pill" :class="activeTab === 'versions' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            @click="activeTab = 'versions'">
+            <GitBranch class="w-4 h-4" />
+            <span>History</span>
           </button>
-          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'profiles'
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="activeTab = 'profiles'">
-            <div class="flex items-center gap-1.5">
-              <Users class="w-4 h-4" />
-              Profiles
-            </div>
-            <div v-if="activeTab === 'profiles'"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          <button class="tab-pill" :class="activeTab === 'profiles' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            @click="activeTab = 'profiles'">
+            <Users class="w-4 h-4" />
+            <span>Profiles</span>
           </button>
-          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'remote'
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="activeTab = 'remote'">
-            <div class="flex items-center gap-1.5">
-              <Globe class="w-4 h-4" />
-              Remote
-            </div>
-            <div v-if="activeTab === 'remote'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            @click="activeTab = 'remote'">
+            <Globe class="w-4 h-4" />
+            <span>Remote</span>
           </button>
-          <button class="px-4 py-2 text-sm font-medium transition-all relative" :class="activeTab === 'settings'
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-            " @click="activeTab = 'settings'">
-            <div class="flex items-center gap-1.5">
-              <Settings class="w-4 h-4" />
-              Settings
-            </div>
-            <div v-if="activeTab === 'settings'"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+          <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            @click="activeTab = 'settings'">
+            <Settings class="w-4 h-4" />
+            <span>Settings</span>
           </button>
         </div>
       </div>
@@ -2142,16 +2103,17 @@ watch(
       @close="showRemoveIncompatibleDialog = false" @confirm="confirmRemoveIncompatibleMods" />
 
     <!-- Dependency Impact Warning Dialog -->
-    <Dialog :open="showDependencyImpactDialog" @close="cancelDependencyImpactAction" 
-      :title="dependencyImpact?.action === 'remove' ? 'Dependency Warning - Remove' : 'Dependency Warning - Disable'" size="md">
+    <Dialog :open="showDependencyImpactDialog" @close="cancelDependencyImpactAction"
+      :title="dependencyImpact?.action === 'remove' ? 'Dependency Warning - Remove' : 'Dependency Warning - Disable'"
+      size="md">
       <div class="space-y-4">
         <p class="text-sm text-muted-foreground">
-          {{ dependencyImpact?.action === 'remove' ? 'Removing' : 'Disabling' }} 
+          {{ dependencyImpact?.action === 'remove' ? 'Removing' : 'Disabling' }}
           <strong>{{ dependencyImpact?.modToAffect?.name }}</strong> may affect other mods:
         </p>
-        
+
         <!-- Dependent Mods -->
-        <div v-if="dependencyImpact?.dependentMods.filter(d => d.willBreak).length" 
+        <div v-if="dependencyImpact?.dependentMods.filter(d => d.willBreak).length"
           class="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
           <div class="flex items-center gap-2 text-destructive font-medium mb-2">
             <AlertTriangle class="w-4 h-4" />
@@ -2163,9 +2125,10 @@ watch(
             </li>
           </ul>
         </div>
-        
+
         <!-- Orphaned Dependencies (only for remove) -->
-        <div v-if="dependencyImpact?.action === 'remove' && dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length"
+        <div
+          v-if="dependencyImpact?.action === 'remove' && dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length"
           class="bg-warning/10 border border-warning/30 rounded-lg p-3">
           <div class="flex items-center gap-2 text-warning font-medium mb-2">
             <Info class="w-4 h-4" />
@@ -2177,16 +2140,16 @@ watch(
             </li>
           </ul>
         </div>
-        
+
         <p class="text-sm text-muted-foreground">
           Do you want to continue?
         </p>
       </div>
-      
+
       <template #footer>
         <div class="flex gap-2">
           <Button variant="secondary" @click="cancelDependencyImpactAction">Cancel</Button>
-          <Button :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'warning'" 
+          <Button :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'warning'"
             @click="confirmDependencyImpactAction">
             {{ dependencyImpact?.action === 'remove' ? 'Remove Anyway' : 'Disable Anyway' }}
           </Button>
@@ -2292,5 +2255,46 @@ watch(
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Modern Tab Pill Styles */
+.tab-pill {
+  @apply px-4 py-2 text-sm font-medium rounded-full flex items-center gap-2 transition-all duration-200 whitespace-nowrap;
+}
+
+.tab-pill-active {
+  @apply bg-primary text-primary-foreground shadow-md shadow-primary/25;
+}
+
+.tab-pill-inactive {
+  @apply text-muted-foreground hover:text-foreground hover:bg-muted/50;
+}
+
+/* Sub-tab Styles */
+.sub-tab {
+  @apply px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200;
+}
+
+.sub-tab-active {
+  @apply bg-muted text-foreground;
+}
+
+.sub-tab-inactive {
+  @apply text-muted-foreground hover:text-foreground hover:bg-muted/30;
+}
+
+/* Scrollbar Styles */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Card hover effect */
+.mod-card {
+  @apply transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30;
 }
 </style>

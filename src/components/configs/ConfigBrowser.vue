@@ -8,6 +8,9 @@
  * - Quick actions on hover
  * - Backup/restore functionality
  * - Import/export support
+ * - File type filters
+ * - Recently modified filter
+ * - Favorite configs (starred)
  */
 import { ref, computed, watch, onMounted } from "vue";
 import { useToast } from "@/composables/useToast";
@@ -33,6 +36,11 @@ import {
     ExternalLink,
     Trash2,
     Settings2,
+    Filter,
+    Clock,
+    Star,
+    ChevronDown,
+    Sparkles,
 } from "lucide-vue-next";
 import type { ConfigFolder, ConfigFile, ConfigBackup } from "@/types";
 
@@ -58,6 +66,58 @@ const searchQuery = ref("");
 const searchResults = ref<ConfigFile[]>([]);
 const isSearching = ref(false);
 
+// Filters
+const activeFileTypeFilter = ref<string | null>(null);
+const showRecentlyModified = ref(false);
+const showFavoritesOnly = ref(false);
+const showFilters = ref(false);
+const favorites = ref<Set<string>>(new Set());
+
+// Toggle favorites filter
+const toggleFavoritesFilter = () => {
+    showFavoritesOnly.value = !showFavoritesOnly.value;
+};
+
+// Load favorites from localStorage
+const loadFavorites = () => {
+    try {
+        const stored = localStorage.getItem(`config-favorites-${props.instanceId}`);
+        if (stored) {
+            favorites.value = new Set(JSON.parse(stored));
+        }
+    } catch (e) {
+        console.error('Failed to load favorites:', e);
+    }
+};
+
+// Save favorites to localStorage
+const saveFavorites = () => {
+    try {
+        localStorage.setItem(`config-favorites-${props.instanceId}`, JSON.stringify([...favorites.value]));
+    } catch (e) {
+        console.error('Failed to save favorites:', e);
+    }
+};
+
+// Toggle favorite
+const toggleFavorite = (filePath: string) => {
+    if (favorites.value.has(filePath)) {
+        favorites.value.delete(filePath);
+    } else {
+        favorites.value.add(filePath);
+    }
+    saveFavorites();
+};
+
+// File type options for filter
+const fileTypeOptions = [
+    { value: 'json', label: 'JSON', color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
+    { value: 'toml', label: 'TOML', color: 'text-blue-400', bg: 'bg-blue-400/10' },
+    { value: 'yaml', label: 'YAML', color: 'text-green-400', bg: 'bg-green-400/10' },
+    { value: 'cfg', label: 'CFG', color: 'text-purple-400', bg: 'bg-purple-400/10' },
+    { value: 'properties', label: 'Properties', color: 'text-orange-400', bg: 'bg-orange-400/10' },
+];
+
 // Backups
 const backups = ref<ConfigBackup[]>([]);
 const showBackupsDialog = ref(false);
@@ -81,6 +141,41 @@ async function loadFolders() {
     }
 }
 
+// Get all files from folders recursively
+const getAllFiles = (folderList: ConfigFolder[]): ConfigFile[] => {
+    const files: ConfigFile[] = [];
+    const traverse = (folder: ConfigFolder) => {
+        files.push(...folder.files);
+        folder.subfolders?.forEach(traverse);
+    };
+    folderList.forEach(traverse);
+    return files;
+};
+
+// Filtered files based on active filters
+const filteredFiles = computed(() => {
+    let files = getAllFiles(folders.value);
+
+    // Filter by type
+    if (activeFileTypeFilter.value) {
+        files = files.filter(f => f.type === activeFileTypeFilter.value);
+    }
+
+    // Filter by recently modified (last 24 hours)
+    if (showRecentlyModified.value) {
+        const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        files = files.filter(f => new Date(f.modified).getTime() > dayAgo);
+    }
+
+    return files;
+});
+
+// Favorite files
+const favoriteFiles = computed(() => {
+    const allFiles = getAllFiles(folders.value);
+    return allFiles.filter(f => favorites.value.has(f.path));
+});
+
 // Search configs
 async function searchConfigs() {
     if (!searchQuery.value.trim()) {
@@ -90,10 +185,17 @@ async function searchConfigs() {
 
     isSearching.value = true;
     try {
-        searchResults.value = await window.api.configs.search(
+        let results = await window.api.configs.search(
             props.instanceId,
             searchQuery.value
         );
+
+        // Apply type filter to search results
+        if (activeFileTypeFilter.value) {
+            results = results.filter(f => f.type === activeFileTypeFilter.value);
+        }
+
+        searchResults.value = results;
     } catch (error: any) {
         console.error("Failed to search configs:", error);
     } finally {
@@ -125,6 +227,11 @@ function toggleFolder(path: string) {
 function selectFile(file: ConfigFile) {
     selectedFile.value = file;
     emit("openFile", file);
+}
+
+// Handle open structured editor
+function handleOpenStructured(file: ConfigFile) {
+    emit("openStructured", file);
 }
 
 // Open file in external editor
@@ -309,19 +416,21 @@ const totalStats = computed(() => {
 
 onMounted(() => {
     loadFolders();
+    loadFavorites();
 });
 
 watch(
     () => props.instanceId,
     () => {
         loadFolders();
+        loadFavorites();
     }
 );
 </script>
 
 <template>
     <div class="config-browser">
-        <!-- Header -->
+        <!-- Modern Header with Gradient -->
         <div class="browser-header">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -329,32 +438,37 @@ watch(
                         <FileSliders class="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                        <h3 class="font-semibold text-foreground">Config Manager</h3>
+                        <h3 class="font-semibold text-foreground flex items-center gap-2">
+                            Config Manager
+                            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                                {{ totalStats.files }} files
+                            </span>
+                        </h3>
                         <p class="text-xs text-muted-foreground">{{ instanceName }}</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-1">
                     <button @click="loadFolders" :disabled="isLoading" class="header-btn" title="Refresh">
                         <RefreshCw :class="['w-4 h-4', isLoading && 'animate-spin']" />
                     </button>
-                    <button @click="
-                        showBackupsDialog = true;
-                    loadBackups();
-                    " class="header-btn" title="Backups">
+                    <button @click="showBackupsDialog = true; loadBackups();" class="header-btn" title="Backups">
                         <History class="w-4 h-4" />
                     </button>
-                    <Button variant="ghost" size="sm" @click="importConfigs" :disabled="isImporting" class="gap-1.5">
+                    <div class="w-px h-4 bg-border/50 mx-1"></div>
+                    <Button variant="ghost" size="sm" @click="importConfigs" :disabled="isImporting"
+                        class="gap-1.5 h-8">
                         <Upload class="w-4 h-4" />
                         <span class="hidden sm:inline">Import</span>
                     </Button>
-                    <Button variant="ghost" size="sm" @click="exportConfigs" :disabled="isExporting" class="gap-1.5">
+                    <Button variant="ghost" size="sm" @click="exportConfigs" :disabled="isExporting"
+                        class="gap-1.5 h-8">
                         <Download class="w-4 h-4" />
                         <span class="hidden sm:inline">Export</span>
                     </Button>
                 </div>
             </div>
 
-            <!-- Search -->
+            <!-- Search with Enhanced Design -->
             <div class="search-container">
                 <Search class="search-icon" />
                 <input v-model="searchQuery" placeholder="Search configs by name or mod..." class="search-input" />
@@ -363,23 +477,153 @@ watch(
                 </button>
             </div>
 
-            <!-- Stats -->
-            <div class="stats-bar">
-                <div class="stat-item">
-                    <File class="w-3.5 h-3.5" />
-                    {{ totalStats.files }} files
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <div class="flex items-center gap-2 flex-1 overflow-x-auto scrollbar-none">
+                    <!-- Filter Toggle -->
+                    <button @click="showFilters = !showFilters"
+                        :class="['filter-chip', showFilters || activeFileTypeFilter || showRecentlyModified ? 'filter-chip-active' : '']">
+                        <Filter class="w-3.5 h-3.5" />
+                        <span>Filters</span>
+                        <ChevronDown :class="['w-3 h-3 transition-transform', showFilters && 'rotate-180']" />
+                    </button>
+
+                    <!-- Quick Filters -->
+                    <button @click="showRecentlyModified = !showRecentlyModified"
+                        :class="['filter-chip', showRecentlyModified ? 'filter-chip-active' : '']">
+                        <Clock class="w-3.5 h-3.5" />
+                        <span>Recent</span>
+                    </button>
+
+                    <!-- Favorites -->
+                    <button @click="toggleFavoritesFilter"
+                        :class="['filter-chip', showFavoritesOnly ? 'filter-chip-active' : '']">
+                        <Star class="w-3.5 h-3.5"
+                            :class="favorites.size > 0 ? 'fill-yellow-400 text-yellow-400' : ''" />
+                        <span>Favorites</span>
+                        <span v-if="favorites.size > 0" class="text-[10px] ml-0.5">({{ favorites.size }})</span>
+                    </button>
+
+                    <!-- Active Type Filters as Pills -->
+                    <template v-if="activeFileTypeFilter && activeFileTypeFilter !== 'favorites'">
+                        <div class="h-4 w-px bg-border/50"></div>
+                        <button @click="activeFileTypeFilter = null" class="filter-chip filter-chip-active gap-1">
+                            <span :class="fileTypeOptions.find(f => f.value === activeFileTypeFilter)?.color">
+                                {{ activeFileTypeFilter.toUpperCase() }}
+                            </span>
+                            <X class="w-3 h-3" />
+                        </button>
+                    </template>
                 </div>
-                <div class="stat-item">
-                    <HardDrive class="w-3.5 h-3.5" />
-                    {{ totalStats.size }}
+
+                <!-- Stats -->
+                <div class="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-2">
+                    <div class="flex items-center gap-1">
+                        <HardDrive class="w-3.5 h-3.5" />
+                        {{ totalStats.size }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expanded Filter Panel -->
+            <div v-if="showFilters" class="filter-panel">
+                <div class="text-xs text-muted-foreground mb-2">Filter by file type:</div>
+                <div class="flex flex-wrap gap-1.5">
+                    <button v-for="type in fileTypeOptions" :key="type.value"
+                        @click="activeFileTypeFilter = activeFileTypeFilter === type.value ? null : type.value" :class="[
+                            'filter-type-btn',
+                            activeFileTypeFilter === type.value ? `${type.bg} ${type.color} border-current` : ''
+                        ]">
+                        <component :is="getFileIcon(type.value)" class="w-3.5 h-3.5" />
+                        {{ type.label }}
+                    </button>
                 </div>
             </div>
         </div>
 
         <!-- Content -->
         <div class="browser-content custom-scrollbar">
+            <!-- Favorites Section (when favorites filter active) -->
+            <div v-if="showFavoritesOnly" class="p-3">
+                <div v-if="favoriteFiles.length === 0" class="empty-state">
+                    <Star class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <p class="text-muted-foreground text-sm">No favorite configs yet</p>
+                    <p class="text-xs text-muted-foreground/70 mt-1">Click the star icon on any config to add it to
+                        favorites
+                    </p>
+                </div>
+                <div v-else class="space-y-1">
+                    <div v-for="file in favoriteFiles" :key="file.path"
+                        :class="['search-result', selectedFile?.path === file.path && 'search-result-active']"
+                        @click="selectFile(file)">
+                        <component :is="getFileIcon(file.type)"
+                            :class="['w-4 h-4 shrink-0', getFileTypeClass(file.type)]" />
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-foreground truncate">{{ file.name }}</div>
+                            <div class="text-xs text-muted-foreground truncate">{{ file.path }}</div>
+                        </div>
+                        <div class="search-result-actions">
+                            <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
+                                title="Remove from favorites">
+                                <Star class="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                            </button>
+                            <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
+                                title="Edit as Key-Value">
+                                <Settings2 class="w-3.5 h-3.5" />
+                            </button>
+                            <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
+                                <ExternalLink class="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtered Results (when type filter or recent active, not searching) -->
+            <div v-else-if="(activeFileTypeFilter || showRecentlyModified) && !searchQuery.trim() && !showFavoritesOnly"
+                class="p-3">
+                <div v-if="filteredFiles.length === 0" class="empty-state">
+                    <Filter class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <p class="text-muted-foreground text-sm">No matching configs</p>
+                    <p class="text-xs text-muted-foreground/70 mt-1">Try adjusting your filters</p>
+                </div>
+                <div v-else class="space-y-1">
+                    <div class="text-xs text-muted-foreground mb-2 flex items-center gap-2">
+                        <Sparkles class="w-3.5 h-3.5" />
+                        {{ filteredFiles.length }} config{{ filteredFiles.length !== 1 ? 's' : '' }} found
+                    </div>
+                    <div v-for="file in filteredFiles" :key="file.path"
+                        :class="['search-result', selectedFile?.path === file.path && 'search-result-active']"
+                        @click="selectFile(file)">
+                        <component :is="getFileIcon(file.type)"
+                            :class="['w-4 h-4 shrink-0', getFileTypeClass(file.type)]" />
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-foreground truncate">{{ file.name }}</div>
+                            <div class="text-xs text-muted-foreground truncate">{{ file.path }}</div>
+                        </div>
+                        <div class="search-result-actions">
+                            <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
+                                :title="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'">
+                                <Star
+                                    :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
+                            </button>
+                            <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
+                                title="Edit as Key-Value">
+                                <Settings2 class="w-3.5 h-3.5" />
+                            </button>
+                            <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
+                                <ExternalLink class="w-3.5 h-3.5" />
+                            </button>
+                            <button class="action-btn action-btn-delete" @click.stop="deleteFile(file)" title="Delete">
+                                <Trash2 class="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Search Results -->
-            <div v-if="searchQuery.trim()" class="p-3">
+            <div v-else-if="searchQuery.trim()" class="p-3">
                 <div v-if="isSearching" class="loading-state">
                     <Loader2 class="w-6 h-6 animate-spin text-primary" />
                 </div>
@@ -405,6 +649,11 @@ watch(
                             </div>
                         </div>
                         <div class="search-result-actions">
+                            <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
+                                :title="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'">
+                                <Star
+                                    :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
+                            </button>
                             <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
                                 title="Edit as Key-Value">
                                 <Settings2 class="w-3.5 h-3.5" />
@@ -420,7 +669,7 @@ watch(
                 </div>
             </div>
 
-            <!-- Folder Tree -->
+            <!-- Folder Tree (default view) -->
             <div v-else class="p-3">
                 <div v-if="isLoading" class="loading-state">
                     <Loader2 class="w-6 h-6 animate-spin text-primary" />
@@ -433,8 +682,7 @@ watch(
                     <ConfigFolderItem v-for="folder in folders" :key="folder.path" :folder="folder"
                         :expanded-folders="expandedFolders" :selected-file="selectedFile" :depth="0"
                         @toggle="toggleFolder" @select="selectFile" @open-external="openExternal"
-                        @open-structured="(file: ConfigFile) => emit('openStructured', file)" @delete="deleteFile"
-                        @open-folder="openFolder" />
+                        @open-structured="handleOpenStructured" @delete="deleteFile" @open-folder="openFolder" />
                 </div>
             </div>
         </div>
@@ -497,6 +745,7 @@ watch(
 .browser-header {
     @apply p-4 space-y-3;
     border-bottom: 1px solid hsl(var(--border) / 0.5);
+    background: linear-gradient(180deg, hsl(var(--card) / 0.8), transparent);
 }
 
 .header-icon {
@@ -508,13 +757,14 @@ watch(
 }
 
 .header-btn {
-    @apply p-2 rounded-lg transition-colors;
+    @apply p-2 rounded-lg transition-all duration-200;
     color: hsl(var(--muted-foreground));
 }
 
 .header-btn:hover {
     color: hsl(var(--foreground));
     background-color: hsl(var(--muted));
+    transform: scale(1.05);
 }
 
 .header-btn:disabled {
@@ -532,7 +782,7 @@ watch(
 }
 
 .search-input {
-    @apply w-full pl-9 pr-9 py-2 rounded-lg text-sm;
+    @apply w-full pl-9 pr-9 py-2.5 rounded-xl text-sm transition-all duration-200;
     background-color: hsl(var(--muted) / 0.5);
     border: 1px solid hsl(var(--border) / 0.5);
     color: hsl(var(--foreground));
@@ -545,16 +795,74 @@ watch(
 .search-input:focus {
     @apply outline-none;
     border-color: hsl(var(--primary) / 0.5);
-    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.1);
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
+    background-color: hsl(var(--background));
 }
 
 .search-clear {
-    @apply absolute right-3 top-1/2 -translate-y-1/2 transition-colors;
+    @apply absolute right-3 top-1/2 -translate-y-1/2 transition-colors p-0.5 rounded;
     color: hsl(var(--muted-foreground));
 }
 
 .search-clear:hover {
     color: hsl(var(--foreground));
+    background-color: hsl(var(--muted));
+}
+
+/* Filter Bar */
+.filter-bar {
+    @apply flex items-center gap-2;
+}
+
+.filter-chip {
+    @apply flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap;
+    background-color: hsl(var(--muted) / 0.5);
+    color: hsl(var(--muted-foreground));
+    border: 1px solid transparent;
+}
+
+.filter-chip:hover {
+    background-color: hsl(var(--muted));
+    color: hsl(var(--foreground));
+}
+
+.filter-chip-active {
+    background-color: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+    border-color: hsl(var(--primary) / 0.3);
+}
+
+.filter-chip-active:hover {
+    background-color: hsl(var(--primary) / 0.2);
+}
+
+/* Filter Panel */
+.filter-panel {
+    @apply p-3 rounded-xl mt-1;
+    background-color: hsl(var(--muted) / 0.3);
+    border: 1px solid hsl(var(--border) / 0.5);
+}
+
+.filter-type-btn {
+    @apply flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer;
+    background-color: hsl(var(--muted) / 0.5);
+    color: hsl(var(--muted-foreground));
+    border: 1px solid hsl(var(--border) / 0.3);
+}
+
+.filter-type-btn:hover {
+    background-color: hsl(var(--muted));
+    border-color: hsl(var(--border));
+}
+
+/* Scrollbar hidden for filter bar */
+.scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
 }
 
 /* Stats */
@@ -583,7 +891,7 @@ watch(
 
 /* Search Results */
 .search-result {
-    @apply flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all;
+    @apply flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200;
     border: 1px solid transparent;
     max-width: 100%;
     overflow: hidden;
@@ -592,6 +900,7 @@ watch(
 .search-result:hover {
     background-color: hsl(var(--muted) / 0.5);
     border-color: hsl(var(--border) / 0.5);
+    transform: translateX(2px);
 }
 
 .search-result-active {
@@ -600,7 +909,7 @@ watch(
 }
 
 .search-result-actions {
-    @apply flex items-center gap-1 opacity-0 transition-opacity shrink-0;
+    @apply flex items-center gap-0.5 opacity-0 transition-opacity shrink-0;
 }
 
 .search-result:hover .search-result-actions {
@@ -608,13 +917,19 @@ watch(
 }
 
 .action-btn {
-    @apply p-1.5 rounded-lg transition-colors;
+    @apply p-1.5 rounded-lg transition-all duration-200;
     color: hsl(var(--muted-foreground));
 }
 
 .action-btn:hover {
     color: hsl(var(--foreground));
     background-color: hsl(var(--muted));
+    transform: scale(1.1);
+}
+
+.action-btn-star:hover {
+    color: rgb(250 204 21);
+    background-color: rgb(250 204 21 / 0.1);
 }
 
 .action-btn-structured:hover {
@@ -655,13 +970,14 @@ watch(
 
 /* Backups */
 .backup-item {
-    @apply flex items-center gap-3 p-3 rounded-xl transition-all;
+    @apply flex items-center gap-3 p-3 rounded-xl transition-all duration-200;
     background-color: hsl(var(--muted) / 0.5);
     border: 1px solid hsl(var(--border) / 0.5);
 }
 
 .backup-item:hover {
     border-color: hsl(var(--border));
+    transform: translateY(-1px);
 }
 
 .backup-icon {
@@ -670,7 +986,7 @@ watch(
 }
 
 .backup-btn {
-    @apply p-2 rounded-lg transition-colors;
+    @apply p-2 rounded-lg transition-all duration-200;
     color: hsl(var(--muted-foreground));
 }
 
@@ -681,11 +997,13 @@ watch(
 .backup-btn-restore:hover {
     color: rgb(74 222 128);
     background-color: rgb(34 197 94 / 0.1);
+    transform: scale(1.1);
 }
 
 .backup-btn-delete:hover {
     color: rgb(248 113 113);
     background-color: rgb(239 68 68 / 0.1);
+    transform: scale(1.1);
 }
 
 /* Scrollbar */

@@ -15,6 +15,21 @@ import type {
   ModpackVersionHistory,
   ModpackChange,
   ModpackProfile,
+  MinecraftInstallation,
+  SyncResult,
+  ModpackPreview,
+  CacheStats,
+  PaginationInfo,
+  ModexInstance,
+  InstanceSyncResult,
+  InstanceLaunchResult,
+  InstanceStats,
+  ConfigFile,
+  ConfigFolder,
+  ConfigContent,
+  ConfigExport,
+  ConfigBackup,
+  ConfigComparison,
 } from "./index";
 
 // Re-export core types
@@ -128,6 +143,23 @@ export interface ElectronAPI {
     addMod: (modpackId: string, modId: string) => Promise<boolean>;
     /** Add multiple mods to a modpack in a single call */
     addModsBatch: (modpackId: string, modIds: string[]) => Promise<number>;
+    /** Check which mods depend on a given mod (for removal warnings) */
+    checkModDependents: (modpackId: string, modId: string) => Promise<Array<{
+      id: string;
+      name: string;
+      dependencyType: string;
+    }>>;
+    /** Analyze full impact of removing or disabling a mod */
+    analyzeModRemovalImpact: (
+      modpackId: string,
+      modId: string,
+      action: "remove" | "disable"
+    ) => Promise<{
+      modToAffect: { id: string; name: string } | null;
+      dependentMods: Array<{ id: string; name: string; willBreak: boolean }>;
+      orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
+      warnings: string[];
+    }>;
     removeMod: (modpackId: string, modId: string) => Promise<boolean>;
     /** Toggle a mod's enabled/disabled state */
     toggleMod: (
@@ -167,6 +199,30 @@ export interface ElectronAPI {
     ) => Promise<ModpackProfile | null>;
     deleteProfile: (modpackId: string, profileId: string) => Promise<boolean>;
     applyProfile: (modpackId: string, profileId: string) => Promise<boolean>;
+    
+    // Profile config management
+    /** Save current configs as profile-specific configs */
+    saveProfileConfigs: (modpackId: string, profileId: string) => Promise<string | null>;
+    /** Apply profile-specific config overrides */
+    applyProfileConfigs: (modpackId: string, profileId: string) => Promise<boolean>;
+    /** Check if modpack has saved overrides */
+    hasOverrides: (modpackId: string) => Promise<boolean>;
+    /** Check if modpack has unsaved changes (compared to last saved version) */
+    hasUnsavedChanges: (modpackId: string) => Promise<boolean>;
+    /** Get detailed unsaved changes for a modpack */
+    getUnsavedChanges: (modpackId: string) => Promise<{
+      hasChanges: boolean;
+      changes: {
+        modsAdded: Array<{ id: string; name: string }>;
+        modsRemoved: Array<{ id: string; name: string }>;
+        modsEnabled: Array<{ id: string; name: string }>;
+        modsDisabled: Array<{ id: string; name: string }>;
+        modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        configsChanged: boolean;
+      };
+    }>;
+    /** Revert all unsaved changes to the last saved version */
+    revertUnsavedChanges: (modpackId: string) => Promise<boolean>;
     
     // CurseForge update checking
     /** Check for CurseForge modpack updates */
@@ -210,16 +266,24 @@ export interface ElectronAPI {
   versions: {
     /** Get version history for a modpack */
     getHistory: (modpackId: string) => Promise<ModpackVersionHistory | null>;
+    /** Validate mods before rollback - check availability and dependencies */
+    validateRollback: (modpackId: string, versionId: string) => Promise<{
+      valid: boolean;
+      availableMods: Array<{ id: string; name: string }>;
+      missingMods: Array<{ id: string; name: string; reason: string }>;
+      brokenDependencies: Array<{ modId: string; modName: string; dependsOn: string }>;
+    }>;
     /** Initialize version control for a modpack */
     initialize: (
       modpackId: string,
       message?: string
     ) => Promise<ModpackVersion | null>;
-    /** Create a new version (commit) */
+    /** Create a new version (commit) - optionally sync configs from instance first */
     create: (
       modpackId: string,
       message: string,
-      tag?: string
+      tag?: string,
+      syncFromInstanceId?: string
     ) => Promise<ModpackVersion | null>;
     /** Rollback to a specific version */
     rollback: (modpackId: string, versionId: string) => Promise<RollbackResult>;
@@ -390,6 +454,7 @@ export interface ElectronAPI {
         updatedMods: string[];
         enabledMods?: string[];
         disabledMods?: string[];
+        hasVersionHistoryChanges?: boolean;
       };
     }>;
   };
@@ -427,6 +492,237 @@ export interface ElectronAPI {
     analyzeModpack: (modpackId: string) => Promise<ModpackAnalysis>;
     checkDependencies: (modId: string) => Promise<ModAnalysis>;
     getPerformanceTips: (modpackId: string) => Promise<string[]>;
+  };
+
+  // ========== MINECRAFT INSTALLATIONS ==========
+  minecraft: {
+    detectInstallations: () => Promise<MinecraftInstallation[]>;
+    getInstallations: () => Promise<MinecraftInstallation[]>;
+    addCustom: (name: string, mcPath: string, modsPath?: string) => Promise<MinecraftInstallation>;
+    remove: (id: string) => Promise<boolean>;
+    setDefault: (id: string) => Promise<boolean>;
+    getDefault: () => Promise<MinecraftInstallation | null>;
+    syncModpack: (
+      installationId: string,
+      modpackId: string,
+      options?: { clearExisting?: boolean; createBackup?: boolean },
+      onProgress?: (current: number, total: number, modName: string) => void
+    ) => Promise<SyncResult>;
+    openModsFolder: (installationId: string) => Promise<boolean>;
+    launch: (installationId?: string) => Promise<{ success: boolean; error?: string }>;
+    selectFolder: () => Promise<string | null>;
+    selectLauncher: () => Promise<string | null>;
+    setLauncherPath: (type: string, launcherPath: string) => Promise<boolean>;
+    getLauncherPaths: () => Promise<Record<string, string>>;
+  };
+
+  // ========== IMAGE CACHE ==========
+  cache: {
+    getImage: (url: string) => Promise<string>;
+    cacheImage: (url: string) => Promise<string | null>;
+    prefetch: (urls: string[]) => Promise<void>;
+    getStats: () => Promise<CacheStats>;
+    clear: () => Promise<void>;
+  };
+
+  // ========== MODPACK PREVIEW ==========
+  preview: {
+    fromZip: (zipPath: string) => Promise<ModpackPreview | null>;
+    fromCurseForge: (modpackData: any, fileData: any) => Promise<ModpackPreview | null>;
+    analyzeModpack: (modpackId: string) => Promise<{
+      estimatedRamMin: number;
+      estimatedRamRecommended: number;
+      estimatedRamMax: number;
+      performanceImpact: number;
+      loadTimeImpact: number;
+      storageImpact: number;
+      warnings: string[];
+      recommendations: string[];
+      compatibilityScore: number;
+    } | null>;
+    selectAndPreview: () => Promise<{ path: string; preview: ModpackPreview } | null>;
+  };
+
+  // ========== LIBRARY PAGINATION ==========
+  library: {
+    getPaginated: (options: {
+      page: number;
+      pageSize: number;
+      search?: string;
+      loader?: string;
+      gameVersion?: string;
+      contentType?: string;
+      sortBy?: string;
+      sortDir?: "asc" | "desc";
+      favorites?: boolean;
+      folderId?: string;
+    }) => Promise<{
+      mods: Mod[];
+      pagination: PaginationInfo;
+    }>;
+  };
+
+  // ========== MODEX INSTANCES ==========
+  instances: {
+    getAll: () => Promise<ModexInstance[]>;
+    get: (id: string) => Promise<ModexInstance | null>;
+    getByModpack: (modpackId: string) => Promise<ModexInstance | null>;
+    create: (options: {
+      name: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      modpackId?: string;
+      description?: string;
+      icon?: string;
+      memory?: { min: number; max: number };
+      source?: ModexInstance["source"];
+    }) => Promise<ModexInstance>;
+    delete: (id: string) => Promise<boolean>;
+    update: (id: string, updates: Partial<ModexInstance>) => Promise<ModexInstance | null>;
+    syncModpack: (
+      instanceId: string,
+      modpackId: string,
+      options?: { 
+        clearExisting?: boolean; 
+        configSyncMode?: "overwrite" | "new_only" | "skip";
+        overridesZipPath?: string;
+      }
+    ) => Promise<InstanceSyncResult>;
+    syncConfigsToModpack: (instanceId: string, modpackId: string) => Promise<{ filesSynced: number; warnings: string[] }>;
+    launch: (instanceId: string) => Promise<InstanceLaunchResult>;
+    openFolder: (instanceId: string, subfolder?: string) => Promise<boolean>;
+    getStats: (instanceId: string) => Promise<InstanceStats | null>;
+    /** Check sync status between instance and modpack */
+    checkSyncStatus: (instanceId: string, modpackId: string) => Promise<{
+      needsSync: boolean;
+      missingInInstance: Array<{ filename: string; type: string }>;
+      extraInInstance: Array<{ filename: string; type: string }>;
+      disabledMismatch: Array<{ filename: string; issue: string }>;
+      configDifferences: number;
+      totalDifferences: number;
+    }>;
+    export: (instanceId: string) => Promise<boolean>;
+    duplicate: (instanceId: string, newName: string) => Promise<ModexInstance | null>;
+    getLauncherConfig: () => Promise<{
+      vanillaPath?: string;
+      javaPath?: string;
+      defaultMemory: { min: number; max: number };
+    }>;
+    setLauncherConfig: (config: {
+      vanillaPath?: string;
+      javaPath?: string;
+      defaultMemory?: { min: number; max: number };
+    }) => Promise<void>;
+    createFromModpack: (
+      modpackId: string,
+      options?: { overridesZipPath?: string }
+    ) => Promise<{ instance: ModexInstance; syncResult: InstanceSyncResult } | null>;
+    onSyncProgress: (callback: (data: { stage: string; current: number; total: number; item?: string }) => void) => () => void;
+  };
+
+  // ========== CONFIG SERVICE ==========
+  configs: {
+    /** Get all config folders for an instance */
+    getFolders: (instanceId: string) => Promise<ConfigFolder[]>;
+    /** Search for config files */
+    search: (instanceId: string, query: string) => Promise<ConfigFile[]>;
+    /** Read a config file's content */
+    read: (instanceId: string, configPath: string) => Promise<ConfigContent>;
+    /** Write content to a config file */
+    write: (instanceId: string, configPath: string, content: string) => Promise<{ success: boolean }>;
+    /** Delete a config file */
+    delete: (instanceId: string, configPath: string) => Promise<{ success: boolean }>;
+    /** Create a new config file */
+    create: (instanceId: string, configPath: string, content?: string) => Promise<{ success: boolean }>;
+    /** Export configs to zip file */
+    export: (instanceId: string, folders?: string[]) => Promise<{ path: string; manifest: ConfigExport } | null>;
+    /** Import configs from zip file */
+    import: (instanceId: string, overwrite?: boolean) => Promise<{ imported: number; skipped: number; errors: string[] } | null>;
+    /** Compare configs between two instances */
+    compare: (instanceId1: string, instanceId2: string, folder?: string) => Promise<ConfigComparison>;
+    /** Get diff of a specific config between two instances */
+    diff: (instanceId1: string, instanceId2: string, configPath: string) => Promise<{ content1: string; content2: string }>;
+    /** Create a backup of all configs */
+    backup: (instanceId: string) => Promise<{ path: string }>;
+    /** List available config backups */
+    listBackups: (instanceId: string) => Promise<ConfigBackup[]>;
+    /** Restore a config backup */
+    restoreBackup: (instanceId: string, backupPath: string) => Promise<{ restored: number }>;
+    /** Delete a config backup */
+    deleteBackup: (backupPath: string) => Promise<{ success: boolean }>;
+    /** Copy specific config files between instances */
+    copyFiles: (sourceInstanceId: string, targetInstanceId: string, configPaths: string[], overwrite?: boolean) => Promise<{ copied: number; skipped: number; errors: string[] }>;
+    /** Copy entire config folder between instances */
+    copyFolder: (sourceInstanceId: string, targetInstanceId: string, folder?: string, overwrite?: boolean) => Promise<{ copied: number }>;
+    /** Open config file in external editor */
+    openExternal: (instanceId: string, configPath: string) => Promise<{ success: boolean }>;
+    /** Open config folder in file explorer */
+    openFolder: (instanceId: string, folder?: string) => Promise<{ success: boolean }>;
+
+    // ========== STRUCTURED CONFIG EDITOR ==========
+
+    /** Config entry type */
+    ConfigEntry: {
+      keyPath: string;
+      key: string;
+      value: any;
+      originalValue: any;
+      type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+      comment?: string;
+      section?: string;
+      depth: number;
+      modified: boolean;
+      line?: number;
+    };
+
+    /** Config section type */
+    ConfigSection: {
+      name: string;
+      displayName: string;
+      comment?: string;
+      entries: Array<ConfigsAPI['ConfigEntry']>;
+      subsections: Array<ConfigsAPI['ConfigSection']>;
+      expanded: boolean;
+    };
+
+    /** Parsed config type */
+    ParsedConfig: {
+      path: string;
+      type: string;
+      sections: Array<ConfigsAPI['ConfigSection']>;
+      allEntries: Array<ConfigsAPI['ConfigEntry']>;
+      errors: string[];
+      rawContent: string;
+      encoding: string;
+    };
+
+    /** Parse a config file into structured key-value pairs */
+    parseStructured: (instanceId: string, configPath: string) => Promise<ConfigsAPI['ParsedConfig']>;
+
+    /** Save structured config modifications with version control */
+    saveStructured: (instanceId: string, configPath: string, modifications: Array<{
+      key: string;
+      oldValue: any;
+      newValue: any;
+      section?: string;
+    }>) => Promise<{ success: boolean }>;
+
+    /** Get all config modifications history for an instance */
+    getModifications: (instanceId: string) => Promise<Array<{
+      id: string;
+      timestamp: string;
+      configPath: string;
+      modifications: Array<{
+        key: string;
+        oldValue: any;
+        newValue: any;
+        section?: string;
+      }>;
+    }>>;
+
+    /** Rollback a specific config change set */
+    rollbackChanges: (instanceId: string, changeSetId: string) => Promise<{ success: boolean }>;
   };
 
   // ========== EVENTS ==========

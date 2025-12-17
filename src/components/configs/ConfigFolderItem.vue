@@ -1,0 +1,242 @@
+<script setup lang="ts">
+/**
+ * ConfigFolderItem - Recursive tree item for config browser
+ */
+import { computed } from "vue";
+import {
+    ChevronRight,
+    ChevronDown,
+    Folder,
+    FolderOpen,
+    FileJson,
+    FileCode,
+    FileText,
+    ExternalLink,
+    Trash2,
+    Settings2,
+} from "lucide-vue-next";
+import type { ConfigFolder, ConfigFile } from "@/types";
+
+const props = defineProps<{
+    folder: ConfigFolder;
+    expandedFolders: Set<string>;
+    selectedFile: ConfigFile | null;
+    depth?: number;
+}>();
+
+const emit = defineEmits<{
+    (e: "toggle", path: string): void;
+    (e: "select", file: ConfigFile): void;
+    (e: "openExternal", file: ConfigFile): void;
+    (e: "openStructured", file: ConfigFile): void;
+    (e: "delete", file: ConfigFile): void;
+    (e: "openFolder", path: string): void;
+}>();
+
+const depth = computed(() => props.depth ?? 0);
+const isExpanded = computed(() => props.expandedFolders.has(props.folder.path));
+
+function getFileIcon(type: string) {
+    switch (type) {
+        case "json":
+        case "json5":
+            return FileJson;
+        case "toml":
+        case "cfg":
+        case "yaml":
+            return FileCode;
+        default:
+            return FileText;
+    }
+}
+
+function getFileTypeClass(type: string): string {
+    switch (type) {
+        case "json":
+        case "json5":
+            return "file-json";
+        case "toml":
+            return "file-toml";
+        case "yaml":
+            return "file-yaml";
+        case "cfg":
+            return "file-cfg";
+        default:
+            return "file-default";
+    }
+}
+
+function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+</script>
+
+<template>
+    <div class="folder-item-wrapper">
+        <!-- Folder Row -->
+        <div class="folder-row" :style="{ paddingLeft: depth * 16 + 8 + 'px' }" @click="emit('toggle', folder.path)">
+            <component :is="isExpanded ? ChevronDown : ChevronRight"
+                class="w-4 h-4 text-muted-foreground transition-transform" />
+            <component :is="isExpanded ? FolderOpen : Folder" class="w-4 h-4 text-amber-400" />
+            <span class="folder-name">{{ folder.name }}</span>
+            <span class="folder-count">{{ folder.fileCount }}</span>
+            <button class="folder-action" @click.stop="emit('openFolder', folder.path)" title="Open in Explorer">
+                <ExternalLink class="w-3.5 h-3.5" />
+            </button>
+        </div>
+
+        <!-- Children -->
+        <div v-if="isExpanded" class="folder-children">
+            <!-- Subfolders -->
+            <ConfigFolderItem v-for="sub in folder.subfolders" :key="sub.path" :folder="sub"
+                :expanded-folders="expandedFolders" :selected-file="selectedFile" :depth="depth + 1"
+                @toggle="emit('toggle', $event)" @select="emit('select', $event)"
+                @open-external="emit('openExternal', $event)" @open-structured="emit('openStructured', $event)"
+                @delete="emit('delete', $event)" @open-folder="emit('openFolder', $event)" />
+
+            <!-- Files -->
+            <div v-for="file in folder.files" :key="file.path"
+                :class="['file-row', selectedFile?.path === file.path && 'file-row-active']"
+                :style="{ paddingLeft: (depth + 1) * 16 + 8 + 'px' }" @click="emit('select', file)">
+                <component :is="getFileIcon(file.type)" :class="['w-4 h-4', getFileTypeClass(file.type)]" />
+                <span class="file-name">{{ file.name }}</span>
+                <span class="file-size">{{ formatSize(file.size) }}</span>
+                <div class="file-actions">
+                    <button class="file-action file-action-structured" @click.stop="emit('openStructured', file)"
+                        title="Edit as Key-Value">
+                        <Settings2 class="w-3.5 h-3.5" />
+                    </button>
+                    <button class="file-action" @click.stop="emit('openExternal', file)" title="Open External">
+                        <ExternalLink class="w-3.5 h-3.5" />
+                    </button>
+                    <button class="file-action file-action-delete" @click.stop="emit('delete', file)" title="Delete">
+                        <Trash2 class="w-3.5 h-3.5" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<style scoped>
+.folder-item-wrapper {
+    @apply select-none;
+}
+
+.folder-row {
+    @apply flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer transition-colors;
+}
+
+.folder-row:hover {
+    background-color: hsl(var(--muted) / 0.5);
+}
+
+.folder-name {
+    @apply text-sm font-medium flex-1;
+    color: hsl(var(--foreground));
+}
+
+.folder-count {
+    @apply text-xs px-1.5 py-0.5 rounded;
+    color: hsl(var(--muted-foreground));
+    background-color: hsl(var(--muted) / 0.5);
+}
+
+.folder-action {
+    @apply p-1 rounded-lg transition-all opacity-0;
+    color: hsl(var(--muted-foreground));
+}
+
+.folder-row:hover .folder-action {
+    @apply opacity-100;
+}
+
+.folder-action:hover {
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--muted));
+}
+
+.folder-children {
+    @apply space-y-0.5;
+}
+
+/* File Row */
+.file-row {
+    @apply flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer transition-all;
+}
+
+.file-row:hover {
+    background-color: hsl(var(--muted) / 0.5);
+}
+
+.file-row-active {
+    background-color: hsl(var(--primary) / 0.1);
+    border-left: 2px solid hsl(var(--primary));
+}
+
+.file-name {
+    @apply text-sm flex-1 truncate;
+    color: hsl(var(--muted-foreground));
+}
+
+.file-row:hover .file-name,
+.file-row-active .file-name {
+    color: hsl(var(--foreground));
+}
+
+.file-size {
+    @apply text-xs;
+    color: hsl(var(--muted-foreground) / 0.7);
+}
+
+.file-actions {
+    @apply flex items-center gap-0.5 opacity-0 transition-opacity;
+}
+
+.file-row:hover .file-actions {
+    @apply opacity-100;
+}
+
+.file-action {
+    @apply p-1 rounded-lg transition-colors;
+    color: hsl(var(--muted-foreground));
+}
+
+.file-action:hover {
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--muted));
+}
+
+.file-action-delete:hover {
+    color: rgb(248 113 113);
+    background-color: rgb(239 68 68 / 0.1);
+}
+
+.file-action-structured:hover {
+    color: rgb(168 85 247);
+    background-color: rgb(168 85 247 / 0.1);
+}
+
+/* File Type Colors */
+.file-json {
+    color: rgb(250 204 21);
+}
+
+.file-toml {
+    color: rgb(96 165 250);
+}
+
+.file-yaml {
+    color: rgb(74 222 128);
+}
+
+.file-cfg {
+    color: rgb(192 132 252);
+}
+
+.file-default {
+    color: hsl(var(--muted-foreground));
+}
+</style>

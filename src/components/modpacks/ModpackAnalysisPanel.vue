@@ -40,12 +40,30 @@ const emit = defineEmits<{
 
 const toast = useToast();
 
+// Format RAM in MB to display string (e.g., "6GB" or "3.5GB")
+function formatRam(mb: number): string {
+  if (mb < 1024) return `${mb}MB`;
+  return `${(mb / 1024).toFixed(mb % 1024 === 0 ? 0 : 1)}GB`;
+}
+
 const analysis = ref<ModpackAnalysis | null>(null);
+const ramAnalysis = ref<{
+  estimatedRamMin: number;
+  estimatedRamRecommended: number;
+  estimatedRamMax: number;
+  performanceImpact: number;
+  loadTimeImpact: number;
+  storageImpact: number;
+  warnings: string[];
+  recommendations: string[];
+  compatibilityScore: number;
+} | null>(null);
 const isLoading = ref(false);
 const expandedSections = ref({
   dependencies: true,
   conflicts: true,
   performance: true,
+  ramEstimate: true,
   recommendations: true,
   dependencyGraph: false,
 });
@@ -95,7 +113,14 @@ const scoreBg = computed(() => {
 async function runAnalysis() {
   isLoading.value = true;
   try {
-    analysis.value = await window.api.analyzer.analyzeModpack(props.modpackId);
+    // Run both analyses in parallel
+    const [analysisResult, ramResult] = await Promise.all([
+      window.api.analyzer.analyzeModpack(props.modpackId),
+      window.api.preview.analyzeModpack(props.modpackId)
+    ]);
+
+    analysis.value = analysisResult;
+    ramAnalysis.value = ramResult;
 
     // Build dependency graph from mod data
     await buildDependencyGraph();
@@ -220,13 +245,7 @@ watch(
             Check for dependencies, conflicts, and performance
           </p>
         </div>
-        <Button
-          variant="default"
-          size="sm"
-          class="gap-1.5"
-          :disabled="isLoading"
-          @click="runAnalysis"
-        >
+        <Button variant="default" size="sm" class="gap-1.5" :disabled="isLoading" @click="runAnalysis">
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
           {{ isLoading ? "Analyzing..." : "Analyze" }}
         </Button>
@@ -236,13 +255,8 @@ watch(
     <!-- Content -->
     <div class="flex-1 overflow-y-auto p-4 space-y-4">
       <!-- No Analysis Yet -->
-      <div
-        v-if="!analysis && !isLoading"
-        class="flex flex-col items-center justify-center h-full text-center py-12"
-      >
-        <div
-          class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4"
-        >
+      <div v-if="!analysis && !isLoading" class="flex flex-col items-center justify-center h-full text-center py-12">
+        <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
           <Zap class="w-8 h-8 text-primary" />
         </div>
         <h3 class="font-semibold text-lg mb-2">Ready to Analyze</h3>
@@ -257,13 +271,8 @@ watch(
       </div>
 
       <!-- Loading -->
-      <div
-        v-else-if="isLoading"
-        class="flex flex-col items-center justify-center h-full text-center py-12"
-      >
-        <div
-          class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 animate-pulse"
-        >
+      <div v-else-if="isLoading" class="flex flex-col items-center justify-center h-full text-center py-12">
+        <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 animate-pulse">
           <RefreshCw class="w-8 h-8 text-primary animate-spin" />
         </div>
         <h3 class="font-semibold text-lg mb-2">Analyzing Modpack...</h3>
@@ -282,14 +291,8 @@ watch(
             </div>
             <div class="flex-1">
               <div class="font-semibold flex items-center gap-2">
-                <CheckCircle
-                  v-if="overallScore >= 80"
-                  class="w-5 h-5 text-emerald-500"
-                />
-                <AlertTriangle
-                  v-else-if="overallScore >= 40"
-                  class="w-5 h-5 text-yellow-500"
-                />
+                <CheckCircle v-if="overallScore >= 80" class="w-5 h-5 text-emerald-500" />
+                <AlertTriangle v-else-if="overallScore >= 40" class="w-5 h-5 text-yellow-500" />
                 <XCircle v-else class="w-5 h-5 text-red-500" />
                 Health Score
               </div>
@@ -302,47 +305,30 @@ watch(
 
         <!-- Missing Dependencies -->
         <div class="rounded-xl border border-border/50 overflow-hidden">
-          <button
-            class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
-            @click="toggleSection('dependencies')"
-          >
+          <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
+            @click="toggleSection('dependencies')">
             <div class="flex items-center gap-2">
               <Link class="w-4 h-4 text-orange-500" />
               <span class="font-medium text-sm">Missing Dependencies</span>
-              <span
-                class="px-2 py-0.5 rounded-full text-xs font-medium"
-                :class="
-                  analysis.missingDependencies.length > 0
-                    ? 'bg-orange-500/20 text-orange-500'
-                    : 'bg-emerald-500/20 text-emerald-500'
-                "
-              >
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="analysis.missingDependencies.length > 0
+                  ? 'bg-orange-500/20 text-orange-500'
+                  : 'bg-emerald-500/20 text-emerald-500'
+                ">
                 {{ analysis.missingDependencies.length }}
               </span>
             </div>
-            <ChevronDown
-              class="w-4 h-4 text-muted-foreground transition-transform"
-              :class="{ '-rotate-180': expandedSections.dependencies }"
-            />
+            <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
+              :class="{ '-rotate-180': expandedSections.dependencies }" />
           </button>
 
-          <div
-            v-if="expandedSections.dependencies"
-            class="border-t border-border/30"
-          >
-            <div
-              v-if="analysis.missingDependencies.length === 0"
-              class="p-4 text-center text-sm text-muted-foreground"
-            >
+          <div v-if="expandedSections.dependencies" class="border-t border-border/30">
+            <div v-if="analysis.missingDependencies.length === 0" class="p-4 text-center text-sm text-muted-foreground">
               <CheckCircle class="w-5 h-5 mx-auto mb-2 text-emerald-500" />
               All dependencies are satisfied
             </div>
             <div v-else class="divide-y divide-border/30">
-              <div
-                v-for="dep in analysis.missingDependencies"
-                :key="dep.modId"
-                class="p-3 flex items-center justify-between hover:bg-accent/20"
-              >
+              <div v-for="dep in analysis.missingDependencies" :key="dep.modId"
+                class="p-3 flex items-center justify-between hover:bg-accent/20">
                 <div class="min-w-0 flex-1">
                   <div class="font-medium text-sm truncate">
                     {{ dep.modName }}
@@ -352,22 +338,12 @@ watch(
                   </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                  <a
-                    v-if="dep.slug"
-                    :href="`https://www.curseforge.com/minecraft/mc-mods/${dep.slug}`"
-                    target="_blank"
-                    class="p-1.5 rounded-lg hover:bg-accent transition-colors"
-                    title="View on CurseForge"
-                  >
+                  <a v-if="dep.slug" :href="`https://www.curseforge.com/minecraft/mc-mods/${dep.slug}`" target="_blank"
+                    class="p-1.5 rounded-lg hover:bg-accent transition-colors" title="View on CurseForge">
                     <ExternalLink class="w-4 h-4 text-muted-foreground" />
                   </a>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    class="h-7 text-xs gap-1"
-                    @click="addDependency(dep)"
-                    :disabled="isLinked"
-                  >
+                  <Button variant="default" size="sm" class="h-7 text-xs gap-1" @click="addDependency(dep)"
+                    :disabled="isLinked">
                     <Package v-if="!isLinked" class="w-3 h-3" />
                     <Lock v-else class="w-3 h-3" />
                     {{ isLinked ? "Locked" : "Add" }}
@@ -380,47 +356,29 @@ watch(
 
         <!-- Conflicts -->
         <div class="rounded-xl border border-border/50 overflow-hidden">
-          <button
-            class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
-            @click="toggleSection('conflicts')"
-          >
+          <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
+            @click="toggleSection('conflicts')">
             <div class="flex items-center gap-2">
               <XCircle class="w-4 h-4 text-red-500" />
               <span class="font-medium text-sm">Conflicts</span>
-              <span
-                class="px-2 py-0.5 rounded-full text-xs font-medium"
-                :class="
-                  analysis.conflicts.length > 0
-                    ? 'bg-red-500/20 text-red-500'
-                    : 'bg-emerald-500/20 text-emerald-500'
-                "
-              >
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="analysis.conflicts.length > 0
+                  ? 'bg-red-500/20 text-red-500'
+                  : 'bg-emerald-500/20 text-emerald-500'
+                ">
                 {{ analysis.conflicts.length }}
               </span>
             </div>
-            <ChevronDown
-              class="w-4 h-4 text-muted-foreground transition-transform"
-              :class="{ '-rotate-180': expandedSections.conflicts }"
-            />
+            <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
+              :class="{ '-rotate-180': expandedSections.conflicts }" />
           </button>
 
-          <div
-            v-if="expandedSections.conflicts"
-            class="border-t border-border/30"
-          >
-            <div
-              v-if="analysis.conflicts.length === 0"
-              class="p-4 text-center text-sm text-muted-foreground"
-            >
+          <div v-if="expandedSections.conflicts" class="border-t border-border/30">
+            <div v-if="analysis.conflicts.length === 0" class="p-4 text-center text-sm text-muted-foreground">
               <CheckCircle class="w-5 h-5 mx-auto mb-2 text-emerald-500" />
               No conflicts detected
             </div>
             <div v-else class="divide-y divide-border/30">
-              <div
-                v-for="(conflict, idx) in analysis.conflicts"
-                :key="idx"
-                class="p-3"
-              >
+              <div v-for="(conflict, idx) in analysis.conflicts" :key="idx" class="p-3">
                 <div class="flex items-center gap-2 text-sm">
                   <span class="font-medium text-red-400">{{
                     conflict.mod1.name
@@ -440,28 +398,19 @@ watch(
 
         <!-- Performance Stats -->
         <div class="rounded-xl border border-border/50 overflow-hidden">
-          <button
-            class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
-            @click="toggleSection('performance')"
-          >
+          <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
+            @click="toggleSection('performance')">
             <div class="flex items-center gap-2">
               <Zap class="w-4 h-4 text-yellow-500" />
               <span class="font-medium text-sm">Performance Profile</span>
             </div>
-            <ChevronDown
-              class="w-4 h-4 text-muted-foreground transition-transform"
-              :class="{ '-rotate-180': expandedSections.performance }"
-            />
+            <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
+              :class="{ '-rotate-180': expandedSections.performance }" />
           </button>
 
-          <div
-            v-if="expandedSections.performance"
-            class="border-t border-border/30 p-4"
-          >
+          <div v-if="expandedSections.performance" class="border-t border-border/30 p-4">
             <div class="grid grid-cols-2 gap-3">
-              <div
-                class="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10"
-              >
+              <div class="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10">
                 <Zap class="w-4 h-4 text-emerald-500" />
                 <div>
                   <div class="text-xs text-muted-foreground">Optimization</div>
@@ -470,9 +419,7 @@ watch(
                   </div>
                 </div>
               </div>
-              <div
-                class="flex items-center gap-2 p-2 rounded-lg bg-blue-500/10"
-              >
+              <div class="flex items-center gap-2 p-2 rounded-lg bg-blue-500/10">
                 <Cpu class="w-4 h-4 text-blue-500" />
                 <div>
                   <div class="text-xs text-muted-foreground">Client Only</div>
@@ -481,9 +428,7 @@ watch(
                   </div>
                 </div>
               </div>
-              <div
-                class="flex items-center gap-2 p-2 rounded-lg bg-orange-500/10"
-              >
+              <div class="flex items-center gap-2 p-2 rounded-lg bg-orange-500/10">
                 <Package class="w-4 h-4 text-orange-500" />
                 <div>
                   <div class="text-xs text-muted-foreground">
@@ -494,9 +439,7 @@ watch(
                   </div>
                 </div>
               </div>
-              <div
-                class="flex items-center gap-2 p-2 rounded-lg bg-purple-500/10"
-              >
+              <div class="flex items-center gap-2 p-2 rounded-lg bg-purple-500/10">
                 <Image class="w-4 h-4 text-purple-500" />
                 <div>
                   <div class="text-xs text-muted-foreground">Graphics</div>
@@ -509,18 +452,111 @@ watch(
           </div>
         </div>
 
+        <!-- RAM Estimation -->
+        <div v-if="ramAnalysis" class="rounded-xl border border-border/50 overflow-hidden">
+          <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
+            @click="toggleSection('ramEstimate')">
+            <div class="flex items-center gap-2">
+              <Cpu class="w-4 h-4 text-red-500" />
+              <span class="font-medium text-sm">RAM & Performance</span>
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="{
+                'bg-emerald-500/20 text-emerald-500': ramAnalysis.performanceImpact <= 30,
+                'bg-yellow-500/20 text-yellow-500': ramAnalysis.performanceImpact > 30 && ramAnalysis.performanceImpact <= 60,
+                'bg-red-500/20 text-red-500': ramAnalysis.performanceImpact > 60
+              }">
+                {{ ramAnalysis.performanceImpact <= 30 ? 'Low' : ramAnalysis.performanceImpact <= 60 ? 'Medium' : 'High'
+                  }} Impact </span>
+            </div>
+            <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
+              :class="{ '-rotate-180': expandedSections.ramEstimate }" />
+          </button>
+
+          <div v-if="expandedSections.ramEstimate" class="border-t border-border/30 p-4 space-y-4">
+            <!-- RAM Estimates -->
+            <div class="grid grid-cols-3 gap-3">
+              <div class="text-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div class="text-2xl font-bold text-blue-400">{{ formatRam(ramAnalysis.estimatedRamMin) }}</div>
+                <div class="text-xs text-muted-foreground">Minimum</div>
+              </div>
+              <div class="text-center p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <div class="text-2xl font-bold text-emerald-400">{{ formatRam(ramAnalysis.estimatedRamRecommended) }}
+                </div>
+                <div class="text-xs text-muted-foreground">Recommended</div>
+              </div>
+              <div class="text-center p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                <div class="text-2xl font-bold text-orange-400">{{ formatRam(ramAnalysis.estimatedRamMax) }}</div>
+                <div class="text-xs text-muted-foreground">Maximum</div>
+              </div>
+            </div>
+
+            <!-- Impact Meters -->
+            <div class="space-y-3">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-muted-foreground">Performance Impact</span>
+                  <span class="font-medium">{{ ramAnalysis.performanceImpact }}/100</span>
+                </div>
+                <div class="h-2 bg-muted rounded-full overflow-hidden">
+                  <div class="h-full transition-all rounded-full" :class="{
+                    'bg-emerald-500': ramAnalysis.performanceImpact <= 30,
+                    'bg-yellow-500': ramAnalysis.performanceImpact > 30 && ramAnalysis.performanceImpact <= 60,
+                    'bg-red-500': ramAnalysis.performanceImpact > 60
+                  }" :style="{ width: `${ramAnalysis.performanceImpact}%` }" />
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-muted-foreground">Load Time Impact</span>
+                  <span class="font-medium">{{ ramAnalysis.loadTimeImpact }}/100</span>
+                </div>
+                <div class="h-2 bg-muted rounded-full overflow-hidden">
+                  <div class="h-full transition-all rounded-full" :class="{
+                    'bg-emerald-500': ramAnalysis.loadTimeImpact <= 30,
+                    'bg-yellow-500': ramAnalysis.loadTimeImpact > 30 && ramAnalysis.loadTimeImpact <= 60,
+                    'bg-red-500': ramAnalysis.loadTimeImpact > 60
+                  }" :style="{ width: `${ramAnalysis.loadTimeImpact}%` }" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Warnings -->
+            <div v-if="ramAnalysis.warnings.length > 0" class="space-y-2">
+              <div class="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <AlertTriangle class="w-3 h-3 text-yellow-500" />
+                Warnings
+              </div>
+              <div class="space-y-1">
+                <div v-for="(warning, idx) in ramAnalysis.warnings" :key="idx"
+                  class="text-xs text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded">
+                  {{ warning }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Recommendations -->
+            <div v-if="ramAnalysis.recommendations.length > 0" class="space-y-2">
+              <div class="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Lightbulb class="w-3 h-3 text-blue-500" />
+                Recommendations
+              </div>
+              <div class="space-y-1">
+                <div v-for="(rec, idx) in ramAnalysis.recommendations" :key="idx"
+                  class="text-xs text-blue-400 bg-blue-500/10 px-2 py-1 rounded">
+                  {{ rec }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Dependency Graph -->
         <div class="rounded-xl border border-border/50 overflow-hidden">
-          <button
-            class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
-            @click="toggleSection('dependencyGraph')"
-          >
+          <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
+            @click="toggleSection('dependencyGraph')">
             <div class="flex items-center gap-2">
               <GitBranch class="w-4 h-4 text-cyan-500" />
               <span class="font-medium text-sm">Dependency Graph</span>
-              <span
-                class="px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-500"
-              >
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-500">
                 {{
                   dependencyGraph.filter((n) => n.dependencies.length > 0)
                     .length
@@ -528,38 +564,22 @@ watch(
                 with deps
               </span>
             </div>
-            <ChevronDown
-              class="w-4 h-4 text-muted-foreground transition-transform"
-              :class="{ '-rotate-180': expandedSections.dependencyGraph }"
-            />
+            <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
+              :class="{ '-rotate-180': expandedSections.dependencyGraph }" />
           </button>
 
-          <div
-            v-if="expandedSections.dependencyGraph"
-            class="border-t border-border/30"
-          >
-            <div
-              v-if="dependencyGraph.length === 0"
-              class="p-4 text-center text-sm text-muted-foreground"
-            >
+          <div v-if="expandedSections.dependencyGraph" class="border-t border-border/30">
+            <div v-if="dependencyGraph.length === 0" class="p-4 text-center text-sm text-muted-foreground">
               No dependency information available
             </div>
             <div v-else class="max-h-[300px] overflow-y-auto">
-              <div
-                v-for="node in dependencyGraph.filter(
-                  (n) => n.dependencies.length > 0
-                )"
-                :key="node.id"
-                class="border-b border-border/20 last:border-0"
-              >
-                <button
-                  @click="toggleNode(node.id)"
-                  class="w-full px-4 py-2 flex items-center gap-2 hover:bg-accent/20 text-left"
-                >
-                  <ChevronDown
-                    class="w-3 h-3 text-muted-foreground transition-transform shrink-0"
-                    :class="{ '-rotate-90': !expandedNodes.has(node.id) }"
-                  />
+              <div v-for="node in dependencyGraph.filter(
+                (n) => n.dependencies.length > 0
+              )" :key="node.id" class="border-b border-border/20 last:border-0">
+                <button @click="toggleNode(node.id)"
+                  class="w-full px-4 py-2 flex items-center gap-2 hover:bg-accent/20 text-left">
+                  <ChevronDown class="w-3 h-3 text-muted-foreground transition-transform shrink-0"
+                    :class="{ '-rotate-90': !expandedNodes.has(node.id) }" />
                   <Package class="w-4 h-4 text-primary shrink-0" />
                   <span class="text-sm font-medium truncate">{{
                     node.name
@@ -570,34 +590,20 @@ watch(
                     }}
                   </span>
                 </button>
-                <div
-                  v-if="expandedNodes.has(node.id)"
-                  class="pl-8 pb-2 space-y-1"
-                >
-                  <div
-                    v-for="dep in node.dependencies"
-                    :key="dep.modId"
-                    class="flex items-center gap-2 px-3 py-1.5 text-sm"
-                  >
+                <div v-if="expandedNodes.has(node.id)" class="pl-8 pb-2 space-y-1">
+                  <div v-for="dep in node.dependencies" :key="dep.modId"
+                    class="flex items-center gap-2 px-3 py-1.5 text-sm">
                     <div class="w-4 h-px bg-border"></div>
-                    <div
-                      class="w-2 h-2 rounded-full shrink-0"
-                      :class="dep.isSatisfied ? 'bg-emerald-500' : 'bg-red-500'"
-                    ></div>
-                    <span
-                      class="truncate"
-                      :class="
-                        dep.isSatisfied
-                          ? 'text-muted-foreground'
-                          : 'text-red-400'
-                      "
-                    >
+                    <div class="w-2 h-2 rounded-full shrink-0"
+                      :class="dep.isSatisfied ? 'bg-emerald-500' : 'bg-red-500'"></div>
+                    <span class="truncate" :class="dep.isSatisfied
+                        ? 'text-muted-foreground'
+                        : 'text-red-400'
+                      ">
                       {{ dep.modName }}
                     </span>
-                    <span
-                      v-if="!dep.isSatisfied"
-                      class="text-[10px] bg-red-500/20 text-red-500 px-1.5 py-0.5 rounded ml-auto shrink-0"
-                    >
+                    <span v-if="!dep.isSatisfied"
+                      class="text-[10px] bg-red-500/20 text-red-500 px-1.5 py-0.5 rounded ml-auto shrink-0">
                       Missing
                     </span>
                   </div>
@@ -608,38 +614,22 @@ watch(
         </div>
 
         <!-- Recommendations -->
-        <div
-          v-if="analysis.recommendations.length > 0"
-          class="rounded-xl border border-border/50 overflow-hidden"
-        >
-          <button
-            class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
-            @click="toggleSection('recommendations')"
-          >
+        <div v-if="analysis.recommendations.length > 0" class="rounded-xl border border-border/50 overflow-hidden">
+          <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/30 transition-colors"
+            @click="toggleSection('recommendations')">
             <div class="flex items-center gap-2">
               <Lightbulb class="w-4 h-4 text-blue-500" />
               <span class="font-medium text-sm">Recommendations</span>
-              <span
-                class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-500"
-              >
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-500">
                 {{ analysis.recommendations.length }}
               </span>
             </div>
-            <ChevronDown
-              class="w-4 h-4 text-muted-foreground transition-transform"
-              :class="{ '-rotate-180': expandedSections.recommendations }"
-            />
+            <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
+              :class="{ '-rotate-180': expandedSections.recommendations }" />
           </button>
 
-          <div
-            v-if="expandedSections.recommendations"
-            class="border-t border-border/30 divide-y divide-border/30"
-          >
-            <div
-              v-for="(rec, idx) in analysis.recommendations"
-              :key="idx"
-              class="p-3 flex items-start gap-2"
-            >
+          <div v-if="expandedSections.recommendations" class="border-t border-border/30 divide-y divide-border/30">
+            <div v-for="(rec, idx) in analysis.recommendations" :key="idx" class="p-3 flex items-start gap-2">
               <Info class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
               <p class="text-sm text-muted-foreground">{{ rec }}</p>
             </div>

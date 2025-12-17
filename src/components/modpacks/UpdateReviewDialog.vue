@@ -8,6 +8,7 @@ import {
   ArrowRight,
   AlertTriangle,
   Download,
+  History,
 } from "lucide-vue-next";
 
 const props = defineProps<{
@@ -36,6 +37,9 @@ const enabledMods = computed(() =>
 );
 const disabledMods = computed(() =>
   props.changes.filter((c) => c.type === "disable")
+);
+const versionControlChanges = computed(() =>
+  props.changes.filter((c) => c.type === "version_control")
 );
 
 async function handleConfirm() {
@@ -144,6 +148,22 @@ async function handleConfirm() {
               class="p-2 rounded bg-amber-500/5 border border-amber-500/10 text-sm flex justify-between items-center gap-2 overflow-hidden">
               <span class="font-medium truncate min-w-0 flex-1">{{ mod.modName }}</span>
               <span class="text-xs text-amber-600/70 shrink-0">Disabled</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- version control -->
+        <div v-if="versionControlChanges.length > 0">
+          <h4 class="text-sm font-medium text-purple-500 mb-2 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            Version Control
+          </h4>
+          <div class="space-y-1">
+            <div v-for="change in versionControlChanges" :key="change.modId"
+              class="p-2 rounded bg-purple-500/5 border border-purple-500/10 text-sm flex items-center gap-2 overflow-hidden">
+              <History class="w-4 h-4 text-purple-500 shrink-0" />
+              <span class="font-medium truncate min-w-0 flex-1">{{ change.modName }}</span>
+              <span class="text-xs text-purple-600/70 shrink-0">Changes available</span>
             </div>
           </div>
         </div>

@@ -741,14 +741,20 @@ export class CurseForgeService {
       game_version = foundVersions[0];
     }
 
-    // Determine loader - prefer specified if available
+    // Determine loader - prefer specified if available, or fallback to detected loaders
     if (
       preferredLoader &&
       foundLoaders.includes(preferredLoader.toLowerCase())
     ) {
+      // preferredLoader matches one of the detected loaders
       loader = preferredLoader.toLowerCase();
     } else if (foundLoaders.length > 0) {
+      // Use first detected loader
       loader = foundLoaders[0];
+    } else if (preferredLoader) {
+      // Fallback: file doesn't list loaders explicitly, trust the preferred loader
+      // This is common for resourcepacks and some mods that work with any loader
+      loader = preferredLoader.toLowerCase();
     }
 
     // MOD VERSION: Use displayName directly from CF API - no parsing!

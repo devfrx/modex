@@ -20,11 +20,18 @@ import {
     Sparkles,
     ToggleLeft,
     ToggleRight,
+    Loader2,
+    Settings,
+    FileCode,
+    AlertTriangle,
+    Undo2,
 } from "lucide-vue-next";
 
 const props = defineProps<{
     modpackId: string;
     modpackName: string;
+    /** Instance ID to sync configs from before creating version */
+    instanceId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -41,6 +48,27 @@ const commitMessage = ref("");
 const commitTag = ref("");
 const expandedVersions = ref<Set<string>>(new Set());
 
+// Unsaved changes tracking
+const unsavedChanges = ref<{
+    hasChanges: boolean;
+    changes: {
+        modsAdded: Array<{ id: string; name: string }>;
+        modsRemoved: Array<{ id: string; name: string }>;
+        modsEnabled: Array<{ id: string; name: string }>;
+        modsDisabled: Array<{ id: string; name: string }>;
+        modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        configsChanged: boolean;
+    };
+} | null>(null);
+const isReverting = ref(false);
+
+// Progress tracking
+const showProgressOverlay = ref(false);
+const progressTitle = ref("");
+const progressMessage = ref("");
+const progressStep = ref(0);
+const progressSteps = ref<string[]>([]);
+
 // Computed
 const versions = computed(() => {
     if (!history.value) return [];
@@ -50,11 +78,60 @@ const versions = computed(() => {
 const currentVersionId = computed(() => history.value?.current_version_id);
 const hasVersionControl = computed(() => history.value !== null && history.value.versions.length > 0);
 
+// Computed for unsaved changes
+const hasUnsavedChanges = computed(() => unsavedChanges.value?.hasChanges ?? false);
+const unsavedChangeCount = computed(() => {
+    if (!unsavedChanges.value?.changes) return 0;
+    const c = unsavedChanges.value.changes;
+    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + (c.configsChanged ? 1 : 0);
+});
+
+// Load unsaved changes
+async function loadUnsavedChanges() {
+    try {
+        unsavedChanges.value = await window.api.modpacks.getUnsavedChanges(props.modpackId);
+    } catch (err) {
+        console.error("Failed to load unsaved changes:", err);
+    }
+}
+
+// Revert unsaved changes
+async function revertChanges() {
+    const confirmed = await confirm({
+        title: "Revert Unsaved Changes",
+        message: "This will discard all changes since the last saved version. This cannot be undone.",
+        variant: "warning",
+        icon: "warning",
+        confirmText: "Revert",
+        cancelText: "Cancel"
+    });
+
+    if (!confirmed) return;
+
+    isReverting.value = true;
+    try {
+        const success = await window.api.modpacks.revertUnsavedChanges(props.modpackId);
+        if (success) {
+            toast.success("Changes Reverted", "Modpack restored to last saved version");
+            await loadUnsavedChanges();
+            emit("refresh");
+        } else {
+            toast.error("Failed", "Could not revert changes");
+        }
+    } catch (err) {
+        toast.error("Failed", (err as Error).message);
+    } finally {
+        isReverting.value = false;
+    }
+}
+
 // Load version history
 async function loadHistory() {
     isLoading.value = true;
     try {
         history.value = await window.api.versions.getHistory(props.modpackId);
+        // Also load unsaved changes
+        await loadUnsavedChanges();
     } catch (err) {
         console.error("Failed to load version history:", err);
     } finally {
@@ -85,65 +162,149 @@ async function createVersion() {
         return;
     }
 
-    isLoading.value = true;
+    showCommitDialog.value = false;
+
+    // Show progress overlay
+    progressTitle.value = "Saving Version";
+    progressSteps.value = props.instanceId
+        ? ["Syncing configs from instance...", "Creating snapshot...", "Saving version..."]
+        : ["Creating snapshot...", "Saving version..."];
+    progressStep.value = 0;
+    progressMessage.value = progressSteps.value[0];
+    showProgressOverlay.value = true;
+
     try {
+        // Simulate step progress
+        if (props.instanceId) {
+            await new Promise(r => setTimeout(r, 300));
+            progressStep.value = 1;
+            progressMessage.value = progressSteps.value[1];
+        }
+
+        await new Promise(r => setTimeout(r, 200));
+        progressStep.value = props.instanceId ? 2 : 1;
+        progressMessage.value = progressSteps.value[progressStep.value];
+
+        // Pass instanceId to sync configs from instance before creating snapshot
         const version = await window.api.versions.create(
             props.modpackId,
             commitMessage.value.trim(),
-            commitTag.value.trim() || undefined
+            commitTag.value.trim() || undefined,
+            props.instanceId  // If provided, syncs instance configs to modpack first
         );
+
+        showProgressOverlay.value = false;
 
         if (version) {
             await loadHistory();
-            toast.success("Version Created", `Created version ${version.tag}`);
-            showCommitDialog.value = false;
+            const syncMsg = props.instanceId ? " (configs synced from instance)" : "";
+            toast.success("Version Created", `Created version ${version.tag}${syncMsg}`);
             commitMessage.value = "";
             commitTag.value = "";
             emit("refresh");
         } else {
             toast.info("No Changes", "No changes detected since last version");
-            showCommitDialog.value = false;
         }
     } catch (err) {
+        showProgressOverlay.value = false;
         toast.error("Failed", (err as Error).message);
-    } finally {
-        isLoading.value = false;
     }
 }
 
 // Rollback to version
 async function rollbackTo(version: ModpackVersion) {
-    const confirmed = await confirm({
-        title: "Rollback to Version",
-        message: `Restore modpack to version ${version.tag}? A rollback commit will be created.`,
-        variant: "warning",
-        icon: "warning",
-        confirmText: "Rollback",
-        cancelText: "Cancel"
-    });
-
-    if (!confirmed) return;
-
-    isLoading.value = true;
+    // First validate the rollback
     try {
-        const result = await window.api.versions.rollback(props.modpackId, version.id);
+        const validation = await window.api.versions.validateRollback(props.modpackId, version.id);
         
+        if (!validation.valid) {
+            const errorMsg = validation.missingMods.length > 0 
+                ? `${validation.missingMods.length} mod(s) cannot be restored` 
+                : "Validation failed";
+            toast.error("Cannot Rollback", errorMsg);
+            return;
+        }
+        
+        // Build confirmation message with warnings
+        let message = `Restore modpack to version ${version.tag}? This will restore mods and configs. A rollback commit will be created.`;
+        
+        if (validation.missingMods.length > 0) {
+            const missingNames = validation.missingMods.map(m => m.name).slice(0, 3).join(", ");
+            const more = validation.missingMods.length > 3 ? ` and ${validation.missingMods.length - 3} more` : "";
+            message += `\n\n⚠️ ${validation.missingMods.length} mod(s) will need to be re-downloaded: ${missingNames}${more}`;
+        }
+        
+        if (validation.brokenDependencies.length > 0) {
+            message += `\n\n⚠️ ${validation.brokenDependencies.length} mod(s) have missing dependencies`;
+        }
+        
+        const confirmed = await confirm({
+            title: "Rollback to Version",
+            message,
+            variant: "warning",
+            icon: "warning",
+            confirmText: "Rollback",
+            cancelText: "Cancel"
+        });
+
+        if (!confirmed) return;
+    } catch (err) {
+        console.error("Failed to validate rollback:", err);
+        // Fall back to simple confirmation
+        const confirmed = await confirm({
+            title: "Rollback to Version",
+            message: `Restore modpack to version ${version.tag}? This will restore mods and configs. A rollback commit will be created.`,
+            variant: "warning",
+            icon: "warning",
+            confirmText: "Rollback",
+            cancelText: "Cancel"
+        });
+        if (!confirmed) return;
+    }
+
+    // Show progress overlay
+    progressTitle.value = "Rolling Back";
+    progressSteps.value = [
+        "Preparing rollback...",
+        "Restoring mod list...",
+        "Restoring configs...",
+        "Re-downloading missing mods...",
+        "Creating rollback commit..."
+    ];
+    progressStep.value = 0;
+    progressMessage.value = progressSteps.value[0];
+    showProgressOverlay.value = true;
+
+    try {
+        // Animate through steps
+        const stepInterval = setInterval(() => {
+            if (progressStep.value < progressSteps.value.length - 1) {
+                progressStep.value++;
+                progressMessage.value = progressSteps.value[progressStep.value];
+            }
+        }, 800);
+
+        const result = await window.api.versions.rollback(props.modpackId, version.id);
+
+        clearInterval(stepInterval);
+        showProgressOverlay.value = false;
+
         // Handle new detailed response format
         if (typeof result === 'object' && result !== null) {
             if (result.success) {
                 await loadHistory();
-                
+
                 // Show appropriate message based on restoration status
                 if (result.failedCount > 0) {
                     const failedNames = result.failedMods?.map((f: any) => f.modName).slice(0, 3).join(', ');
                     const moreCount = result.failedCount > 3 ? ` and ${result.failedCount - 3} more` : '';
                     toast.warning(
-                        "Partial Rollback", 
+                        "Partial Rollback",
                         `Restored ${result.totalMods} of ${result.originalModCount} mods. Failed: ${failedNames}${moreCount}`
                     );
                 } else if (result.restoredCount > 0) {
                     toast.success(
-                        "Rolled Back", 
+                        "Rolled Back",
                         `Restored to ${version.tag} (${result.restoredCount} mod${result.restoredCount > 1 ? 's' : ''} re-downloaded)`
                     );
                 } else {
@@ -162,9 +323,8 @@ async function rollbackTo(version: ModpackVersion) {
             toast.error("Failed", "Could not rollback to this version");
         }
     } catch (err) {
+        showProgressOverlay.value = false;
         toast.error("Failed", (err as Error).message);
-    } finally {
-        isLoading.value = false;
     }
 }
 
@@ -200,25 +360,39 @@ function formatDate(dateString: string): string {
 }
 
 // Get change icon
-function getChangeIcon(type: ModpackChange["type"]) {
+function getChangeIcon(type: ModpackChange["type"], modId?: string) {
+    // Config changes have special icon
+    if (modId === "_configs_") return FileCode;
+
     switch (type) {
         case "add": return Plus;
         case "remove": return Minus;
         case "update": return RefreshCw;
         case "enable": return ToggleRight;
         case "disable": return ToggleLeft;
+        case "version_control": return GitBranch;
     }
 }
 
 // Get change color class
-function getChangeColor(type: ModpackChange["type"]): string {
+function getChangeColor(type: ModpackChange["type"], modId?: string): string {
+    // Config changes have special color
+    if (modId === "_configs_") return "text-purple-500 bg-purple-500/10";
+
     switch (type) {
         case "add": return "text-emerald-500 bg-emerald-500/10";
         case "remove": return "text-red-500 bg-red-500/10";
         case "update": return "text-blue-500 bg-blue-500/10";
         case "enable": return "text-emerald-500 bg-emerald-500/10";
         case "disable": return "text-amber-500 bg-amber-500/10";
+        case "version_control": return "text-violet-500 bg-violet-500/10";
+        default: return "text-muted-foreground bg-muted";
     }
+}
+
+// Check if change is config-related
+function isConfigChange(change: ModpackChange): boolean {
+    return change.modId === "_configs_";
 }
 
 // Watch for modpack changes
@@ -277,6 +451,61 @@ watch(() => props.modpackId, () => {
 
         <!-- Version Timeline -->
         <div v-else class="flex-1 overflow-y-auto -mx-2 px-2">
+            <!-- Unsaved Changes Banner -->
+            <div v-if="hasUnsavedChanges && unsavedChanges"
+                class="mb-4 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10">
+                <div class="flex items-start gap-3">
+                    <div class="p-2 rounded-lg bg-yellow-500/20">
+                        <AlertTriangle class="w-5 h-5 text-yellow-500" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h4 class="font-medium text-yellow-600 dark:text-yellow-400 mb-1">
+                            Unsaved Changes ({{ unsavedChangeCount }})
+                        </h4>
+                        <div class="space-y-1 text-sm text-muted-foreground">
+                            <div v-if="unsavedChanges.changes.modsAdded.length > 0" class="flex items-center gap-1.5">
+                                <Plus class="w-3.5 h-3.5 text-emerald-500" />
+                                <span>{{ unsavedChanges.changes.modsAdded.length }} mods added</span>
+                            </div>
+                            <div v-if="unsavedChanges.changes.modsRemoved.length > 0" class="flex items-center gap-1.5">
+                                <Minus class="w-3.5 h-3.5 text-red-500" />
+                                <span>{{ unsavedChanges.changes.modsRemoved.length }} mods removed</span>
+                            </div>
+                            <div v-if="unsavedChanges.changes.modsUpdated?.length > 0"
+                                class="flex items-center gap-1.5">
+                                <RefreshCw class="w-3.5 h-3.5 text-blue-500" />
+                                <span>{{ unsavedChanges.changes.modsUpdated.length }} mods updated</span>
+                            </div>
+                            <div v-if="unsavedChanges.changes.modsEnabled.length > 0" class="flex items-center gap-1.5">
+                                <ToggleRight class="w-3.5 h-3.5 text-emerald-500" />
+                                <span>{{ unsavedChanges.changes.modsEnabled.length }} mods enabled</span>
+                            </div>
+                            <div v-if="unsavedChanges.changes.modsDisabled.length > 0"
+                                class="flex items-center gap-1.5">
+                                <ToggleLeft class="w-3.5 h-3.5 text-amber-500" />
+                                <span>{{ unsavedChanges.changes.modsDisabled.length }} mods disabled</span>
+                            </div>
+                            <div v-if="unsavedChanges.changes.configsChanged" class="flex items-center gap-1.5">
+                                <Settings class="w-3.5 h-3.5 text-purple-500" />
+                                <span>Config files changed</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mt-3">
+                            <Button size="sm" variant="outline" class="gap-1.5 h-8" @click="revertChanges"
+                                :disabled="isReverting">
+                                <Undo2 v-if="!isReverting" class="w-3.5 h-3.5" />
+                                <Loader2 v-else class="w-3.5 h-3.5 animate-spin" />
+                                {{ isReverting ? 'Reverting...' : 'Revert All' }}
+                            </Button>
+                            <Button size="sm" class="gap-1.5 h-8" @click="showCommitDialog = true">
+                                <Save class="w-3.5 h-3.5" />
+                                Save Version
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="relative">
                 <!-- Timeline Line -->
                 <div class="absolute left-[15px] top-4 bottom-4 w-px bg-border/50"></div>
@@ -356,11 +585,15 @@ watch(() => props.modpackId, () => {
                                             <div v-for="(change, idx) in version.changes.slice(0, 10)" :key="idx"
                                                 class="flex items-center gap-2 text-sm">
                                                 <div class="w-5 h-5 rounded flex items-center justify-center shrink-0"
-                                                    :class="getChangeColor(change.type)">
-                                                    <component :is="getChangeIcon(change.type)" class="w-3 h-3" />
+                                                    :class="getChangeColor(change.type, change.modId)">
+                                                    <component :is="getChangeIcon(change.type, change.modId)"
+                                                        class="w-3 h-3" />
                                                 </div>
-                                                <span class="truncate">{{ change.modName }}</span>
-                                                <span v-if="change.type === 'update'"
+                                                <span class="truncate">
+                                                    {{ isConfigChange(change) ? 'Configuration files modified' :
+                                                        change.modName }}
+                                                </span>
+                                                <span v-if="change.type === 'update' && !isConfigChange(change)"
                                                     class="text-xs text-muted-foreground font-mono">
                                                     {{ change.previousVersion }} → {{ change.newVersion }}
                                                 </span>
@@ -369,6 +602,13 @@ watch(() => props.modpackId, () => {
                                                 class="text-xs text-muted-foreground pl-7">
                                                 +{{ version.changes.length - 10 }} more changes
                                             </div>
+                                        </div>
+
+                                        <!-- Config snapshot indicator -->
+                                        <div v-if="version.config_snapshot_id"
+                                            class="mt-2 flex items-center gap-2 text-xs text-purple-400">
+                                            <Settings class="w-3 h-3" />
+                                            <span>Config snapshot saved</span>
                                         </div>
                                     </div>
 
@@ -389,6 +629,17 @@ watch(() => props.modpackId, () => {
                 <p class="text-sm text-muted-foreground">
                     Create a snapshot of the current modpack state.
                 </p>
+
+                <!-- Instance sync notice -->
+                <div v-if="instanceId"
+                    class="flex items-start gap-2 p-3 bg-primary-500/10 border border-primary-500/30 rounded-lg text-sm">
+                    <RefreshCw class="w-4 h-4 text-primary-400 mt-0.5 shrink-0" />
+                    <div>
+                        <p class="text-primary-300 font-medium">Instance configs will be included</p>
+                        <p class="text-gray-400 text-xs">Your config modifications from the game instance will be saved
+                            in this version.</p>
+                    </div>
+                </div>
 
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Version Tag</label>
@@ -411,6 +662,51 @@ watch(() => props.modpackId, () => {
                 </Button>
             </template>
         </Dialog>
+
+        <!-- Progress Overlay -->
+        <Teleport to="body">
+            <Transition name="fade">
+                <div v-if="showProgressOverlay"
+                    class="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center">
+                    <div class="bg-card border border-border/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+                        <!-- Header -->
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                                <Loader2 class="w-5 h-5 text-primary animate-spin" />
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-lg">{{ progressTitle }}</h3>
+                                <p class="text-sm text-muted-foreground">{{ progressMessage }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Progress Steps -->
+                        <div class="space-y-2">
+                            <div v-for="(step, idx) in progressSteps" :key="idx"
+                                class="flex items-center gap-3 text-sm transition-all duration-300"
+                                :class="idx <= progressStep ? 'opacity-100' : 'opacity-40'">
+                                <div class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors"
+                                    :class="idx < progressStep
+                                        ? 'bg-emerald-500/20 text-emerald-500'
+                                        : idx === progressStep
+                                            ? 'bg-primary/20 text-primary'
+                                            : 'bg-muted text-muted-foreground'">
+                                    <svg v-if="idx < progressStep" class="w-3 h-3" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" stroke-width="3">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <Loader2 v-else-if="idx === progressStep" class="w-3 h-3 animate-spin" />
+                                    <span v-else class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                                </div>
+                                <span :class="idx <= progressStep ? 'text-foreground' : 'text-muted-foreground'">
+                                    {{ step }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </Transition>
+        </Teleport>
     </div>
 </template>
 
@@ -432,5 +728,15 @@ watch(() => props.modpackId, () => {
 .expand-enter-to,
 .expand-leave-from {
     max-height: 300px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 </style>

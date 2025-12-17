@@ -25,6 +25,11 @@ import {
   DependencyInfo,
 } from "./services/ModAnalyzerService.js";
 import { getDownloadService } from "./services/DownloadService.js";
+import { MinecraftService, MinecraftInstallation, SyncResult } from "./services/MinecraftService.js";
+import { ImageCacheService } from "./services/ImageCacheService.js";
+import { ModpackAnalyzerService, ModpackPreview, ModpackAnalysis } from "./services/ModpackAnalyzerService.js";
+import { InstanceService, ModexInstance, InstanceSyncResult } from "./services/InstanceService.js";
+import { ConfigService, ConfigFile, ConfigFolder, ConfigContent, ConfigExport } from "./services/ConfigService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +47,11 @@ let win: BrowserWindow | null;
 let metadataManager: MetadataManager;
 let curseforgeService: CurseForgeService;
 let modAnalyzerService: ModAnalyzerService;
+let minecraftService: MinecraftService;
+let imageCacheService: ImageCacheService;
+let modpackAnalyzerService: ModpackAnalyzerService;
+let instanceService: InstanceService;
+let configService: ConfigService;
 
 // Register custom protocol for local file access (thumbnails cache)
 protocol.registerSchemesAsPrivileged([
@@ -80,6 +90,16 @@ async function initializeBackend() {
   metadataManager = new MetadataManager();
   curseforgeService = new CurseForgeService(metadataManager.getBasePath());
   modAnalyzerService = new ModAnalyzerService(curseforgeService);
+  minecraftService = new MinecraftService(metadataManager.getBasePath());
+  imageCacheService = new ImageCacheService(metadataManager.getBasePath());
+  modpackAnalyzerService = new ModpackAnalyzerService();
+  instanceService = new InstanceService(metadataManager.getBasePath());
+  configService = new ConfigService(metadataManager.getBasePath());
+
+  // Initialize services
+  await imageCacheService.initialize();
+  await minecraftService.detectInstallations();
+  await instanceService.initialize();
 
   // Register atom:// protocol for cached images
   protocol.handle("atom", (request) => {
@@ -343,6 +363,14 @@ async function initializeBackend() {
   );
 
   ipcMain.handle("modpacks:delete", async (_, id: string) => {
+    // First, find and delete any linked instance
+    const linkedInstance = await instanceService.getInstanceByModpack(id);
+    if (linkedInstance) {
+      console.log(`[Delete Modpack] Also deleting linked instance: ${linkedInstance.id}`);
+      await instanceService.deleteInstance(linkedInstance.id);
+    }
+    
+    // Then delete the modpack
     return metadataManager.deleteModpack(id);
   });
 
@@ -375,6 +403,20 @@ async function initializeBackend() {
   );
 
   ipcMain.handle(
+    "modpacks:checkModDependents",
+    async (_, modpackId: string, modId: string) => {
+      return metadataManager.checkModDependents(modpackId, modId);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:analyzeModRemovalImpact",
+    async (_, modpackId: string, modId: string, action: "remove" | "disable") => {
+      return metadataManager.analyzeModRemovalImpact(modpackId, modId, action);
+    }
+  );
+
+  ipcMain.handle(
     "modpacks:removeMod",
     async (_, modpackId: string, modId: string) => {
       return metadataManager.removeModFromModpack(modpackId, modId);
@@ -402,7 +444,32 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:clone",
     async (_, modpackId: string, newName: string) => {
-      return metadataManager.cloneModpack(modpackId, newName);
+      // Clone the modpack (includes configs, version history)
+      const newModpackId = await metadataManager.cloneModpack(modpackId, newName);
+      
+      if (newModpackId) {
+        // Also clone the instance if one exists
+        try {
+          const existingInstance = await instanceService.getInstanceByModpack(modpackId);
+          if (existingInstance) {
+            const newInstance = await instanceService.duplicateInstance(
+              existingInstance.id, 
+              newName
+            );
+            if (newInstance) {
+              // Update the new instance to link to the new modpack
+              newInstance.modpackId = newModpackId;
+              await instanceService.updateInstance(newInstance.id, { modpackId: newModpackId });
+              console.log(`[Clone] Created instance ${newInstance.id} for cloned modpack ${newModpackId}`);
+            }
+          }
+        } catch (err) {
+          console.error(`[Clone] Failed to clone instance:`, err);
+          // Don't fail the whole operation
+        }
+      }
+      
+      return newModpackId;
     }
   );
 
@@ -449,6 +516,50 @@ async function initializeBackend() {
     "modpacks:applyProfile",
     async (_, modpackId: string, profileId: string) => {
       return metadataManager.applyProfile(modpackId, profileId);
+    }
+  );
+
+  // Profile config management
+  ipcMain.handle(
+    "modpacks:saveProfileConfigs",
+    async (_, modpackId: string, profileId: string) => {
+      return metadataManager.saveProfileConfigs(modpackId, profileId);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:applyProfileConfigs",
+    async (_, modpackId: string, profileId: string) => {
+      return metadataManager.applyProfileConfigs(modpackId, profileId);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:hasOverrides",
+    async (_, modpackId: string) => {
+      return metadataManager.hasOverrides(modpackId);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:hasUnsavedChanges",
+    async (_, modpackId: string) => {
+      const result = await metadataManager.getUnsavedChanges(modpackId);
+      return result.hasChanges;
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:getUnsavedChanges",
+    async (_, modpackId: string) => {
+      return metadataManager.getUnsavedChanges(modpackId);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:revertUnsavedChanges",
+    async (_, modpackId: string) => {
+      return metadataManager.revertUnsavedChanges(modpackId);
     }
   );
 
@@ -865,6 +976,13 @@ async function initializeBackend() {
   });
 
   ipcMain.handle(
+    "versions:validateRollback",
+    async (_, modpackId: string, versionId: string) => {
+      return metadataManager.validateRollbackMods(modpackId, versionId);
+    }
+  );
+
+  ipcMain.handle(
     "versions:initialize",
     async (_, modpackId: string, message?: string) => {
       return metadataManager.initializeVersionControl(modpackId, message);
@@ -873,8 +991,18 @@ async function initializeBackend() {
 
   ipcMain.handle(
     "versions:create",
-    async (_, modpackId: string, message: string, tag?: string) => {
-      return metadataManager.createVersion(modpackId, message, tag);
+    async (_, modpackId: string, message: string, tag?: string, syncFromInstanceId?: string) => {
+      // If an instance is specified, sync its configs to modpack first
+      // This ensures the version snapshot includes instance modifications
+      if (syncFromInstanceId) {
+        const overridesPath = metadataManager.getOverridesPath(modpackId);
+        await instanceService.syncConfigsToModpack(syncFromInstanceId, overridesPath);
+      }
+      
+      // Check if configs have actually changed compared to last snapshot
+      const hasConfigChanges = await metadataManager.hasConfigChanges(modpackId);
+      
+      return metadataManager.createVersion(modpackId, message, tag, hasConfigChanges);
     }
   );
 
@@ -1045,6 +1173,26 @@ async function initializeBackend() {
         finalModIds
       );
 
+      // After rollback, sync configs to the linked instance if exists
+      if (result) {
+        const linkedInstance = await instanceService.getInstanceByModpack(modpackId);
+        if (linkedInstance) {
+          console.log(`[Rollback] Syncing configs to instance ${linkedInstance.id}`);
+          const overridesPath = metadataManager.getOverridesPath(modpackId);
+          
+          // Copy restored configs from overrides to instance
+          const configFolders = ["config", "kubejs", "defaultconfigs", "scripts"];
+          for (const folder of configFolders) {
+            const srcPath = path.join(overridesPath, folder);
+            const destPath = path.join(linkedInstance.path, folder);
+            if (await fs.pathExists(srcPath)) {
+              await fs.copy(srcPath, destPath, { overwrite: true });
+              console.log(`[Rollback] Synced ${folder} to instance`);
+            }
+          }
+        }
+      }
+
       // Return detailed result
       return {
         success: result,
@@ -1139,10 +1287,28 @@ async function initializeBackend() {
 
       const { manifest, code } = await metadataManager.exportToModex(modpackId);
 
-      // Create ZIP with modex.json
+      // Create ZIP with modex.json and overrides
       const AdmZip = (await import("adm-zip")).default;
       const zip = new AdmZip();
       zip.addFile("modex.json", Buffer.from(JSON.stringify(manifest, null, 2)));
+      
+      // Add overrides (config files) if they exist
+      const overridesPath = metadataManager.getOverridesPath(modpackId);
+      if (await fs.pathExists(overridesPath)) {
+        const entries = await fs.readdir(overridesPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name === "snapshots") continue; // Don't include version snapshots
+          
+          const srcPath = path.join(overridesPath, entry.name);
+          if (entry.isDirectory()) {
+            zip.addLocalFolder(srcPath, `overrides/${entry.name}`);
+          } else {
+            zip.addLocalFile(srcPath, "overrides");
+          }
+        }
+        console.log(`[Export MODEX] Added overrides from ${overridesPath}`);
+      }
+      
       zip.writeZip(result.filePath);
 
       return { success: true, code, path: result.filePath };
@@ -1203,9 +1369,11 @@ async function initializeBackend() {
 
     if (result.canceled || !result.filePaths[0]) return null;
 
+    const zipFilePath = result.filePaths[0];
+
     try {
       const AdmZip = (await import("adm-zip")).default;
-      const zip = new AdmZip(result.filePaths[0]);
+      const zip = new AdmZip(zipFilePath);
       const manifestEntry = zip.getEntry("manifest.json");
 
       if (!manifestEntry) {
@@ -1231,6 +1399,123 @@ async function initializeBackend() {
         curseforgeService,
         onProgress
       );
+
+      // Extract and save overrides (config files, scripts, etc.)
+      if (importResult.modpackId) {
+        if (win) {
+          win.webContents.send("import:progress", {
+            current: 95,
+            total: 100,
+            modName: "Extracting configurations...",
+          });
+        }
+        
+        const overridesResult = await metadataManager.saveOverridesFromZip(
+          zipFilePath,
+          importResult.modpackId,
+          manifest
+        );
+        
+        if (overridesResult.fileCount > 0) {
+          console.log(`[CF Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
+        }
+
+        // AUTO-FLOW: Create instance -> sync -> version control
+        try {
+          if (win) {
+            win.webContents.send("import:progress", {
+              current: 97,
+              total: 100,
+              modName: "Creating game instance...",
+            });
+          }
+
+          const modpack = await metadataManager.getModpackById(importResult.modpackId);
+          if (modpack) {
+            // Create instance
+            const instance = await instanceService.createInstance({
+              name: modpack.name,
+              minecraftVersion: modpack.minecraft_version || "1.20.1",
+              loader: modpack.loader || "forge",
+              modpackId: modpack.id,
+              description: modpack.description,
+              source: modpack.cf_project_id ? {
+                type: "curseforge",
+                projectId: modpack.cf_project_id,
+                fileId: modpack.cf_file_id,
+                name: modpack.name,
+                version: modpack.version
+              } : undefined
+            });
+
+            if (win) {
+              win.webContents.send("import:progress", {
+                current: 98,
+                total: 100,
+                modName: "Syncing mods to instance...",
+              });
+            }
+
+            // Get mods and sync to instance
+            const mods = await metadataManager.getModsInModpack(importResult.modpackId);
+            const disabledMods = modpack.disabled_mod_ids || [];
+            const modsToSync = mods
+              .filter(m => !disabledMods.includes(m.id))
+              .map(m => ({
+                id: m.id,
+                name: m.name,
+                filename: m.filename,
+                cf_project_id: m.cf_project_id,
+                cf_file_id: m.cf_file_id,
+                content_type: m.content_type || "mod"
+              }));
+
+            const overridesPath = metadataManager.getOverridesPath(importResult.modpackId);
+            await instanceService.syncModpackToInstance(instance.id, {
+              mods: modsToSync,
+              overridesZipPath: overridesPath
+            }, {
+              onProgress: (stage, current, total, item) => {
+                if (win) {
+                  win.webContents.send("instance:syncProgress", { stage, current, total, item });
+                }
+              }
+            });
+
+            if (win) {
+              win.webContents.send("import:progress", {
+                current: 99,
+                total: 100,
+                modName: "Initializing version control...",
+              });
+            }
+
+            // Sync configs from instance back to modpack (captures default configs)
+            await instanceService.syncConfigsToModpack(instance.id, overridesPath);
+
+            // Initialize version control with complete config state
+            const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+            if (!existingHistory || existingHistory.versions.length === 0) {
+              await metadataManager.initializeVersionControl(importResult.modpackId, "Initial version (with instance configs)");
+              console.log(`[CF Import] Version control initialized for modpack ${importResult.modpackId}`);
+            }
+
+            console.log(`[CF Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+          }
+        } catch (autoFlowError) {
+          console.error(`[CF Import] Auto-flow failed (non-fatal):`, autoFlowError);
+          // Still try to initialize version control even if instance creation failed
+          try {
+            const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+            if (!existingHistory || existingHistory.versions.length === 0) {
+              await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from CurseForge");
+              console.log(`[CF Import] Version control initialized (fallback)`);
+            }
+          } catch (vcError) {
+            console.error(`[CF Import] Failed to initialize version control:`, vcError);
+          }
+        }
+      }
 
       return {
         // Success if we have a modpack ID (even if all mods were reused from library)
@@ -1502,6 +1787,115 @@ async function initializeBackend() {
           await metadataManager.updateModpack(importResult.modpackId, updateData);
         }
 
+        // Extract and save overrides (config files, scripts, etc.) BEFORE cleaning up temp file
+        if (importResult.modpackId) {
+          win.webContents.send("import:progress", {
+            current: 95,
+            total: 100,
+            modName: "Extracting configurations...",
+          });
+          
+          const overridesResult = await metadataManager.saveOverridesFromZip(
+            tempFile,
+            importResult.modpackId,
+            manifest
+          );
+          
+          if (overridesResult.fileCount > 0) {
+            console.log(`[CF Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
+          }
+
+          // AUTO-FLOW: Create instance -> sync -> version control
+          try {
+            win.webContents.send("import:progress", {
+              current: 97,
+              total: 100,
+              modName: "Creating game instance...",
+            });
+
+            const modpack = await metadataManager.getModpackById(importResult.modpackId);
+            if (modpack) {
+              // Create instance
+              const instance = await instanceService.createInstance({
+                name: modpack.name,
+                minecraftVersion: modpack.minecraft_version || "1.20.1",
+                loader: modpack.loader || "forge",
+                modpackId: modpack.id,
+                description: modpack.description,
+                source: modpack.cf_project_id ? {
+                  type: "curseforge",
+                  projectId: modpack.cf_project_id,
+                  fileId: modpack.cf_file_id,
+                  name: modpack.name,
+                  version: modpack.version
+                } : undefined
+              });
+
+              win.webContents.send("import:progress", {
+                current: 98,
+                total: 100,
+                modName: "Syncing mods to instance...",
+              });
+
+              // Get mods and sync to instance
+              const mods = await metadataManager.getModsInModpack(importResult.modpackId);
+              const disabledMods = modpack.disabled_mod_ids || [];
+              const modsToSync = mods
+                .filter(m => !disabledMods.includes(m.id))
+                .map(m => ({
+                  id: m.id,
+                  name: m.name,
+                  filename: m.filename,
+                  cf_project_id: m.cf_project_id,
+                  cf_file_id: m.cf_file_id,
+                  content_type: m.content_type || "mod"
+                }));
+
+              const overridesPath = metadataManager.getOverridesPath(importResult.modpackId);
+              await instanceService.syncModpackToInstance(instance.id, {
+                mods: modsToSync,
+                overridesZipPath: overridesPath
+              }, {
+                onProgress: (stage, current, total, item) => {
+                  if (win) {
+                    win.webContents.send("instance:syncProgress", { stage, current, total, item });
+                  }
+                }
+              });
+
+              win.webContents.send("import:progress", {
+                current: 99,
+                total: 100,
+                modName: "Initializing version control...",
+              });
+
+              // Sync configs from instance back to modpack
+              await instanceService.syncConfigsToModpack(instance.id, overridesPath);
+
+              // Initialize version control with complete config state
+              const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+              if (!existingHistory || existingHistory.versions.length === 0) {
+                await metadataManager.initializeVersionControl(importResult.modpackId, "Initial version (with instance configs)");
+                console.log(`[CF URL Import] Version control initialized for modpack ${importResult.modpackId}`);
+              }
+
+              console.log(`[CF URL Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+            }
+          } catch (autoFlowError) {
+            console.error(`[CF URL Import] Auto-flow failed (non-fatal):`, autoFlowError);
+            // Still try to initialize version control even if instance creation failed
+            try {
+              const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+              if (!existingHistory || existingHistory.versions.length === 0) {
+                await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from CurseForge URL");
+                console.log(`[CF URL Import] Version control initialized (fallback)`);
+              }
+            } catch (vcError) {
+              console.error(`[CF URL Import] Failed to initialize version control:`, vcError);
+            }
+          }
+        }
+
         // Clean up temp file
         await fs.remove(tempFile);
 
@@ -1534,16 +1928,45 @@ async function initializeBackend() {
 
     if (result.canceled || !result.filePaths[0]) return null;
 
+    const zipFilePath = result.filePaths[0];
+
     try {
+      // Check if file exists and is readable
+      const fileStats = await fs.stat(zipFilePath);
+      if (fileStats.size === 0) {
+        throw new Error("Invalid .modex file: File is empty");
+      }
+
+      // Note: Disk space check skipped - will fail gracefully during extraction if space runs out
+
       const AdmZip = (await import("adm-zip")).default;
-      const zip = new AdmZip(result.filePaths[0]);
+      let zip;
+      try {
+        zip = new AdmZip(zipFilePath);
+      } catch (zipError: any) {
+        throw new Error(
+          `Corrupted or invalid .modex file: ${zipError.message || "Unable to read ZIP archive"}. ` +
+          `The file may be damaged or not a valid ZIP format.`
+        );
+      }
+
       const manifestEntry = zip.getEntry("modex.json");
 
       if (!manifestEntry) {
-        throw new Error("Invalid .modex file: missing manifest");
+        throw new Error(
+          "Invalid .modex file: Missing modex.json manifest. " +
+          "Make sure this file was exported from MODEX."
+        );
       }
 
-      const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+      let manifest;
+      try {
+        manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+      } catch (parseError) {
+        throw new Error(
+          "Invalid .modex file: The manifest is corrupted or not valid JSON"
+        );
+      }
 
       // Progress callback that sends events to renderer
       const onProgress = (current: number, total: number, modName: string) => {
@@ -1552,11 +1975,118 @@ async function initializeBackend() {
         }
       };
 
-      return metadataManager.importFromModex(
+      const importResult = await metadataManager.importFromModex(
         manifest,
         curseforgeService,
         onProgress
       );
+
+      // Extract and save overrides if the .modex contains them
+      if (importResult.modpackId) {
+        // .modex files may have an "overrides" folder like CurseForge packs
+        const overridesResult = await metadataManager.saveOverridesFromZip(
+          zipFilePath,
+          importResult.modpackId,
+          { overrides: "overrides" } // Standard overrides folder name
+        );
+        
+        if (overridesResult.fileCount > 0) {
+          console.log(`[MODEX Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
+        }
+
+        // AUTO-FLOW: Create instance -> sync -> version control (only for new imports, not updates)
+        if (!importResult.isUpdate) {
+          try {
+            if (win) {
+              win.webContents.send("import:progress", {
+                current: 97,
+                total: 100,
+                modName: "Creating game instance...",
+              });
+            }
+
+            const modpack = await metadataManager.getModpackById(importResult.modpackId);
+            if (modpack) {
+              // Create instance
+              const instance = await instanceService.createInstance({
+                name: modpack.name,
+                minecraftVersion: modpack.minecraft_version || "1.20.1",
+                loader: modpack.loader || "forge",
+                modpackId: modpack.id,
+                description: modpack.description,
+              });
+
+              if (win) {
+                win.webContents.send("import:progress", {
+                  current: 98,
+                  total: 100,
+                  modName: "Syncing mods to instance...",
+                });
+              }
+
+              // Get mods and sync to instance
+              const mods = await metadataManager.getModsInModpack(importResult.modpackId);
+              const disabledMods = modpack.disabled_mod_ids || [];
+              const modsToSync = mods
+                .filter(m => !disabledMods.includes(m.id))
+                .map(m => ({
+                  id: m.id,
+                  name: m.name,
+                  filename: m.filename,
+                  cf_project_id: m.cf_project_id,
+                  cf_file_id: m.cf_file_id,
+                  content_type: m.content_type || "mod"
+                }));
+
+              const overridesPath = metadataManager.getOverridesPath(importResult.modpackId);
+              await instanceService.syncModpackToInstance(instance.id, {
+                mods: modsToSync,
+                overridesZipPath: overridesPath
+              }, {
+                onProgress: (stage, current, total, item) => {
+                  if (win) {
+                    win.webContents.send("instance:syncProgress", { stage, current, total, item });
+                  }
+                }
+              });
+
+              if (win) {
+                win.webContents.send("import:progress", {
+                  current: 99,
+                  total: 100,
+                  modName: "Initializing version control...",
+                });
+              }
+
+              // Sync configs from instance back to modpack
+              await instanceService.syncConfigsToModpack(instance.id, overridesPath);
+
+              // Initialize version control with complete config state
+              const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+              if (!existingHistory || existingHistory.versions.length === 0) {
+                await metadataManager.initializeVersionControl(importResult.modpackId, "Initial version (with instance configs)");
+                console.log(`[MODEX Import] Version control initialized for modpack ${importResult.modpackId}`);
+              }
+
+              console.log(`[MODEX Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+            }
+          } catch (autoFlowError) {
+            console.error(`[MODEX Import] Auto-flow failed (non-fatal):`, autoFlowError);
+            // Still try to initialize version control even if instance creation failed
+            try {
+              const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+              if (!existingHistory || existingHistory.versions.length === 0) {
+                await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from .modex file");
+                console.log(`[MODEX Import] Version control initialized (fallback)`);
+              }
+            } catch (vcError) {
+              console.error(`[MODEX Import] Failed to initialize version control:`, vcError);
+            }
+          }
+        }
+      }
+
+      return importResult;
     } catch (error: any) {
       console.log("[IPC] Import error:", error.message);
       throw new Error(error.message);
@@ -1584,12 +2114,44 @@ async function initializeBackend() {
           }
         };
 
-        return metadataManager.importFromModex(
+        const importResult = await metadataManager.importFromModex(
           manifest,
           curseforgeService,
           onProgress,
           modpackId
         );
+
+        if (importResult.success && importResult.modpackId) {
+          try {
+            const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+            
+            if (!importResult.isUpdate) {
+              // New import: initialize version control
+              if (!existingHistory || existingHistory.versions.length === 0) {
+                await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from remote manifest");
+                console.log(`[MODEX Manifest Import] Version control initialized for modpack ${importResult.modpackId}`);
+              }
+            } else {
+              // Update: create a new version to record the changes
+              const changesSummary = importResult.changes 
+                ? `Added: ${importResult.changes.added}, Removed: ${importResult.changes.removed}, Updated: ${importResult.changes.updated}`
+                : "Remote update applied";
+              
+              await metadataManager.createVersion(
+                importResult.modpackId,
+                `Remote update: ${changesSummary}`,
+                undefined,
+                true, // hasConfigChanges (manifest may include config updates)
+                false // forceCreate
+              );
+              console.log(`[MODEX Manifest Update] Created new version for modpack ${importResult.modpackId}`);
+            }
+          } catch (vcError) {
+            console.error(`[MODEX Manifest Import] Failed to handle version control:`, vcError);
+          }
+        }
+
+        return importResult;
       } catch (error: any) {
         console.log("[IPC] Import manifest error:", error.message);
         throw new Error(error.message);
@@ -1895,9 +2457,17 @@ async function initializeBackend() {
           date_released: modData.date_released,
           release_type: modData.release_type,
           game_version: modData.game_version,
+          game_versions: modData.game_versions,
           loader: modData.loader,
+          content_type: modData.content_type,
           description: modData.description,
           thumbnail_url: modData.thumbnail_url || undefined,
+          logo_url: modData.logo_url || undefined,
+          download_count: modData.download_count,
+          categories: modData.categories,
+          file_size: modData.file_size,
+          date_modified: modData.date_modified,
+          website_url: modData.website_url,
         });
 
         // Note: The mod is updated in the library, and since modpacks reference
@@ -2091,6 +2661,718 @@ async function initializeBackend() {
       ],
     });
     return result.canceled ? null : result.filePaths[0];
+  });
+
+  // ========== MINECRAFT INSTALLATIONS IPC HANDLERS ==========
+
+  ipcMain.handle("minecraft:detectInstallations", async () => {
+    return minecraftService.detectInstallations();
+  });
+
+  ipcMain.handle("minecraft:getInstallations", async () => {
+    return minecraftService.getInstallations();
+  });
+
+  ipcMain.handle("minecraft:addCustomInstallation", async (_, name: string, mcPath: string, modsPath?: string) => {
+    return minecraftService.addCustomInstallation(name, mcPath, modsPath);
+  });
+
+  ipcMain.handle("minecraft:removeInstallation", async (_, id: string) => {
+    return minecraftService.removeInstallation(id);
+  });
+
+  ipcMain.handle("minecraft:setDefault", async (_, id: string) => {
+    return minecraftService.setDefaultInstallation(id);
+  });
+
+  ipcMain.handle("minecraft:getDefault", async () => {
+    return minecraftService.getDefaultInstallation();
+  });
+
+  ipcMain.handle("minecraft:syncModpack", async (_, installationId: string, modpackId: string, options?: { clearExisting?: boolean; createBackup?: boolean }) => {
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack) return { success: false, synced: 0, skipped: 0, errors: ["Modpack not found"], syncedMods: [] };
+
+    const mods = await metadataManager.getModsInModpack(modpackId);
+    const disabledMods = modpack.disabled_mod_ids || [];
+    
+    // Filter out disabled mods and prepare for sync
+    const modsToSync = mods
+      .filter(m => !disabledMods.includes(m.id))
+      .map(m => ({
+        id: m.id,
+        name: m.name,
+        filename: m.filename,
+        downloadUrl: m.cf_project_id && m.cf_file_id 
+          ? `https://edge.forgecdn.net/files/${Math.floor(m.cf_file_id / 1000)}/${m.cf_file_id % 1000}/${m.filename}`
+          : undefined
+      }));
+
+    return minecraftService.syncModpack(installationId, modsToSync, {
+      ...options,
+      onProgress: (current, total, modName) => {
+        if (win) {
+          win.webContents.send("sync:progress", { current, total, modName });
+        }
+      }
+    });
+  });
+
+  ipcMain.handle("minecraft:openModsFolder", async (_, installationId: string) => {
+    return minecraftService.openModsFolder(installationId);
+  });
+
+  ipcMain.handle("minecraft:launch", async (_, installationId?: string) => {
+    return minecraftService.launchMinecraft(installationId);
+  });
+
+  ipcMain.handle("minecraft:selectFolder", async () => {
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openDirectory"],
+      title: "Select Minecraft Installation Folder"
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle("minecraft:selectLauncher", async () => {
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile"],
+      title: "Select Launcher Executable",
+      filters: [
+        { name: "Executables", extensions: ["exe"] },
+        { name: "All Files", extensions: ["*"] }
+      ]
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle("minecraft:setLauncherPath", async (_, type: string, launcherPath: string) => {
+    return minecraftService.setLauncherPath(type as any, launcherPath);
+  });
+
+  ipcMain.handle("minecraft:getLauncherPaths", async () => {
+    return minecraftService.getLauncherPaths();
+  });
+
+  // ========== MODEX INSTANCES IPC HANDLERS ==========
+
+  ipcMain.handle("instance:getAll", async () => {
+    return instanceService.getInstances();
+  });
+
+  ipcMain.handle("instance:get", async (_, id: string) => {
+    return instanceService.getInstance(id);
+  });
+
+  ipcMain.handle("instance:getByModpack", async (_, modpackId: string) => {
+    return instanceService.getInstanceByModpack(modpackId);
+  });
+
+  ipcMain.handle("instance:create", async (_, options: {
+    name: string;
+    minecraftVersion: string;
+    loader: string;
+    loaderVersion?: string;
+    modpackId?: string;
+    description?: string;
+    icon?: string;
+    memory?: { min: number; max: number };
+    source?: ModexInstance["source"];
+  }) => {
+    return instanceService.createInstance(options);
+  });
+
+  ipcMain.handle("instance:delete", async (_, id: string) => {
+    return instanceService.deleteInstance(id);
+  });
+
+  ipcMain.handle("instance:update", async (_, id: string, updates: Partial<ModexInstance>) => {
+    return instanceService.updateInstance(id, updates);
+  });
+
+  ipcMain.handle("instance:syncModpack", async (_, instanceId: string, modpackId: string, options?: {
+    clearExisting?: boolean;
+    configSyncMode?: "overwrite" | "new_only" | "skip";
+    overridesZipPath?: string;
+  }) => {
+    // Get modpack and mods
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack) {
+      return { success: false, modsDownloaded: 0, modsSkipped: 0, configsCopied: 0, configsSkipped: 0, errors: ["Modpack not found"], warnings: [] };
+    }
+
+    const mods = await metadataManager.getModsInModpack(modpackId);
+    const disabledModIds = new Set(modpack.disabled_mod_ids || []);
+
+    // Prepare enabled mods data with content_type for proper folder placement
+    const modsToSync = mods
+      .filter(m => !disabledModIds.has(m.id))
+      .map(m => ({
+        id: m.id,
+        name: m.name,
+        filename: m.filename,
+        cf_project_id: m.cf_project_id,
+        cf_file_id: m.cf_file_id,
+        content_type: m.content_type || "mod",
+        downloadUrl: m.cf_project_id && m.cf_file_id
+          ? undefined // Will be built by InstanceService
+          : undefined
+      }));
+
+    // Prepare disabled mods data (for .jar.disabled handling)
+    const disabledModsToSync = mods
+      .filter(m => disabledModIds.has(m.id))
+      .map(m => ({
+        id: m.id,
+        filename: m.filename,
+        content_type: m.content_type || "mod" as "mod" | "resourcepack" | "shader"
+      }));
+
+    // Use passed overridesZipPath, or use the calculated overrides path
+    // The overrides are always stored at userData/modex/overrides/{modpackId}
+    const overridesSource = options?.overridesZipPath || metadataManager.getOverridesPath(modpackId);
+
+    return instanceService.syncModpackToInstance(instanceId, {
+      mods: modsToSync,
+      disabledMods: disabledModsToSync,
+      overridesZipPath: overridesSource
+    }, {
+      clearExisting: options?.clearExisting,
+      configSyncMode: options?.configSyncMode,
+      onProgress: (stage, current, total, item) => {
+        if (win) {
+          win.webContents.send("instance:syncProgress", { stage, current, total, item });
+        }
+      }
+    });
+  });
+
+  // Sync configs FROM instance TO modpack (for version control)
+  ipcMain.handle("instance:syncConfigsToModpack", async (_, instanceId: string, modpackId: string) => {
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack) {
+      return { filesSynced: 0, warnings: ["Modpack not found"] };
+    }
+    
+    const overridesPath = metadataManager.getOverridesPath(modpackId);
+    return instanceService.syncConfigsToModpack(instanceId, overridesPath);
+  });
+
+  ipcMain.handle("instance:launch", async (_, instanceId: string) => {
+    return instanceService.launchInstance(instanceId);
+  });
+
+  ipcMain.handle("instance:openFolder", async (_, instanceId: string, subfolder?: string) => {
+    return instanceService.openInstanceFolder(instanceId, subfolder);
+  });
+
+  ipcMain.handle("instance:getStats", async (_, instanceId: string) => {
+    return instanceService.getInstanceStats(instanceId);
+  });
+
+  ipcMain.handle("instance:checkSyncStatus", async (_, instanceId: string, modpackId: string) => {
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack) {
+      return { needsSync: false, missingInInstance: [], extraInInstance: [], disabledMismatch: [], configDifferences: 0, totalDifferences: 0 };
+    }
+    
+    const mods = await metadataManager.getModsInModpack(modpackId);
+    const modData = mods.map(m => ({
+      id: m.id,
+      filename: m.filename,
+      content_type: m.content_type
+    }));
+    
+    // Get overrides path for config comparison - use camelCase field name
+    const overridesPath = modpack.overridesPath;
+    
+    return instanceService.checkSyncStatus(instanceId, modData, modpack.disabled_mod_ids || [], overridesPath);
+  });
+
+  ipcMain.handle("instance:export", async (_, instanceId: string) => {
+    if (!win) return false;
+    
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) return false;
+
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: `${instance.name}.zip`,
+      filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+      title: "Export Instance"
+    });
+
+    if (result.canceled || !result.filePath) return false;
+    return instanceService.exportInstance(instanceId, result.filePath);
+  });
+
+  ipcMain.handle("instance:duplicate", async (_, instanceId: string, newName: string) => {
+    return instanceService.duplicateInstance(instanceId, newName);
+  });
+
+  ipcMain.handle("instance:getLauncherConfig", async () => {
+    return instanceService.getLauncherConfig();
+  });
+
+  ipcMain.handle("instance:setLauncherConfig", async (_, config: any) => {
+    return instanceService.setLauncherConfig(config);
+  });
+
+  ipcMain.handle("instance:createFromModpack", async (_, modpackId: string, options?: {
+    overridesZipPath?: string;
+  }) => {
+    // Get modpack info
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack) return null;
+
+    // Create instance
+    const instance = await instanceService.createInstance({
+      name: modpack.name,
+      minecraftVersion: modpack.minecraft_version || "1.20.1",
+      loader: modpack.loader || "forge",
+      modpackId: modpack.id,
+      description: modpack.description,
+      source: modpack.cf_project_id ? {
+        type: "curseforge",
+        projectId: modpack.cf_project_id,
+        fileId: modpack.cf_file_id,
+        name: modpack.name,
+        version: modpack.version
+      } : undefined
+    });
+
+    // Get mods
+    const mods = await metadataManager.getModsInModpack(modpackId);
+    const disabledMods = modpack.disabled_mod_ids || [];
+
+    const modsToSync = mods
+      .filter(m => !disabledMods.includes(m.id))
+      .map(m => ({
+        id: m.id,
+        name: m.name,
+        filename: m.filename,
+        cf_project_id: m.cf_project_id,
+        cf_file_id: m.cf_file_id,
+        content_type: m.content_type || "mod"
+      }));
+
+    // Sync mods and configs to instance
+    const syncResult = await instanceService.syncModpackToInstance(instance.id, {
+      mods: modsToSync,
+      overridesZipPath: options?.overridesZipPath
+    }, {
+      onProgress: (stage, current, total, item) => {
+        if (win) {
+          win.webContents.send("instance:syncProgress", { stage, current, total, item });
+        }
+      }
+    });
+
+    // After successful sync, sync configs from instance back to modpack overrides
+    // Then initialize version control with the complete initial state
+    if (syncResult.success) {
+      try {
+        // Sync instance configs back to modpack (captures any default configs)
+        const overridesPath = metadataManager.getOverridesPath(modpackId);
+        await instanceService.syncConfigsToModpack(instance.id, overridesPath);
+        
+        // Initialize version control for the modpack (if not already initialized)
+        const existingHistory = await metadataManager.getVersionHistory(modpackId);
+        if (!existingHistory || existingHistory.versions.length === 0) {
+          await metadataManager.initializeVersionControl(modpackId, "Initial version (after instance sync)");
+          console.log(`[CreateFromModpack] Version control initialized for modpack ${modpackId}`);
+        }
+      } catch (vcError) {
+        console.error(`[CreateFromModpack] Failed to initialize version control:`, vcError);
+        // Don't fail the overall operation, just log the error
+      }
+    }
+
+    return { instance, syncResult };
+  });
+
+  // ========== IMAGE CACHE IPC HANDLERS ==========
+
+  ipcMain.handle("cache:getImage", async (_, url: string) => {
+    return imageCacheService.getCachedUrl(url);
+  });
+
+  ipcMain.handle("cache:cacheImage", async (_, url: string) => {
+    return imageCacheService.cacheImage(url);
+  });
+
+  ipcMain.handle("cache:prefetch", async (_, urls: string[]) => {
+    return imageCacheService.prefetchImages(urls);
+  });
+
+  ipcMain.handle("cache:getStats", async () => {
+    return imageCacheService.getStats();
+  });
+
+  ipcMain.handle("cache:clear", async () => {
+    return imageCacheService.clearCache();
+  });
+
+  // ========== MODPACK PREVIEW/ANALYSIS IPC HANDLERS ==========
+
+  ipcMain.handle("preview:fromZip", async (_, zipPath: string) => {
+    return modpackAnalyzerService.previewFromZip(zipPath);
+  });
+
+  ipcMain.handle("preview:fromCurseForge", async (_, modpackData: any, fileData: any) => {
+    return modpackAnalyzerService.previewFromCurseForge(modpackData, fileData);
+  });
+
+  ipcMain.handle("preview:analyzeModpack", async (_, modpackId: string) => {
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack) return null;
+
+    const mods = await metadataManager.getModsInModpack(modpackId);
+    
+    return modpackAnalyzerService.analyzeExistingModpack(
+      mods.map(m => ({ 
+        cf_project_id: m.cf_project_id, 
+        name: m.name, 
+        file_size: m.file_size 
+      })),
+      { 
+        minecraftVersion: modpack.minecraft_version || "", 
+        modLoader: modpack.loader || "forge" 
+      }
+    );
+  });
+
+  ipcMain.handle("preview:selectZip", async () => {
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile"],
+      filters: [
+        { name: "Modpack Files", extensions: ["zip", "mrpack", "modex"] }
+      ],
+      title: "Select Modpack to Preview"
+    });
+    
+    if (result.canceled || !result.filePaths[0]) return null;
+    
+    // Return both path and preview
+    const zipPath = result.filePaths[0];
+    const preview = await modpackAnalyzerService.previewFromZip(zipPath);
+    
+    return { path: zipPath, preview };
+  });
+
+  // ========== LIBRARY PAGINATION IPC HANDLERS ==========
+
+  ipcMain.handle("mods:getPaginated", async (_, options: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    loader?: string;
+    gameVersion?: string;
+    contentType?: string;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    favorites?: boolean;
+    folderId?: string;
+  }) => {
+    const allMods = await metadataManager.getAllMods();
+    let filtered = [...allMods];
+
+    // Apply filters
+    if (options.search) {
+      const query = options.search.toLowerCase();
+      filtered = filtered.filter(m => 
+        m.name.toLowerCase().includes(query) ||
+        m.author?.toLowerCase().includes(query) ||
+        m.description?.toLowerCase().includes(query)
+      );
+    }
+
+    if (options.loader && options.loader !== "all") {
+      filtered = filtered.filter(m => m.loader.toLowerCase() === options.loader!.toLowerCase());
+    }
+
+    if (options.gameVersion && options.gameVersion !== "all") {
+      filtered = filtered.filter(m => m.game_version === options.gameVersion);
+    }
+
+    if (options.contentType && options.contentType !== "all") {
+      filtered = filtered.filter(m => (m.content_type || "mod") === options.contentType);
+    }
+
+    if (options.favorites) {
+      filtered = filtered.filter(m => m.favorite);
+    }
+
+    // Sort
+    const sortBy = options.sortBy || "name";
+    const sortDir = options.sortDir || "asc";
+    
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case "name":
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case "created_at":
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+        case "download_count":
+          comparison = (a.download_count || 0) - (b.download_count || 0);
+          break;
+        case "author":
+          comparison = (a.author || "").localeCompare(b.author || "");
+          break;
+        default:
+          comparison = a.name.localeCompare(b.name);
+      }
+      return sortDir === "desc" ? -comparison : comparison;
+    });
+
+    // Paginate
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / options.pageSize);
+    const start = (options.page - 1) * options.pageSize;
+    const end = start + options.pageSize;
+    const mods = filtered.slice(start, end);
+
+    // Prefetch images for current page
+    const imageUrls = mods
+      .map(m => m.thumbnail_url || m.logo_url)
+      .filter(Boolean) as string[];
+    imageCacheService.prefetchImages(imageUrls);
+
+    return {
+      mods,
+      pagination: {
+        page: options.page,
+        pageSize: options.pageSize,
+        total,
+        totalPages,
+        hasNext: options.page < totalPages,
+        hasPrev: options.page > 1
+      }
+    };
+  });
+
+  // ========== CONFIG SERVICE IPC HANDLERS ==========
+
+  // Get config folders for an instance
+  ipcMain.handle("config:getFolders", async (_, instanceId: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) return [];
+    return configService.getConfigFolders(instance.path);
+  });
+
+  // Search for config files
+  ipcMain.handle("config:search", async (_, instanceId: string, query: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) return [];
+    return configService.searchConfigs(instance.path, query);
+  });
+
+  // Read a config file
+  ipcMain.handle("config:read", async (_, instanceId: string, configPath: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    return configService.readConfig(instance.path, configPath);
+  });
+
+  // Write a config file
+  ipcMain.handle("config:write", async (_, instanceId: string, configPath: string, content: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    await configService.writeConfig(instance.path, configPath, content);
+    return { success: true };
+  });
+
+  // Delete a config file
+  ipcMain.handle("config:delete", async (_, instanceId: string, configPath: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    await configService.deleteConfig(instance.path, configPath);
+    return { success: true };
+  });
+
+  // Create a new config file
+  ipcMain.handle("config:create", async (_, instanceId: string, configPath: string, content?: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    await configService.createConfig(instance.path, configPath, content || "");
+    return { success: true };
+  });
+
+  // Export configs to zip
+  ipcMain.handle("config:export", async (_, instanceId: string, folders?: string[]) => {
+    if (!win) return null;
+    
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: `${instance.name}-configs.zip`,
+      filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+      title: "Export Configs"
+    });
+
+    if (result.canceled || !result.filePath) return null;
+
+    const manifest = await configService.exportConfigs(
+      instance.path,
+      instance.id,
+      instance.name,
+      result.filePath,
+      folders
+    );
+
+    return { path: result.filePath, manifest };
+  });
+
+  // Import configs from zip
+  ipcMain.handle("config:import", async (_, instanceId: string, overwrite?: boolean) => {
+    if (!win) return null;
+    
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile"],
+      filters: [{ name: "Config Archive", extensions: ["zip"] }],
+      title: "Import Configs"
+    });
+
+    if (result.canceled || !result.filePaths[0]) return null;
+
+    return configService.importConfigs(instance.path, result.filePaths[0], overwrite ?? false);
+  });
+
+  // Compare configs between two instances
+  ipcMain.handle("config:compare", async (_, instanceId1: string, instanceId2: string, folder?: string) => {
+    const instance1 = await instanceService.getInstance(instanceId1);
+    const instance2 = await instanceService.getInstance(instanceId2);
+    if (!instance1 || !instance2) throw new Error("Instance not found");
+    return configService.compareConfigs(instance1.path, instance2.path, folder);
+  });
+
+  // Get config diff between two instances
+  ipcMain.handle("config:diff", async (_, instanceId1: string, instanceId2: string, configPath: string) => {
+    const instance1 = await instanceService.getInstance(instanceId1);
+    const instance2 = await instanceService.getInstance(instanceId2);
+    if (!instance1 || !instance2) throw new Error("Instance not found");
+    return configService.diffConfig(instance1.path, instance2.path, configPath);
+  });
+
+  // Create config backup
+  ipcMain.handle("config:backup", async (_, instanceId: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    const backupPath = await configService.backupConfigs(instance.path);
+    return { path: backupPath };
+  });
+
+  // List config backups
+  ipcMain.handle("config:listBackups", async (_, instanceId: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) return [];
+    return configService.listBackups(instance.path);
+  });
+
+  // Restore config backup
+  ipcMain.handle("config:restoreBackup", async (_, instanceId: string, backupPath: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    return configService.restoreBackup(instance.path, backupPath);
+  });
+
+  // Delete config backup
+  ipcMain.handle("config:deleteBackup", async (_, backupPath: string) => {
+    await configService.deleteBackup(backupPath);
+    return { success: true };
+  });
+
+  // Copy config files between instances
+  ipcMain.handle("config:copyFiles", async (_, sourceInstanceId: string, targetInstanceId: string, configPaths: string[], overwrite?: boolean) => {
+    const sourceInstance = await instanceService.getInstance(sourceInstanceId);
+    const targetInstance = await instanceService.getInstance(targetInstanceId);
+    if (!sourceInstance || !targetInstance) throw new Error("Instance not found");
+    return configService.copyConfigFiles(sourceInstance.path, targetInstance.path, configPaths, overwrite ?? true);
+  });
+
+  // Copy entire config folder between instances
+  ipcMain.handle("config:copyFolder", async (_, sourceInstanceId: string, targetInstanceId: string, folder?: string, overwrite?: boolean) => {
+    const sourceInstance = await instanceService.getInstance(sourceInstanceId);
+    const targetInstance = await instanceService.getInstance(targetInstanceId);
+    if (!sourceInstance || !targetInstance) throw new Error("Instance not found");
+    return configService.copyConfigFolder(sourceInstance.path, targetInstance.path, folder || "config", overwrite ?? true);
+  });
+
+  // Open config in external editor
+  ipcMain.handle("config:openExternal", async (_, instanceId: string, configPath: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    const fullPath = path.join(instance.path, configPath);
+    shell.openPath(fullPath);
+    return { success: true };
+  });
+
+  // Open config folder in file explorer
+  ipcMain.handle("config:openFolder", async (_, instanceId: string, folder?: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    const folderPath = folder ? path.join(instance.path, folder) : path.join(instance.path, "config");
+    shell.openPath(folderPath);
+    return { success: true };
+  });
+
+  // ========== STRUCTURED CONFIG EDITOR IPC HANDLERS ==========
+
+  // Parse a config file into structured key-value pairs
+  ipcMain.handle("config:parseStructured", async (_, instanceId: string, configPath: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    return configService.parseConfigStructured(instance.path, configPath);
+  });
+
+  // Save structured config modifications with version control tracking
+  ipcMain.handle("config:saveStructured", async (_, instanceId: string, configPath: string, modifications: Array<{
+    key: string;
+    oldValue: any;
+    newValue: any;
+    section?: string;
+  }>) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    
+    // Convert modifications to ConfigEntry format expected by saveConfigStructured
+    const entries = modifications.map(mod => ({
+      keyPath: mod.key,
+      key: mod.key.split('.').pop() || mod.key,
+      value: mod.newValue,
+      originalValue: mod.oldValue,
+      type: typeof mod.newValue as any,
+      section: mod.section,
+      depth: 0,
+      modified: true,
+    }));
+    
+    await configService.saveConfigStructured(instance.path, configPath, entries, instanceId);
+    return { success: true };
+  });
+
+  // Get all config modifications for an instance (version control history)
+  ipcMain.handle("config:getModifications", async (_, instanceId: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    return configService.getConfigModifications(instance.path);
+  });
+
+  // Rollback a specific config change set
+  ipcMain.handle("config:rollbackChanges", async (_, instanceId: string, changeSetId: string) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) throw new Error("Instance not found");
+    await configService.rollbackConfigChanges(instance.path, changeSetId);
+    return { success: true };
   });
 }
 

@@ -31,6 +31,7 @@ import {
   Users,
   History,
   ExternalLink,
+  Info,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -90,6 +91,9 @@ const activeTab = ref<
 >("mods");
 const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
 
+// Linked instance (for config sync in version control)
+const linkedInstanceId = ref<string | null>(null);
+
 // Confirm dialog state for removing incompatible mods
 const showRemoveIncompatibleDialog = ref(false);
 
@@ -125,6 +129,17 @@ const cfUpdateProgress = ref({ current: 0, total: 0, currentMod: "" });
 // Incompatible mods re-search
 const isReSearching = ref(false);
 const reSearchProgress = ref({ current: 0, total: 0, currentMod: "" });
+
+// Dependency Impact Dialog
+const showDependencyImpactDialog = ref(false);
+const dependencyImpact = ref<{
+  action: "remove" | "disable";
+  modToAffect: { id: string; name: string } | null;
+  dependentMods: Array<{ id: string; name: string; willBreak: boolean }>;
+  orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
+  warnings: string[];
+} | null>(null);
+const pendingModAction = ref<{ modId: string; action: "remove" | "disable" } | null>(null);
 
 // Editable form fields
 const editForm = ref({
@@ -459,17 +474,19 @@ async function loadData() {
   updateResult.value = null;
 
   try {
-    const [pack, cMods, allMods, disabled] = await Promise.all([
+    const [pack, cMods, allMods, disabled, linkedInstance] = await Promise.all([
       window.api.modpacks.getById(props.modpackId),
       window.api.modpacks.getMods(props.modpackId),
       window.api.mods.getAll(),
       window.api.modpacks.getDisabledMods(props.modpackId),
+      window.api.instances.getByModpack(props.modpackId),
     ]);
     modpack.value = pack || null;
     currentMods.value = cMods;
     availableMods.value = allMods;
     disabledModIds.value = new Set(disabled);
     selectedModIds.value.clear();
+    linkedInstanceId.value = linkedInstance?.id || null;
 
     // Initialize edit form
     if (pack) {
@@ -555,16 +572,63 @@ async function removeMod(modId: string) {
     );
     return;
   }
+  
+  // Check dependency impact before removing
+  try {
+    const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "remove");
+    
+    if (impact.dependentMods.filter(d => d.willBreak).length > 0 || impact.orphanedDependencies.length > 0) {
+      // Show impact dialog
+      dependencyImpact.value = { ...impact, action: "remove" };
+      pendingModAction.value = { modId, action: "remove" };
+      showDependencyImpactDialog.value = true;
+      return;
+    }
+    
+    // No impact, proceed directly
+    await executeModRemoval(modId);
+  } catch (err) {
+    console.error("Failed to remove mod:", err);
+  }
+}
+
+async function executeModRemoval(modId: string) {
   try {
     await window.api.modpacks.removeMod(props.modpackId, modId);
     await loadData();
     emit("update");
   } catch (err) {
     console.error("Failed to remove mod:", err);
+    toast.error("Remove Failed", (err as Error).message);
   }
 }
 
 async function toggleModEnabled(modId: string) {
+  // Check if we're disabling (mod is currently enabled)
+  const isCurrentlyEnabled = !disabledModIds.value.has(modId);
+  
+  if (isCurrentlyEnabled) {
+    // We're about to disable - check dependency impact
+    try {
+      const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "disable");
+      
+      if (impact.dependentMods.filter(d => d.willBreak).length > 0) {
+        // Show impact dialog
+        dependencyImpact.value = { ...impact, action: "disable" };
+        pendingModAction.value = { modId, action: "disable" };
+        showDependencyImpactDialog.value = true;
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to check dependency impact:", err);
+    }
+  }
+  
+  // No impact or enabling, proceed
+  await executeModToggle(modId);
+}
+
+async function executeModToggle(modId: string) {
   try {
     const result = await window.api.modpacks.toggleMod(props.modpackId, modId);
     if (result) {
@@ -706,6 +770,31 @@ async function confirmRemoveIncompatibleMods() {
   emit("update");
   toast.success("Mods Removed", `Removed ${removed} incompatible mod(s)`);
 }
+
+// Confirm action after dependency impact warning
+async function confirmDependencyImpactAction() {
+  showDependencyImpactDialog.value = false;
+  
+  if (!pendingModAction.value) return;
+  
+  const { modId, action } = pendingModAction.value;
+  
+  if (action === "remove") {
+    await executeModRemoval(modId);
+  } else {
+    await executeModToggle(modId);
+  }
+  
+  pendingModAction.value = null;
+  dependencyImpact.value = null;
+}
+
+function cancelDependencyImpactAction() {
+  showDependencyImpactDialog.value = false;
+  pendingModAction.value = null;
+  dependencyImpact.value = null;
+}
+
 function toggleSort(field: "name" | "version") {
   if (sortBy.value === field) {
     sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
@@ -906,6 +995,15 @@ async function checkForRemoteUpdates() {
         });
       }
 
+      // Show version control changes (includes config changes synced via version history)
+      if (result.changes.hasVersionHistoryChanges) {
+        changes.push({
+          type: "version_control",
+          modId: "version_history",
+          modName: "Version Control History"
+        });
+      }
+
       updateResult.value = {
         hasUpdate: true,
         changes,
@@ -992,6 +1090,8 @@ async function applyRemoteUpdate() {
   } catch (err) {
     console.error("Failed to apply update:", err);
     toast.error("Update Error", (err as Error).message);
+  } finally {
+    showProgressDialog.value = false;
   }
 }
 
@@ -1724,7 +1824,7 @@ watch(
         <!-- Version History Tab -->
         <div v-else-if="activeTab === 'versions'" class="flex-1 p-6 overflow-auto">
           <VersionHistoryPanel v-if="modpack" :modpack-id="modpackId" :modpack-name="modpack.name"
-            @refresh="loadData" />
+            :instance-id="linkedInstanceId || undefined" @refresh="loadData" />
         </div>
 
         <!-- Profiles Tab -->
@@ -2040,6 +2140,59 @@ watch(
       :message="`This will remove ${incompatibleModCount} mod(s) that don't match the modpack's version (${modpack?.minecraft_version}) or loader (${modpack?.loader}). The mods will remain in your library but will be removed from this modpack.`"
       confirm-text="Remove Mods" cancel-text="Cancel" variant="danger" icon="trash"
       @close="showRemoveIncompatibleDialog = false" @confirm="confirmRemoveIncompatibleMods" />
+
+    <!-- Dependency Impact Warning Dialog -->
+    <Dialog :open="showDependencyImpactDialog" @close="cancelDependencyImpactAction" 
+      :title="dependencyImpact?.action === 'remove' ? 'Dependency Warning - Remove' : 'Dependency Warning - Disable'" size="md">
+      <div class="space-y-4">
+        <p class="text-sm text-muted-foreground">
+          {{ dependencyImpact?.action === 'remove' ? 'Removing' : 'Disabling' }} 
+          <strong>{{ dependencyImpact?.modToAffect?.name }}</strong> may affect other mods:
+        </p>
+        
+        <!-- Dependent Mods -->
+        <div v-if="dependencyImpact?.dependentMods.filter(d => d.willBreak).length" 
+          class="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
+          <div class="flex items-center gap-2 text-destructive font-medium mb-2">
+            <AlertTriangle class="w-4 h-4" />
+            <span>These mods depend on it and may not work:</span>
+          </div>
+          <ul class="text-sm space-y-1 ml-6">
+            <li v-for="mod in dependencyImpact?.dependentMods.filter(d => d.willBreak)" :key="mod.id">
+              {{ mod.name }}
+            </li>
+          </ul>
+        </div>
+        
+        <!-- Orphaned Dependencies (only for remove) -->
+        <div v-if="dependencyImpact?.action === 'remove' && dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length"
+          class="bg-warning/10 border border-warning/30 rounded-lg p-3">
+          <div class="flex items-center gap-2 text-warning font-medium mb-2">
+            <Info class="w-4 h-4" />
+            <span>These dependencies may no longer be needed:</span>
+          </div>
+          <ul class="text-sm space-y-1 ml-6">
+            <li v-for="mod in dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers)" :key="mod.id">
+              {{ mod.name }}
+            </li>
+          </ul>
+        </div>
+        
+        <p class="text-sm text-muted-foreground">
+          Do you want to continue?
+        </p>
+      </div>
+      
+      <template #footer>
+        <div class="flex gap-2">
+          <Button variant="secondary" @click="cancelDependencyImpactAction">Cancel</Button>
+          <Button :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'warning'" 
+            @click="confirmDependencyImpactAction">
+            {{ dependencyImpact?.action === 'remove' ? 'Remove Anyway' : 'Disable Anyway' }}
+          </Button>
+        </div>
+      </template>
+    </Dialog>
 
     <ModUpdateDialog :open="showSingleModUpdateDialog" :mod="selectedUpdateMod" :modpack-id="modpackId"
       :minecraft-version="modpack?.minecraft_version" :loader="modpack?.loader"

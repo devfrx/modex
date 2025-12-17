@@ -11,6 +11,8 @@ import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import ShareDialog from "@/components/modpacks/ShareDialog.vue";
 import ConvertModpackDialog from "@/components/modpacks/ConvertModpackDialog.vue";
 import CurseForgeModpackSearch from "@/components/modpacks/CurseForgeModpackSearch.vue";
+import SyncModpackDialog from "@/components/modpacks/SyncModpackDialog.vue";
+import PlayModpackDialog from "@/components/modpacks/PlayModpackDialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
@@ -106,6 +108,14 @@ const convertModpack = ref<Modpack | null>(null);
 // CurseForge Browse State
 const showCFBrowse = ref(false);
 
+// Sync State
+const showSyncDialog = ref(false);
+const syncModpackId = ref<string | null>(null);
+const syncModpackName = ref<string>("");
+const syncModpackVersion = ref<string>("");
+const syncModpackLoader = ref<string>("");
+const syncModpackModCount = ref<number>(0);
+
 // Import State
 const showProgress = ref(false);
 const progressTitle = ref("");
@@ -161,8 +171,11 @@ async function loadModpacks() {
 
     const packsWithCounts = await Promise.all(
       packs.map(async (pack) => {
-        const mods = await window.api.modpacks.getMods(pack.id!);
-        return { ...pack, modCount: mods.length };
+        const [mods, hasUnsaved] = await Promise.all([
+          window.api.modpacks.getMods(pack.id!),
+          window.api.modpacks.hasUnsavedChanges(pack.id!),
+        ]);
+        return { ...pack, modCount: mods.length, hasUnsavedChanges: hasUnsaved };
       })
     );
 
@@ -926,6 +939,22 @@ watch(
   { immediate: true }
 );
 
+// Sync to Minecraft (now uses instance-based play)
+function openSyncDialog(modpackId: string, modpackName: string) {
+  const modpack = modpacks.value.find(m => m.id === modpackId);
+  syncModpackId.value = modpackId;
+  syncModpackName.value = modpackName;
+  syncModpackVersion.value = modpack?.minecraft_version || "";
+  syncModpackLoader.value = modpack?.loader || "";
+  syncModpackModCount.value = modpack?.modCount || 0;
+  showSyncDialog.value = true;
+}
+
+function handleSyncComplete() {
+  showSyncDialog.value = false;
+  toast.success("Ready to Play", `${syncModpackName.value} instance is ready!`);
+}
+
 onMounted(() => {
   loadSettings();
   loadFavoriteModpacks();
@@ -1237,7 +1266,7 @@ onMounted(() => {
             :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
             @delete="confirmDelete" @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack"
             @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack" @share="openShareExport"
-            @convert="openConvertDialog" />
+            @convert="openConvertDialog" @sync="openSyncDialog" />
         </div>
 
         <!-- List View -->
@@ -1519,6 +1548,11 @@ onMounted(() => {
         <Button @click="showMergeSummary = false"> Close </Button>
       </template>
     </Dialog>
+
+    <!-- Play Modpack Dialog (Instance-based) -->
+    <PlayModpackDialog v-if="syncModpackId" :open="showSyncDialog" :modpack-id="syncModpackId"
+      :modpack-name="syncModpackName" :minecraft-version="syncModpackVersion" :loader="syncModpackLoader"
+      :mod-count="syncModpackModCount" @close="showSyncDialog = false" @launched="handleSyncComplete" />
   </div>
 </template>
 <style scoped>

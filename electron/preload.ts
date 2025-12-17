@@ -180,6 +180,18 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:addMod", modpackId, modId),
     addModsBatch: (modpackId: string, modIds: string[]): Promise<number> =>
       ipcRenderer.invoke("modpacks:addModsBatch", modpackId, modIds),
+    checkModDependents: (modpackId: string, modId: string): Promise<Array<{ id: string; name: string; dependencyType: string }>> =>
+      ipcRenderer.invoke("modpacks:checkModDependents", modpackId, modId),
+    analyzeModRemovalImpact: (
+      modpackId: string,
+      modId: string,
+      action: "remove" | "disable"
+    ): Promise<{
+      modToAffect: { id: string; name: string } | null;
+      dependentMods: Array<{ id: string; name: string; willBreak: boolean }>;
+      orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
+      warnings: string[];
+    }> => ipcRenderer.invoke("modpacks:analyzeModRemovalImpact", modpackId, modId, action),
     removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
     toggleMod: (
@@ -245,6 +257,34 @@ contextBridge.exposeInMainWorld("api", {
 
     applyProfile: (modpackId: string, profileId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:applyProfile", modpackId, profileId),
+
+    // Profile config management
+    saveProfileConfigs: (modpackId: string, profileId: string): Promise<string | null> =>
+      ipcRenderer.invoke("modpacks:saveProfileConfigs", modpackId, profileId),
+
+    applyProfileConfigs: (modpackId: string, profileId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:applyProfileConfigs", modpackId, profileId),
+
+    hasOverrides: (modpackId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:hasOverrides", modpackId),
+
+    hasUnsavedChanges: (modpackId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:hasUnsavedChanges", modpackId),
+
+    getUnsavedChanges: (modpackId: string): Promise<{
+      hasChanges: boolean;
+      changes: {
+        modsAdded: Array<{ id: string; name: string }>;
+        modsRemoved: Array<{ id: string; name: string }>;
+        modsEnabled: Array<{ id: string; name: string }>;
+        modsDisabled: Array<{ id: string; name: string }>;
+        modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        configsChanged: boolean;
+      };
+    }> => ipcRenderer.invoke("modpacks:getUnsavedChanges", modpackId),
+
+    revertUnsavedChanges: (modpackId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:revertUnsavedChanges", modpackId),
 
     // CurseForge update checking
     checkCFUpdate: (
@@ -322,14 +362,22 @@ contextBridge.exposeInMainWorld("api", {
   versions: {
     getHistory: (modpackId: string): Promise<any | null> =>
       ipcRenderer.invoke("versions:getHistory", modpackId),
+    validateRollback: (modpackId: string, versionId: string): Promise<{
+      valid: boolean;
+      availableMods: Array<{ id: string; name: string }>;
+      missingMods: Array<{ id: string; name: string; reason: string }>;
+      brokenDependencies: Array<{ modId: string; modName: string; dependsOn: string }>;
+    }> =>
+      ipcRenderer.invoke("versions:validateRollback", modpackId, versionId),
     initialize: (modpackId: string, message?: string): Promise<any | null> =>
       ipcRenderer.invoke("versions:initialize", modpackId, message),
     create: (
       modpackId: string,
       message: string,
-      tag?: string
+      tag?: string,
+      syncFromInstanceId?: string
     ): Promise<any | null> =>
-      ipcRenderer.invoke("versions:create", modpackId, message, tag),
+      ipcRenderer.invoke("versions:create", modpackId, message, tag, syncFromInstanceId),
     rollback: (modpackId: string, versionId: string): Promise<boolean> =>
       ipcRenderer.invoke("versions:rollback", modpackId, versionId),
     compare: (
@@ -511,6 +559,7 @@ contextBridge.exposeInMainWorld("api", {
         updatedMods: string[];
         enabledMods?: string[];
         disabledMods?: string[];
+        hasVersionHistoryChanges?: boolean;
       };
     }> => ipcRenderer.invoke("remote:checkUpdate", modpackId),
   },
@@ -620,6 +669,527 @@ contextBridge.exposeInMainWorld("api", {
 
     getPerformanceTips: (modpackId: string): Promise<string[]> =>
       ipcRenderer.invoke("analyzer:getPerformanceTips", modpackId),
+  },
+
+  // ========== MINECRAFT INSTALLATIONS ==========
+  minecraft: {
+    detectInstallations: (): Promise<Array<{
+      id: string;
+      name: string;
+      type: "vanilla" | "prism" | "multimc" | "curseforge" | "atlauncher" | "gdlauncher" | "modrinth" | "custom";
+      path: string;
+      modsPath: string;
+      version?: string;
+      loader?: string;
+      lastUsed?: string;
+      isDefault?: boolean;
+      icon?: string;
+    }>> => ipcRenderer.invoke("minecraft:detectInstallations"),
+    
+    getInstallations: (): Promise<Array<{
+      id: string;
+      name: string;
+      type: string;
+      path: string;
+      modsPath: string;
+      version?: string;
+      loader?: string;
+      lastUsed?: string;
+      isDefault?: boolean;
+      icon?: string;
+    }>> => ipcRenderer.invoke("minecraft:getInstallations"),
+    
+    addCustom: (name: string, mcPath: string, modsPath?: string): Promise<any> =>
+      ipcRenderer.invoke("minecraft:addCustomInstallation", name, mcPath, modsPath),
+    
+    remove: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke("minecraft:removeInstallation", id),
+    
+    setDefault: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke("minecraft:setDefault", id),
+    
+    getDefault: (): Promise<any> =>
+      ipcRenderer.invoke("minecraft:getDefault"),
+    
+    syncModpack: (
+      installationId: string,
+      modpackId: string,
+      options?: { clearExisting?: boolean; createBackup?: boolean },
+      onProgress?: (current: number, total: number, modName: string) => void
+    ): Promise<{
+      success: boolean;
+      synced: number;
+      skipped: number;
+      errors: string[];
+      syncedMods: string[];
+    }> => {
+      if (onProgress) {
+        const handler = (_event: any, data: { current: number; total: number; modName: string }) => {
+          onProgress(data.current, data.total, data.modName);
+        };
+        ipcRenderer.on("sync:progress", handler);
+        return ipcRenderer.invoke("minecraft:syncModpack", installationId, modpackId, options)
+          .finally(() => ipcRenderer.removeListener("sync:progress", handler));
+      }
+      return ipcRenderer.invoke("minecraft:syncModpack", installationId, modpackId, options);
+    },
+    
+    openModsFolder: (installationId: string): Promise<boolean> =>
+      ipcRenderer.invoke("minecraft:openModsFolder", installationId),
+    
+    launch: (installationId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("minecraft:launch", installationId),
+    
+    selectFolder: (): Promise<string | null> =>
+      ipcRenderer.invoke("minecraft:selectFolder"),
+    
+    selectLauncher: (): Promise<string | null> =>
+      ipcRenderer.invoke("minecraft:selectLauncher"),
+    
+    setLauncherPath: (type: string, launcherPath: string): Promise<boolean> =>
+      ipcRenderer.invoke("minecraft:setLauncherPath", type, launcherPath),
+    
+    getLauncherPaths: (): Promise<Record<string, string>> =>
+      ipcRenderer.invoke("minecraft:getLauncherPaths"),
+  },
+
+  // ========== MODEX INSTANCES ==========
+  instances: {
+    getAll: (): Promise<Array<{
+      id: string;
+      name: string;
+      description?: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      path: string;
+      modpackId?: string;
+      icon?: string;
+      modCount?: number;
+      createdAt: string;
+      lastPlayed?: string;
+      playTime?: number;
+      state: "ready" | "installing" | "error";
+      memory?: { min: number; max: number };
+      source?: {
+        type: "curseforge" | "modrinth" | "local";
+        projectId?: number;
+        fileId?: number;
+        name?: string;
+        version?: string;
+      };
+    }>> => ipcRenderer.invoke("instance:getAll"),
+
+    get: (id: string): Promise<any | null> =>
+      ipcRenderer.invoke("instance:get", id),
+
+    getByModpack: (modpackId: string): Promise<any | null> =>
+      ipcRenderer.invoke("instance:getByModpack", modpackId),
+
+    create: (options: {
+      name: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      modpackId?: string;
+      description?: string;
+      icon?: string;
+      memory?: { min: number; max: number };
+      source?: {
+        type: "curseforge" | "modrinth" | "local";
+        projectId?: number;
+        fileId?: number;
+        name?: string;
+        version?: string;
+      };
+    }): Promise<any> => ipcRenderer.invoke("instance:create", options),
+
+    delete: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke("instance:delete", id),
+
+    update: (id: string, updates: any): Promise<any | null> =>
+      ipcRenderer.invoke("instance:update", id, updates),
+
+    syncModpack: (
+      instanceId: string,
+      modpackId: string,
+      options?: { 
+        clearExisting?: boolean; 
+        configSyncMode?: "overwrite" | "new_only" | "skip";
+        overridesZipPath?: string;
+      }
+    ): Promise<{
+      success: boolean;
+      modsDownloaded: number;
+      modsSkipped: number;
+      configsCopied: number;
+      configsSkipped: number;
+      errors: string[];
+      warnings: string[];
+    }> => ipcRenderer.invoke("instance:syncModpack", instanceId, modpackId, options),
+
+    syncConfigsToModpack: (
+      instanceId: string,
+      modpackId: string
+    ): Promise<{ filesSynced: number; warnings: string[] }> =>
+      ipcRenderer.invoke("instance:syncConfigsToModpack", instanceId, modpackId),
+
+    launch: (instanceId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("instance:launch", instanceId),
+
+    openFolder: (instanceId: string, subfolder?: string): Promise<boolean> =>
+      ipcRenderer.invoke("instance:openFolder", instanceId, subfolder),
+
+    getStats: (instanceId: string): Promise<{
+      modCount: number;
+      configCount: number;
+      totalSize: string;
+      folders: Array<{ name: string; count: number }>;
+    } | null> => ipcRenderer.invoke("instance:getStats", instanceId),
+
+    checkSyncStatus: (instanceId: string, modpackId: string): Promise<{
+      needsSync: boolean;
+      missingInInstance: Array<{ filename: string; type: string }>;
+      extraInInstance: Array<{ filename: string; type: string }>;
+      disabledMismatch: Array<{ filename: string; issue: string }>;
+      configDifferences: number;
+      totalDifferences: number;
+    }> => ipcRenderer.invoke("instance:checkSyncStatus", instanceId, modpackId),
+
+    export: (instanceId: string): Promise<boolean> =>
+      ipcRenderer.invoke("instance:export", instanceId),
+
+    duplicate: (instanceId: string, newName: string): Promise<any | null> =>
+      ipcRenderer.invoke("instance:duplicate", instanceId, newName),
+
+    getLauncherConfig: (): Promise<{
+      vanillaPath?: string;
+      javaPath?: string;
+      defaultMemory: { min: number; max: number };
+    }> => ipcRenderer.invoke("instance:getLauncherConfig"),
+
+    setLauncherConfig: (config: {
+      vanillaPath?: string;
+      javaPath?: string;
+      defaultMemory?: { min: number; max: number };
+    }): Promise<void> => ipcRenderer.invoke("instance:setLauncherConfig", config),
+
+    createFromModpack: (
+      modpackId: string,
+      options?: { overridesZipPath?: string }
+    ): Promise<{
+      instance: any;
+      syncResult: {
+        success: boolean;
+        modsDownloaded: number;
+        modsSkipped: number;
+        configsCopied: number;
+        errors: string[];
+        warnings: string[];
+      };
+    } | null> => ipcRenderer.invoke("instance:createFromModpack", modpackId, options),
+
+    onSyncProgress: (callback: (data: { stage: string; current: number; total: number; item?: string }) => void) => {
+      const handler = (_: any, data: any) => callback(data);
+      ipcRenderer.on("instance:syncProgress", handler);
+      return () => ipcRenderer.removeListener("instance:syncProgress", handler);
+    },
+  },
+
+  // ========== IMAGE CACHE ==========
+  cache: {
+    getImage: (url: string): Promise<string> =>
+      ipcRenderer.invoke("cache:getImage", url),
+    
+    cacheImage: (url: string): Promise<string | null> =>
+      ipcRenderer.invoke("cache:cacheImage", url),
+    
+    prefetch: (urls: string[]): Promise<void> =>
+      ipcRenderer.invoke("cache:prefetch", urls),
+    
+    getStats: (): Promise<{
+      totalSize: number;
+      entryCount: number;
+      hitRate: number;
+      memoryUsage: number;
+      oldestEntry: number;
+      newestEntry: number;
+    }> => ipcRenderer.invoke("cache:getStats"),
+    
+    clear: (): Promise<void> =>
+      ipcRenderer.invoke("cache:clear"),
+  },
+
+  // ========== MODPACK PREVIEW/ANALYSIS ==========
+  preview: {
+    fromZip: (zipPath: string): Promise<{
+      name: string;
+      version: string;
+      author?: string;
+      description?: string;
+      minecraftVersion: string;
+      modLoader: string;
+      modLoaderVersion?: string;
+      modCount: number;
+      mods: Array<{ projectId: number; fileId: number; name?: string; required: boolean }>;
+      resourcePackCount: number;
+      shaderCount: number;
+      analysis: {
+        estimatedRamMin: number;
+        estimatedRamRecommended: number;
+        estimatedRamMax: number;
+        performanceImpact: number;
+        loadTimeImpact: number;
+        storageImpact: number;
+        warnings: string[];
+        recommendations: string[];
+        compatibilityScore: number;
+      };
+      source: string;
+      overridesCount: number;
+      configFilesCount: number;
+      totalSize?: number;
+    } | null> => ipcRenderer.invoke("preview:fromZip", zipPath),
+    
+    fromCurseForge: (modpackData: any, fileData: any): Promise<any> =>
+      ipcRenderer.invoke("preview:fromCurseForge", modpackData, fileData),
+    
+    analyzeModpack: (modpackId: string): Promise<{
+      estimatedRamMin: number;
+      estimatedRamRecommended: number;
+      estimatedRamMax: number;
+      performanceImpact: number;
+      loadTimeImpact: number;
+      storageImpact: number;
+      warnings: string[];
+      recommendations: string[];
+      compatibilityScore: number;
+    } | null> => ipcRenderer.invoke("preview:analyzeModpack", modpackId),
+    
+    selectAndPreview: (): Promise<{
+      path: string;
+      preview: any;
+    } | null> => ipcRenderer.invoke("preview:selectZip"),
+  },
+
+  // ========== LIBRARY PAGINATION ==========
+  library: {
+    getPaginated: (options: {
+      page: number;
+      pageSize: number;
+      search?: string;
+      loader?: string;
+      gameVersion?: string;
+      contentType?: string;
+      sortBy?: string;
+      sortDir?: "asc" | "desc";
+      favorites?: boolean;
+      folderId?: string;
+    }): Promise<{
+      mods: any[];
+      pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        hasNext: boolean;
+        hasPrev: boolean;
+      };
+    }> => ipcRenderer.invoke("mods:getPaginated", options),
+  },
+
+  // ========== CONFIG SERVICE ==========
+  configs: {
+    /** Get all config folders for an instance */
+    getFolders: (instanceId: string): Promise<Array<{
+      path: string;
+      name: string;
+      fileCount: number;
+      totalSize: number;
+      subfolders: any[];
+      files: Array<{
+        path: string;
+        name: string;
+        extension: string;
+        size: number;
+        modified: string;
+        type: string;
+        folder: string;
+        modId?: string;
+      }>;
+    }>> => ipcRenderer.invoke("config:getFolders", instanceId),
+
+    /** Search for config files */
+    search: (instanceId: string, query: string): Promise<Array<{
+      path: string;
+      name: string;
+      extension: string;
+      size: number;
+      modified: string;
+      type: string;
+      folder: string;
+      modId?: string;
+    }>> => ipcRenderer.invoke("config:search", instanceId, query),
+
+    /** Read a config file's content */
+    read: (instanceId: string, configPath: string): Promise<{
+      content: string;
+      parsed?: any;
+      encoding: string;
+      parseError?: string;
+    }> => ipcRenderer.invoke("config:read", instanceId, configPath),
+
+    /** Write content to a config file */
+    write: (instanceId: string, configPath: string, content: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:write", instanceId, configPath, content),
+
+    /** Delete a config file */
+    delete: (instanceId: string, configPath: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:delete", instanceId, configPath),
+
+    /** Create a new config file */
+    create: (instanceId: string, configPath: string, content?: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:create", instanceId, configPath, content),
+
+    /** Export configs to zip file */
+    export: (instanceId: string, folders?: string[]): Promise<{
+      path: string;
+      manifest: {
+        exportedAt: string;
+        sourceInstanceId: string;
+        sourceInstanceName: string;
+        folders: string[];
+        fileCount: number;
+      };
+    } | null> => ipcRenderer.invoke("config:export", instanceId, folders),
+
+    /** Import configs from zip file */
+    import: (instanceId: string, overwrite?: boolean): Promise<{
+      imported: number;
+      skipped: number;
+      errors: string[];
+    } | null> => ipcRenderer.invoke("config:import", instanceId, overwrite),
+
+    /** Compare configs between two instances */
+    compare: (instanceId1: string, instanceId2: string, folder?: string): Promise<{
+      onlyInFirst: string[];
+      onlyInSecond: string[];
+      different: string[];
+      identical: string[];
+    }> => ipcRenderer.invoke("config:compare", instanceId1, instanceId2, folder),
+
+    /** Get diff of a specific config between two instances */
+    diff: (instanceId1: string, instanceId2: string, configPath: string): Promise<{
+      content1: string;
+      content2: string;
+    }> => ipcRenderer.invoke("config:diff", instanceId1, instanceId2, configPath),
+
+    /** Create a backup of all configs */
+    backup: (instanceId: string): Promise<{ path: string }> =>
+      ipcRenderer.invoke("config:backup", instanceId),
+
+    /** List available config backups */
+    listBackups: (instanceId: string): Promise<Array<{
+      path: string;
+      date: string;
+      size: number;
+    }>> => ipcRenderer.invoke("config:listBackups", instanceId),
+
+    /** Restore a config backup */
+    restoreBackup: (instanceId: string, backupPath: string): Promise<{ restored: number }> =>
+      ipcRenderer.invoke("config:restoreBackup", instanceId, backupPath),
+
+    /** Delete a config backup */
+    deleteBackup: (backupPath: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:deleteBackup", backupPath),
+
+    /** Copy specific config files between instances */
+    copyFiles: (sourceInstanceId: string, targetInstanceId: string, configPaths: string[], overwrite?: boolean): Promise<{
+      copied: number;
+      skipped: number;
+      errors: string[];
+    }> => ipcRenderer.invoke("config:copyFiles", sourceInstanceId, targetInstanceId, configPaths, overwrite),
+
+    /** Copy entire config folder between instances */
+    copyFolder: (sourceInstanceId: string, targetInstanceId: string, folder?: string, overwrite?: boolean): Promise<{
+      copied: number;
+    }> => ipcRenderer.invoke("config:copyFolder", sourceInstanceId, targetInstanceId, folder, overwrite),
+
+    /** Open config file in external editor */
+    openExternal: (instanceId: string, configPath: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:openExternal", instanceId, configPath),
+
+    /** Open config folder in file explorer */
+    openFolder: (instanceId: string, folder?: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:openFolder", instanceId, folder),
+
+    // ========== STRUCTURED CONFIG EDITOR ==========
+
+    /** Parse a config file into structured key-value pairs */
+    parseStructured: (instanceId: string, configPath: string): Promise<{
+      path: string;
+      type: string;
+      sections: Array<{
+        name: string;
+        displayName: string;
+        comment?: string;
+        entries: Array<{
+          keyPath: string;
+          key: string;
+          value: any;
+          originalValue: any;
+          type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+          comment?: string;
+          section?: string;
+          depth: number;
+          modified: boolean;
+          line?: number;
+        }>;
+        subsections: any[];
+        expanded: boolean;
+      }>;
+      allEntries: Array<{
+        keyPath: string;
+        key: string;
+        value: any;
+        originalValue: any;
+        type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+        comment?: string;
+        section?: string;
+        depth: number;
+        modified: boolean;
+        line?: number;
+      }>;
+      errors: string[];
+      rawContent: string;
+      encoding: string;
+    }> => ipcRenderer.invoke("config:parseStructured", instanceId, configPath),
+
+    /** Save structured config modifications with version control */
+    saveStructured: (instanceId: string, configPath: string, modifications: Array<{
+      key: string;
+      oldValue: any;
+      newValue: any;
+      section?: string;
+    }>): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:saveStructured", instanceId, configPath, modifications),
+
+    /** Get all config modifications history for an instance */
+    getModifications: (instanceId: string): Promise<Array<{
+      id: string;
+      timestamp: string;
+      configPath: string;
+      modifications: Array<{
+        key: string;
+        oldValue: any;
+        newValue: any;
+        section?: string;
+      }>;
+    }>> => ipcRenderer.invoke("config:getModifications", instanceId),
+
+    /** Rollback a specific config change set */
+    rollbackChanges: (instanceId: string, changeSetId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("config:rollbackChanges", instanceId, changeSetId),
   },
 
   // ========== EVENTS ==========

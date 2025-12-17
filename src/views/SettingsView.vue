@@ -6,6 +6,7 @@ import { useDialog } from "@/composables/useDialog";
 import { useSidebar } from "@/composables/useSidebar";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
+import MinecraftInstallations from "@/components/ui/MinecraftInstallations.vue";
 import {
   Settings as SettingsIcon,
   FolderOpen,
@@ -95,6 +96,7 @@ const tabs = [
   { id: "general", name: "General", icon: SettingsIcon },
   { id: "appearance", name: "Appearance", icon: Palette },
   { id: "sidebar", name: "Sidebar", icon: Sliders },
+  { id: "minecraft", name: "Minecraft", icon: Globe },
   { id: "library", name: "Library", icon: Database },
   { id: "shortcuts", name: "Shortcuts", icon: Keyboard },
   { id: "about", name: "About", icon: Info },
@@ -507,6 +509,13 @@ onMounted(() => {
                 </button>
               </div>
             </div>
+          </section>
+        </div>
+
+        <!-- Minecraft Installations Tab -->
+        <div v-if="currentTab === 'minecraft'" class="space-y-8">
+          <section class="space-y-4">
+            <MinecraftInstallations />
           </section>
         </div>
 

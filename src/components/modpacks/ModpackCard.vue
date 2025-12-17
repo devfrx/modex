@@ -10,12 +10,15 @@ import {
   Heart,
   Share2,
   RefreshCw,
-  Calendar,
   Clock,
   Flame,
   Globe,
   Link2,
+  Play,
+  MoreHorizontal,
+  CircleDot,
 } from "lucide-vue-next";
+import { ref } from "vue";
 import Button from "@/components/ui/Button.vue";
 
 interface ModpackWithCount {
@@ -34,6 +37,12 @@ interface ModpackWithCount {
   cf_file_id?: number;
   cf_slug?: string;
   share_code?: string;
+  // Remote sync
+  remote_source?: {
+    url?: string;
+  };
+  // Unsaved changes flag
+  hasUnsavedChanges?: boolean;
 }
 
 defineProps<{
@@ -51,7 +60,10 @@ defineEmits<{
   (e: "toggle-favorite", id: string): void;
   (e: "share", id: string, name: string): void;
   (e: "convert", id: string): void;
+  (e: "sync", id: string, name: string): void;
 }>();
+
+const showMoreActions = ref(false);
 
 function handleImageError(event: Event) {
   const target = event.target as HTMLImageElement;
@@ -77,148 +89,192 @@ function formatDate(dateStr?: string) {
     return "Unknown";
   }
 }
+
+function closeMoreActions() {
+  showMoreActions.value = false;
+}
 </script>
 
 <template>
   <div
     class="glass-card relative rounded-xl group transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1"
-    :class="{ 'ring-2 ring-primary bg-primary/5': selected }" @click="$emit('toggle-select', modpack.id)">
+    :class="{ 'ring-2 ring-primary bg-primary/5': selected }" @click="$emit('toggle-select', modpack.id)"
+    @mouseleave="closeMoreActions">
     <!-- Image Background -->
     <div v-if="modpack.image_url" class="absolute inset-0 z-0 overflow-hidden rounded-xl">
-      <img :src="modpack.image_url.startsWith('http') ||
-        modpack.image_url.startsWith('file:')
+      <img :src="modpack.image_url.startsWith('http') || modpack.image_url.startsWith('file:')
         ? modpack.image_url
-        : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
-        "
-        class="w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-all duration-500 scale-100 group-hover:scale-105"
+        : 'atom:///' + modpack.image_url.replace(/\\/g, '/')"
+        class="w-full h-full object-cover opacity-25 group-hover:opacity-35 transition-all duration-500 scale-100 group-hover:scale-105"
         alt="" @error="handleImageError" />
-      <div class="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
+      <div class="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-background/40" />
     </div>
 
     <!-- Hover Gradient Effect (no image) -->
     <div v-else
-      class="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-xl" />
+      class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-xl" />
 
-    <!-- Favorite Button -->
-    <button
-      class="absolute top-3 left-3 z-20 transition-all duration-200 p-2 rounded-full bg-background/40 backdrop-blur-md border border-white/10 hover:bg-background/60 hover:scale-110"
-      :class="favorite
-        ? 'opacity-100 scale-100'
-        : 'opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100'
-        " @click.stop="$emit('toggle-favorite', modpack.id)" title="Toggle favorite">
-      <Heart class="w-4 h-4 transition-colors" :class="favorite
-        ? 'fill-rose-500 text-rose-500'
-        : 'text-muted-foreground hover:text-rose-500'
-        " />
-    </button>
+    <!-- Top Bar: Favorite + Selection -->
+    <div class="absolute top-3 left-3 right-3 z-20 flex items-center justify-between">
+      <!-- Favorite Button -->
+      <button
+        class="transition-all duration-200 p-2 rounded-full bg-background/60 backdrop-blur-md border border-white/10 hover:bg-background/80 hover:scale-110"
+        :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+        @click.stop="$emit('toggle-favorite', modpack.id)" title="Toggle favorite">
+        <Heart class="w-4 h-4 transition-colors"
+          :class="favorite ? 'fill-rose-500 text-rose-500' : 'text-muted-foreground hover:text-rose-500'" />
+      </button>
 
-    <!-- Selection Checkbox -->
-    <div class="absolute top-3 right-3 z-20 transition-all duration-200"
-      :class="selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
-      <div class="w-6 h-6 rounded-md border flex items-center justify-center transition-colors shadow-sm" :class="selected
-        ? 'bg-primary border-primary'
-        : 'bg-background/50 border-border hover:border-primary'
-        ">
-        <Check v-if="selected" class="w-4 h-4 text-primary-foreground" />
+      <!-- Selection Checkbox -->
+      <div class="transition-all duration-200" :class="selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
+        <div
+          class="w-6 h-6 rounded-md border flex items-center justify-center transition-colors shadow-sm backdrop-blur-md"
+          :class="selected ? 'bg-primary border-primary' : 'bg-background/60 border-border hover:border-primary'">
+          <Check v-if="selected" class="w-4 h-4 text-primary-foreground" />
+        </div>
       </div>
     </div>
 
     <div class="relative z-10 p-5 flex flex-col h-full">
-      <div class="flex items-start justify-between mb-4">
+      <!-- Header with Icon -->
+      <div class="flex items-start gap-3 mb-3">
         <div
-          class="p-3 backdrop-blur-md rounded-2xl group-hover:bg-primary/20 group-hover:text-primary transition-all duration-300 shadow-sm border border-white/5"
-          :class="modpack.image_url ? 'bg-background/40' : 'bg-secondary/40'">
-          <Package v-if="!modpack.image_url" class="w-6 h-6" />
-          <Image v-else class="w-6 h-6" />
+          class="shrink-0 p-2.5 backdrop-blur-md rounded-xl transition-all duration-300 shadow-sm border border-white/5"
+          :class="modpack.image_url ? 'bg-background/50' : 'bg-secondary/50'">
+          <Package v-if="!modpack.image_url" class="w-5 h-5 text-muted-foreground" />
+          <Image v-else class="w-5 h-5 text-muted-foreground" />
         </div>
-      </div>
-
-      <div class="flex-1">
-        <h3
-          class="font-bold text-lg mb-1.5 line-clamp-1 tracking-tight group-hover:text-primary transition-colors pr-6">
-          {{ modpack.name }}
-        </h3>
-
-        <p class="text-sm text-muted-foreground line-clamp-2 mb-4 leading-relaxed">
-          {{ modpack.description || "No description available" }}
-        </p>
-
-        <!-- Info Row -->
-        <div class="flex items-center gap-2 flex-wrap text-xs mb-4">
-          <div class="flex items-center gap-2 text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md">
-            <span class="w-1.5 h-1.5 rounded-full bg-primary" />
-            <span class="text-foreground font-medium">{{
-              modpack.modCount
-            }}</span>
-            mods
-          </div>
-          <span v-if="modpack.minecraft_version"
-            class="px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium border border-emerald-500/20">
-            {{ modpack.minecraft_version }}
-          </span>
-          <span v-if="modpack.loader"
-            class="px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-medium capitalize border border-blue-500/20">
-            {{ modpack.loader }}
-          </span>
-          <!-- Source indicators -->
-          <span v-if="modpack.cf_project_id"
-            class="px-2 py-1 rounded-md bg-orange-500/10 text-orange-500 text-[10px] font-medium border border-orange-500/20 flex items-center gap-1"
-            title="Imported from CurseForge">
-            <Flame class="w-3 h-3" />
-            CF
-          </span>
-          <span v-if="modpack.share_code"
-            class="px-2 py-1 rounded-md bg-purple-500/10 text-purple-500 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
-            title="Linked with Gist">
-            <Link2 class="w-3 h-3" />
-            Gist
-          </span>
-        </div>
-      </div>
-
-      <!-- Footer: Dates & Actions -->
-      <div class="pt-4 border-t border-border/50 flex items-center justify-between">
-        <div class="flex flex-col gap-0.5 text-[10px] text-muted-foreground opacity-70">
-          <div class="flex items-center gap-1.5">
+        <div class="flex-1 min-w-0 pt-0.5">
+          <h3 class="font-bold text-base line-clamp-1 tracking-tight group-hover:text-primary transition-colors">
+            {{ modpack.name }}
+          </h3>
+          <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
             <Clock class="w-3 h-3" />
-            <span>{{
-              formatDate(modpack.updated_at || modpack.created_at)
-            }}</span>
+            <span>{{ formatDate(modpack.updated_at || modpack.created_at) }}</span>
           </div>
         </div>
+      </div>
 
-        <div class="flex items-center gap-1" @click.stop>
+      <!-- Description -->
+      <p class="text-sm text-muted-foreground line-clamp-2 mb-3 leading-relaxed flex-1">
+        {{ modpack.description || "No description available" }}
+      </p>
+
+      <!-- Tags Row -->
+      <div class="flex items-center gap-1.5 flex-wrap mb-4">
+        <!-- Mod count -->
+        <div class="flex items-center gap-1.5 text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md text-xs">
+          <span class="w-1.5 h-1.5 rounded-full bg-primary" />
+          <span class="text-foreground font-medium">{{ modpack.modCount }}</span>
+          <span class="text-[10px]">mods</span>
+        </div>
+
+        <!-- MC Version -->
+        <span v-if="modpack.minecraft_version"
+          class="px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium border border-emerald-500/20">
+          {{ modpack.minecraft_version }}
+        </span>
+
+        <!-- Loader -->
+        <span v-if="modpack.loader"
+          class="px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-medium capitalize border border-blue-500/20">
+          {{ modpack.loader }}
+        </span>
+
+        <!-- CurseForge source -->
+        <span v-if="modpack.cf_project_id"
+          class="px-1.5 py-1 rounded-md bg-orange-500/10 text-orange-500 text-[10px] font-medium border border-orange-500/20 flex items-center gap-0.5"
+          title="Imported from CurseForge">
+          <Flame class="w-3 h-3" />
+        </span>
+
+        <!-- Linked with Gist -->
+        <span v-if="modpack.remote_source?.url"
+          class="px-1.5 py-1 rounded-md bg-purple-500/10 text-purple-500 text-[10px] font-medium border border-purple-500/20 flex items-center gap-0.5"
+          title="Linked with remote Gist - receives updates">
+          <Link2 class="w-3 h-3" />
+        </span>
+
+        <!-- Shareable -->
+        <span v-else-if="modpack.share_code"
+          class="px-1.5 py-1 rounded-md bg-cyan-500/10 text-cyan-500 text-[10px] font-medium border border-cyan-500/20 flex items-center gap-0.5"
+          title="Has share code - can be shared via Gist">
+          <Globe class="w-3 h-3" />
+        </span>
+
+        <!-- Unsaved Changes -->
+        <span v-if="modpack.hasUnsavedChanges"
+          class="px-1.5 py-1 rounded-md bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-[10px] font-medium border border-yellow-500/20 flex items-center gap-0.5"
+          title="Unsaved config changes - commit a new version to save">
+          <CircleDot class="w-3 h-3" />
+        </span>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="pt-3 border-t border-border/30 flex items-center gap-2" @click.stop>
+        <!-- Primary: Play Button -->
+        <Button variant="default" size="sm"
+          class="flex-1 gap-1.5 h-9 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 border-0"
+          @click.stop="$emit('sync', modpack.id, modpack.name)" title="Play / Sync to Minecraft">
+          <Play class="w-4 h-4 fill-current" />
+          <span class="font-medium">Play</span>
+        </Button>
+
+        <!-- Secondary Actions -->
+        <Button variant="ghost" size="icon"
+          class="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg"
+          @click.stop="$emit('edit', modpack.id)" title="Edit Modpack">
+          <Edit class="w-4 h-4" />
+        </Button>
+
+        <Button variant="ghost" size="icon"
+          class="h-9 w-9 text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10 rounded-lg"
+          @click.stop="$emit('share', modpack.id, modpack.name)" title="Share / Export">
+          <Share2 class="w-4 h-4" />
+        </Button>
+
+        <!-- More Actions Dropdown -->
+        <div class="relative">
           <Button variant="ghost" size="icon"
-            class="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-            @click.stop="$emit('open-folder', modpack.id)" title="Open Folder">
-            <FolderOpen class="w-4 h-4" />
+            class="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg"
+            @click.stop="showMoreActions = !showMoreActions" title="More actions">
+            <MoreHorizontal class="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="icon"
-            class="h-8 w-8 text-muted-foreground hover:text-purple-500 hover:bg-purple-500/10 rounded-lg transition-colors"
-            @click.stop="$emit('share', modpack.id, modpack.name)" title="Share / Export">
-            <Share2 class="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon"
-            class="h-8 w-8 text-muted-foreground hover:text-cyan-500 hover:bg-cyan-500/10 rounded-lg transition-colors"
-            @click.stop="$emit('clone', modpack.id)"
-            :title="modpack.cf_project_id ? 'Clone (detach from CurseForge)' : 'Clone Modpack'">
-            <Copy class="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon"
-            class="h-8 w-8 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-colors"
-            @click.stop="$emit('convert', modpack.id)" title="Convert to different version/loader">
-            <RefreshCw class="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon"
-            class="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-            @click.stop="$emit('edit', modpack.id)" title="Edit">
-            <Edit class="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon"
-            class="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-            @click.stop="$emit('delete', modpack.id)" title="Delete">
-            <Trash2 class="w-4 h-4" />
-          </Button>
+
+          <!-- Dropdown Menu -->
+          <Transition enter-active-class="transition duration-100 ease-out"
+            enter-from-class="transform scale-95 opacity-0" enter-to-class="transform scale-100 opacity-100"
+            leave-active-class="transition duration-75 ease-in" leave-from-class="transform scale-100 opacity-100"
+            leave-to-class="transform scale-95 opacity-0">
+            <div v-if="showMoreActions"
+              class="absolute right-0 top-full mt-2 w-44 rounded-lg bg-popover border border-border shadow-xl z-[100] py-1 overflow-hidden">
+              <button
+                class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-accent transition-colors"
+                @click.stop="$emit('open-folder', modpack.id); closeMoreActions()">
+                <FolderOpen class="w-4 h-4 text-muted-foreground" />
+                Open Folder
+              </button>
+              <button
+                class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-accent transition-colors"
+                @click.stop="$emit('clone', modpack.id); closeMoreActions()">
+                <Copy class="w-4 h-4 text-muted-foreground" />
+                Clone
+              </button>
+              <button
+                class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-accent transition-colors"
+                @click.stop="$emit('convert', modpack.id); closeMoreActions()">
+                <RefreshCw class="w-4 h-4 text-muted-foreground" />
+                Convert Version
+              </button>
+              <div class="h-px bg-border my-1" />
+              <button
+                class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-destructive/10 text-destructive transition-colors"
+                @click.stop="$emit('delete', modpack.id); closeMoreActions()">
+                <Trash2 class="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>

@@ -9,14 +9,12 @@ import Input from "@/components/ui/Input.vue";
 import MinecraftInstallations from "@/components/ui/MinecraftInstallations.vue";
 import {
   Settings as SettingsIcon,
-  FolderOpen,
   Database,
   Palette,
   Info,
   Trash2,
   RefreshCw,
   AlertTriangle,
-  ExternalLink,
   Sun,
   Moon,
   Monitor,
@@ -71,7 +69,6 @@ const toast = useToast();
 const { confirm } = useDialog();
 
 // Settings State
-const libraryPath = ref("");
 const {
   currentTheme,
   setTheme,
@@ -84,7 +81,6 @@ const {
 const accentColor = ref("purple");
 const modCount = ref(0);
 const modpackCount = ref(0);
-const totalSize = ref("0 MB");
 const isClearingData = ref(false);
 const apiAvailable = ref(true);
 const cfApiKey = ref("");
@@ -119,25 +115,19 @@ const accentColors = [
 // Keyboard shortcuts
 const shortcuts = [
   { keys: "Ctrl + F", action: "Search mods/modpacks" },
-  { keys: "Ctrl + N", action: "Create new modpack" },
-  { keys: "Ctrl + I", action: "Import mods" },
+  { keys: "Ctrl + N", action: "Create modpack from selection" },
   { keys: "Ctrl + A", action: "Select all" },
   { keys: "Delete", action: "Delete selected" },
-  { keys: "Escape", action: "Clear selection / Close" },
+  { keys: "Escape", action: "Clear selection / Close dialog" },
+  { keys: "1", action: "Switch to Grid view" },
+  { keys: "2", action: "Switch to List view" },
+  { keys: "3", action: "Switch to Compact view" },
 ];
 
 // Helper function for slider input handling
 function handleSliderInput(event: Event, property: keyof typeof customization.value) {
   const target = event.target as HTMLInputElement;
   updateCustomization({ [property]: parseInt(target.value) });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 // Load settings
@@ -153,10 +143,6 @@ async function loadSettings() {
     const modpacks = await window.api.modpacks.getAll();
     modCount.value = mods.length;
     modpackCount.value = modpacks.length;
-
-    // Metadata-only mode: no local file storage
-    totalSize.value = "N/A (metadata only)";
-    libraryPath.value = "Mods are stored as metadata references only";
 
     // Load API Key
     cfApiKey.value = await window.api.updates.getApiKey("curseforge");
@@ -183,15 +169,7 @@ async function checkForAppUpdates() {
   }, 1500);
 }
 
-async function openLibraryFolder() {
-  // Not available in metadata-only mode
-  toast.info(
-    "Not Available",
-    "Open Library is not available. Mods are stored as API references only, not as local files."
-  );
-}
-
-function applyAccentColor(color: (typeof accentColors)[0]) {
+async function applyAccentColor(color: (typeof accentColors)[0]) {
   accentColor.value = color.name;
   localStorage.setItem("modex:accent", color.name);
   document.documentElement.style.setProperty("--primary", color.value);
@@ -533,7 +511,7 @@ onMounted(() => {
               </Button>
             </div>
 
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-2 gap-4">
               <div
                 class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
                 <div class="text-3xl font-bold text-primary">
@@ -548,30 +526,25 @@ onMounted(() => {
                 </div>
                 <div class="text-sm text-muted-foreground mt-1">Modpacks</div>
               </div>
-              <div
-                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
-                <div class="text-3xl font-bold text-primary">
-                  {{ totalSize }}
-                </div>
-                <div class="text-sm text-muted-foreground mt-1">Total Size</div>
-              </div>
             </div>
           </section>
 
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <FolderOpen class="w-4 h-4 text-primary" />
-              Storage Location
+              <Database class="w-4 h-4 text-primary" />
+              Storage Information
             </h3>
             <div class="p-5 rounded-xl border border-border bg-card/50">
-              <div class="space-y-2">
-                <label class="text-sm font-medium">Mod Library Path</label>
-                <div class="flex gap-2">
-                  <Input v-model="libraryPath" readonly class="flex-1 font-mono text-sm" />
-                  <Button variant="outline" @click="openLibraryFolder">
-                    <ExternalLink class="w-4 h-4 mr-2" />
-                    Open
-                  </Button>
+              <div class="flex items-start gap-3">
+                <div class="p-2 rounded-lg bg-primary/10">
+                  <Info class="w-5 h-5 text-primary" />
+                </div>
+                <div class="flex-1">
+                  <div class="font-medium">Metadata-Only Storage</div>
+                  <p class="text-sm text-muted-foreground mt-1">
+                    ModEx stores mod and modpack information as metadata references from CurseForge.
+                    Actual mod files are only downloaded when you sync a modpack to a Minecraft installation.
+                  </p>
                 </div>
               </div>
             </div>

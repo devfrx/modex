@@ -32,6 +32,10 @@ import {
   History,
   ExternalLink,
   Info,
+  HelpCircle,
+  ChevronDown,
+  BookOpen,
+  Lightbulb,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -90,6 +94,9 @@ const activeTab = ref<
   | "remote"
 >("mods");
 const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
+
+// Help Guide State
+const showHelp = ref(false);
 
 // Linked instance (for config sync in version control)
 const linkedInstanceId = ref<string | null>(null);
@@ -1258,123 +1265,459 @@ watch(
   <div v-if="isOpen"
     class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
     <div
-      class="bg-background border border-border/50 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-      <!-- Compact Header -->
-      <div class="shrink-0 border-b border-border/50 bg-gradient-to-r from-card/80 to-card/40">
-        <!-- Top Bar -->
-        <div class="px-5 py-3 flex items-center gap-4">
-          <!-- Pack Info -->
-          <div class="flex items-center gap-3 min-w-0 flex-1">
-            <!-- Thumbnail -->
-            <div v-if="modpack?.image_url" class="w-10 h-10 rounded-lg overflow-hidden ring-2 ring-primary/20 shrink-0">
-              <img :src="modpack.image_url.startsWith('http') ||
-                modpack.image_url.startsWith('file:')
-                ? modpack.image_url
-                : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
-                " class="w-full h-full object-cover" />
-            </div>
-            <div v-else
-              class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-primary/20 shrink-0">
-              <Package class="w-5 h-5 text-primary" />
+      class="bg-background border border-border/50 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+
+      <!-- Modern Header with Hero Style -->
+      <div class="shrink-0 relative overflow-hidden">
+        <!-- Background gradient -->
+        <div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-card to-card/80"></div>
+        <div
+          class="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent">
+        </div>
+
+        <!-- Content -->
+        <div class="relative">
+          <!-- Top Bar -->
+          <div class="px-6 py-4 flex items-start gap-5">
+            <!-- Pack Info with larger thumbnail -->
+            <div class="flex items-start gap-4 min-w-0 flex-1">
+              <!-- Thumbnail - Larger -->
+              <div v-if="modpack?.image_url"
+                class="w-16 h-16 rounded-xl overflow-hidden ring-2 ring-white/10 shadow-lg shrink-0">
+                <img :src="modpack.image_url.startsWith('http') ||
+                  modpack.image_url.startsWith('file:')
+                  ? modpack.image_url
+                  : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
+                  " class="w-full h-full object-cover" />
+              </div>
+              <div v-else
+                class="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center ring-2 ring-white/10 shadow-lg shrink-0">
+                <Package class="w-8 h-8 text-primary" />
+              </div>
+
+              <!-- Name & Meta -->
+              <div class="min-w-0 flex-1 py-1">
+                <div class="flex items-center gap-3 mb-2">
+                  <h2 class="text-xl font-bold truncate text-foreground">
+                    {{ modpack?.name || "Loading..." }}
+                  </h2>
+                  <span v-if="modpack?.version"
+                    class="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
+                    v{{ modpack.version }}
+                  </span>
+                  <span v-if="modpack?.remote_source?.url"
+                    class="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
+                    title="This modpack is linked to a remote source">
+                    <Share2 class="w-3 h-3" />
+                    Linked
+                  </span>
+                </div>
+
+                <!-- Stats Row -->
+                <div class="flex items-center gap-3 flex-wrap">
+                  <div v-if="modpack?.minecraft_version"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span class="text-xs font-medium text-emerald-400">{{ modpack.minecraft_version }}</span>
+                  </div>
+                  <div v-if="modpack?.loader"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                    <span class="text-xs font-medium text-blue-400 capitalize">{{ modpack.loader }}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 border border-border/50">
+                    <Layers class="w-3.5 h-3.5 text-muted-foreground" />
+                    <span class="text-xs font-medium text-muted-foreground">{{ currentMods.length }} mods</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Name & Meta -->
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <h2 class="text-lg font-bold truncate">
-                  {{ modpack?.name || "Loading..." }}
-                </h2>
-                <span v-if="modpack?.version" class="text-xs text-muted-foreground font-mono">v{{ modpack.version
-                }}</span>
-                <span v-if="modpack?.remote_source?.url"
-                  class="px-1.5 py-0.5 rounded-md bg-purple-500/15 text-purple-500 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
-                  title="This modpack is linked to a remote source">
-                  <Share2 class="w-3 h-3" />
-                  Linked
-                </span>
+            <!-- Actions - Vertical Stack Style -->
+            <div class="flex items-center gap-2 shrink-0">
+              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg" @click="selectImage"
+                title="Set cover image">
+                <ImagePlus class="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg"
+                :disabled="!modpack?.minecraft_version || !modpack?.loader" :title="!modpack?.minecraft_version || !modpack?.loader
+                  ? 'Set version and loader first'
+                  : 'Check updates'
+                  " @click="showUpdatesDialog = true">
+                <ArrowUpCircle class="w-4 h-4" />
+              </Button>
+              <div class="w-px h-6 bg-border/50 mx-1"></div>
+              <Button variant="outline" size="sm" class="h-9 px-3 gap-2 rounded-lg" @click="$emit('export')">
+                <Download class="w-4 h-4" />
+                <span>Export</span>
+              </Button>
+              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg hover:bg-red-500/10 hover:text-red-400"
+                @click="$emit('close')">
+                <X class="w-5 h-5" />
+              </Button>
+            </div>
+          </div>
+
+          <!-- Remote Update Banner -->
+          <div v-if="updateResult?.hasUpdate" class="px-6 pb-4">
+            <UpdateAvailableBanner :current-version="modpack?.version || 'unknown'" :new-version="updateResult.remoteManifest?.modpack.version || 'unknown'
+              " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
+          </div>
+
+          <!-- Tab Navigation - Modern Segment Style -->
+          <div class="px-6 pb-4">
+            <div class="flex items-center gap-1 p-1 rounded-xl bg-muted/30 border border-border/30 w-fit">
+              <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'mods'">
+                <Layers class="w-4 h-4" />
+                <span>Resources</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'discover' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'discover'">
+                <Sparkles class="w-4 h-4" />
+                <span>Discover</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'health'">
+                <AlertCircle class="w-4 h-4" />
+                <span>Health</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'versions' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'versions'">
+                <GitBranch class="w-4 h-4" />
+                <span>History</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'profiles' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'profiles'">
+                <Users class="w-4 h-4" />
+                <span>Profiles</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'remote'">
+                <Globe class="w-4 h-4" />
+                <span>Remote</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'settings'">
+                <Settings class="w-4 h-4" />
+                <span>Settings</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom border -->
+        <div
+          class="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent">
+        </div>
+      </div>
+
+      <!-- Help Guide Banner (collapsible) -->
+      <div class="shrink-0 border-b border-border/30">
+        <!-- Help Toggle Button -->
+        <button @click="showHelp = !showHelp"
+          class="w-full px-6 py-2 flex items-center justify-between text-sm hover:bg-muted/30 transition-colors">
+          <div class="flex items-center gap-2">
+            <HelpCircle class="w-4 h-4 text-primary" />
+            <span class="text-muted-foreground">
+              <span class="font-medium text-foreground">Need help?</span>
+              Click to see how to use this section
+            </span>
+          </div>
+          <ChevronDown :class="['w-4 h-4 text-muted-foreground transition-transform', showHelp && 'rotate-180']" />
+        </button>
+
+        <!-- Help Content (expanded) -->
+        <div v-if="showHelp" class="px-6 pb-4 pt-2 bg-muted/20 border-t border-border/20">
+          <!-- Resources Tab Help -->
+          <div v-if="activeTab === 'mods'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen class="w-5 h-5 text-primary" />
               </div>
-              <div class="flex items-center gap-2 text-xs">
-                <span v-if="modpack?.minecraft_version"
-                  class="px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium">
-                  {{ modpack.minecraft_version }}
-                </span>
-                <span v-if="modpack?.loader"
-                  class="px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-500 font-medium capitalize">
-                  {{ modpack.loader }}
-                </span>
-                <span class="text-muted-foreground">
-                  <Layers class="w-3 h-3 inline mr-0.5" />
-                  {{ currentMods.length }} mods
-                </span>
+              <div class="flex-1 min-w-0">
+                <h4 class="font-semibold text-foreground mb-2">📦 Resources - Manage Your Mod Content</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  This is where you manage all the mods, resource packs, and shaders in your modpack.
+                </p>
+
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
+                      <span
+                        class="w-5 h-5 rounded bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-xs">1</span>
+                      Left Panel: Your Installed Content
+                    </h5>
+                    <ul class="space-y-1 text-muted-foreground ml-6 list-disc">
+                      <li><b>Toggle ON/OFF:</b> Click the green switch to enable/disable mods</li>
+                      <li><b>Checkbox:</b> Select multiple mods for bulk actions</li>
+                      <li><b>Trash icon:</b> Remove a mod from the modpack</li>
+                      <li><b>Search:</b> Filter by name</li>
+                      <li><b>Quick filters:</b> Show all, only incompatible, or only disabled</li>
+                    </ul>
+                  </div>
+
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
+                      <span
+                        class="w-5 h-5 rounded bg-blue-500/20 text-blue-500 flex items-center justify-center text-xs">2</span>
+                      Right Panel: Your Library
+                    </h5>
+                    <ul class="space-y-1 text-muted-foreground ml-6 list-disc">
+                      <li><b>Green mods:</b> Compatible with your modpack version</li>
+                      <li><b>Dimmed mods:</b> Incompatible (wrong version or loader)</li>
+                      <li><b>+ Button:</b> Click to add a compatible mod</li>
+                      <li><b>Lock icon:</b> Cannot be added (incompatible)</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div
+                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <span><b>Tip:</b> Use the sub-tabs above to switch between Mods, Resource Packs, and Shaders!</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Actions -->
-          <div class="flex items-center gap-1.5 shrink-0">
-            <Button variant="ghost" size="sm" class="h-8 px-2.5 gap-1.5" @click="selectImage" title="Set cover image">
-              <ImagePlus class="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm" class="h-8 px-2.5 gap-1.5"
-              :disabled="!modpack?.minecraft_version || !modpack?.loader" :title="!modpack?.minecraft_version || !modpack?.loader
-                ? 'Set version and loader first'
-                : 'Check updates'
-                " @click="showUpdatesDialog = true">
-              <ArrowUpCircle class="w-4 h-4" />
-            </Button>
-            <Button variant="outline" size="sm" class="h-8 px-3 gap-1.5" @click="$emit('export')">
-              <Download class="w-4 h-4" />
-              <span class="hidden sm:inline">Export</span>
-            </Button>
-            <Button variant="ghost" size="sm" class="h-8 w-8 p-0 ml-1" @click="$emit('close')">
-              <X class="w-5 h-5" />
-            </Button>
+          <!-- Discover Tab Help -->
+          <div v-else-if="activeTab === 'discover'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen class="w-5 h-5 text-primary" />
+              </div>
+              <div class="flex-1">
+                <h4 class="font-semibold text-foreground mb-2">✨ Discover - Find New Content</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Get smart recommendations for mods that work well with your current modpack.
+                </p>
+
+                <div class="space-y-2 text-sm">
+                  <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                    <li><b>Smart suggestions:</b> Based on categories of mods you already have</li>
+                    <li><b>Shuffle button:</b> Click to see different recommendations</li>
+                    <li><b>Content tabs:</b> Switch between Mods, Resource Packs, and Shaders</li>
+                    <li><b>Add button:</b> Click on a card to add it to your modpack</li>
+                    <li><b>External link:</b> Open on CurseForge to see more details</li>
+                  </ul>
+                </div>
+
+                <div
+                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <span><b>Tip:</b> The recommendations improve as you add more mods - it learns what categories you
+                    like!</span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <!-- Remote Update Banner -->
-        <div v-if="updateResult?.hasUpdate" class="px-5 pb-4">
-          <UpdateAvailableBanner :current-version="modpack?.version || 'unknown'" :new-version="updateResult.remoteManifest?.modpack.version || 'unknown'
-            " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
-        </div>
+          <!-- Health Tab Help -->
+          <div v-else-if="activeTab === 'health'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen class="w-5 h-5 text-primary" />
+              </div>
+              <div class="flex-1">
+                <h4 class="font-semibold text-foreground mb-2">🏥 Health - Diagnose Modpack Issues</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Analyze your modpack for problems like missing dependencies, conflicts, and performance issues.
+                </p>
 
-        <!-- Tab Navigation - Modern Pill Style -->
-        <div class="px-5 pb-3 flex items-center gap-1 overflow-x-auto scrollbar-none">
-          <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
-            @click="activeTab = 'mods'">
-            <Layers class="w-4 h-4" />
-            <span>Resources</span>
-          </button>
-          <button class="tab-pill" :class="activeTab === 'discover' ? 'tab-pill-active' : 'tab-pill-inactive'"
-            @click="activeTab = 'discover'">
-            <Sparkles class="w-4 h-4" />
-            <span>Discover</span>
-          </button>
-          <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
-            @click="activeTab = 'health'">
-            <AlertCircle class="w-4 h-4" />
-            <span>Health</span>
-          </button>
-          <button class="tab-pill" :class="activeTab === 'versions' ? 'tab-pill-active' : 'tab-pill-inactive'"
-            @click="activeTab = 'versions'">
-            <GitBranch class="w-4 h-4" />
-            <span>History</span>
-          </button>
-          <button class="tab-pill" :class="activeTab === 'profiles' ? 'tab-pill-active' : 'tab-pill-inactive'"
-            @click="activeTab = 'profiles'">
-            <Users class="w-4 h-4" />
-            <span>Profiles</span>
-          </button>
-          <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
-            @click="activeTab = 'remote'">
-            <Globe class="w-4 h-4" />
-            <span>Remote</span>
-          </button>
-          <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
-            @click="activeTab = 'settings'">
-            <Settings class="w-4 h-4" />
-            <span>Settings</span>
-          </button>
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">What it checks:</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li><b>Missing dependencies:</b> Mods that require other mods you don't have</li>
+                      <li><b>Conflicts:</b> Mods that are known to cause issues together</li>
+                      <li><b>Performance:</b> Estimates RAM needs and performance impact</li>
+                      <li><b>Dependency tree:</b> Visual map of which mods depend on which</li>
+                    </ul>
+                  </div>
+
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">How to use:</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li>Click <b>"Analyze"</b> to run a full check</li>
+                      <li>Review any <b>red warnings</b> for critical issues</li>
+                      <li>Use <b>"Add"</b> buttons to fix missing dependencies</li>
+                      <li>Check the <b>RAM estimate</b> to adjust your game settings</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div
+                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <span><b>Tip:</b> Run an analysis after adding several mods to catch any issues early!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Versions Tab Help -->
+          <div v-else-if="activeTab === 'versions'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen class="w-5 h-5 text-primary" />
+              </div>
+              <div class="flex-1">
+                <h4 class="font-semibold text-foreground mb-2">📜 History - Version Control</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Save snapshots of your modpack and rollback if something breaks. Like "undo" but for your entire
+                  modpack!
+                </p>
+
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">Key features:</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li><b>Save Version:</b> Create a snapshot with a description</li>
+                      <li><b>Timeline view:</b> See all your saved versions</li>
+                      <li><b>Rollback:</b> Restore to any previous version</li>
+                      <li><b>Change tracking:</b> See exactly what changed between versions</li>
+                    </ul>
+                  </div>
+
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">When to save:</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li>Before adding lots of new mods</li>
+                      <li>When everything is working perfectly</li>
+                      <li>Before major changes to configs</li>
+                      <li>Before updating mods</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div
+                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <span><b>Tip:</b> Always write a descriptive message when saving - "Added Biomes O' Plenty" is better
+                    than "update"!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Profiles Tab Help -->
+          <div v-else-if="activeTab === 'profiles'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen class="w-5 h-5 text-primary" />
+              </div>
+              <div class="flex-1">
+                <h4 class="font-semibold text-foreground mb-2">👥 Profiles - Save Mod Configurations</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Create and switch between different mod setups without removing mods. Perfect for different
+                  playstyles!
+                </p>
+
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">Example profiles:</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li><b>Performance Mode:</b> Only essential mods enabled</li>
+                      <li><b>Full Experience:</b> All mods enabled</li>
+                      <li><b>Building Only:</b> Decorative and building mods</li>
+                      <li><b>Adventure Mode:</b> RPG and exploration mods</li>
+                    </ul>
+                  </div>
+
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">How to use:</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li>Enable/disable mods as you want them</li>
+                      <li>Click <b>"Save Current Profile"</b></li>
+                      <li>Give it a name</li>
+                      <li>Click <b>"Load"</b> anytime to restore that setup</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div
+                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <span><b>Tip:</b> Loading a profile only enables/disables mods - it never removes them!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Remote Tab Help -->
+          <div v-else-if="activeTab === 'remote'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen class="w-5 h-5 text-primary" />
+              </div>
+              <div class="flex-1">
+                <h4 class="font-semibold text-foreground mb-2">🌐 Remote - Updates & Collaboration</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Keep your modpack updated and share it with others using remote sync.
+                </p>
+
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">CurseForge Modpacks:</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li><b>Check for Updates:</b> See if a new version is available</li>
+                      <li><b>View Changelog:</b> See what changed in new versions</li>
+                      <li><b>Apply Update:</b> Update to the latest version</li>
+                      <li><b>Re-search incompatible:</b> Try to find compatible versions for failed mods</li>
+                    </ul>
+                  </div>
+
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground">Remote Sync (for sharing):</h5>
+                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                      <li><b>Export Manifest:</b> Create a shareable JSON file</li>
+                      <li><b>Remote URL:</b> Paste a Gist URL to sync from</li>
+                      <li><b>Auto-check:</b> Enable to check for updates on startup</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div
+                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <span><b>Tip:</b> Use GitHub Gist to host your manifest for free sharing with friends!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings Tab Help -->
+          <div v-else-if="activeTab === 'settings'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen class="w-5 h-5 text-primary" />
+              </div>
+              <div class="flex-1">
+                <h4 class="font-semibold text-foreground mb-2">⚙️ Settings - Modpack Configuration</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Basic settings for your modpack. Some settings are locked after creation to prevent issues.
+                </p>
+
+                <div class="space-y-2 text-sm">
+                  <ul class="space-y-1 text-muted-foreground list-disc ml-4">
+                    <li><b>Name:</b> The display name of your modpack</li>
+                    <li><b>Version:</b> Your modpack's version number (e.g., 1.0.0)</li>
+                    <li><b>Minecraft Version:</b> The game version (🔒 locked after creation)</li>
+                    <li><b>Mod Loader:</b> Forge, Fabric, NeoForge, or Quilt (🔒 locked after creation)</li>
+                    <li><b>Description:</b> A description of what the modpack is about</li>
+                  </ul>
+                </div>
+
+                <div
+                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <span><b>Why locked?</b> Changing Minecraft version or loader would make your mods incompatible.
+                    Create a new modpack instead!</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2296,5 +2639,22 @@ watch(
 /* Card hover effect */
 .mod-card {
   @apply transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30;
+}
+
+/* Help Content Styles */
+.help-content {
+  @apply animate-in fade-in slide-in-from-top-2 duration-200;
+}
+
+.help-content h4 {
+  @apply text-base;
+}
+
+.help-content h5 {
+  @apply text-sm;
+}
+
+.help-content b {
+  @apply text-foreground;
 }
 </style>

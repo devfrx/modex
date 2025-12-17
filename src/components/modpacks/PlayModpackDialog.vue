@@ -114,7 +114,7 @@ async function checkInstance() {
                     totalSize: instanceStats.totalSize,
                 };
             }
-            
+
             // Check sync status
             try {
                 syncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
@@ -203,7 +203,7 @@ async function handleSyncInstance() {
                     totalSize: instanceStats.totalSize,
                 };
             }
-            
+
             // Refresh sync status after successful sync
             syncStatus.value = await window.api.instances.checkSyncStatus(instance.value!.id, props.modpackId);
         } else {
@@ -379,13 +379,13 @@ onMounted(() => {
                                 {{ stats.modCount }} mods
                             </span>
                             <!-- Sync Status Indicator -->
-                            <span v-if="syncStatus?.needsSync" 
+                            <span v-if="syncStatus?.needsSync"
                                 class="header-tag border-amber-500/30 text-amber-400 bg-amber-500/10"
                                 :title="`${syncStatus.totalDifferences} difference(s) with modpack`">
                                 <RefreshCw class="w-3 h-3" />
                                 Needs Sync
                             </span>
-                            <span v-else-if="instance && syncStatus && !syncStatus.needsSync" 
+                            <span v-else-if="instance && syncStatus && !syncStatus.needsSync"
                                 class="header-tag border-green-500/30 text-green-400 bg-green-500/10">
                                 <Check class="w-3 h-3" />
                                 In Sync
@@ -522,7 +522,7 @@ onMounted(() => {
 
                 <!-- Has Instance - Manage Flow -->
                 <template v-else>
-                    <div class="space-y-4">
+                    <div class="flex flex-col h-full gap-4">
                         <!-- Quick Stats Bar -->
                         <div class="quick-stats-bar">
                             <div class="quick-stat">
@@ -552,7 +552,7 @@ onMounted(() => {
                         </div>
 
                         <!-- Tab Content -->
-                        <div class="min-h-[280px]">
+                        <div class="flex-1 flex flex-col min-h-[350px]">
                             <!-- Play Tab -->
                             <div v-if="activeTab === 'play'" class="play-tab-content">
                                 <!-- Play Button Area -->
@@ -590,7 +590,7 @@ onMounted(() => {
                             <!-- Sync Tab -->
                             <div v-if="activeTab === 'sync'" class="space-y-4">
                                 <!-- Sync Status Banner -->
-                                <div v-if="syncStatus?.needsSync" 
+                                <div v-if="syncStatus?.needsSync"
                                     class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
                                     <div class="flex items-center gap-3 mb-3">
                                         <AlertCircle class="w-5 h-5 text-amber-400" />
@@ -599,92 +599,99 @@ onMounted(() => {
                                             {{ syncStatus.totalDifferences }} difference(s)
                                         </span>
                                     </div>
-                                    
+
                                     <!-- Detailed differences -->
                                     <div class="space-y-3 text-sm">
                                         <!-- Missing in Instance -->
                                         <div v-if="syncStatus.missingInInstance.length" class="space-y-1">
                                             <div class="flex items-center gap-2 text-amber-400">
                                                 <Download class="w-4 h-4" />
-                                                <span class="font-medium">Missing in instance ({{ syncStatus.missingInInstance.length }})</span>
+                                                <span class="font-medium">Missing in instance ({{
+                                                    syncStatus.missingInInstance.length }})</span>
                                             </div>
                                             <div class="ml-6 space-y-1 max-h-24 overflow-y-auto">
-                                                <div v-for="item in syncStatus.missingInInstance.slice(0, 5)" :key="item.filename" 
+                                                <div v-for="item in syncStatus.missingInInstance.slice(0, 5)"
+                                                    :key="item.filename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
                                                     <Package v-if="item.type === 'mod'" class="w-3 h-3" />
                                                     <Palette v-else-if="item.type === 'resourcepack'" class="w-3 h-3" />
                                                     <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
                                                     <span class="truncate">{{ item.filename }}</span>
                                                 </div>
-                                                <div v-if="syncStatus.missingInInstance.length > 5" class="text-xs text-muted-foreground/70">
+                                                <div v-if="syncStatus.missingInInstance.length > 5"
+                                                    class="text-xs text-muted-foreground/70">
                                                     ... and {{ syncStatus.missingInInstance.length - 5 }} more
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         <!-- Extra in Instance -->
                                         <div v-if="syncStatus.extraInInstance.length" class="space-y-1">
                                             <div class="flex items-center gap-2 text-blue-400">
                                                 <Package class="w-4 h-4" />
-                                                <span class="font-medium">Extra in instance ({{ syncStatus.extraInInstance.length }})</span>
+                                                <span class="font-medium">Extra in instance ({{
+                                                    syncStatus.extraInInstance.length }})</span>
                                             </div>
                                             <div class="ml-6 space-y-1 max-h-24 overflow-y-auto">
-                                                <div v-for="item in syncStatus.extraInInstance.slice(0, 5)" :key="item.filename" 
+                                                <div v-for="item in syncStatus.extraInInstance.slice(0, 5)"
+                                                    :key="item.filename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
                                                     <Package v-if="item.type === 'mod'" class="w-3 h-3" />
                                                     <Palette v-else-if="item.type === 'resourcepack'" class="w-3 h-3" />
                                                     <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
                                                     <span class="truncate">{{ item.filename }}</span>
                                                 </div>
-                                                <div v-if="syncStatus.extraInInstance.length > 5" class="text-xs text-muted-foreground/70">
+                                                <div v-if="syncStatus.extraInInstance.length > 5"
+                                                    class="text-xs text-muted-foreground/70">
                                                     ... and {{ syncStatus.extraInInstance.length - 5 }} more
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         <!-- Disabled State Mismatch -->
                                         <div v-if="syncStatus.disabledMismatch.length" class="space-y-1">
                                             <div class="flex items-center gap-2 text-orange-400">
                                                 <Settings class="w-4 h-4" />
-                                                <span class="font-medium">Wrong enabled/disabled state ({{ syncStatus.disabledMismatch.length }})</span>
+                                                <span class="font-medium">Wrong enabled/disabled state ({{
+                                                    syncStatus.disabledMismatch.length }})</span>
                                             </div>
                                             <div class="ml-6 space-y-1 max-h-24 overflow-y-auto">
-                                                <div v-for="item in syncStatus.disabledMismatch.slice(0, 5)" :key="item.filename" 
+                                                <div v-for="item in syncStatus.disabledMismatch.slice(0, 5)"
+                                                    :key="item.filename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
                                                     <span class="truncate">{{ item.filename }}</span>
                                                     <span class="text-orange-400/80">({{ item.issue }})</span>
                                                 </div>
-                                                <div v-if="syncStatus.disabledMismatch.length > 5" class="text-xs text-muted-foreground/70">
+                                                <div v-if="syncStatus.disabledMismatch.length > 5"
+                                                    class="text-xs text-muted-foreground/70">
                                                     ... and {{ syncStatus.disabledMismatch.length - 5 }} more
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         <!-- Config Differences -->
                                         <div v-if="syncStatus.configDifferences > 0" class="space-y-1">
                                             <div class="flex items-center gap-2 text-purple-400">
                                                 <FileCode class="w-4 h-4" />
-                                                <span class="font-medium">Config file differences ({{ syncStatus.configDifferences }})</span>
+                                                <span class="font-medium">Config file differences ({{
+                                                    syncStatus.configDifferences }})</span>
                                             </div>
                                             <div class="ml-6 text-muted-foreground text-xs">
                                                 Some config files differ from modpack defaults
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     <!-- Quick Sync Button -->
                                     <div class="mt-4 pt-3 border-t border-amber-500/20">
-                                        <Button 
-                                            @click="handleSyncInstance"
-                                            :disabled="isSyncing"
-                                            variant="outline"
+                                        <Button @click="handleSyncInstance" :disabled="isSyncing" variant="outline"
                                             class="w-full border-amber-500/50 text-amber-400 hover:bg-amber-500/20">
                                             <RefreshCw :class="['w-4 h-4 mr-2', isSyncing && 'animate-spin']" />
                                             Sync Now to Resolve Differences
                                         </Button>
                                     </div>
                                 </div>
-                                <div v-else-if="syncStatus && !syncStatus.needsSync" 
+                                <div v-else-if="syncStatus && !syncStatus.needsSync"
                                     class="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
                                     <div class="flex items-center gap-3">
                                         <Check class="w-5 h-5 text-green-400" />
@@ -694,7 +701,7 @@ onMounted(() => {
                                         All mods, resourcepacks, shaders, and configs match the modpack definition.
                                     </p>
                                 </div>
-                                
+
                                 <!-- Options -->
                                 <div class="options-card">
                                     <h4 class="text-sm font-medium text-foreground flex items-center gap-2 mb-4">
@@ -768,9 +775,9 @@ onMounted(() => {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                    }}</span>
+                                                }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                    }}%</span>
+                                                }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -803,7 +810,7 @@ onMounted(() => {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -813,7 +820,7 @@ onMounted(() => {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -1259,7 +1266,7 @@ onMounted(() => {
 
 /* Config Browser Container */
 .config-browser-container {
-    @apply h-[360px] -mx-6 -mb-4;
+    @apply flex-1 -mx-6 -mb-4 min-h-[450px];
     border-top: 1px solid hsl(var(--border) / 0.5);
 }
 

@@ -2492,7 +2492,7 @@ watch(
       <template #footer>
         <div class="flex gap-2">
           <Button variant="secondary" @click="cancelDependencyImpactAction">Cancel</Button>
-          <Button :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'warning'"
+          <Button :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'outline'"
             @click="confirmDependencyImpactAction">
             {{ dependencyImpact?.action === 'remove' ? 'Remove Anyway' : 'Disable Anyway' }}
           </Button>

@@ -95,6 +95,9 @@ async function initializeBackend() {
   modpackAnalyzerService = new ModpackAnalyzerService();
   instanceService = new InstanceService(metadataManager.getBasePath());
   configService = new ConfigService(metadataManager.getBasePath());
+  
+  // Connect instanceService to metadataManager for version control integration
+  metadataManager.setInstanceService(instanceService);
 
   // Initialize services
   await imageCacheService.initialize();
@@ -3340,6 +3343,7 @@ async function initializeBackend() {
     oldValue: any;
     newValue: any;
     section?: string;
+    line?: number;
   }>) => {
     const instance = await instanceService.getInstance(instanceId);
     if (!instance) throw new Error("Instance not found");
@@ -3354,9 +3358,13 @@ async function initializeBackend() {
       section: mod.section,
       depth: 0,
       modified: true,
+      line: mod.line,
     }));
     
-    await configService.saveConfigStructured(instance.path, configPath, entries, instanceId);
+    // Pass the modpackId from the instance for version control tracking
+    const modpackId = instance.modpackId;
+    console.log("[config:saveStructured] Instance:", instance.id, "ModpackId:", modpackId);
+    await configService.saveConfigStructured(instance.path, configPath, entries, modpackId);
     return { success: true };
   });
 

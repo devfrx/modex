@@ -1200,21 +1200,14 @@ export class InstanceService {
         }
       }
 
-      // Check config differences if overrides path provided
-      if (overridesPath && await fs.pathExists(overridesPath)) {
-        const configOverridesPath = path.join(overridesPath, "config");
-        const instanceConfigPath = path.join(instance.path, "config");
-        
-        if (await fs.pathExists(configOverridesPath) && await fs.pathExists(instanceConfigPath)) {
-          result.configDifferences = await this.countConfigDifferences(configOverridesPath, instanceConfigPath);
-        }
-      }
+      // Config differences are NOT counted for sync purposes
+      // Configs are managed directly as physical files, not as virtual modpack references
+      // The user edits configs directly on the instance, so there's nothing to "sync"
 
       result.totalDifferences = 
         result.missingInInstance.length + 
         result.extraInInstance.length + 
-        result.disabledMismatch.length +
-        result.configDifferences;
+        result.disabledMismatch.length;
       
       result.needsSync = result.totalDifferences > 0;
 

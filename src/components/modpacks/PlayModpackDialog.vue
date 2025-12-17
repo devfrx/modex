@@ -10,7 +10,7 @@
  * - Quick folder access
  */
 
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import {
     Play,
     Loader2,
@@ -95,6 +95,7 @@ const syncStatus = ref<{
 // Structured Config Editor State
 const showStructuredEditor = ref(false);
 const structuredEditorFile = ref<ConfigFile | null>(null);
+const configRefreshKey = ref(0);
 
 // Sync Options
 const clearExistingMods = ref(false);
@@ -188,11 +189,11 @@ async function handleSyncInstance() {
 
         if (result.success) {
             const configMsg = configSyncMode.value === "skip"
-                ? "(configs skipped)"
-                : `${result.configsCopied} configs (${result.configsSkipped} preserved)`;
+                ? ""
+                : `, ${result.configsCopied} configs`;
             success(
                 "Sync Complete",
-                `${result.modsDownloaded} mods updated, ${configMsg}`
+                `${result.modsDownloaded} mods updated${configMsg}`
             );
 
             const instanceStats = await getInstanceStats(instance.value!.id);
@@ -335,7 +336,22 @@ onMounted(() => {
     if (props.open) {
         checkInstance();
     }
+    // Listen for config revert events from other components
+    window.addEventListener('modex:configReverted', handleConfigReverted);
 });
+
+onUnmounted(() => {
+    window.removeEventListener('modex:configReverted', handleConfigReverted);
+});
+
+// Handle config revert event (reload the config editor)
+function handleConfigReverted(event: Event) {
+    const customEvent = event as CustomEvent<{ modpackId: string }>;
+    // Only reload if this dialog is for the same modpack
+    if (customEvent.detail.modpackId === props.modpackId) {
+        configRefreshKey.value++;
+    }
+}
 </script>
 
 <template>
@@ -668,18 +684,6 @@ onMounted(() => {
                                                 </div>
                                             </div>
                                         </div>
-
-                                        <!-- Config Differences -->
-                                        <div v-if="syncStatus.configDifferences > 0" class="space-y-1">
-                                            <div class="flex items-center gap-2 text-purple-400">
-                                                <FileCode class="w-4 h-4" />
-                                                <span class="font-medium">Config file differences ({{
-                                                    syncStatus.configDifferences }})</span>
-                                            </div>
-                                            <div class="ml-6 text-muted-foreground text-xs">
-                                                Some config files differ from modpack defaults
-                                            </div>
-                                        </div>
                                     </div>
 
                                     <!-- Quick Sync Button -->
@@ -698,7 +702,7 @@ onMounted(() => {
                                         <span class="font-medium text-green-300">Instance is in sync with modpack</span>
                                     </div>
                                     <p class="text-xs text-muted-foreground mt-2 ml-8">
-                                        All mods, resourcepacks, shaders, and configs match the modpack definition.
+                                        All mods, resourcepacks, and shaders match the modpack definition.
                                     </p>
                                 </div>
 
@@ -726,6 +730,10 @@ onMounted(() => {
                                         <FileCode class="w-4 h-4 text-muted-foreground" />
                                         Config Handling
                                     </h4>
+                                    <p class="text-xs text-muted-foreground mb-3">
+                                        Choose how to handle config files from the modpack (your local changes are not
+                                        tracked for sync)
+                                    </p>
 
                                     <div class="grid gap-2">
                                         <label
@@ -735,7 +743,8 @@ onMounted(() => {
                                             <div class="flex-1">
                                                 <span class="text-sm font-medium text-foreground">Only add new
                                                     configs</span>
-                                                <p class="text-xs text-muted-foreground">Keeps your modifications</p>
+                                                <p class="text-xs text-muted-foreground">Add configs for new mods, keep
+                                                    existing</p>
                                             </div>
                                             <CheckCircle v-if="configSyncMode === 'new_only'"
                                                 class="w-4 h-4 text-primary" />
@@ -748,7 +757,8 @@ onMounted(() => {
                                             <div class="flex-1">
                                                 <span class="text-sm font-medium text-foreground">Overwrite all
                                                     configs</span>
-                                                <p class="text-xs text-muted-foreground">Reset to modpack defaults</p>
+                                                <p class="text-xs text-muted-foreground">Reset all configs to modpack
+                                                    defaults</p>
                                             </div>
                                             <AlertCircle v-if="configSyncMode === 'overwrite'"
                                                 class="w-4 h-4 text-orange-400" />
@@ -760,7 +770,8 @@ onMounted(() => {
                                                 class="option-radio" />
                                             <div class="flex-1">
                                                 <span class="text-sm font-medium text-foreground">Skip configs</span>
-                                                <p class="text-xs text-muted-foreground">Only update mods</p>
+                                                <p class="text-xs text-muted-foreground">Only sync mods, ignore configs
+                                                </p>
                                             </div>
                                         </label>
                                     </div>
@@ -775,9 +786,9 @@ onMounted(() => {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                }}</span>
+                                                    }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                }}%</span>
+                                                    }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -810,7 +821,7 @@ onMounted(() => {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -820,7 +831,7 @@ onMounted(() => {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -921,8 +932,8 @@ onMounted(() => {
             <!-- Editor Content -->
             <div class="flex-1 overflow-hidden">
                 <ConfigStructuredEditor v-if="instance && structuredEditorFile" :instance-id="instance.id"
-                    :config-path="structuredEditorFile.path" @close="handleCloseStructuredEditor"
-                    @saved="handleCloseStructuredEditor" />
+                    :config-path="structuredEditorFile.path" :refresh-key="configRefreshKey"
+                    @close="handleCloseStructuredEditor" @saved="handleCloseStructuredEditor" />
             </div>
         </div>
     </div>

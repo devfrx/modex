@@ -536,7 +536,7 @@ async function importCurseForgeModpack() {
     progressMessage.value = `Downloading mod ${data.current}/${data.total}: ${data.modName}`;
   };
 
-  window.api.on("import:progress", progressHandler);
+  const removeProgressListener = window.api.on("import:progress", progressHandler);
 
   try {
     const result = await window.api.import.curseforge();
@@ -544,7 +544,7 @@ async function importCurseForgeModpack() {
 
     if (!result) {
       // User cancelled - cleanup and return
-      window.ipcRenderer.off("import:progress", progressHandler as any);
+      removeProgressListener();
       showProgress.value = false;
       return;
     }
@@ -554,7 +554,7 @@ async function importCurseForgeModpack() {
       console.log(
         `[CF Import] ${result.conflicts.length} conflicts detected, showing dialog`
       );
-      window.ipcRenderer.off("import:progress", progressHandler as any);
+      removeProgressListener();
       showProgress.value = false;
 
       pendingCFConflicts.value = {
@@ -591,7 +591,7 @@ async function importCurseForgeModpack() {
   } catch (err) {
     toast.error("Import Error", (err as Error).message, 7000);
   } finally {
-    window.ipcRenderer.off("import:progress", progressHandler as any);
+    removeProgressListener();
     showProgress.value = false;
     // Ensure DOM update completes
     await nextTick();

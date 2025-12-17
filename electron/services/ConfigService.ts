@@ -167,6 +167,8 @@ export interface ConfigModification {
   filePath: string;
   /** Key path that was modified */
   keyPath: string;
+  /** Line number in file */
+  line?: number;
   /** Old value */
   oldValue: any;
   /** New value */
@@ -952,6 +954,21 @@ export class ConfigService {
    */
   private parseJsonStructured(content: string, result: ParsedConfig): void {
     const parsed = JSON.parse(content);
+    const lines = content.split("\n");
+    
+    // Helper to find line number for a key
+    const findKeyLine = (key: string, startLine: number = 0): number => {
+      // Search for "key": or "key" : pattern
+      const keyPattern = new RegExp(`"${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\s*:`);
+      for (let i = startLine; i < lines.length; i++) {
+        if (keyPattern.test(lines[i])) {
+          return i + 1; // 1-based line number
+        }
+      }
+      return 0;
+    };
+    
+    let lastFoundLine = 0;
     
     const processObject = (obj: any, parentPath: string, depth: number): ConfigSection => {
       const section: ConfigSection = {
@@ -964,6 +981,8 @@ export class ConfigService {
 
       for (const [key, value] of Object.entries(obj)) {
         const keyPath = parentPath ? `${parentPath}.${key}` : key;
+        const lineNum = findKeyLine(key, lastFoundLine);
+        if (lineNum > 0) lastFoundLine = lineNum;
         
         if (value !== null && typeof value === "object" && !Array.isArray(value)) {
           // Nested object becomes a subsection
@@ -978,6 +997,7 @@ export class ConfigService {
             type: this.getValueType(value),
             depth,
             modified: false,
+            line: lineNum || undefined,
           });
         }
       }
@@ -1358,6 +1378,7 @@ export class ConfigService {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         filePath: configPath,
         keyPath: entry.keyPath,
+        line: entry.line,
         oldValue: entry.originalValue,
         newValue: entry.value,
         timestamp: new Date().toISOString(),
@@ -1653,6 +1674,12 @@ export class ConfigService {
     instancePath: string,
     modifications: ConfigModification[]
   ): Promise<void> {
+    console.log("[ConfigService] saveModificationsToVersionControl called:", {
+      modpackId,
+      instancePath,
+      modificationsCount: modifications.length
+    });
+    
     // Store in a .modex-changes folder within the instance
     const changesDir = path.join(instancePath, ".modex-changes");
     await fs.ensureDir(changesDir);
@@ -1668,6 +1695,8 @@ export class ConfigService {
 
     // Append to changes log
     const logPath = path.join(changesDir, "config-changes.json");
+    console.log("[ConfigService] Writing to:", logPath);
+    
     let existingChanges: ConfigChangeSet[] = [];
 
     if (await fs.pathExists(logPath)) {
@@ -1680,6 +1709,7 @@ export class ConfigService {
 
     existingChanges.push(changeSet);
     await fs.writeFile(logPath, JSON.stringify(existingChanges, null, 2));
+    console.log("[ConfigService] Config changes saved successfully");
   }
 
   /**

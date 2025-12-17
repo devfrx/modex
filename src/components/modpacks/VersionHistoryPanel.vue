@@ -58,6 +58,14 @@ const unsavedChanges = ref<{
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
         configsChanged: boolean;
+        configDetails?: Array<{
+            filePath: string;
+            keyPath: string;
+            line?: number;
+            oldValue: any;
+            newValue: any;
+            timestamp: string;
+        }>;
     };
 } | null>(null);
 const isReverting = ref(false);
@@ -80,11 +88,27 @@ const hasVersionControl = computed(() => history.value !== null && history.value
 
 // Computed for unsaved changes
 const hasUnsavedChanges = computed(() => unsavedChanges.value?.hasChanges ?? false);
+const configChangeCount = computed(() => {
+    return unsavedChanges.value?.changes?.configDetails?.length || (unsavedChanges.value?.changes?.configsChanged ? 1 : 0);
+});
 const unsavedChangeCount = computed(() => {
     if (!unsavedChanges.value?.changes) return 0;
     const c = unsavedChanges.value.changes;
-    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + (c.configsChanged ? 1 : 0);
+    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + configChangeCount.value;
 });
+
+// Helper functions for config display
+const getFileName = (filePath: string): string => {
+    const parts = filePath.split(/[/\\]/);
+    return parts[parts.length - 1] || filePath;
+};
+
+const formatConfigValue = (value: any): string => {
+    if (value === null || value === undefined) return 'null';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'object') return JSON.stringify(value).slice(0, 20);
+    return String(value).slice(0, 20);
+};
 
 // Load unsaved changes
 async function loadUnsavedChanges() {
@@ -115,6 +139,8 @@ async function revertChanges() {
             toast.success("Changes Reverted", "Modpack restored to last saved version");
             await loadUnsavedChanges();
             emit("refresh");
+            // Dispatch global event to notify other components (e.g., ConfigStructuredEditor in PlayModpackDialog)
+            window.dispatchEvent(new CustomEvent('modex:configReverted', { detail: { modpackId: props.modpackId } }));
         } else {
             toast.error("Failed", "Could not revert changes");
         }
@@ -216,28 +242,28 @@ async function rollbackTo(version: ModpackVersion) {
     // First validate the rollback
     try {
         const validation = await window.api.versions.validateRollback(props.modpackId, version.id);
-        
+
         if (!validation.valid) {
-            const errorMsg = validation.missingMods.length > 0 
-                ? `${validation.missingMods.length} mod(s) cannot be restored` 
+            const errorMsg = validation.missingMods.length > 0
+                ? `${validation.missingMods.length} mod(s) cannot be restored`
                 : "Validation failed";
             toast.error("Cannot Rollback", errorMsg);
             return;
         }
-        
+
         // Build confirmation message with warnings
         let message = `Restore modpack to version ${version.tag}? This will restore mods and configs. A rollback commit will be created.`;
-        
+
         if (validation.missingMods.length > 0) {
             const missingNames = validation.missingMods.map(m => m.name).slice(0, 3).join(", ");
             const more = validation.missingMods.length > 3 ? ` and ${validation.missingMods.length - 3} more` : "";
             message += `\n\n⚠️ ${validation.missingMods.length} mod(s) will need to be re-downloaded: ${missingNames}${more}`;
         }
-        
+
         if (validation.brokenDependencies.length > 0) {
             message += `\n\n⚠️ ${validation.brokenDependencies.length} mod(s) have missing dependencies`;
         }
-        
+
         const confirmed = await confirm({
             title: "Rollback to Version",
             message,
@@ -485,9 +511,35 @@ watch(() => props.modpackId, () => {
                                 <ToggleLeft class="w-3.5 h-3.5 text-amber-500" />
                                 <span>{{ unsavedChanges.changes.modsDisabled.length }} mods disabled</span>
                             </div>
-                            <div v-if="unsavedChanges.changes.configsChanged" class="flex items-center gap-1.5">
-                                <Settings class="w-3.5 h-3.5 text-purple-500" />
-                                <span>Config files changed</span>
+                            <div v-if="unsavedChanges.changes.configsChanged" class="flex flex-col gap-1">
+                                <div class="flex items-center gap-1.5">
+                                    <Settings class="w-3.5 h-3.5 text-purple-500" />
+                                    <span>{{ configChangeCount }} config change{{ configChangeCount !== 1 ? 's' : ''
+                                        }}</span>
+                                </div>
+                                <!-- Config change details -->
+                                <div v-if="unsavedChanges.changes.configDetails?.length"
+                                    class="ml-5 mt-1 space-y-1 max-h-24 overflow-y-auto text-xs">
+                                    <div v-for="(cfg, idx) in unsavedChanges.changes.configDetails.slice(0, 5)"
+                                        :key="idx"
+                                        class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
+                                        <span v-if="cfg.line" class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
+                                            }}</span>
+                                        <span class="text-white/60 truncate max-w-[100px]" :title="cfg.filePath">{{
+                                            getFileName(cfg.filePath) }}</span>
+                                        <span class="text-white/80 font-medium truncate max-w-[80px]">{{
+                                            cfg.keyPath.split('.').pop() }}</span>
+                                        <span class="text-red-400/70 line-through truncate max-w-[50px]">{{
+                                            formatConfigValue(cfg.oldValue) }}</span>
+                                        <span class="text-white/40">→</span>
+                                        <span class="text-green-400 truncate max-w-[50px]">{{
+                                            formatConfigValue(cfg.newValue) }}</span>
+                                    </div>
+                                    <div v-if="unsavedChanges.changes.configDetails.length > 5"
+                                        class="text-muted-foreground/60 text-[10px] pl-2">
+                                        ... and {{ unsavedChanges.changes.configDetails.length - 5 }} more
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 mt-3">

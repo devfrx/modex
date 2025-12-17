@@ -742,6 +742,8 @@ export interface ConfigModification {
   filePath: string;
   /** Key path that was modified */
   keyPath: string;
+  /** Line number in file */
+  line?: number;
   /** Old value */
   oldValue: any;
   /** New value */

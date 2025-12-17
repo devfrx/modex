@@ -139,7 +139,7 @@ async function importModex() {
   const progressHandler = (data: { current: number; total: number; modName: string }) => {
     importProgress.value = data;
   };
-  window.api.on("import:progress", progressHandler);
+  const removeProgressListener = window.api.on("import:progress", progressHandler);
 
   try {
     const result = await window.api.import.modex();
@@ -158,7 +158,7 @@ async function importModex() {
         showConflictDialog.value = true;
         isImporting.value = false;
         importProgress.value = null;
-        window.ipcRenderer.off("import:progress", progressHandler as any);
+        removeProgressListener();
         return;
       }
 
@@ -193,7 +193,7 @@ async function importModex() {
     console.error("Import failed:", err);
     toast.error("Import Failed", (err as Error).message);
   } finally {
-    window.ipcRenderer.off("import:progress", progressHandler as any);
+    removeProgressListener();
     isImporting.value = false;
     importProgress.value = null;
   }

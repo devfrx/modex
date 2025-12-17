@@ -219,6 +219,14 @@ export interface ElectronAPI {
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
         configsChanged: boolean;
+        configDetails?: Array<{
+          filePath: string;
+          keyPath: string;
+          line?: number;
+          oldValue: any;
+          newValue: any;
+          timestamp: string;
+        }>;
       };
     }>;
     /** Revert all unsaved changes to the last saved version */
@@ -726,7 +734,8 @@ export interface ElectronAPI {
   };
 
   // ========== EVENTS ==========
-  on: (channel: string, callback: (data: any) => void) => void;
+  /** Register an event listener. Returns a cleanup function to remove the listener. */
+  on: (channel: string, callback: (data: any) => void) => () => void;
 }
 
 // ==================== CURSEFORGE TYPES ====================

@@ -325,7 +325,7 @@
             </div>
         </template>
 
-        <!-- Changes Summary -->
+        <!-- Changes Summary (Version Control style) -->
         <div v-if="hasChanges && editorMode === 'visual'" class="changes-summary">
             <div class="summary-header">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -334,12 +334,34 @@
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
                 <span>{{ modificationCount }} modifiche in sospeso</span>
+                <span class="summary-hint">(Appariranno in Version Control dopo il salvataggio)</span>
             </div>
             <div class="changes-list">
-                <div v-for="(value, keyPath) in editedValues" :key="keyPath" class="change-item">
-                    <span class="change-key">{{ keyPath }}</span>
-                    <span class="change-arrow">→</span>
-                    <span class="change-value">{{ formatValue(value) }}</span>
+                <div v-for="mod in modificationDetails" :key="mod.keyPath" class="change-item">
+                    <div class="change-location">
+                        <span v-if="mod.line" class="change-line">L{{ mod.line }}</span>
+                        <span v-if="mod.section" class="change-section">[{{ mod.section }}]</span>
+                    </div>
+                    <div class="change-content">
+                        <span class="change-key">{{ mod.key }}</span>
+                        <div class="change-values">
+                            <span class="change-old" :title="formatValue(mod.oldValue)">{{ formatValue(mod.oldValue)
+                            }}</span>
+                            <svg class="change-arrow-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 12h14M12 5l7 7-7 7" />
+                            </svg>
+                            <span class="change-new" :title="formatValue(mod.newValue)">{{ formatValue(mod.newValue)
+                            }}</span>
+                        </div>
+                    </div>
+                    <button class="change-reset" @click="resetValue(mod.keyPath)" title="Annulla questa modifica">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -348,36 +370,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, reactive, nextTick } from 'vue';
-
-interface ConfigEntry {
-    keyPath: string;
-    key: string;
-    value: any;
-    originalValue: any;
-    type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
-    comment?: string;
-    section?: string;
-    depth: number;
-    modified: boolean;
-}
-
-interface ConfigSection {
-    name: string;
-    displayName: string;
-    entries: ConfigEntry[];
-    subsections: ConfigSection[];
-    expanded: boolean;
-}
-
-interface ParsedConfig {
-    path: string;
-    type: string;
-    sections: ConfigSection[];
-    allEntries: ConfigEntry[];
-    errors: string[];
-    rawContent: string;
-    encoding: string;
-}
+import type { ConfigEntry, ConfigSection, ParsedConfig } from '@/types';
 
 interface GroupedSection {
     name: string;
@@ -388,6 +381,7 @@ interface GroupedSection {
 const props = defineProps<{
     instanceId: string;
     configPath: string;
+    refreshKey?: number;  // Change this value to force reload
 }>();
 
 const emit = defineEmits<{
@@ -427,6 +421,34 @@ const hasChanges = computed(() => {
 });
 
 const modificationCount = computed(() => Object.keys(editedValues).length);
+
+// Detailed modifications with line numbers for display
+interface ModificationDetail {
+    keyPath: string;
+    key: string;
+    oldValue: any;
+    newValue: any;
+    line?: number;
+    section?: string;
+}
+
+const modificationDetails = computed((): ModificationDetail[] => {
+    const details: ModificationDetail[] = [];
+    for (const [keyPath, newValue] of Object.entries(editedValues)) {
+        const entry = parsedConfig.value?.allEntries.find(e => e.keyPath === keyPath);
+        details.push({
+            keyPath,
+            key: entry?.key || keyPath.split('.').pop() || keyPath,
+            oldValue: entry?.originalValue,
+            newValue,
+            line: entry?.line,
+            section: entry?.section
+        });
+    }
+    // Sort by line number if available
+    details.sort((a, b) => (a.line || 0) - (b.line || 0));
+    return details;
+});
 
 const filteredEntries = computed(() => {
     if (!parsedConfig.value?.allEntries) return [];
@@ -726,7 +748,7 @@ const saveChanges = async () => {
         if (editorMode.value === 'raw') {
             await saveRawContent();
         } else {
-            // Build modifications list
+            // Build modifications list with line numbers
             const modifications = Object.entries(editedValues).map(([keyPath, newValue]) => {
                 // Find original entry
                 const entry = parsedConfig.value?.allEntries.find(e => e.keyPath === keyPath);
@@ -735,7 +757,8 @@ const saveChanges = async () => {
                     key: keyPath,
                     oldValue: entry?.originalValue ?? entry?.value,
                     newValue,
-                    section: entry?.section
+                    section: entry?.section,
+                    line: entry?.line
                 };
             });
 
@@ -779,7 +802,7 @@ const saveRawContent = async () => {
 };
 
 // Watch for prop changes
-watch(() => [props.instanceId, props.configPath], () => {
+watch(() => [props.instanceId, props.configPath, props.refreshKey], () => {
     Object.keys(editedValues).forEach(key => delete editedValues[key]);
     loadConfig();
 });
@@ -787,6 +810,11 @@ watch(() => [props.instanceId, props.configPath], () => {
 // Load on mount
 onMounted(() => {
     loadConfig();
+});
+
+// Expose methods for parent components
+defineExpose({
+    reload: loadConfig
 });
 </script>
 
@@ -1201,36 +1229,72 @@ onMounted(() => {
     line-height: 1.6;
 }
 
-/* Changes Summary */
+/* Changes Summary (Version Control style) */
 .changes-summary {
     @apply border-t border-white/10 bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-4 shrink-0;
 }
 
 .summary-header {
-    @apply flex items-center gap-2 text-sm font-medium text-white mb-3;
+    @apply flex items-center gap-2 text-sm font-medium text-white mb-3 flex-wrap;
 }
 
 .summary-icon {
     @apply w-4 h-4 text-purple-400;
 }
 
+.summary-hint {
+    @apply text-xs text-white/40 ml-auto;
+}
+
 .changes-list {
-    @apply space-y-1 max-h-[80px] overflow-y-auto;
+    @apply space-y-2 max-h-[120px] overflow-y-auto;
 }
 
 .change-item {
-    @apply flex items-center gap-2 text-xs font-mono;
+    @apply flex items-center gap-3 text-xs font-mono bg-black/20 rounded-lg p-2 hover:bg-black/30 transition-colors;
+}
+
+.change-location {
+    @apply flex items-center gap-1 shrink-0 min-w-[80px];
+}
+
+.change-line {
+    @apply text-cyan-400 font-semibold bg-cyan-500/10 px-1.5 py-0.5 rounded text-[10px];
+}
+
+.change-section {
+    @apply text-white/40 text-[10px] truncate max-w-[50px];
+}
+
+.change-content {
+    @apply flex-1 flex flex-col gap-0.5 min-w-0;
 }
 
 .change-key {
-    @apply text-white/60 truncate max-w-[150px];
+    @apply text-white font-medium truncate;
 }
 
-.change-arrow {
-    @apply text-purple-400 shrink-0;
+.change-values {
+    @apply flex items-center gap-2;
 }
 
-.change-value {
-    @apply text-green-400 truncate max-w-[150px];
+.change-old {
+    @apply text-red-400/80 line-through truncate max-w-[120px] text-[10px];
+}
+
+.change-arrow-icon {
+    @apply w-3 h-3 text-purple-400 shrink-0;
+}
+
+.change-new {
+    @apply text-green-400 truncate max-w-[120px] text-[10px];
+}
+
+.change-reset {
+    @apply p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors shrink-0;
+}
+
+.change-reset svg {
+    @apply w-3.5 h-3.5;
 }
 </style>

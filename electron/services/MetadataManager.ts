@@ -18,6 +18,7 @@ import path from "path";
 import fs from "fs-extra";
 import crypto from "crypto";
 import { getContentTypeFromClassId } from "./CurseForgeService";
+import type { InstanceService } from "./InstanceService";
 
 // ==================== TYPES ====================
 
@@ -170,6 +171,9 @@ export class MetadataManager {
   private cacheDir: string;
   private libraryPath: string;
   private configPath: string;
+  
+  // Reference to InstanceService for accessing instance data
+  private instanceService: InstanceService | null = null;
 
   // Storage for pending CF import conflicts
   private pendingCFConflicts: Map<string, { partialData: any; manifest: any }> =
@@ -187,6 +191,13 @@ export class MetadataManager {
     this.libraryPath = path.join(this.baseDir, "library.json");
     this.configPath = path.join(this.baseDir, "config.json");
     this.ensureDirectories();
+  }
+
+  /**
+   * Set the InstanceService reference (called after InstanceService is created)
+   */
+  setInstanceService(instanceService: InstanceService): void {
+    this.instanceService = instanceService;
   }
 
   /**
@@ -945,6 +956,14 @@ export class MetadataManager {
       modsDisabled: Array<{ id: string; name: string }>;
       modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
       configsChanged: boolean;
+      configDetails: Array<{ 
+        filePath: string; 
+        keyPath: string; 
+        line?: number;
+        oldValue: any; 
+        newValue: any;
+        timestamp: string;
+      }>;
     };
     lastVersion: ModpackVersion | null;
   }> {
@@ -957,6 +976,7 @@ export class MetadataManager {
         modsDisabled: [] as Array<{ id: string; name: string }>,
         modsUpdated: [] as Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>,
         configsChanged: false,
+        configDetails: [] as Array<{ filePath: string; keyPath: string; line?: number; oldValue: any; newValue: any; timestamp: string }>,
       },
       lastVersion: null as ModpackVersion | null,
     };
@@ -1055,8 +1075,56 @@ export class MetadataManager {
       }
     }
 
-    // Check for config changes
+    // Check for config changes and load details
     result.changes.configsChanged = await this.hasConfigChanges(modpackId);
+    
+    // Load detailed config modifications from instance if available
+    try {
+      if (!this.instanceService) {
+        console.warn("[MetadataManager] InstanceService not set, cannot load config modifications");
+      } else {
+        // Find instance by modpackId
+        const instance = await this.instanceService.getInstanceByModpack(modpackId);
+        console.log("[MetadataManager] getUnsavedChanges - Looking for instance with modpackId:", modpackId, "Found:", instance?.id);
+        
+        if (instance) {
+          const configChangesPath = path.join(instance.path, ".modex-changes", "config-changes.json");
+          console.log("[MetadataManager] Checking config changes at:", configChangesPath);
+          
+          if (await fs.pathExists(configChangesPath)) {
+            const changeSets = JSON.parse(await fs.readFile(configChangesPath, "utf-8"));
+            console.log("[MetadataManager] Found", changeSets.length, "change sets");
+            
+            // Get only uncommitted changes
+            const uncommittedChanges = changeSets.filter((cs: any) => !cs.committed);
+            console.log("[MetadataManager] Uncommitted changes:", uncommittedChanges.length);
+            
+            for (const changeSet of uncommittedChanges) {
+              for (const mod of changeSet.modifications) {
+                result.changes.configDetails.push({
+                  filePath: mod.filePath,
+                  keyPath: mod.keyPath,
+                  line: mod.line,
+                  oldValue: mod.oldValue,
+                  newValue: mod.newValue,
+                  timestamp: mod.timestamp,
+                });
+              }
+            }
+            // If we have config details, mark configsChanged as true
+            if (result.changes.configDetails.length > 0) {
+              result.changes.configsChanged = true;
+            }
+          } else {
+            console.log("[MetadataManager] No config-changes.json file found");
+          }
+        } else {
+          console.log("[MetadataManager] No instance found for modpack");
+        }
+      }
+    } catch (err) {
+      console.error("Error loading config modifications:", err);
+    }
 
     // Determine if there are any changes
     result.hasChanges = 
@@ -1116,13 +1184,211 @@ export class MetadataManager {
       }
     }
 
-    // Restore config snapshot if available
+    // Restore config snapshot if available (overrides folder)
     if (currentVersion.config_snapshot_id) {
       await this.restoreConfigSnapshot(modpackId, currentVersion.config_snapshot_id);
     }
 
+    // Revert config changes in instance and clear uncommitted changes
+    await this.revertInstanceConfigChanges(modpackId);
+
     console.log(`[Version Control] Reverted modpack ${modpackId} to version ${currentVersion.id}`);
     return true;
+  }
+
+  /**
+   * Revert uncommitted config changes in instance by restoring original values
+   */
+  private async revertInstanceConfigChanges(modpackId: string): Promise<void> {
+    console.log("[MetadataManager] revertInstanceConfigChanges called for modpack:", modpackId);
+    
+    if (!this.instanceService) {
+      console.warn("[MetadataManager] InstanceService not set, cannot revert config changes");
+      return;
+    }
+
+    try {
+      const instance = await this.instanceService.getInstanceByModpack(modpackId);
+      console.log("[MetadataManager] Instance found:", instance?.id, "Path:", instance?.path);
+      
+      if (!instance) {
+        console.log("[MetadataManager] No instance found for modpack, skipping config revert");
+        return;
+      }
+
+      const configChangesPath = path.join(instance.path, ".modex-changes", "config-changes.json");
+      console.log("[MetadataManager] Checking config changes at:", configChangesPath);
+      
+      if (!await fs.pathExists(configChangesPath)) {
+        console.log("[MetadataManager] No config-changes.json found, nothing to revert");
+        return;
+      }
+
+      const changeSets = JSON.parse(await fs.readFile(configChangesPath, "utf-8"));
+      const uncommittedChanges = changeSets.filter((cs: any) => !cs.committed);
+
+      if (uncommittedChanges.length === 0) {
+        console.log("[MetadataManager] No uncommitted config changes to revert");
+        return;
+      }
+
+      // Group modifications by file path for efficient reverting
+      const modificationsByFile = new Map<string, Array<{ keyPath: string; oldValue: any; line?: number }>>();
+      
+      for (const changeSet of uncommittedChanges) {
+        for (const mod of changeSet.modifications) {
+          const filePath = mod.filePath;
+          if (!modificationsByFile.has(filePath)) {
+            modificationsByFile.set(filePath, []);
+          }
+          modificationsByFile.get(filePath)!.push({
+            keyPath: mod.keyPath,
+            oldValue: mod.oldValue,
+            line: mod.line,
+          });
+        }
+      }
+
+      // Revert each file
+      for (const [filePath, modifications] of modificationsByFile) {
+        const fullPath = path.join(instance.path, filePath);
+        if (!await fs.pathExists(fullPath)) {
+          console.warn(`[MetadataManager] Config file not found: ${fullPath}`);
+          continue;
+        }
+
+        try {
+          // Read current file content
+          const content = await fs.readFile(fullPath, "utf-8");
+          const lines = content.split("\n");
+          
+          // Determine file format
+          const ext = path.extname(filePath).toLowerCase();
+          
+          if (ext === ".json" || ext === ".json5") {
+            // For JSON, parse, modify, and rewrite
+            const json = JSON.parse(content);
+            for (const mod of modifications) {
+              this.setNestedValue(json, mod.keyPath, mod.oldValue);
+            }
+            await fs.writeFile(fullPath, JSON.stringify(json, null, 2));
+          } else if (ext === ".toml") {
+            // For TOML files, we need to reload and revert line by line
+            // Since we have oldValue, we can reconstruct
+            let newLines = [...lines];
+            for (const mod of modifications) {
+              if (mod.line && mod.line > 0 && mod.line <= lines.length) {
+                const lineIndex = mod.line - 1;
+                const currentLine = lines[lineIndex];
+                // Extract key from the line
+                const keyMatch = currentLine.match(/^(\s*)([^=]+)=/);
+                if (keyMatch) {
+                  const indent = keyMatch[1];
+                  const key = keyMatch[2].trim();
+                  const formattedValue = this.formatTomlValue(mod.oldValue);
+                  newLines[lineIndex] = `${indent}${key} = ${formattedValue}`;
+                }
+              }
+            }
+            await fs.writeFile(fullPath, newLines.join("\n"));
+          } else if (ext === ".properties" || ext === ".cfg") {
+            // For Forge cfg files and properties files
+            let newLines = [...lines];
+            for (const mod of modifications) {
+              if (mod.line && mod.line > 0 && mod.line <= lines.length) {
+                const lineIndex = mod.line - 1;
+                const currentLine = lines[lineIndex];
+                
+                // Forge cfg format: B:"Key Name"=value or S:keyName=value
+                // Also handles: I:someKey=123, D:doubleKey=1.5
+                const forgeCfgMatch = currentLine.match(/^(\s*)([BIDSFL]:"[^"]+"|[BIDSFL]:[^=]+)=(.*)$/i);
+                if (forgeCfgMatch) {
+                  const indent = forgeCfgMatch[1];
+                  const keyPart = forgeCfgMatch[2];
+                  // Format value based on type prefix
+                  let formattedValue = mod.oldValue;
+                  if (typeof mod.oldValue === 'boolean') {
+                    formattedValue = mod.oldValue ? 'true' : 'false';
+                  }
+                  newLines[lineIndex] = `${indent}${keyPart}=${formattedValue}`;
+                  console.log(`[MetadataManager] Reverted line ${mod.line}: "${currentLine}" -> "${newLines[lineIndex]}"`);
+                } else {
+                  // Standard properties format: key=value or key:value
+                  const propsMatch = currentLine.match(/^(\s*)([^=:]+)[=:]/);
+                  if (propsMatch) {
+                    const indent = propsMatch[1];
+                    const key = propsMatch[2];
+                    const separator = currentLine.includes(":") && !currentLine.match(/^[BIDSFL]:/) ? ":" : "=";
+                    newLines[lineIndex] = `${indent}${key}${separator}${mod.oldValue}`;
+                    console.log(`[MetadataManager] Reverted line ${mod.line}: "${currentLine}" -> "${newLines[lineIndex]}"`);
+                  }
+                }
+              }
+            }
+            await fs.writeFile(fullPath, newLines.join("\n"));
+          }
+          
+          console.log(`[MetadataManager] Reverted config file: ${filePath}`);
+        } catch (err) {
+          console.error(`[MetadataManager] Failed to revert ${filePath}:`, err);
+        }
+      }
+
+      // Remove uncommitted changes from the file (keep committed ones)
+      const committedChanges = changeSets.filter((cs: any) => cs.committed);
+      if (committedChanges.length > 0) {
+        await fs.writeFile(configChangesPath, JSON.stringify(committedChanges, null, 2));
+      } else {
+        // No committed changes, remove the file entirely
+        await fs.remove(configChangesPath);
+      }
+
+      console.log(`[MetadataManager] Reverted ${uncommittedChanges.length} uncommitted config change sets`);
+    } catch (err) {
+      console.error("[MetadataManager] Error reverting instance config changes:", err);
+    }
+  }
+
+  /**
+   * Set a nested value in an object using dot-notation path
+   */
+  private setNestedValue(obj: any, keyPath: string, value: any): void {
+    const keys = keyPath.split(".");
+    let current = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      // Handle array indices like "items[0]"
+      const arrayMatch = key.match(/^(.+)\[(\d+)\]$/);
+      if (arrayMatch) {
+        current = current[arrayMatch[1]][parseInt(arrayMatch[2])];
+      } else {
+        current = current[key];
+      }
+      if (current === undefined) return;
+    }
+    const lastKey = keys[keys.length - 1];
+    const arrayMatch = lastKey.match(/^(.+)\[(\d+)\]$/);
+    if (arrayMatch) {
+      current[arrayMatch[1]][parseInt(arrayMatch[2])] = value;
+    } else {
+      current[lastKey] = value;
+    }
+  }
+
+  /**
+   * Format a value for TOML output
+   */
+  private formatTomlValue(value: any): string {
+    if (typeof value === "string") {
+      return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    } else if (typeof value === "boolean") {
+      return value ? "true" : "false";
+    } else if (typeof value === "number") {
+      return String(value);
+    } else if (Array.isArray(value)) {
+      return `[${value.map(v => this.formatTomlValue(v)).join(", ")}]`;
+    }
+    return String(value);
   }
 
   /**
@@ -2192,7 +2458,44 @@ export class MetadataManager {
     // Update modpack version to match
     await this.updateModpack(modpackId, { version: versionTag });
 
+    // Mark config changes as committed in the instance
+    await this.markConfigChangesAsCommitted(modpackId, versionId);
+
     return newVersion;
+  }
+
+  /**
+   * Mark all uncommitted config changes as committed
+   */
+  private async markConfigChangesAsCommitted(modpackId: string, versionId: string): Promise<void> {
+    try {
+      if (!this.instanceService) {
+        console.warn("[MetadataManager] InstanceService not set, cannot mark config changes");
+        return;
+      }
+      const instance = await this.instanceService.getInstanceByModpack(modpackId);
+      if (!instance) return;
+      
+      const configChangesPath = path.join(instance.path, ".modex-changes", "config-changes.json");
+      if (!await fs.pathExists(configChangesPath)) return;
+      
+      const changeSets = JSON.parse(await fs.readFile(configChangesPath, "utf-8"));
+      let modified = false;
+      
+      for (const changeSet of changeSets) {
+        if (!changeSet.committed) {
+          changeSet.committed = true;
+          changeSet.commitVersionId = versionId;
+          modified = true;
+        }
+      }
+      
+      if (modified) {
+        await fs.writeFile(configChangesPath, JSON.stringify(changeSets, null, 2));
+      }
+    } catch (err) {
+      console.error("Error marking config changes as committed:", err);
+    }
   }
 
   /**

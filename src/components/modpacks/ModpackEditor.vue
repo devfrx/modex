@@ -1062,7 +1062,7 @@ async function applyRemoteUpdate() {
       };
     };
 
-    window.api.on("import:progress", progressHandler);
+    const removeProgressListener = window.api.on("import:progress", progressHandler);
 
     // Pass the current modpack ID to ensure we update THIS modpack
     const result = await window.api.import.modexFromData(
@@ -1071,8 +1071,7 @@ async function applyRemoteUpdate() {
     );
 
     // Remove listener
-    // @ts-ignore
-    window.ipcRenderer.off("import:progress", progressHandler);
+    removeProgressListener();
 
     if (result && result.success) {
       toast.success("Update Complete", `Modpack updated successfully!`);

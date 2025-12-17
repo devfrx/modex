@@ -280,6 +280,14 @@ contextBridge.exposeInMainWorld("api", {
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
         configsChanged: boolean;
+        configDetails?: Array<{
+          filePath: string;
+          keyPath: string;
+          line?: number;
+          oldValue: any;
+          newValue: any;
+          timestamp: string;
+        }>;
       };
     }> => ipcRenderer.invoke("modpacks:getUnsavedChanges", modpackId),
 
@@ -378,7 +386,14 @@ contextBridge.exposeInMainWorld("api", {
       syncFromInstanceId?: string
     ): Promise<any | null> =>
       ipcRenderer.invoke("versions:create", modpackId, message, tag, syncFromInstanceId),
-    rollback: (modpackId: string, versionId: string): Promise<boolean> =>
+    rollback: (modpackId: string, versionId: string): Promise<{
+      success: boolean;
+      restoredCount: number;
+      failedCount: number;
+      failedMods: Array<{ modId: string; modName: string; reason: string }>;
+      totalMods: number;
+      originalModCount: number;
+    }> =>
       ipcRenderer.invoke("versions:rollback", modpackId, versionId),
     compare: (
       modpackId: string,
@@ -1194,7 +1209,12 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== EVENTS ==========
   on: (channel: string, callback: (data: any) => void) => {
-    ipcRenderer.on(channel, (_event, data) => callback(data));
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on(channel, handler);
+    // Return a cleanup function to properly remove the listener
+    return () => {
+      ipcRenderer.off(channel, handler);
+    };
   },
 });
 

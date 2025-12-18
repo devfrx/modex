@@ -61,6 +61,7 @@ defineEmits<{
   (e: "share", id: string, name: string): void;
   (e: "convert", id: string): void;
   (e: "sync", id: string, name: string): void;
+  (e: "play", id: string): void;
 }>();
 
 const showMoreActions = ref(false);
@@ -212,12 +213,18 @@ function closeMoreActions() {
 
       <!-- Action Buttons -->
       <div class="pt-3 border-t border-border/30 flex items-center gap-2" @click.stop>
-        <!-- Primary: Play Button -->
+        <!-- Primary: Play Button (Direct Launch) -->
         <Button variant="default" size="sm"
-          class="flex-1 gap-1.5 h-9 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 border-0"
-          @click.stop="$emit('sync', modpack.id, modpack.name)" title="Play / Sync to Minecraft">
+          class="gap-1.5 h-9 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 border-0"
+          @click.stop="$emit('play', modpack.id)" title="Quick Play">
           <Play class="w-4 h-4 fill-current" />
-          <span class="font-medium">Play</span>
+        </Button>
+
+        <!-- Open Play Dialog -->
+        <Button variant="outline" size="sm"
+          class="flex-1 gap-1.5 h-9 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50"
+          @click.stop="$emit('sync', modpack.id, modpack.name)" title="Open Play Dialog">
+          <span class="font-medium">Open</span>
         </Button>
 
         <!-- Secondary Actions -->

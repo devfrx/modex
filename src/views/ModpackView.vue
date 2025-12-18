@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "@/composables/useToast";
+import { useInstances } from "@/composables/useInstances";
 import ModpackCard from "@/components/modpacks/ModpackCard.vue";
 import ModpackListItem from "@/components/modpacks/ModpackListItem.vue";
 import ModpackCompactCard from "@/components/modpacks/ModpackCompactCard.vue";
@@ -46,6 +47,7 @@ import type { Modpack, Mod } from "@/types/electron";
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const { getInstanceByModpack, createFromModpack, launchInstance } = useInstances();
 
 interface ModpackWithCount extends Modpack {
   modCount: number;
@@ -950,6 +952,40 @@ function openSyncDialog(modpackId: string, modpackName: string) {
   showSyncDialog.value = true;
 }
 
+// Quick Play - Launch directly without opening dialog
+async function quickPlay(modpackId: string) {
+  const modpack = modpacks.value.find(m => m.id === modpackId);
+  if (!modpack) return;
+
+  try {
+    // Check if instance exists
+    let instance = await getInstanceByModpack(modpackId);
+
+    if (!instance) {
+      // Create instance first
+      toast.info("Creating Instance", `Setting up ${modpack.name}...`);
+      const result = await createFromModpack(modpackId);
+      if (!result?.instance) {
+        toast.error("Failed", "Could not create instance");
+        return;
+      }
+      instance = result.instance;
+    }
+
+    // Launch the instance
+    toast.info("Launching", `Starting ${modpack.name}...`);
+    const launchResult = await launchInstance(instance.id);
+
+    if (launchResult.success) {
+      toast.success("Launched", "Minecraft is starting...");
+    } else {
+      toast.error("Launch Failed", launchResult.error || "Unknown error");
+    }
+  } catch (err: any) {
+    toast.error("Error", err.message);
+  }
+}
+
 function handleSyncComplete() {
   showSyncDialog.value = false;
   toast.success("Ready to Play", `${syncModpackName.value} instance is ready!`);
@@ -1266,7 +1302,7 @@ onMounted(() => {
             :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
             @delete="confirmDelete" @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack"
             @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack" @share="openShareExport"
-            @convert="openConvertDialog" @sync="openSyncDialog" />
+            @convert="openConvertDialog" @sync="openSyncDialog" @play="quickPlay" />
         </div>
 
         <!-- List View -->

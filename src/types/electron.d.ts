@@ -653,6 +653,29 @@ export interface ElectronAPI {
       options?: { overridesZipPath?: string }
     ) => Promise<{ instance: ModexInstance; syncResult: InstanceSyncResult } | null>;
     onSyncProgress: (callback: (data: { stage: string; current: number; total: number; item?: string }) => void) => () => void;
+    
+    // Game tracking
+    getRunningGame: (instanceId: string) => Promise<{
+      instanceId: string;
+      launcherPid?: number;
+      gamePid?: number;
+      startTime: number;
+      status: "launching" | "loading_mods" | "running" | "stopped";
+      loadedMods: number;
+      totalMods: number;
+      currentMod?: string;
+    } | null>;
+    killGame: (instanceId: string) => Promise<boolean>;
+    onGameStatusChange: (callback: (data: {
+      instanceId: string;
+      launcherPid?: number;
+      gamePid?: number;
+      startTime: number;
+      status: "launching" | "loading_mods" | "running" | "stopped";
+      loadedMods: number;
+      totalMods: number;
+      currentMod?: string;
+    }) => void) => () => void;
   };
 
   // ========== CONFIG SERVICE ==========

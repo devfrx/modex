@@ -37,6 +37,15 @@ import {
     ChevronRight,
     Shield,
     Check,
+    Terminal,
+    ChevronDown,
+    ChevronUp,
+    Square,
+    Maximize2,
+    Minimize2,
+    Cpu,
+    MemoryStick,
+    Sliders,
 } from "lucide-vue-next";
 import { useInstances } from "@/composables/useInstances";
 import { useToast } from "@/composables/useToast";
@@ -63,12 +72,17 @@ const emit = defineEmits<{
 // Composables
 const {
     syncProgress,
+    runningGames,
     getInstanceByModpack,
     createFromModpack,
     syncModpackToInstance,
     launchInstance,
     openInstanceFolder,
     getInstanceStats,
+    getRunningGame,
+    killGame,
+    onGameLogLine,
+    updateInstance,
 } = useInstances();
 const { success, error: showError } = useToast();
 
@@ -91,6 +105,41 @@ const syncStatus = ref<{
     configDifferences: number;
     totalDifferences: number;
 } | null>(null);
+
+// Loader Installation Progress
+const loaderProgress = ref<{
+    stage: string;
+    current: number;
+    total: number;
+    detail: string;
+} | null>(null);
+
+// Game Launch State
+const gameLaunched = ref(false);
+const gameLoadingMessage = ref("");
+
+// Instance Settings (RAM & JVM Args)
+const showSettings = ref(false);
+const memoryMin = ref(2048);
+const memoryMax = ref(4096);
+const customJavaArgs = ref("");
+
+// Live Log State
+const gameLogs = ref<Array<{ time: string; level: string; message: string }>>([]);
+const showLogConsole = ref(false);
+const logScrollRef = ref<HTMLDivElement | null>(null);
+const maxLogLines = 200;
+
+// Computed: current running game info for this instance
+const runningGame = computed(() => {
+    if (!instance.value) return null;
+    return runningGames.value.get(instance.value.id) || null;
+});
+
+// Computed: is this instance's game currently running?
+const isGameRunning = computed(() => {
+    return runningGame.value !== null && runningGame.value.status !== "stopped";
+});
 
 // Structured Config Editor State
 const showStructuredEditor = ref(false);
@@ -115,6 +164,9 @@ async function checkInstance() {
                     totalSize: instanceStats.totalSize,
                 };
             }
+
+            // Load instance settings (RAM, JVM args)
+            loadInstanceSettings();
 
             // Check sync status
             try {
@@ -217,26 +269,92 @@ async function handleSyncInstance() {
     }
 }
 
+// Save instance settings (RAM, JVM args)
+async function saveInstanceSettings() {
+    if (!instance.value) return;
+
+    try {
+        await updateInstance(instance.value.id, {
+            memory: { min: memoryMin.value, max: memoryMax.value },
+            javaArgs: customJavaArgs.value || undefined
+        });
+        success("Settings Saved", "Memory and JVM arguments updated");
+        showSettings.value = false;
+    } catch (err: any) {
+        showError("Failed to save", err.message);
+    }
+}
+
+// Load instance settings when instance is loaded
+function loadInstanceSettings() {
+    if (instance.value) {
+        memoryMin.value = instance.value.memory?.min || 2048;
+        memoryMax.value = instance.value.memory?.max || 4096;
+        customJavaArgs.value = instance.value.javaArgs || "";
+    }
+}
+
 // Launch instance
 async function handleLaunch() {
     if (!instance.value) return;
 
     isLaunching.value = true;
+    loaderProgress.value = null;
+    gameLaunched.value = false;
+    gameLoadingMessage.value = "";
+
+    // Listen for loader installation progress
+    const removeProgressListener = window.api.on("loader:installProgress", (data: any) => {
+        loaderProgress.value = {
+            stage: data.stage,
+            current: data.current,
+            total: data.total,
+            detail: data.detail || ""
+        };
+    });
+
     try {
         const result = await launchInstance(instance.value.id);
 
         if (result.success) {
-            success("Launching Minecraft", `Starting ${instance.value.name}...`);
+            // Switch to game tracking mode
+            gameLaunched.value = true;
+            gameLoadingMessage.value = "Launching Minecraft... Waiting for the game to start.";
+            success("Minecraft Launcher Started", "The game is now loading...");
             emit("launched", instance.value);
-            emit("close");
         } else {
             showError("Launch failed", result.error || "Unknown error");
         }
     } catch (err: any) {
         showError("Launch failed", err.message);
     } finally {
+        removeProgressListener();
         isLaunching.value = false;
+        loaderProgress.value = null;
     }
+}
+
+// Kill running game
+async function handleKillGame() {
+    if (!instance.value) return;
+
+    try {
+        const result = await killGame(instance.value.id);
+        if (result) {
+            success("Game Stopped", "Minecraft has been terminated.");
+            gameLaunched.value = false;
+        } else {
+            showError("Failed to stop game", "Could not find or terminate the game process.");
+        }
+    } catch (err: any) {
+        showError("Error stopping game", err.message);
+    }
+}
+
+// Close after game launched
+function handleCloseAfterLaunch() {
+    gameLaunched.value = false;
+    emit("close");
 }
 
 // Open folder
@@ -287,6 +405,18 @@ function formatDate(dateString?: string): string {
     return date.toLocaleDateString();
 }
 
+// Format runtime from start timestamp
+function formatRuntime(startTime?: number): string {
+    if (!startTime) return "0s";
+    const diff = Date.now() - startTime;
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
+}
+
 // Get loader badge styles
 function getLoaderStyles(loader?: string) {
     switch (loader?.toLowerCase()) {
@@ -327,9 +457,38 @@ watch(() => props.open, async (open) => {
     if (open) {
         syncResult.value = null;
         activeTab.value = "play";
+        gameLaunched.value = false;
+        gameLoadingMessage.value = "";
+        gameLogs.value = [];
         await checkInstance();
+    } else {
+        // Clear logs when dialog closes
+        gameLogs.value = [];
+        showLogConsole.value = false;
     }
 });
+
+// Log line handler
+let unsubscribeLogLine: (() => void) | null = null;
+
+function handleGameLogLine(instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) {
+    if (!instance.value || instanceId !== instance.value.id) return;
+
+    // Add log to array, maintaining max lines
+    gameLogs.value.push(logLine);
+    if (gameLogs.value.length > maxLogLines) {
+        gameLogs.value = gameLogs.value.slice(-maxLogLines);
+    }
+
+    // Auto-scroll to bottom if enabled
+    if (logScrollRef.value) {
+        requestAnimationFrame(() => {
+            if (logScrollRef.value) {
+                logScrollRef.value.scrollTop = logScrollRef.value.scrollHeight;
+            }
+        });
+    }
+}
 
 // Initial check
 onMounted(() => {
@@ -338,10 +497,14 @@ onMounted(() => {
     }
     // Listen for config revert events from other components
     window.addEventListener('modex:configReverted', handleConfigReverted);
+
+    // Subscribe to game log lines
+    unsubscribeLogLine = onGameLogLine(handleGameLogLine);
 });
 
 onUnmounted(() => {
     window.removeEventListener('modex:configReverted', handleConfigReverted);
+    unsubscribeLogLine?.();
 });
 
 // Handle config revert event (reload the config editor)
@@ -571,36 +734,254 @@ function handleConfigReverted(event: Event) {
                         <div class="flex-1 flex flex-col min-h-[350px]">
                             <!-- Play Tab -->
                             <div v-if="activeTab === 'play'" class="play-tab-content">
-                                <!-- Play Button Area -->
-                                <div class="play-area">
-                                    <button @click="handleLaunch" :disabled="instance.state !== 'ready' || isLaunching"
-                                        class="play-button">
-                                        <div class="play-button-bg" />
-                                        <div class="play-button-content">
-                                            <div class="play-icon-wrapper">
-                                                <Loader2 v-if="isLaunching" class="w-8 h-8 animate-spin" />
-                                                <Play v-else class="w-8 h-8" />
+                                <!-- Game Running State (tracked from process/logs) -->
+                                <div v-if="gameLaunched || isGameRunning" class="game-running-container">
+                                    <!-- Compact Status Bar -->
+                                    <div class="game-status-bar" :class="{
+                                        'status-launching': runningGame?.status === 'launching',
+                                        'status-loading': runningGame?.status === 'loading_mods',
+                                        'status-running': runningGame?.status === 'running'
+                                    }">
+                                        <div class="flex items-center gap-3">
+                                            <!-- Status Icon -->
+                                            <div class="status-icon-container">
+                                                <Rocket v-if="runningGame?.status === 'launching'"
+                                                    class="w-5 h-5 animate-bounce" />
+                                                <Loader2 v-else-if="runningGame?.status === 'loading_mods'"
+                                                    class="w-5 h-5 animate-spin" />
+                                                <Gamepad2 v-else-if="runningGame?.status === 'running'"
+                                                    class="w-5 h-5" />
+                                                <Loader2 v-else class="w-5 h-5 animate-spin" />
+                                            </div>
+
+                                            <!-- Status Text -->
+                                            <div class="flex flex-col">
+                                                <span class="font-semibold text-sm">
+                                                    <template v-if="runningGame?.status === 'running'">Game
+                                                        Running</template>
+                                                    <template v-else-if="runningGame?.status === 'loading_mods'">Loading
+                                                        Mods</template>
+                                                    <template v-else-if="runningGame?.status === 'launching'">Starting
+                                                        Minecraft</template>
+                                                    <template v-else>Waiting...</template>
+                                                </span>
+                                                <span v-if="runningGame?.currentMod"
+                                                    class="text-xs opacity-75 truncate max-w-[200px]">
+                                                    {{ runningGame.currentMod }}
+                                                </span>
                                             </div>
                                         </div>
-                                        <div class="play-button-ring" />
-                                    </button>
-                                    <div class="play-label">
-                                        <span class="play-label-text">{{ isLaunching ? "Launching..." : "Play" }}</span>
-                                        <span class="play-label-hint">Click to start Minecraft</span>
+
+                                        <!-- Right side: Progress + Actions -->
+                                        <div class="flex items-center gap-4">
+                                            <!-- Mini Progress -->
+                                            <div v-if="runningGame?.status === 'loading_mods'"
+                                                class="hidden sm:flex items-center gap-2">
+                                                <div class="w-24 h-1.5 bg-black/30 rounded-full overflow-hidden">
+                                                    <div class="h-full bg-current rounded-full transition-all duration-300"
+                                                        :style="{ width: `${runningGame?.totalMods ? (runningGame.loadedMods / runningGame.totalMods) * 100 : 10}%` }" />
+                                                </div>
+                                                <span class="text-xs font-mono opacity-75">
+                                                    {{ Math.round(runningGame?.totalMods ? (runningGame.loadedMods /
+                                                        runningGame.totalMods) * 100 : 0) }}%
+                                                </span>
+                                            </div>
+
+                                            <!-- Runtime -->
+                                            <div v-if="runningGame?.status === 'running'"
+                                                class="text-xs opacity-75 font-mono">
+                                                {{ formatRuntime(runningGame?.startTime) }}
+                                            </div>
+
+                                            <!-- Action Buttons -->
+                                            <div class="flex items-center gap-2">
+                                                <button @click="showLogConsole = !showLogConsole"
+                                                    class="p-1.5 rounded-md hover:bg-black/20 transition-colors"
+                                                    :title="showLogConsole ? 'Hide Logs' : 'Show Logs'">
+                                                    <Terminal class="w-4 h-4" />
+                                                </button>
+                                                <button v-if="runningGame?.gamePid" @click="handleKillGame"
+                                                    class="p-1.5 rounded-md hover:bg-red-500/30 text-red-300 transition-colors"
+                                                    title="Stop Game">
+                                                    <Square class="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Log Console -->
+                                    <div v-if="showLogConsole" class="log-console">
+                                        <div class="log-console-header">
+                                            <div class="flex items-center gap-2">
+                                                <Terminal class="w-4 h-4 text-muted-foreground" />
+                                                <span class="text-sm font-medium">Game Logs</span>
+                                                <span class="text-xs text-muted-foreground">({{ gameLogs.length }}
+                                                    lines)</span>
+                                            </div>
+                                            <button @click="gameLogs = []"
+                                                class="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                                Clear
+                                            </button>
+                                        </div>
+                                        <div ref="logScrollRef" class="log-console-content">
+                                            <div v-if="gameLogs.length === 0" class="log-empty">
+                                                <span class="text-muted-foreground text-sm">Waiting for logs...</span>
+                                            </div>
+                                            <div v-for="(log, index) in gameLogs" :key="index" class="log-line"
+                                                :class="`log-${log.level.toLowerCase()}`">
+                                                <span class="log-time">{{ log.time }}</span>
+                                                <span class="log-level">{{ log.level }}</span>
+                                                <span class="log-message">{{ log.message }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Quick Info Card -->
+                                    <div class="game-info-card">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center gap-4">
+                                                <div v-if="runningGame?.status === 'loading_mods'" class="info-stat">
+                                                    <Package class="w-4 h-4 text-amber-400" />
+                                                    <span>{{ runningGame?.loadedMods || 0 }}/{{ runningGame?.totalMods
+                                                        || '?' }} mods</span>
+                                                </div>
+                                                <div v-else-if="runningGame?.status === 'running'"
+                                                    class="info-stat text-green-400">
+                                                    <CheckCircle class="w-4 h-4" />
+                                                    <span>Ready to play</span>
+                                                </div>
+                                                <div class="info-stat text-muted-foreground">
+                                                    <span>PID: {{ runningGame?.gamePid || 'N/A' }}</span>
+                                                </div>
+                                            </div>
+                                            <button @click="handleCloseAfterLaunch"
+                                                class="text-sm text-primary hover:text-primary/80 transition-colors">
+                                                Close Dialog
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- Info Text -->
-                                <p class="text-xs text-muted-foreground text-center mt-6">
-                                    Isolated instance • Your vanilla installation stays untouched
-                                </p>
+                                <!-- Normal Play State -->
+                                <template v-else>
+                                    <div class="play-ready-container">
+                                        <!-- Main Play Section -->
+                                        <div class="play-main-section">
+                                            <!-- Play Button -->
+                                            <button @click="handleLaunch"
+                                                :disabled="instance.state !== 'ready' || isLaunching"
+                                                class="play-button-new">
+                                                <div class="play-button-inner">
+                                                    <Loader2 v-if="isLaunching" class="w-10 h-10 animate-spin" />
+                                                    <Play v-else class="w-10 h-10" />
+                                                </div>
+                                            </button>
 
-                                <div v-if="instance.state !== 'ready'" class="warning-card">
-                                    <AlertCircle class="w-5 h-5 text-yellow-400" />
-                                    <p class="text-sm text-yellow-300">
-                                        Instance is currently {{ instance.state }}. Please wait...
-                                    </p>
-                                </div>
+                                            <!-- Play Info -->
+                                            <div class="play-info">
+                                                <h3 class="text-lg font-semibold">
+                                                    {{ isLaunching ? "Launching..." : "Ready to Play" }}
+                                                </h3>
+                                                <p class="text-sm text-muted-foreground">
+                                                    {{ stats?.modCount || 0 }} mods • {{ props.loader || 'Forge' }} {{
+                                                    props.minecraftVersion }}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Settings Toggle -->
+                                        <button @click="showSettings = !showSettings" class="settings-toggle"
+                                            :class="{ 'settings-toggle-active': showSettings }">
+                                            <Sliders class="w-4 h-4" />
+                                            <span>Settings</span>
+                                            <ChevronDown class="w-4 h-4 transition-transform"
+                                                :class="{ 'rotate-180': showSettings }" />
+                                        </button>
+
+                                        <!-- Settings Panel -->
+                                        <div v-if="showSettings" class="settings-panel">
+                                            <!-- Memory Settings -->
+                                            <div class="settings-group">
+                                                <div class="settings-group-header">
+                                                    <MemoryStick class="w-4 h-4 text-primary" />
+                                                    <span>Memory (RAM)</span>
+                                                </div>
+                                                <div class="memory-sliders">
+                                                    <div class="memory-row">
+                                                        <label class="text-xs text-muted-foreground w-12">Min</label>
+                                                        <input type="range" v-model.number="memoryMin" min="1024"
+                                                            max="16384" step="512" class="flex-1 accent-primary" />
+                                                        <span class="text-sm font-mono w-16 text-right">{{ (memoryMin /
+                                                            1024).toFixed(1) }}G</span>
+                                                    </div>
+                                                    <div class="memory-row">
+                                                        <label class="text-xs text-muted-foreground w-12">Max</label>
+                                                        <input type="range" v-model.number="memoryMax" min="1024"
+                                                            max="16384" step="512" class="flex-1 accent-primary" />
+                                                        <span class="text-sm font-mono w-16 text-right">{{ (memoryMax /
+                                                            1024).toFixed(1) }}G</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- JVM Arguments -->
+                                            <div class="settings-group">
+                                                <div class="settings-group-header">
+                                                    <Cpu class="w-4 h-4 text-primary" />
+                                                    <span>JVM Arguments</span>
+                                                </div>
+                                                <textarea v-model="customJavaArgs"
+                                                    placeholder="Additional JVM arguments (e.g., -XX:+UseG1GC)"
+                                                    class="settings-textarea" rows="2" />
+                                                <p class="text-xs text-muted-foreground mt-1">
+                                                    These will be added to the default launcher arguments
+                                                </p>
+                                            </div>
+
+                                            <!-- Save Button -->
+                                            <button @click="saveInstanceSettings" class="settings-save-btn">
+                                                <Save class="w-4 h-4" />
+                                                Save Settings
+                                            </button>
+                                        </div>
+
+                                        <!-- Loader Installation Progress -->
+                                        <div v-if="loaderProgress" class="loader-progress-card">
+                                            <div class="flex items-center gap-3 mb-2">
+                                                <Download class="w-5 h-5 text-blue-400 animate-pulse" />
+                                                <span class="font-medium text-blue-300">Installing Mod Loader</span>
+                                            </div>
+                                            <div class="progress-bar-container">
+                                                <div class="progress-bar-fill"
+                                                    :style="{ width: `${(loaderProgress.current / loaderProgress.total) * 100}%` }" />
+                                            </div>
+                                            <p class="text-xs text-muted-foreground mt-2">
+                                                {{ loaderProgress.detail }}
+                                            </p>
+                                        </div>
+
+                                        <!-- Instance Info Footer -->
+                                        <div class="play-footer">
+                                            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                                                <span class="flex items-center gap-1">
+                                                    <Shield class="w-3 h-3" />
+                                                    Isolated instance
+                                                </span>
+                                                <span class="flex items-center gap-1">
+                                                    <HardDrive class="w-3 h-3" />
+                                                    {{ stats?.totalSize || 'N/A' }}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="instance.state !== 'ready'" class="warning-card">
+                                            <AlertCircle class="w-5 h-5 text-yellow-400" />
+                                            <p class="text-sm text-yellow-300">
+                                                Instance is currently {{ instance.state }}. Please wait...
+                                            </p>
+                                        </div>
+                                    </div>
+                                </template>
                             </div>
 
                             <!-- Sync Tab -->
@@ -786,9 +1167,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                }}</span>
+                                                    }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                }}%</span>
+                                                    }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -821,7 +1202,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -831,7 +1212,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -1099,6 +1480,209 @@ function handleConfigReverted(event: Event) {
     @apply flex flex-col items-center justify-center py-8;
 }
 
+/* Game Running Container - New Design */
+.game-running-container {
+    @apply w-full flex flex-col gap-3;
+}
+
+/* Status Bar */
+.game-status-bar {
+    @apply flex items-center justify-between px-4 py-3 rounded-xl transition-colors;
+}
+
+.game-status-bar.status-launching {
+    @apply bg-blue-500/20 text-blue-300;
+}
+
+.game-status-bar.status-loading {
+    @apply bg-amber-500/20 text-amber-300;
+}
+
+.game-status-bar.status-running {
+    @apply bg-green-500/20 text-green-300;
+}
+
+.status-icon-container {
+    @apply w-8 h-8 rounded-lg flex items-center justify-center bg-black/20;
+}
+
+/* Log Console */
+.log-console {
+    @apply rounded-xl overflow-hidden border border-border/50;
+    background: hsl(var(--card) / 0.8);
+}
+
+.log-console-header {
+    @apply flex items-center justify-between px-4 py-2 border-b border-border/50;
+    background: hsl(var(--muted) / 0.3);
+}
+
+.log-console-content {
+    @apply h-48 overflow-y-auto font-mono text-xs p-3 space-y-0.5;
+    background: hsl(0 0% 5%);
+}
+
+.log-empty {
+    @apply h-full flex items-center justify-center;
+}
+
+.log-line {
+    @apply flex gap-2 py-0.5 hover:bg-white/5 px-1 rounded;
+}
+
+.log-time {
+    @apply text-muted-foreground shrink-0;
+    min-width: 65px;
+}
+
+.log-level {
+    @apply font-medium shrink-0;
+    min-width: 45px;
+}
+
+.log-message {
+    @apply text-foreground/90 break-all;
+}
+
+.log-info .log-level {
+    @apply text-blue-400;
+}
+
+.log-warn .log-level {
+    @apply text-amber-400;
+}
+
+.log-error .log-level,
+.log-fatal .log-level {
+    @apply text-red-400;
+}
+
+.log-debug .log-level,
+.log-trace .log-level {
+    @apply text-muted-foreground;
+}
+
+/* Game Info Card */
+.game-info-card {
+    @apply px-4 py-3 rounded-xl;
+    background: hsl(var(--muted) / 0.3);
+    border: 1px solid hsl(var(--border) / 0.5);
+}
+
+.info-stat {
+    @apply flex items-center gap-2 text-sm;
+}
+
+/* Play Ready Container - New Design */
+.play-ready-container {
+    @apply w-full flex flex-col gap-4;
+}
+
+.play-main-section {
+    @apply flex items-center gap-6 p-6 rounded-xl;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(var(--primary) / 0.05));
+    border: 1px solid hsl(var(--primary) / 0.2);
+}
+
+.play-button-new {
+    @apply w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-300 cursor-pointer;
+    background: linear-gradient(145deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
+    box-shadow: 0 4px 20px hsl(var(--primary) / 0.3);
+    color: hsl(var(--primary-foreground));
+}
+
+.play-button-new:hover:not(:disabled) {
+    transform: scale(1.05);
+    box-shadow: 0 8px 30px hsl(var(--primary) / 0.4);
+}
+
+.play-button-new:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.play-button-new:disabled {
+    @apply opacity-50 cursor-not-allowed;
+}
+
+.play-button-inner {
+    @apply flex items-center justify-center;
+    margin-left: 4px;
+    /* Visual centering for play icon */
+}
+
+.play-info {
+    @apply flex-1;
+}
+
+/* Settings Toggle */
+.settings-toggle {
+    @apply flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all;
+    background: hsl(var(--muted) / 0.3);
+    border: 1px solid hsl(var(--border) / 0.5);
+    color: hsl(var(--muted-foreground));
+}
+
+.settings-toggle:hover {
+    background: hsl(var(--muted) / 0.5);
+    color: hsl(var(--foreground));
+}
+
+.settings-toggle-active {
+    background: hsl(var(--primary) / 0.1);
+    border-color: hsl(var(--primary) / 0.3);
+    color: hsl(var(--primary));
+}
+
+/* Settings Panel */
+.settings-panel {
+    @apply p-4 rounded-xl space-y-4;
+    background: hsl(var(--muted) / 0.2);
+    border: 1px solid hsl(var(--border) / 0.5);
+}
+
+.settings-group {
+    @apply space-y-2;
+}
+
+.settings-group-header {
+    @apply flex items-center gap-2 text-sm font-medium;
+}
+
+.memory-sliders {
+    @apply space-y-2;
+}
+
+.memory-row {
+    @apply flex items-center gap-3;
+}
+
+.settings-textarea {
+    @apply w-full p-3 rounded-lg text-sm font-mono resize-none;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+}
+
+.settings-textarea:focus {
+    outline: none;
+    border-color: hsl(var(--primary) / 0.5);
+}
+
+.settings-save-btn {
+    @apply flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-medium transition-colors;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.settings-save-btn:hover {
+    background: hsl(var(--primary) / 0.9);
+}
+
+/* Play Footer */
+.play-footer {
+    @apply pt-3 border-t border-border/30;
+}
+
 .play-area {
     @apply flex flex-col items-center gap-4;
 }
@@ -1186,6 +1770,23 @@ function handleConfigReverted(event: Event) {
         transform: scale(1.15);
         opacity: 0;
     }
+}
+
+/* Loader Progress Card */
+.loader-progress-card {
+    @apply w-full max-w-sm p-4 rounded-xl mt-6;
+    background: linear-gradient(145deg, hsl(var(--primary) / 0.1), hsl(var(--primary) / 0.05));
+    border: 1px solid hsl(var(--primary) / 0.2);
+}
+
+.progress-bar-container {
+    @apply w-full h-2 rounded-full overflow-hidden;
+    background: hsl(var(--muted) / 0.3);
+}
+
+.progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-300;
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
 }
 
 /* Warning */
@@ -1409,5 +2010,91 @@ function handleConfigReverted(event: Event) {
 /* Structured Editor Container */
 .structured-editor-container {
     @apply min-h-[500px] max-h-[70vh];
+}
+
+/* Game Running State */
+.game-running-state {
+    @apply flex-1 flex flex-col items-center justify-center py-6;
+}
+
+.game-status-header {
+    @apply flex items-center justify-center;
+}
+
+.game-status-icon {
+    @apply w-20 h-20 rounded-full flex items-center justify-center;
+    border: 2px solid currentColor;
+    transition: all 0.3s ease;
+}
+
+.game-status-icon.launching {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.05) 100%);
+    border-color: rgba(59, 130, 246, 0.5);
+    animation: pulse-blue 2s ease-in-out infinite;
+}
+
+.game-status-icon.loading {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%);
+    border-color: rgba(245, 158, 11, 0.5);
+    animation: pulse-amber 2s ease-in-out infinite;
+}
+
+.game-status-icon.running {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.05) 100%);
+    border-color: rgba(34, 197, 94, 0.5);
+    animation: pulse-green 2s ease-in-out infinite;
+}
+
+@keyframes pulse-blue {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
+    }
+}
+
+@keyframes pulse-amber {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 0 40px rgba(245, 158, 11, 0.5);
+    }
+}
+
+@keyframes pulse-green {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 0 40px rgba(34, 197, 94, 0.5);
+    }
+}
+
+.mod-loading-progress {
+    @apply w-full max-w-sm;
+}
+
+.progress-bar-fill.mod-progress {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.8), rgba(245, 158, 11, 1));
+}
+
+.game-running-info {
+    @apply text-center;
+}
+
+.loading-tips {
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    max-width: 20rem;
 }
 </style>

@@ -934,6 +934,49 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.on("instance:syncProgress", handler);
       return () => ipcRenderer.removeListener("instance:syncProgress", handler);
     },
+
+    // Game tracking
+    getRunningGame: (instanceId: string): Promise<{
+      instanceId: string;
+      launcherPid?: number;
+      gamePid?: number;
+      startTime: number;
+      status: "launching" | "loading_mods" | "running" | "stopped";
+      loadedMods: number;
+      totalMods: number;
+      currentMod?: string;
+    } | null> => ipcRenderer.invoke("instance:getRunningGame", instanceId),
+
+    killGame: (instanceId: string): Promise<boolean> =>
+      ipcRenderer.invoke("instance:killGame", instanceId),
+
+    onGameStatusChange: (callback: (data: {
+      instanceId: string;
+      launcherPid?: number;
+      gamePid?: number;
+      startTime: number;
+      status: "launching" | "loading_mods" | "running" | "stopped";
+      loadedMods: number;
+      totalMods: number;
+      currentMod?: string;
+    }) => void) => {
+      const handler = (_: any, data: any) => callback(data);
+      ipcRenderer.on("game:statusChange", handler);
+      return () => ipcRenderer.removeListener("game:statusChange", handler);
+    },
+    
+    /** Subscribe to real-time game log lines */
+    onLogLine: (callback: (data: {
+      instanceId: string;
+      time: string;
+      level: string;
+      message: string;
+      raw: string;
+    }) => void) => {
+      const handler = (_: any, data: any) => callback(data);
+      ipcRenderer.on("game:logLine", handler);
+      return () => ipcRenderer.removeListener("game:logLine", handler);
+    },
   },
 
   // ========== IMAGE CACHE ==========

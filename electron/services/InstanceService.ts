@@ -96,6 +96,19 @@ export interface InstanceLaunchResult {
   process?: ChildProcess;
 }
 
+/** Running game info */
+export interface RunningGameInfo {
+  instanceId: string;
+  launcherPid?: number;
+  gamePid?: number;
+  startTime: number;
+  status: "launching" | "loading_mods" | "running" | "stopped";
+  loadedMods: number;
+  totalMods: number;
+  currentMod?: string;
+  logWatcher?: fs.FSWatcher;
+}
+
 interface LauncherConfig {
   vanillaPath?: string;
   javaPath?: string;
@@ -112,6 +125,15 @@ export class InstanceService {
   private instancesPath: string;
   private configPath: string;
   private launcherConfig: LauncherConfig;
+  
+  /** Track running games by instance ID */
+  private runningGames: Map<string, RunningGameInfo> = new Map();
+  
+  /** Callback for game status updates */
+  private onGameStatusChange?: (instanceId: string, info: RunningGameInfo) => void;
+  
+  /** Callback for game log lines (for real-time log console) */
+  private onGameLogLine?: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) => void;
 
   constructor(basePath: string) {
     // Store instances in userData/modex/instances
@@ -366,6 +388,7 @@ export class InstanceService {
         modsDownloaded: 0,
         modsSkipped: 0,
         configsCopied: 0,
+        configsSkipped: 0,
         errors: ["Instance not found"],
         warnings: []
       };
@@ -876,7 +899,10 @@ export class InstanceService {
   /**
    * Launch Minecraft with this instance's game directory
    */
-  async launchInstance(instanceId: string): Promise<InstanceLaunchResult> {
+  async launchInstance(
+    instanceId: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<InstanceLaunchResult> {
     const instance = this.instances.find(i => i.id === instanceId);
     if (!instance) {
       return { success: false, error: "Instance not found" };
@@ -902,37 +928,695 @@ export class InstanceService {
         };
       }
 
-      // Build launch arguments
-      // The vanilla launcher supports --workDir to specify the game directory
-      const args: string[] = [];
-      
-      // Use --workDir for the vanilla launcher to point to our instance
-      args.push("--workDir", instance.path);
+      // Ensure mod loader is installed before launching
+      if (instance.loader && instance.loader !== "vanilla" && instance.loaderVersion) {
+        const loaderInstalled = await this.ensureModLoaderInstalled(
+          instance.loader,
+          instance.loaderVersion,
+          instance.minecraftVersion,
+          onProgress
+        );
+        if (!loaderInstalled.success) {
+          console.warn(`[InstanceService] Failed to install mod loader: ${loaderInstalled.error}`);
+          // Continue anyway - user might have installed it manually
+        }
+      }
 
-      console.log(`[InstanceService] Launching: ${launcherPath} ${args.join(" ")}`);
+      // Notify creating profile
+      onProgress?.("profile", 0, 1, "Creating launcher profile...");
+
+      // Create/update launcher profile for this instance
+      await this.createOrUpdateLauncherProfile(instance);
+      
+      onProgress?.("profile", 1, 1, "Profile ready");
+
+      console.log(`[InstanceService] Launching: ${launcherPath}`);
       console.log(`[InstanceService] Instance path: ${instance.path}`);
+      console.log(`[InstanceService] Profile created for: ${instance.name}`);
 
       // Update last played
       instance.lastPlayed = new Date().toISOString();
       await this.saveInstanceMeta(instance);
 
-      // Launch
+      // Launch without --workDir (profile handles the game directory)
       if (platform === "darwin" && launcherPath.endsWith(".app")) {
-        spawn("open", [launcherPath, "--args", ...args], { 
+        spawn("open", [launcherPath], { 
           detached: true, 
           stdio: "ignore" 
         }).unref();
       } else {
-        spawn(launcherPath, args, { 
+        spawn(launcherPath, [], { 
           detached: true, 
           stdio: "ignore",
           cwd: path.dirname(launcherPath)
         }).unref();
       }
 
+      // Start tracking the game
+      await this.startGameTracking(instance);
+
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Create or update a launcher profile in the vanilla Minecraft launcher
+   * This creates a profile that points to our instance's game directory
+   */
+  private async createOrUpdateLauncherProfile(instance: ModexInstance): Promise<void> {
+    const platform = process.platform;
+    let minecraftDir: string;
+
+    // Find the .minecraft directory
+    if (platform === "win32") {
+      minecraftDir = path.join(process.env.APPDATA || "", ".minecraft");
+    } else if (platform === "darwin") {
+      minecraftDir = path.join(os.homedir(), "Library", "Application Support", "minecraft");
+    } else {
+      minecraftDir = path.join(os.homedir(), ".minecraft");
+    }
+
+    const profilesPath = path.join(minecraftDir, "launcher_profiles.json");
+    
+    // Read existing profiles
+    let profiles: any = { profiles: {} };
+    if (await fs.pathExists(profilesPath)) {
+      try {
+        profiles = await fs.readJson(profilesPath);
+        if (!profiles.profiles) {
+          profiles.profiles = {};
+        }
+      } catch (error) {
+        console.warn("[InstanceService] Could not read launcher_profiles.json, creating new");
+        profiles = { profiles: {} };
+      }
+    }
+
+    // Build version ID for modded minecraft
+    // For Fabric: fabric-loader-VERSION-MC_VERSION
+    // For Forge: VERSION-forge-FORGE_VERSION
+    // For NeoForge: neoforge-VERSION
+    let versionId = instance.minecraftVersion;
+    if (instance.loader && instance.loader !== "vanilla" && instance.loaderVersion) {
+      const loader = instance.loader.toLowerCase();
+      if (loader === "fabric") {
+        versionId = `fabric-loader-${instance.loaderVersion}-${instance.minecraftVersion}`;
+      } else if (loader === "forge") {
+        versionId = `${instance.minecraftVersion}-forge-${instance.loaderVersion}`;
+      } else if (loader === "neoforge") {
+        versionId = `neoforge-${instance.loaderVersion}`;
+      } else if (loader === "quilt") {
+        versionId = `quilt-loader-${instance.loaderVersion}-${instance.minecraftVersion}`;
+      }
+    }
+
+    // Create profile ID based on instance ID
+    const profileId = `modex-${instance.id}`;
+
+    // Build Java arguments - include GPU-related fixes for hybrid graphics laptops
+    const memMax = instance.memory?.max || 4096;
+    const memMin = instance.memory?.min || 2048;
+    const baseArgs = `-Xmx${memMax}M -Xms${memMin}M`;
+    // Add arguments to help with rendering on hybrid GPU systems and texture loading
+    const gpuArgs = "-Dsun.java2d.opengl=true -Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=false -Dfml.earlyprogresswindow=false";
+    // Include user's custom JVM arguments if set
+    const customArgs = instance.javaArgs ? ` ${instance.javaArgs}` : "";
+    const javaArgs = `${baseArgs} ${gpuArgs}${customArgs}`;
+
+    // Create or update the profile
+    profiles.profiles[profileId] = {
+      name: `[ModEx] ${instance.name}`,
+      type: "custom",
+      created: instance.createdAt || new Date().toISOString(),
+      lastUsed: new Date().toISOString(),
+      lastVersionId: versionId,
+      gameDir: instance.path,
+      javaArgs: javaArgs
+    };
+
+    // Set as selected profile so it launches directly
+    profiles.selectedProfile = profileId;
+
+    // Save profiles
+    await fs.writeJson(profilesPath, profiles, { spaces: 2 });
+    console.log(`[InstanceService] Created/updated launcher profile: ${profileId}`);
+    console.log(`[InstanceService] Version ID: ${versionId}`);
+    console.log(`[InstanceService] Game directory: ${instance.path}`);
+    console.log(`[InstanceService] Java args: ${javaArgs}`);
+  }
+
+  /**
+   * Ensure the mod loader is installed in the Minecraft launcher
+   * Downloads and installs Fabric, Forge, NeoForge, or Quilt if not already installed
+   */
+  private async ensureModLoaderInstalled(
+    loader: string,
+    loaderVersion: string,
+    minecraftVersion: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<{ success: boolean; error?: string }> {
+    const platform = process.platform;
+    let minecraftDir: string;
+
+    // Find the .minecraft directory
+    if (platform === "win32") {
+      minecraftDir = path.join(process.env.APPDATA || "", ".minecraft");
+    } else if (platform === "darwin") {
+      minecraftDir = path.join(os.homedir(), "Library", "Application Support", "minecraft");
+    } else {
+      minecraftDir = path.join(os.homedir(), ".minecraft");
+    }
+
+    const versionsDir = path.join(minecraftDir, "versions");
+    const librariesDir = path.join(minecraftDir, "libraries");
+
+    // Build version ID
+    let versionId: string;
+    const loaderLower = loader.toLowerCase();
+    
+    if (loaderLower === "fabric") {
+      versionId = `fabric-loader-${loaderVersion}-${minecraftVersion}`;
+    } else if (loaderLower === "forge") {
+      versionId = `${minecraftVersion}-forge-${loaderVersion}`;
+    } else if (loaderLower === "neoforge") {
+      versionId = `neoforge-${loaderVersion}`;
+    } else if (loaderLower === "quilt") {
+      versionId = `quilt-loader-${loaderVersion}-${minecraftVersion}`;
+    } else {
+      return { success: true }; // Vanilla, nothing to install
+    }
+
+    // Check if already installed
+    const versionDir = path.join(versionsDir, versionId);
+    const versionJsonPath = path.join(versionDir, `${versionId}.json`);
+    
+    if (await fs.pathExists(versionJsonPath)) {
+      console.log(`[InstanceService] Mod loader already installed: ${versionId}`);
+      onProgress?.("check", 1, 1, `${loader} ${loaderVersion} already installed`);
+      return { success: true };
+    }
+
+    console.log(`[InstanceService] Installing mod loader: ${versionId}`);
+    onProgress?.("install", 0, 100, `Installing ${loader} ${loaderVersion}...`);
+
+    try {
+      if (loaderLower === "fabric") {
+        return await this.installFabric(minecraftVersion, loaderVersion, versionDir, versionJsonPath, librariesDir, onProgress);
+      } else if (loaderLower === "quilt") {
+        return await this.installQuilt(minecraftVersion, loaderVersion, versionDir, versionJsonPath, librariesDir, onProgress);
+      } else if (loaderLower === "forge") {
+        return await this.installForge(minecraftVersion, loaderVersion, minecraftDir, onProgress);
+      } else if (loaderLower === "neoforge") {
+        return await this.installNeoForge(minecraftVersion, loaderVersion, minecraftDir, onProgress);
+      }
+
+      return { success: false, error: "Unknown loader type" };
+    } catch (error: any) {
+      console.error(`[InstanceService] Failed to install mod loader:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Install Fabric mod loader
+   */
+  private async installFabric(
+    minecraftVersion: string,
+    loaderVersion: string,
+    versionDir: string,
+    versionJsonPath: string,
+    librariesDir: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Fetch version JSON from Fabric Meta API
+      const metaUrl = `https://meta.fabricmc.net/v2/versions/loader/${minecraftVersion}/${loaderVersion}/profile/json`;
+      console.log(`[InstanceService] Fetching Fabric profile from: ${metaUrl}`);
+      onProgress?.("install", 5, 100, "Fetching Fabric profile...");
+      
+      const response = await fetch(metaUrl);
+      if (!response.ok) {
+        return { success: false, error: `Failed to fetch Fabric profile: ${response.statusText}` };
+      }
+
+      const versionJson = await response.json();
+      onProgress?.("install", 10, 100, "Creating version directory...");
+
+      // Create version directory
+      await fs.ensureDir(versionDir);
+
+      // Save version JSON
+      await fs.writeJson(versionJsonPath, versionJson, { spaces: 2 });
+      console.log(`[InstanceService] Saved Fabric version JSON: ${versionJsonPath}`);
+      onProgress?.("install", 15, 100, "Downloading libraries...");
+
+      // Download libraries
+      const libraries = (versionJson.libraries || []).filter((lib: any) => lib.url && lib.name);
+      const totalLibs = libraries.length;
+      let downloadedLibs = 0;
+      
+      for (const lib of libraries) {
+        const libName = lib.name.split(":")[1] || lib.name;
+        onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 80), 100, `Downloading ${libName}...`);
+        await this.downloadLibrary(lib, librariesDir);
+        downloadedLibs++;
+      }
+
+      onProgress?.("install", 100, 100, `Fabric ${loaderVersion} installed!`);
+      console.log(`[InstanceService] Fabric ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Install Quilt mod loader
+   */
+  private async installQuilt(
+    minecraftVersion: string,
+    loaderVersion: string,
+    versionDir: string,
+    versionJsonPath: string,
+    librariesDir: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Fetch version JSON from Quilt Meta API
+      const metaUrl = `https://meta.quiltmc.org/v3/versions/loader/${minecraftVersion}/${loaderVersion}/profile/json`;
+      console.log(`[InstanceService] Fetching Quilt profile from: ${metaUrl}`);
+      onProgress?.("install", 5, 100, "Fetching Quilt profile...");
+      
+      const response = await fetch(metaUrl);
+      if (!response.ok) {
+        return { success: false, error: `Failed to fetch Quilt profile: ${response.statusText}` };
+      }
+
+      const versionJson = await response.json();
+      onProgress?.("install", 10, 100, "Creating version directory...");
+
+      // Create version directory
+      await fs.ensureDir(versionDir);
+
+      // Save version JSON
+      await fs.writeJson(versionJsonPath, versionJson, { spaces: 2 });
+      console.log(`[InstanceService] Saved Quilt version JSON: ${versionJsonPath}`);
+      onProgress?.("install", 15, 100, "Downloading libraries...");
+
+      // Download libraries
+      const libraries = (versionJson.libraries || []).filter((lib: any) => lib.url && lib.name);
+      const totalLibs = libraries.length;
+      let downloadedLibs = 0;
+      
+      for (const lib of libraries) {
+        const libName = lib.name.split(":")[1] || lib.name;
+        onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 80), 100, `Downloading ${libName}...`);
+        await this.downloadLibrary(lib, librariesDir);
+        downloadedLibs++;
+      }
+
+      onProgress?.("install", 100, 100, `Quilt ${loaderVersion} installed!`);
+      console.log(`[InstanceService] Quilt ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Install Forge mod loader
+   * Downloads the Forge installer and runs it headlessly
+   */
+  private async installForge(
+    minecraftVersion: string,
+    loaderVersion: string,
+    minecraftDir: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<{ success: boolean; error?: string }> {
+    const { execSync } = await import("child_process");
+    
+    try {
+      // Build installer URL
+      // Format: https://maven.minecraftforge.net/net/minecraftforge/forge/MC-FORGE/forge-MC-FORGE-installer.jar
+      const forgeVersion = `${minecraftVersion}-${loaderVersion}`;
+      const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeVersion}/forge-${forgeVersion}-installer.jar`;
+      
+      console.log(`[InstanceService] Downloading Forge installer from: ${installerUrl}`);
+      onProgress?.("install", 5, 100, "Downloading Forge installer...");
+
+      const response = await fetch(installerUrl);
+      if (!response.ok) {
+        // Try alternative URL format (some versions use different naming)
+        const altUrl = `https://files.minecraftforge.net/maven/net/minecraftforge/forge/${forgeVersion}/forge-${forgeVersion}-installer.jar`;
+        const altResponse = await fetch(altUrl);
+        if (!altResponse.ok) {
+          return { 
+            success: false, 
+            error: `Failed to download Forge installer. Version ${loaderVersion} may not exist for MC ${minecraftVersion}` 
+          };
+        }
+        // Use alternative response
+        const buffer = Buffer.from(await altResponse.arrayBuffer());
+        await this.runForgeInstaller(buffer, minecraftDir, minecraftVersion, loaderVersion, onProgress);
+        return { success: true };
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      onProgress?.("install", 30, 100, "Running Forge installer...");
+      
+      await this.runForgeInstaller(buffer, minecraftDir, minecraftVersion, loaderVersion, onProgress);
+      
+      onProgress?.("install", 100, 100, `Forge ${loaderVersion} installed!`);
+      console.log(`[InstanceService] Forge ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("[InstanceService] Forge installation error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Run Forge installer in headless mode
+   */
+  private async runForgeInstaller(
+    installerBuffer: Buffer,
+    minecraftDir: string,
+    minecraftVersion: string,
+    loaderVersion: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<void> {
+    const { execSync, spawn } = await import("child_process");
+    const tempDir = path.join(app.getPath("temp"), "modex-forge-install");
+    const installerPath = path.join(tempDir, `forge-installer-${minecraftVersion}-${loaderVersion}.jar`);
+
+    try {
+      // Save installer to temp
+      await fs.ensureDir(tempDir);
+      await fs.writeFile(installerPath, installerBuffer);
+      
+      onProgress?.("install", 40, 100, "Running installer (this may take a while)...");
+      
+      // Find Java executable
+      let javaPath = "java";
+      const platform = process.platform;
+      
+      if (platform === "win32") {
+        // Try to find Java in Minecraft's runtime
+        const mcJavaPath = path.join(
+          process.env.LOCALAPPDATA || "",
+          "Packages",
+          "Microsoft.4297127D64EC6_8wekyb3d8bbwe",
+          "LocalCache",
+          "Local",
+          "runtime"
+        );
+        
+        if (await fs.pathExists(mcJavaPath)) {
+          const runtimes = await fs.readdir(mcJavaPath);
+          for (const runtime of runtimes) {
+            const javawPath = path.join(mcJavaPath, runtime, "windows-x64", runtime, "bin", "java.exe");
+            if (await fs.pathExists(javawPath)) {
+              javaPath = javawPath;
+              break;
+            }
+          }
+        }
+        
+        // Fallback to Program Files Java
+        if (javaPath === "java") {
+          const javaHome = process.env.JAVA_HOME;
+          if (javaHome && await fs.pathExists(path.join(javaHome, "bin", "java.exe"))) {
+            javaPath = path.join(javaHome, "bin", "java.exe");
+          }
+        }
+      }
+      
+      console.log(`[InstanceService] Using Java: ${javaPath}`);
+      console.log(`[InstanceService] Running Forge installer: ${installerPath}`);
+      
+      // Run installer in headless mode
+      // The --installClient flag tells Forge to install without GUI
+      return new Promise((resolve, reject) => {
+        const proc = spawn(javaPath, [
+          "-jar",
+          installerPath,
+          "--installClient",
+          minecraftDir
+        ], {
+          cwd: tempDir,
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+
+        let output = "";
+        proc.stdout?.on("data", (data) => {
+          output += data.toString();
+          const lines = data.toString().split("\n");
+          for (const line of lines) {
+            if (line.includes("Downloading")) {
+              onProgress?.("install", 50, 100, line.trim().slice(0, 50));
+            } else if (line.includes("Patching")) {
+              onProgress?.("install", 70, 100, "Patching files...");
+            } else if (line.includes("Injecting")) {
+              onProgress?.("install", 80, 100, "Injecting profile...");
+            }
+          }
+        });
+        
+        proc.stderr?.on("data", (data) => {
+          output += data.toString();
+        });
+
+        proc.on("close", (code) => {
+          // Clean up installer
+          fs.remove(installerPath).catch(() => {});
+          
+          if (code === 0) {
+            console.log("[InstanceService] Forge installer completed successfully");
+            resolve();
+          } else {
+            console.error("[InstanceService] Forge installer output:", output);
+            reject(new Error(`Forge installer exited with code ${code}`));
+          }
+        });
+
+        proc.on("error", (err) => {
+          fs.remove(installerPath).catch(() => {});
+          reject(err);
+        });
+
+        // Timeout after 5 minutes
+        setTimeout(() => {
+          proc.kill();
+          reject(new Error("Forge installer timed out"));
+        }, 300000);
+      });
+    } catch (error) {
+      // Clean up on error
+      await fs.remove(installerPath).catch(() => {});
+      throw error;
+    }
+  }
+
+  /**
+   * Install NeoForge mod loader
+   * Downloads the NeoForge installer and runs it headlessly
+   */
+  private async installNeoForge(
+    minecraftVersion: string,
+    loaderVersion: string,
+    minecraftDir: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Build installer URL
+      // Format: https://maven.neoforged.net/releases/net/neoforged/neoforge/VERSION/neoforge-VERSION-installer.jar
+      const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${loaderVersion}/neoforge-${loaderVersion}-installer.jar`;
+      
+      console.log(`[InstanceService] Downloading NeoForge installer from: ${installerUrl}`);
+      onProgress?.("install", 5, 100, "Downloading NeoForge installer...");
+
+      const response = await fetch(installerUrl);
+      if (!response.ok) {
+        return { 
+          success: false, 
+          error: `Failed to download NeoForge installer. Version ${loaderVersion} may not exist.` 
+        };
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      onProgress?.("install", 30, 100, "Running NeoForge installer...");
+      
+      await this.runNeoForgeInstaller(buffer, minecraftDir, loaderVersion, onProgress);
+      
+      onProgress?.("install", 100, 100, `NeoForge ${loaderVersion} installed!`);
+      console.log(`[InstanceService] NeoForge ${loaderVersion} installed successfully`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("[InstanceService] NeoForge installation error:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Run NeoForge installer in headless mode
+   */
+  private async runNeoForgeInstaller(
+    installerBuffer: Buffer,
+    minecraftDir: string,
+    loaderVersion: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<void> {
+    const { spawn } = await import("child_process");
+    const tempDir = path.join(app.getPath("temp"), "modex-neoforge-install");
+    const installerPath = path.join(tempDir, `neoforge-installer-${loaderVersion}.jar`);
+
+    try {
+      // Save installer to temp
+      await fs.ensureDir(tempDir);
+      await fs.writeFile(installerPath, installerBuffer);
+      
+      onProgress?.("install", 40, 100, "Running installer (this may take a while)...");
+      
+      // Find Java executable (same logic as Forge)
+      let javaPath = "java";
+      const platform = process.platform;
+      
+      if (platform === "win32") {
+        const mcJavaPath = path.join(
+          process.env.LOCALAPPDATA || "",
+          "Packages",
+          "Microsoft.4297127D64EC6_8wekyb3d8bbwe",
+          "LocalCache",
+          "Local",
+          "runtime"
+        );
+        
+        if (await fs.pathExists(mcJavaPath)) {
+          const runtimes = await fs.readdir(mcJavaPath);
+          for (const runtime of runtimes) {
+            const javawPath = path.join(mcJavaPath, runtime, "windows-x64", runtime, "bin", "java.exe");
+            if (await fs.pathExists(javawPath)) {
+              javaPath = javawPath;
+              break;
+            }
+          }
+        }
+        
+        if (javaPath === "java") {
+          const javaHome = process.env.JAVA_HOME;
+          if (javaHome && await fs.pathExists(path.join(javaHome, "bin", "java.exe"))) {
+            javaPath = path.join(javaHome, "bin", "java.exe");
+          }
+        }
+      }
+      
+      console.log(`[InstanceService] Using Java: ${javaPath}`);
+      console.log(`[InstanceService] Running NeoForge installer: ${installerPath}`);
+      
+      return new Promise((resolve, reject) => {
+        const proc = spawn(javaPath, [
+          "-jar",
+          installerPath,
+          "--installClient",
+          minecraftDir
+        ], {
+          cwd: tempDir,
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+
+        let output = "";
+        proc.stdout?.on("data", (data) => {
+          output += data.toString();
+          const lines = data.toString().split("\n");
+          for (const line of lines) {
+            if (line.includes("Downloading")) {
+              onProgress?.("install", 50, 100, line.trim().slice(0, 50));
+            } else if (line.includes("Patching") || line.includes("Processing")) {
+              onProgress?.("install", 70, 100, "Processing files...");
+            } else if (line.includes("Injecting") || line.includes("Successfully")) {
+              onProgress?.("install", 90, 100, "Finalizing...");
+            }
+          }
+        });
+        
+        proc.stderr?.on("data", (data) => {
+          output += data.toString();
+        });
+
+        proc.on("close", (code) => {
+          fs.remove(installerPath).catch(() => {});
+          
+          if (code === 0) {
+            console.log("[InstanceService] NeoForge installer completed successfully");
+            resolve();
+          } else {
+            console.error("[InstanceService] NeoForge installer output:", output);
+            reject(new Error(`NeoForge installer exited with code ${code}`));
+          }
+        });
+
+        proc.on("error", (err) => {
+          fs.remove(installerPath).catch(() => {});
+          reject(err);
+        });
+
+        // Timeout after 5 minutes
+        setTimeout(() => {
+          proc.kill();
+          reject(new Error("NeoForge installer timed out"));
+        }, 300000);
+      });
+    } catch (error) {
+      await fs.remove(installerPath).catch(() => {});
+      throw error;
+    }
+  }
+
+  /**
+   * Download a library to the libraries directory
+   * Maven-style: group.id:artifact:version -> group/id/artifact/version/artifact-version.jar
+   */
+  private async downloadLibrary(
+    lib: { name: string; url: string; sha1?: string },
+    librariesDir: string
+  ): Promise<void> {
+    // Parse Maven coordinates: group:artifact:version
+    const parts = lib.name.split(":");
+    if (parts.length < 3) return;
+
+    const [group, artifact, version] = parts;
+    const groupPath = group.replace(/\./g, "/");
+    const jarName = `${artifact}-${version}.jar`;
+    const libPath = path.join(librariesDir, groupPath, artifact, version, jarName);
+
+    // Check if already exists
+    if (await fs.pathExists(libPath)) {
+      return;
+    }
+
+    // Build download URL
+    const downloadUrl = `${lib.url}${groupPath}/${artifact}/${version}/${jarName}`;
+    
+    try {
+      console.log(`[InstanceService] Downloading library: ${lib.name}`);
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        console.warn(`[InstanceService] Failed to download ${lib.name}: ${response.statusText}`);
+        return;
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      
+      // Ensure directory exists
+      await fs.ensureDir(path.dirname(libPath));
+      
+      // Save library
+      await fs.writeFile(libPath, buffer);
+      console.log(`[InstanceService] Downloaded: ${jarName}`);
+    } catch (error) {
+      console.warn(`[InstanceService] Failed to download ${lib.name}:`, error);
     }
   }
 
@@ -1408,6 +2092,481 @@ export class InstanceService {
     } catch (error) {
       console.error("[InstanceService] Error duplicating:", error);
       return null;
+    }
+  }
+
+  // ==================== GAME TRACKING ====================
+
+  /**
+   * Set callback for game status changes
+   */
+  setGameStatusCallback(callback: (instanceId: string, info: RunningGameInfo) => void) {
+    this.onGameStatusChange = callback;
+  }
+
+  /**
+   * Set callback for real-time log lines
+   */
+  setGameLogCallback(callback: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) => void) {
+    this.onGameLogLine = callback;
+  }
+
+  /**
+   * Get running game info for an instance
+   */
+  getRunningGame(instanceId: string): RunningGameInfo | undefined {
+    return this.runningGames.get(instanceId);
+  }
+
+  /**
+   * Get all running games
+   */
+  getAllRunningGames(): Map<string, RunningGameInfo> {
+    return new Map(this.runningGames);
+  }
+
+  /**
+   * Start tracking a launched game
+   */
+  private async startGameTracking(instance: ModexInstance): Promise<void> {
+    const gameInfo: RunningGameInfo = {
+      instanceId: instance.id,
+      startTime: Date.now(),
+      status: "launching",
+      loadedMods: 0,
+      totalMods: instance.modCount || 0
+    };
+
+    this.runningGames.set(instance.id, gameInfo);
+    this.onGameStatusChange?.(instance.id, gameInfo);
+
+    // Start watching for the Java process and logs
+    this.watchForGameProcess(instance);
+    this.watchGameLogs(instance);
+  }
+
+  /**
+   * Watch for Java/Minecraft process to start
+   */
+  private async watchForGameProcess(instance: ModexInstance): Promise<void> {
+    const gameInfo = this.runningGames.get(instance.id);
+    if (!gameInfo) return;
+
+    // Poll for javaw process with our game directory
+    const checkInterval = setInterval(async () => {
+      try {
+        const { execSync } = await import("child_process");
+        const platform = process.platform;
+        
+        if (platform === "win32") {
+          // Windows: use PowerShell to find java processes (WMIC is deprecated)
+          try {
+            const result = execSync(
+              `powershell -Command "Get-CimInstance Win32_Process -Filter \\"Name like '%java%'\\" | Select-Object ProcessId, CommandLine | ConvertTo-Json"`,
+              { encoding: "utf-8", timeout: 10000 }
+            );
+            
+            // Parse JSON result
+            let processes: any[] = [];
+            try {
+              const parsed = JSON.parse(result);
+              processes = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+              // No processes found
+              return;
+            }
+            
+            // Look for our instance path in the command line
+            for (const proc of processes) {
+              if (!proc || !proc.CommandLine) continue;
+              
+              const cmdLine = proc.CommandLine as string;
+              // Check if this Java process is running our instance
+              if (cmdLine.includes(instance.path) || cmdLine.includes(instance.path.replace(/\\/g, "/"))) {
+                const pid = proc.ProcessId;
+                if (pid && !isNaN(pid)) {
+                  gameInfo.gamePid = pid;
+                  gameInfo.status = "loading_mods";
+                  this.onGameStatusChange?.(instance.id, gameInfo);
+                  console.log(`[InstanceService] Found game process PID: ${pid}`);
+                  clearInterval(checkInterval);
+                  
+                  // Start monitoring process health
+                  this.monitorGameProcess(instance);
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("[InstanceService] PowerShell process query failed:", e);
+          }
+        }
+      } catch (error) {
+        console.warn("[InstanceService] Error checking for game process:", error);
+      }
+    }, 2000);
+
+    // Stop checking after 2 minutes
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      const info = this.runningGames.get(instance.id);
+      if (info && !info.gamePid) {
+        console.log("[InstanceService] Timeout waiting for game process");
+      }
+    }, 120000);
+  }
+
+  /**
+   * Monitor game process to detect when it exits
+   */
+  private async monitorGameProcess(instance: ModexInstance): Promise<void> {
+    const gameInfo = this.runningGames.get(instance.id);
+    if (!gameInfo || !gameInfo.gamePid) return;
+
+    const checkInterval = setInterval(async () => {
+      try {
+        // Check if process is still running
+        process.kill(gameInfo.gamePid!, 0); // Signal 0 just checks if process exists
+      } catch (error) {
+        // Process no longer exists
+        console.log(`[InstanceService] Game process ${gameInfo.gamePid} exited`);
+        clearInterval(checkInterval);
+        this.stopGameTracking(instance.id);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Watch game logs for mod loading progress
+   */
+  private async watchGameLogs(instance: ModexInstance): Promise<void> {
+    const logsPath = path.join(instance.path, "logs");
+    const latestLog = path.join(logsPath, "latest.log");
+
+    // Wait for logs directory to exist
+    let attempts = 0;
+    while (!(await fs.pathExists(logsPath)) && attempts < 30) {
+      await new Promise(r => setTimeout(r, 1000));
+      attempts++;
+    }
+
+    if (!(await fs.pathExists(logsPath))) {
+      console.warn("[InstanceService] Logs directory not found");
+      return;
+    }
+
+    const gameInfo = this.runningGames.get(instance.id);
+    if (!gameInfo) return;
+
+    // IMPORTANT: Start from the current file size to ignore old log content
+    // This ensures we only read NEW log entries from this launch
+    let lastSize = 0;
+    let initialSize = 0;
+    const launchTime = gameInfo.startTime;
+    
+    try {
+      if (await fs.pathExists(latestLog)) {
+        const stats = await fs.stat(latestLog);
+        // If the log file was modified before we launched, skip its content
+        if (stats.mtimeMs < launchTime) {
+          lastSize = stats.size;
+          initialSize = stats.size;
+          console.log(`[InstanceService] Skipping existing log content (${lastSize} bytes)`);
+        }
+      }
+    } catch {}
+
+    const readNewContent = async () => {
+      try {
+        if (!(await fs.pathExists(latestLog))) return;
+        
+        const stats = await fs.stat(latestLog);
+        
+        // Check if log file was replaced (new game session)
+        if (stats.size < lastSize) {
+          // File was truncated/replaced, start from beginning
+          lastSize = 0;
+          console.log("[InstanceService] Log file was replaced, reading from start");
+        }
+        
+        if (stats.size === lastSize) return;
+        
+        // Read only new content using fs-extra
+        const content = await fs.readFile(latestLog, "utf-8");
+        const newContent = content.slice(lastSize);
+        lastSize = stats.size;
+        
+        if (newContent && newContent.trim()) {
+          this.parseLogContent(instance.id, newContent);
+        }
+      } catch (error) {
+        // File might be locked, ignore
+      }
+    };
+
+    // Poll for log changes
+    const logCheckInterval = setInterval(readNewContent, 500);
+
+    // Store interval for cleanup
+    const info = this.runningGames.get(instance.id);
+    if (info) {
+      (info as any).logCheckInterval = logCheckInterval;
+    }
+  }
+
+  /**
+   * Parse a single log line into structured format
+   */
+  private parseLogLine(rawLine: string): { time: string; level: string; message: string; raw: string } {
+    // Minecraft log format: [HH:MM:SS] [Thread/LEVEL] [Category]: Message
+    // Or simpler: [HH:MM:SS] [LEVEL]: Message
+    const timestampMatch = rawLine.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
+    const levelMatch = rawLine.match(/\[(INFO|WARN|ERROR|DEBUG|FATAL|TRACE)[\]/]/i);
+    
+    const time = timestampMatch ? timestampMatch[1] : new Date().toLocaleTimeString('en-US', { hour12: false });
+    const level = levelMatch ? levelMatch[1].toUpperCase() : 'INFO';
+    
+    // Extract message - everything after the second ] or just the line
+    let message = rawLine;
+    const lastBracket = rawLine.lastIndexOf(']');
+    if (lastBracket > 0 && lastBracket < rawLine.length - 1) {
+      message = rawLine.substring(lastBracket + 1).trim();
+      if (message.startsWith(':')) {
+        message = message.substring(1).trim();
+      }
+    }
+    
+    return { time, level, message, raw: rawLine };
+  }
+
+  /**
+   * Parse log content for mod loading progress
+   */
+  private parseLogContent(instanceId: string, content: string): void {
+    const gameInfo = this.runningGames.get(instanceId);
+    if (!gameInfo) return;
+
+    const lines = content.split("\n");
+    let hasChanges = false;
+    
+    for (const line of lines) {
+      // Skip empty lines
+      if (!line.trim()) continue;
+      
+      // Send log line to frontend for real-time console
+      if (this.onGameLogLine) {
+        const parsed = this.parseLogLine(line);
+        this.onGameLogLine(instanceId, parsed);
+      }
+      
+      // ========== FABRIC/QUILT MOD LOADING ==========
+      // Fabric/Quilt: "Loading X mods:"
+      const fabricLoadingMatch = line.match(/Loading\s+(\d+)\s+mods?:/i);
+      if (fabricLoadingMatch) {
+        gameInfo.totalMods = parseInt(fabricLoadingMatch[1]);
+        gameInfo.loadedMods = 0;
+        gameInfo.currentMod = "Initializing mods...";
+        if (gameInfo.status === "launching") {
+          gameInfo.status = "loading_mods";
+        }
+        hasChanges = true;
+        continue;
+      }
+
+      // ========== FORGE MOD LOADING ==========
+      // Forge: "Mod List: X mods"
+      const forgeModListMatch = line.match(/Mod List:\s*(\d+)\s*mods?/i);
+      if (forgeModListMatch) {
+        gameInfo.totalMods = parseInt(forgeModListMatch[1]);
+        gameInfo.loadedMods = 0;
+        gameInfo.currentMod = "Loading mods...";
+        if (gameInfo.status === "launching") {
+          gameInfo.status = "loading_mods";
+        }
+        hasChanges = true;
+        continue;
+      }
+
+      // Forge: "Loading X mods" or "Found X mod candidates"
+      const forgeLoadingMatch = line.match(/(?:Loading|Found)\s+(\d+)\s+(?:mods?|mod candidates)/i);
+      if (forgeLoadingMatch && !line.includes("mods:")) {
+        const count = parseInt(forgeLoadingMatch[1]);
+        if (count > gameInfo.totalMods) {
+          gameInfo.totalMods = count;
+        }
+        if (gameInfo.status === "launching") {
+          gameInfo.status = "loading_mods";
+        }
+        hasChanges = true;
+        continue;
+      }
+
+      // ========== NEOFORGE MOD LOADING ==========
+      // NeoForge: "Loading X mods"
+      const neoforgeLoadingMatch = line.match(/NeoForge.*Loading\s+(\d+)/i);
+      if (neoforgeLoadingMatch) {
+        gameInfo.totalMods = parseInt(neoforgeLoadingMatch[1]);
+        gameInfo.loadedMods = 0;
+        gameInfo.currentMod = "Loading NeoForge mods...";
+        if (gameInfo.status === "launching") {
+          gameInfo.status = "loading_mods";
+        }
+        hasChanges = true;
+        continue;
+      }
+
+      // Only process loading phases if we're in loading_mods status
+      if (gameInfo.status !== "loading_mods") continue;
+
+      // ========== LOADING PROGRESS PHASES ==========
+      // These represent different phases of loading, use them as percentage markers
+
+      // Mixin application (early phase - 10-20%)
+      if (line.match(/\[.*mixin.*\]/i) || line.includes("SpongePowered MIXIN")) {
+        gameInfo.loadedMods = Math.max(gameInfo.loadedMods, Math.floor(gameInfo.totalMods * 0.15));
+        gameInfo.currentMod = "Applying mixins...";
+        hasChanges = true;
+        continue;
+      }
+
+      // Registry setup (20-40%)
+      if (line.includes("Registr") || line.includes("registry")) {
+        gameInfo.loadedMods = Math.max(gameInfo.loadedMods, Math.floor(gameInfo.totalMods * 0.3));
+        gameInfo.currentMod = "Setting up registries...";
+        hasChanges = true;
+        continue;
+      }
+
+      // Model/Resource loading (40-60%)
+      if (line.includes("ModelLoader") || line.includes("Loading model") || line.includes("Baking models")) {
+        gameInfo.loadedMods = Math.max(gameInfo.loadedMods, Math.floor(gameInfo.totalMods * 0.5));
+        gameInfo.currentMod = "Loading models...";
+        hasChanges = true;
+        continue;
+      }
+
+      // Texture creation (60-80%)
+      if (line.includes("Created:") && line.includes("textures")) {
+        gameInfo.loadedMods = Math.max(gameInfo.loadedMods, Math.floor(gameInfo.totalMods * 0.7));
+        gameInfo.currentMod = "Loading textures...";
+        hasChanges = true;
+        continue;
+      }
+
+      // Sound engine (80-90%)
+      if (line.includes("Sound engine started") || line.includes("OpenAL initialized")) {
+        gameInfo.loadedMods = Math.max(gameInfo.loadedMods, Math.floor(gameInfo.totalMods * 0.85));
+        gameInfo.currentMod = "Starting sound engine...";
+        hasChanges = true;
+        continue;
+      }
+
+      // Resource reload (90-95%)
+      if (line.includes("Reloading ResourceManager") || line.includes("resource reload")) {
+        gameInfo.loadedMods = Math.max(gameInfo.loadedMods, Math.floor(gameInfo.totalMods * 0.92));
+        gameInfo.currentMod = "Reloading resources...";
+        hasChanges = true;
+        continue;
+      }
+
+      // ========== GAME READY INDICATORS ==========
+      if (
+        line.includes("took") && line.includes("seconds to start") ||
+        line.includes("Narrator library") ||
+        line.includes("Backend library: LWJGL") ||
+        line.match(/\[Render thread\/INFO\].*Minecraft/)
+      ) {
+        gameInfo.status = "running";
+        gameInfo.loadedMods = gameInfo.totalMods;
+        gameInfo.currentMod = undefined;
+        hasChanges = true;
+        continue;
+      }
+    }
+
+    // Notify of changes only if something changed
+    if (hasChanges) {
+      this.onGameStatusChange?.(instanceId, gameInfo);
+    }
+  }
+
+  /**
+   * Stop tracking a game
+   */
+  stopGameTracking(instanceId: string): void {
+    const gameInfo = this.runningGames.get(instanceId);
+    if (!gameInfo) return;
+
+    // Clean up log watcher
+    if (gameInfo.logWatcher) {
+      gameInfo.logWatcher.close();
+    }
+    if ((gameInfo as any).logCheckInterval) {
+      clearInterval((gameInfo as any).logCheckInterval);
+    }
+
+    gameInfo.status = "stopped";
+    this.onGameStatusChange?.(instanceId, gameInfo);
+    
+    // Remove from running games after notifying
+    setTimeout(() => {
+      this.runningGames.delete(instanceId);
+    }, 1000);
+  }
+
+  /**
+   * Kill a running game
+   */
+  async killGame(instanceId: string): Promise<boolean> {
+    const gameInfo = this.runningGames.get(instanceId);
+    if (!gameInfo) return false;
+
+    try {
+      const platform = process.platform;
+      const { execSync } = await import("child_process");
+
+      if (gameInfo.gamePid) {
+        if (platform === "win32") {
+          execSync(`taskkill /F /PID ${gameInfo.gamePid}`, { encoding: "utf-8" });
+        } else {
+          process.kill(gameInfo.gamePid, "SIGKILL");
+        }
+        console.log(`[InstanceService] Killed game process ${gameInfo.gamePid}`);
+      }
+
+      // Also try to kill any remaining java processes for this instance
+      if (platform === "win32") {
+        try {
+          const result = execSync(
+            `powershell -Command "Get-CimInstance Win32_Process -Filter \\"Name like '%java%'\\" | Select-Object ProcessId, CommandLine | ConvertTo-Json"`,
+            { encoding: "utf-8", timeout: 10000 }
+          );
+          
+          const instance = this.instances.find(i => i.id === instanceId);
+          if (instance) {
+            let processes: any[] = [];
+            try {
+              const parsed = JSON.parse(result);
+              processes = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {}
+            
+            for (const proc of processes) {
+              if (!proc || !proc.CommandLine) continue;
+              if (proc.CommandLine.includes(instance.path)) {
+                try {
+                  execSync(`taskkill /F /PID ${proc.ProcessId}`);
+                } catch {}
+              }
+            }
+          }
+        } catch {}
+      }
+
+      this.stopGameTracking(instanceId);
+      return true;
+    } catch (error) {
+      console.error("[InstanceService] Error killing game:", error);
+      return false;
     }
   }
 }

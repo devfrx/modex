@@ -1562,6 +1562,7 @@ async function initializeBackend() {
               name: modpack.name,
               minecraftVersion: modpack.minecraft_version || "1.20.1",
               loader: modpack.loader || "forge",
+              loaderVersion: modpack.loader_version,
               modpackId: modpack.id,
               description: modpack.description,
               source: modpack.cf_project_id ? {
@@ -1945,6 +1946,7 @@ async function initializeBackend() {
                 name: modpack.name,
                 minecraftVersion: modpack.minecraft_version || "1.20.1",
                 loader: modpack.loader || "forge",
+                loaderVersion: modpack.loader_version,
                 modpackId: modpack.id,
                 description: modpack.description,
                 source: modpack.cf_project_id ? {
@@ -2137,6 +2139,7 @@ async function initializeBackend() {
                 name: modpack.name,
                 minecraftVersion: modpack.minecraft_version || "1.20.1",
                 loader: modpack.loader || "forge",
+                loaderVersion: modpack.loader_version,
                 modpackId: modpack.id,
                 description: modpack.description,
               });
@@ -2998,7 +3001,64 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("instance:launch", async (_, instanceId: string) => {
-    return instanceService.launchInstance(instanceId);
+    // Send loader installation progress to renderer
+    const onProgress = (stage: string, current: number, total: number, detail?: string) => {
+      if (win) {
+        win.webContents.send("loader:installProgress", { stage, current, total, detail });
+      }
+    };
+    return instanceService.launchInstance(instanceId, onProgress);
+  });
+
+  // Game tracking: Get running game info
+  ipcMain.handle("instance:getRunningGame", async (_, instanceId: string) => {
+    const info = instanceService.getRunningGame(instanceId);
+    if (!info) return null;
+    // Return serializable object (without logWatcher)
+    return {
+      instanceId: info.instanceId,
+      launcherPid: info.launcherPid,
+      gamePid: info.gamePid,
+      startTime: info.startTime,
+      status: info.status,
+      loadedMods: info.loadedMods,
+      totalMods: info.totalMods,
+      currentMod: info.currentMod
+    };
+  });
+
+  // Game tracking: Kill running game
+  ipcMain.handle("instance:killGame", async (_, instanceId: string) => {
+    return instanceService.killGame(instanceId);
+  });
+
+  // Setup game status change callback
+  instanceService.setGameStatusCallback((instanceId, info) => {
+    if (win) {
+      win.webContents.send("game:statusChange", {
+        instanceId,
+        launcherPid: info.launcherPid,
+        gamePid: info.gamePid,
+        startTime: info.startTime,
+        status: info.status,
+        loadedMods: info.loadedMods,
+        totalMods: info.totalMods,
+        currentMod: info.currentMod
+      });
+    }
+  });
+
+  // Setup game log line callback for real-time console
+  instanceService.setGameLogCallback((instanceId, logLine) => {
+    if (win) {
+      win.webContents.send("game:logLine", {
+        instanceId,
+        time: logLine.time,
+        level: logLine.level,
+        message: logLine.message,
+        raw: logLine.raw
+      });
+    }
   });
 
   ipcMain.handle("instance:openFolder", async (_, instanceId: string, subfolder?: string) => {
@@ -3068,6 +3128,7 @@ async function initializeBackend() {
       name: modpack.name,
       minecraftVersion: modpack.minecraft_version || "1.20.1",
       loader: modpack.loader || "forge",
+      loaderVersion: modpack.loader_version,
       modpackId: modpack.id,
       description: modpack.description,
       source: modpack.cf_project_id ? {

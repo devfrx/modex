@@ -16,9 +16,22 @@ import type {
   InstanceStats,
 } from "@/types";
 
+// Running game info interface
+export interface RunningGameInfo {
+  instanceId: string;
+  launcherPid?: number;
+  gamePid?: number;
+  startTime: number;
+  status: "launching" | "loading_mods" | "running" | "stopped";
+  loadedMods: number;
+  totalMods: number;
+  currentMod?: string;
+}
+
 // Reactive state
 const instances = ref<ModexInstance[]>([]);
 const isLoading = ref(false);
+const runningGames = ref<Map<string, RunningGameInfo>>(new Map());
 const syncProgress = ref<{
   stage: string;
   current: number;
@@ -252,28 +265,79 @@ async function setLauncherConfig(config: {
 }
 
 /**
+ * Get running game info for an instance
+ */
+async function getRunningGame(instanceId: string): Promise<RunningGameInfo | null> {
+  return window.api.instances.getRunningGame(instanceId);
+}
+
+/**
+ * Kill a running game
+ */
+async function killGame(instanceId: string): Promise<boolean> {
+  const result = await window.api.instances.killGame(instanceId);
+  if (result) {
+    runningGames.value.delete(instanceId);
+  }
+  return result;
+}
+
+/**
  * Composable hook
  */
 export function useInstances() {
-  let unsubscribe: (() => void) | null = null;
+  let unsubscribeSyncProgress: (() => void) | null = null;
+  let unsubscribeGameStatus: (() => void) | null = null;
+  let unsubscribeGameLogLine: (() => void) | null = null;
+  
+  // Log line callbacks (registered per-component)
+  const logLineCallbacks = new Set<(instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) => void>();
 
   onMounted(() => {
     // Subscribe to sync progress events
-    unsubscribe = window.api.instances.onSyncProgress((data) => {
+    unsubscribeSyncProgress = window.api.instances.onSyncProgress((data) => {
       syncProgress.value = data;
+    });
+
+    // Subscribe to game status change events
+    unsubscribeGameStatus = window.api.instances.onGameStatusChange((data) => {
+      if (data.status === "stopped") {
+        runningGames.value.delete(data.instanceId);
+      } else {
+        runningGames.value.set(data.instanceId, data);
+      }
+      // Force reactivity update
+      runningGames.value = new Map(runningGames.value);
+    });
+    
+    // Subscribe to game log line events
+    unsubscribeGameLogLine = window.api.instances.onLogLine((data) => {
+      logLineCallbacks.forEach(cb => cb(data.instanceId, data));
     });
   });
 
   onUnmounted(() => {
-    unsubscribe?.();
+    unsubscribeSyncProgress?.();
+    unsubscribeGameStatus?.();
+    unsubscribeGameLogLine?.();
     syncProgress.value = null;
+    logLineCallbacks.clear();
   });
+  
+  /**
+   * Register a callback for log lines (for a specific instance or all)
+   */
+  function onGameLogLine(callback: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) => void): () => void {
+    logLineCallbacks.add(callback);
+    return () => logLineCallbacks.delete(callback);
+  }
 
   return {
     // State
     instances,
     isLoading,
     syncProgress,
+    runningGames,
     
     // Computed
     instanceCount,
@@ -296,6 +360,9 @@ export function useInstances() {
     createFromModpack,
     getLauncherConfig,
     setLauncherConfig,
+    getRunningGame,
+    killGame,
+    onGameLogLine,
   };
 }
 

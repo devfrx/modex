@@ -108,7 +108,7 @@ contextBridge.exposeInMainWorld("api", {
     ): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getModFiles", modId, options),
     getCategories: (
-      contentType?: "mods" | "resourcepacks" | "shaders"
+      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks"
     ): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getCategories", contentType),
     getPopular: (gameVersion?: string, modLoader?: string): Promise<any[]> =>
@@ -291,8 +291,12 @@ contextBridge.exposeInMainWorld("api", {
       };
     }> => ipcRenderer.invoke("modpacks:getUnsavedChanges", modpackId),
 
-    revertUnsavedChanges: (modpackId: string): Promise<boolean> =>
-      ipcRenderer.invoke("modpacks:revertUnsavedChanges", modpackId),
+    revertUnsavedChanges: (modpackId: string): Promise<{
+      success: boolean;
+      restoredMods: number;
+      skippedMods: number;
+      missingMods: Array<{ id: string; name: string }>;
+    }> => ipcRenderer.invoke("modpacks:revertUnsavedChanges", modpackId),
 
     // CurseForge update checking
     checkCFUpdate: (
@@ -572,11 +576,23 @@ contextBridge.exposeInMainWorld("api", {
         addedMods: { name: string; version: string }[];
         removedMods: string[];
         updatedMods: string[];
-        enabledMods?: string[];
-        disabledMods?: string[];
+        enabledMods: string[];
+        disabledMods: string[];
         hasVersionHistoryChanges?: boolean;
       };
     }> => ipcRenderer.invoke("remote:checkUpdate", modpackId),
+    /** Import a modpack directly from a remote Gist/URL */
+    importFromUrl: (
+      url: string
+    ): Promise<{
+      success: boolean;
+      modpackId?: string;
+      modpackName?: string;
+      modsImported?: number;
+      error?: string;
+      alreadyExists?: boolean;
+      message?: string;
+    }> => ipcRenderer.invoke("remote:importFromUrl", url),
   },
 
   // ========== UPDATES ==========
@@ -604,9 +620,13 @@ contextBridge.exposeInMainWorld("api", {
     checkAll: (): Promise<
       Array<{
         modId: string;
+        projectId: string | null;
+        projectName: string;
+        currentVersion: string;
         hasUpdate: boolean;
         latestVersion: string | null;
         source: string;
+        updateUrl: string | null;
         newFileId?: number;
       }>
     > => ipcRenderer.invoke("updates:checkAll"),
@@ -615,9 +635,13 @@ contextBridge.exposeInMainWorld("api", {
     ): Promise<
       Array<{
         modId: string;
+        projectId: string | null;
+        projectName: string;
+        currentVersion: string;
         hasUpdate: boolean;
         latestVersion: string | null;
         source: string;
+        updateUrl: string | null;
         newFileId?: number;
       }>
     > => ipcRenderer.invoke("updates:checkModpack", modpackId),
@@ -899,6 +923,7 @@ contextBridge.exposeInMainWorld("api", {
         modsDownloaded: number;
         modsSkipped: number;
         configsCopied: number;
+        configsSkipped: number;
         errors: string[];
         warnings: string[];
       };
@@ -1073,6 +1098,7 @@ contextBridge.exposeInMainWorld("api", {
         exportedAt: string;
         sourceInstanceId: string;
         sourceInstanceName: string;
+        modpackId?: string;
         folders: string[];
         fileCount: number;
       };

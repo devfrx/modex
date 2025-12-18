@@ -562,6 +562,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:revertUnsavedChanges",
     async (_, modpackId: string) => {
+      // Returns detailed result with info about missing mods
       return metadataManager.revertUnsavedChanges(modpackId);
     }
   );
@@ -1241,6 +1242,109 @@ async function initializeBackend() {
     return metadataManager.checkForRemoteUpdate(modpackId);
   });
 
+  ipcMain.handle("remote:importFromUrl", async (_, url: string) => {
+    if (!win) return { success: false, error: "Window not available" };
+
+    try {
+      // Send progress
+      win.webContents.send("import:progress", {
+        current: 5,
+        total: 100,
+        modName: "Fetching remote manifest...",
+      });
+
+      // Fetch the manifest from URL
+      let urlToFetch = url;
+
+      // Sanitize Gist URL: Remove commit hash if present
+      const gistRegex =
+        /^(https:\/\/gist\.githubusercontent\.com\/[^/]+\/[^/]+\/raw)\/[0-9a-f]{40}\/(.+)$/;
+      const match = urlToFetch.match(gistRegex);
+      if (match) {
+        urlToFetch = `${match[1]}/${match[2]}`;
+      }
+
+      // For Gist URLs, use the GitHub API
+      const gistApiRegex =
+        /^https:\/\/gist\.githubusercontent\.com\/([^/]+)\/([^/]+)\/raw\/(.+)$/;
+      const apiMatch = urlToFetch.match(gistApiRegex);
+
+      let manifest: any;
+
+      if (apiMatch) {
+        const gistId = apiMatch[2];
+        const filename = apiMatch[3];
+        const apiUrl = `https://api.github.com/gists/${gistId}`;
+
+        const apiResponse = await fetch(apiUrl, {
+          headers: {
+            Accept: "application/vnd.github.v3+json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+          },
+        });
+
+        if (!apiResponse.ok) {
+          throw new Error(`GitHub API request failed: ${apiResponse.statusText}`);
+        }
+
+        const gistData = await apiResponse.json();
+        const file = gistData.files[filename];
+        if (!file) {
+          throw new Error(`File "${filename}" not found in gist`);
+        }
+        manifest = JSON.parse(file.content);
+      } else {
+        // Regular URL fetch
+        const response = await fetch(urlToFetch, {
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch: ${response.statusText}`);
+        }
+        manifest = await response.json();
+      }
+
+      // Validate manifest
+      if (!manifest.modex_version || !manifest.share_code) {
+        throw new Error("Invalid MODEX manifest: Missing modex_version or share_code");
+      }
+
+      win.webContents.send("import:progress", {
+        current: 10,
+        total: 100,
+        modName: `Importing ${manifest.modpack?.name || "modpack"}...`,
+      });
+
+      // Progress callback
+      const onProgress = (current: number, total: number, modName: string) => {
+        if (win) {
+          // Map to 10-95% range
+          const percent = 10 + Math.round((current / total) * 85);
+          win.webContents.send("import:progress", { current: percent, total: 100, modName });
+        }
+      };
+
+      // Use dedicated importFromUrl function (always creates new modpack)
+      const importResult = await metadataManager.importFromUrl(
+        manifest,
+        urlToFetch,
+        curseforgeService,
+        onProgress
+      );
+
+      win.webContents.send("import:progress", {
+        current: 100,
+        total: 100,
+        modName: "Import complete!",
+      });
+
+      return importResult;
+    } catch (error: any) {
+      console.error("[Remote Import] Error:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // ========== EXPORT IPC HANDLERS ==========
 
   ipcMain.handle("export:curseforge", async (_, modpackId: string) => {
@@ -1257,7 +1361,7 @@ async function initializeBackend() {
 
       if (result.canceled || !result.filePath) return null;
 
-      // Create ZIP with manifest.json and modlist.html
+      // Create ZIP with manifest.json, modlist.html and overrides
       const AdmZip = (await import("adm-zip")).default;
       const zip = new AdmZip();
       zip.addFile(
@@ -1265,6 +1369,24 @@ async function initializeBackend() {
         Buffer.from(JSON.stringify(manifest, null, 2))
       );
       zip.addFile("modlist.html", Buffer.from(modlist));
+      
+      // Add overrides (config files, resourcepacks, shaderpacks, etc.) if they exist
+      const overridesPath = metadataManager.getOverridesPath(modpackId);
+      if (await fs.pathExists(overridesPath)) {
+        const entries = await fs.readdir(overridesPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name === "snapshots") continue; // Don't include version snapshots
+          
+          const srcPath = path.join(overridesPath, entry.name);
+          if (entry.isDirectory()) {
+            zip.addLocalFolder(srcPath, `overrides/${entry.name}`);
+          } else {
+            zip.addLocalFile(srcPath, "overrides");
+          }
+        }
+        console.log(`[Export CF] Added overrides from ${overridesPath}`);
+      }
+      
       zip.writeZip(result.filePath);
 
       return { success: true, path: result.filePath };
@@ -2248,11 +2370,13 @@ async function initializeBackend() {
     
     const results: Array<{
       modId: string;
+      projectId: string;
       projectName: string;
       currentVersion: string;
       latestVersion: string | null;
       hasUpdate: boolean;
       source: string;
+      updateUrl: string | null;
       newFileId?: number;
     }> = [];
     
@@ -2275,11 +2399,13 @@ async function initializeBackend() {
 
             return {
               modId: mod.id,
+              projectId: mod.cf_project_id?.toString() || null,
               projectName: mod.name,
               currentVersion: mod.version,
               latestVersion: latestFile?.displayName || null,
               hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
               source: "curseforge",
+              updateUrl: mod.cf_project_id ? `https://www.curseforge.com/minecraft/mc-mods/${mod.slug || mod.cf_project_id}` : null,
               newFileId:
                 latestFile && latestFile.id !== mod.cf_file_id
                   ? latestFile.id
@@ -2288,11 +2414,13 @@ async function initializeBackend() {
           } catch (error) {
             return {
               modId: mod.id,
+              projectId: mod.cf_project_id?.toString() || null,
               projectName: mod.name,
               currentVersion: mod.version,
               latestVersion: null,
               hasUpdate: false,
               source: "curseforge",
+              updateUrl: mod.cf_project_id ? `https://www.curseforge.com/minecraft/mc-mods/${mod.slug || mod.cf_project_id}` : null,
             };
           }
         })
@@ -2350,11 +2478,13 @@ async function initializeBackend() {
     
     const results: Array<{
       modId: string;
+      projectId: string;
       projectName: string;
       currentVersion: string;
       latestVersion: string | null;
       hasUpdate: boolean;
       source: string;
+      updateUrl: string | null;
       newFileId?: number;
     }> = [];
     
@@ -2377,11 +2507,13 @@ async function initializeBackend() {
 
             return {
               modId: mod.id,
+              projectId: mod.cf_project_id?.toString() || null,
               projectName: mod.name,
               currentVersion: mod.version,
               latestVersion: latestFile?.displayName || null,
               hasUpdate: latestFile ? latestFile.id !== mod.cf_file_id : false,
               source: "curseforge",
+              updateUrl: mod.cf_project_id ? `https://www.curseforge.com/minecraft/mc-mods/${mod.slug || mod.cf_project_id}` : null,
               newFileId:
                 latestFile && latestFile.id !== mod.cf_file_id
                   ? latestFile.id
@@ -2390,11 +2522,13 @@ async function initializeBackend() {
           } catch (error) {
             return {
               modId: mod.id,
+              projectId: mod.cf_project_id?.toString() || null,
               projectName: mod.name,
               currentVersion: mod.version,
               latestVersion: null,
               hasUpdate: false,
               source: "curseforge",
+              updateUrl: mod.cf_project_id ? `https://www.curseforge.com/minecraft/mc-mods/${mod.slug || mod.cf_project_id}` : null,
             };
           }
         })

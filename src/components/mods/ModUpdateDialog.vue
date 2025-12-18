@@ -95,8 +95,8 @@ async function checkUpdate() {
         projectName: props.mod.name,
         source: "curseforge",
         updateUrl: null,
-        changelog: null,
-        releaseDate: null,
+        changelog: undefined,
+        releaseDate: undefined,
       };
     }
   } catch (err) {
@@ -139,18 +139,10 @@ function openChangelog() {
 </script>
 
 <template>
-  <Dialog
-    :open="open"
-    :title="`Aggiornamento: ${mod?.name}`"
-    maxWidth="md"
-    @close="$emit('close')"
-  >
+  <Dialog :open="open" :title="`Aggiornamento: ${mod?.name}`" maxWidth="md" @close="$emit('close')">
     <div class="space-y-6 py-4">
       <!-- Loading State -->
-      <div
-        v-if="isLoading"
-        class="flex flex-col items-center justify-center py-8 text-center text-muted-foreground"
-      >
+      <div v-if="isLoading" class="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
         <RefreshCw class="w-8 h-8 animate-spin mb-3 text-primary" />
         <p>Controllo aggiornamenti su CurseForge...</p>
       </div>
@@ -159,9 +151,7 @@ function openChangelog() {
       <div v-else-if="updateChecked && updateInfo">
         <!-- Update Available -->
         <div v-if="hasUpdate" class="space-y-6">
-          <div
-            class="flex items-center justify-center p-4 rounded-full bg-emerald-500/10 w-16 h-16 mx-auto"
-          >
+          <div class="flex items-center justify-center p-4 rounded-full bg-emerald-500/10 w-16 h-16 mx-auto">
             <Download class="w-8 h-8 text-emerald-500" />
           </div>
 
@@ -173,14 +163,10 @@ function openChangelog() {
           </div>
 
           <!-- Version Comparison -->
-          <div
-            class="flex items-center justify-center gap-4 py-4 bg-muted/30 rounded-lg border border-border"
-          >
+          <div class="flex items-center justify-center gap-4 py-4 bg-muted/30 rounded-lg border border-border">
             <div class="text-center">
               <div class="text-xs text-muted-foreground mb-1">Attuale</div>
-              <div
-                class="font-mono text-sm bg-background px-2 py-1 rounded border border-border"
-              >
+              <div class="font-mono text-sm bg-background px-2 py-1 rounded border border-border">
                 {{ mod.version }}
               </div>
             </div>
@@ -188,8 +174,7 @@ function openChangelog() {
             <div class="text-center">
               <div class="text-xs text-muted-foreground mb-1">Nuova</div>
               <div
-                class="font-mono text-sm text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 font-bold"
-              >
+                class="font-mono text-sm text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 font-bold">
                 {{ updateInfo.latestVersion }}
               </div>
             </div>
@@ -207,9 +192,7 @@ function openChangelog() {
 
         <!-- No Update -->
         <div v-else class="text-center py-6">
-          <div
-            class="flex items-center justify-center p-4 rounded-full bg-secondary w-16 h-16 mx-auto mb-4"
-          >
+          <div class="flex items-center justify-center p-4 rounded-full bg-secondary w-16 h-16 mx-auto mb-4">
             <CheckCircle class="w-8 h-8 text-muted-foreground" />
           </div>
           <h3 class="font-medium text-lg">Nessun aggiornamento</h3>
@@ -217,9 +200,7 @@ function openChangelog() {
             Stai usando l'ultima versione disponibile.
           </p>
 
-          <div
-            class="mt-4 font-mono text-sm bg-muted/50 inline-block px-3 py-1 rounded"
-          >
+          <div class="mt-4 font-mono text-sm bg-muted/50 inline-block px-3 py-1 rounded">
             {{ mod.version }}
           </div>
         </div>
@@ -228,12 +209,7 @@ function openChangelog() {
 
     <template #footer>
       <div class="flex justify-between w-full">
-        <Button
-          v-if="hasUpdate"
-          variant="ghost"
-          @click="openChangelog"
-          class="gap-2"
-        >
+        <Button v-if="hasUpdate" variant="ghost" @click="openChangelog" class="gap-2">
           <FileText class="w-4 h-4" /> Vedi Changelog
         </Button>
         <div v-else></div>
@@ -241,12 +217,7 @@ function openChangelog() {
 
         <div class="flex gap-2">
           <Button variant="ghost" @click="$emit('close')">Chiudi</Button>
-          <Button
-            v-if="hasUpdate"
-            @click="applyUpdate"
-            :disabled="isUpdating"
-            class="gap-2"
-          >
+          <Button v-if="hasUpdate" @click="applyUpdate" :disabled="isUpdating" class="gap-2">
             <RefreshCw v-if="isUpdating" class="w-4 h-4 animate-spin" />
             <Download v-else class="w-4 h-4" />
             {{ isUpdating ? "Aggiornamento..." : "Aggiorna Ora" }}
@@ -257,13 +228,7 @@ function openChangelog() {
   </Dialog>
 
   <!-- Nested Changelog Dialog -->
-  <ChangelogDialog
-    v-if="updateInfo && hasUpdate"
-    :open="changelogOpen"
-    :mod-id="parseInt(updateInfo.projectId || '0')"
-    :file-id="updateInfo.newFileId || 0"
-    :mod-name="mod?.name"
-    :version="updateInfo.latestVersion || ''"
-    @close="changelogOpen = false"
-  />
+  <ChangelogDialog v-if="updateInfo && hasUpdate" :open="changelogOpen" :mod-id="parseInt(updateInfo.projectId || '0')"
+    :file-id="updateInfo.newFileId || 0" :mod-name="mod?.name" :version="updateInfo.latestVersion || ''"
+    @close="changelogOpen = false" />
 </template>

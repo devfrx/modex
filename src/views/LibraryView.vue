@@ -854,9 +854,8 @@ async function createModpackFromSelection(data: {
   try {
     const packId = await window.api.modpacks.create(data);
     const ids = Array.from(selectedModIds.value);
-    for (const modId of ids) {
-      await window.api.modpacks.addMod(packId, modId);
-    }
+    // Use batch API for better performance
+    await window.api.modpacks.addModsBatch(packId, ids);
     clearSelection();
     toast.success(
       "Modpack Created",
@@ -885,12 +884,11 @@ async function addSelectionToModpack(
 
   showProgress.value = true;
   progressTitle.value = "Adding to Modpack";
+  progressMessage.value = `Adding ${compatibleModIds.length} mods...`;
 
   try {
-    for (const modId of compatibleModIds) {
-      progressMessage.value = `Adding mods...`;
-      await window.api.modpacks.addMod(packId, modId);
-    }
+    // Use batch API for better performance
+    await window.api.modpacks.addModsBatch(packId, compatibleModIds);
     clearSelection();
 
     const skippedCount = selectedModIds.value.size - compatibleModIds.length;

@@ -295,12 +295,16 @@ async function loadData() {
     mods.value = modsData;
     modpacks.value = modpacksData;
 
-    // Calculate mod usage across modpacks
+    // Calculate mod usage across modpacks using batch API
     const usage = new Map<string, string[]>();
     const packCounts: { name: string; count: number }[] = [];
 
+    // Use batch API to get all mods for all modpacks at once
+    const packIds = modpacksData.map(p => p.id!);
+    const modpackModsMap = await window.api.modpacks.getModsMultiple(packIds);
+
     for (const pack of modpacksData) {
-      const packMods = await window.api.modpacks.getMods(pack.id);
+      const packMods = modpackModsMap[pack.id!] || [];
       packCounts.push({ name: pack.name, count: packMods.length });
 
       for (const mod of packMods) {

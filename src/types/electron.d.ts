@@ -135,6 +135,8 @@ export interface ElectronAPI {
     getAll: () => Promise<Modpack[]>;
     getById: (id: string) => Promise<Modpack | undefined>;
     create: (data: CreateModpackData) => Promise<string>;
+    /** Alias for create - adds a new modpack */
+    add: (data: CreateModpackData) => Promise<string>;
     update: (id: string, updates: Partial<Modpack>) => Promise<boolean>;
     delete: (id: string) => Promise<boolean>;
     getMods: (modpackId: string) => Promise<Mod[]>;
@@ -230,7 +232,12 @@ export interface ElectronAPI {
       };
     }>;
     /** Revert all unsaved changes to the last saved version */
-    revertUnsavedChanges: (modpackId: string) => Promise<boolean>;
+    revertUnsavedChanges: (modpackId: string) => Promise<{
+      success: boolean;
+      restoredMods: number;
+      skippedMods: number;
+      missingMods: Array<{ id: string; name: string }>;
+    }>;
     
     // CurseForge update checking
     /** Check for CurseForge modpack updates */
@@ -323,6 +330,10 @@ export interface ElectronAPI {
       defaultName: string,
       extension: string
     ) => Promise<string | null>;
+    /** Export raw manifest JSON for debug/sharing */
+    manifest: (
+      modpackId: string
+    ) => Promise<{ success: boolean; path: string } | null>;
   };
 
   import: {
@@ -338,14 +349,19 @@ export interface ElectronAPI {
         modName: string;
         existingVersion: string;
         newVersion: string;
+        existingModId: string;
         projectID: number;
         fileID: number;
+        cfMod: any;
+        cfFile: any;
         existingMod: {
           id: string;
           name: string;
           version: string;
         };
       }>;
+      partialData?: any;
+      manifest?: any;
     } | null>;
     /** Import MODEX modpack */
     modex: () => Promise<{
@@ -460,10 +476,20 @@ export interface ElectronAPI {
         addedMods: { name: string; version: string }[];
         removedMods: string[];
         updatedMods: string[];
-        enabledMods?: string[];
-        disabledMods?: string[];
+        enabledMods: string[];
+        disabledMods: string[];
         hasVersionHistoryChanges?: boolean;
       };
+    }>;
+    /** Import a modpack directly from a remote Gist/URL */
+    importFromUrl: (url: string) => Promise<{
+      success: boolean;
+      modpackId?: string;
+      modpackName?: string;
+      modsImported?: number;
+      error?: string;
+      alreadyExists?: boolean;
+      message?: string;
     }>;
   };
 

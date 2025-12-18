@@ -49,11 +49,7 @@ import RecommendationsPanel from "@/components/modpacks/RecommendationsPanel.vue
 import ProfilesPanel from "@/components/modpacks/ProfilesPanel.vue";
 import UpdateReviewDialog from "@/components/modpacks/UpdateReviewDialog.vue";
 import UpdateAvailableBanner from "@/components/modpacks/UpdateAvailableBanner.vue";
-import {
-  remoteUpdateService,
-  UpdateResult,
-} from "@/services/RemoteUpdateService";
-import type { Mod, Modpack, ModpackChange } from "@/types/electron";
+import type { Mod, Modpack, ModpackChange, RemoteUpdateResult } from "@/types";
 
 const props = defineProps<{
   modpackId: string;
@@ -106,7 +102,7 @@ const showRemoveIncompatibleDialog = ref(false);
 
 // Remote Updates
 const showReviewDialog = ref(false);
-const updateResult = ref<UpdateResult | null>(null);
+const updateResult = ref<RemoteUpdateResult | null>(null);
 const isCheckingUpdate = ref(false);
 const showProgressDialog = ref(false);
 const progressState = ref({
@@ -507,9 +503,19 @@ async function loadData() {
         auto_check_remote: pack.remote_source?.auto_check || false,
       };
 
-      // Auto-check for updates if enabled
+      // Auto-check for updates if enabled (but skip if just imported)
       if (pack.remote_source?.url && pack.remote_source.auto_check) {
-        checkForRemoteUpdates();
+        if (pack.remote_source.skip_initial_check) {
+          // Clear the skip flag for next time
+          await window.api.modpacks.update(pack.id!, {
+            remote_source: {
+              ...pack.remote_source,
+              skip_initial_check: false,
+            },
+          });
+        } else {
+          checkForRemoteUpdates();
+        }
       }
     }
   } catch (err) {
@@ -2127,12 +2133,12 @@ watch(
         <!-- Version History Tab -->
         <div v-else-if="activeTab === 'versions'" class="flex-1 p-6 overflow-auto">
           <VersionHistoryPanel v-if="modpack" :modpack-id="modpackId" :modpack-name="modpack.name"
-            :instance-id="linkedInstanceId || undefined" @refresh="loadData" />
+            :instance-id="linkedInstanceId || undefined" :is-linked="isLinked" @refresh="loadData" />
         </div>
 
         <!-- Profiles Tab -->
         <div v-else-if="activeTab === 'profiles'" class="flex-1 p-6 overflow-auto">
-          <ProfilesPanel v-if="modpack" :modpack="modpack" @refresh="loadData" />
+          <ProfilesPanel v-if="modpack" :modpack="modpack" :is-linked="isLinked" @refresh="loadData" />
         </div>
 
         <!-- Settings Tab -->

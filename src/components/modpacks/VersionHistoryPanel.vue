@@ -25,6 +25,8 @@ import {
     FileCode,
     AlertTriangle,
     Undo2,
+    Lock,
+    Globe,
 } from "lucide-vue-next";
 
 const props = defineProps<{
@@ -32,6 +34,8 @@ const props = defineProps<{
     modpackName: string;
     /** Instance ID to sync configs from before creating version */
     instanceId?: string;
+    /** Whether this modpack is managed by a remote source (read-only) */
+    isLinked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -134,9 +138,19 @@ async function revertChanges() {
 
     isReverting.value = true;
     try {
-        const success = await window.api.modpacks.revertUnsavedChanges(props.modpackId);
-        if (success) {
-            toast.success("Changes Reverted", "Modpack restored to last saved version");
+        const result = await window.api.modpacks.revertUnsavedChanges(props.modpackId);
+        if (result.success) {
+            // Check if some mods were skipped (deleted from library)
+            if (result.skippedMods > 0 && result.missingMods.length > 0) {
+                const missingNames = result.missingMods.slice(0, 3).map(m => m.name).join(", ");
+                const more = result.missingMods.length > 3 ? ` and ${result.missingMods.length - 3} more` : "";
+                toast.warning(
+                    "Partial Revert",
+                    `Restored ${result.restoredMods} mods. ${result.skippedMods} mod(s) were deleted from library and couldn't be restored: ${missingNames}${more}`
+                );
+            } else {
+                toast.success("Changes Reverted", "Modpack restored to last saved version");
+            }
             await loadUnsavedChanges();
             emit("refresh");
             // Dispatch global event to notify other components (e.g., ConfigStructuredEditor in PlayModpackDialog)
@@ -441,11 +455,16 @@ watch(() => props.modpackId, () => {
                 </p>
             </div>
 
-            <Button v-if="hasVersionControl" size="sm" class="gap-1.5" @click="showCommitDialog = true"
+            <Button v-if="hasVersionControl && !props.isLinked" size="sm" class="gap-1.5" @click="showCommitDialog = true"
                 :disabled="isLoading">
                 <Save class="w-4 h-4" />
                 Save Version
             </Button>
+            <!-- Remote locked indicator -->
+            <div v-else-if="hasVersionControl && props.isLinked" class="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Lock class="w-4 h-4" />
+                <span>Managed by remote</span>
+            </div>
         </div>
 
         <!-- Loading State -->
@@ -468,9 +487,17 @@ watch(() => props.modpackId, () => {
                 <p class="text-sm text-muted-foreground mb-4">
                     Track changes to your modpack and restore previous versions anytime
                 </p>
-                <Button @click="initializeVersionControl" :disabled="isLoading" class="gap-1.5">
-                    <GitBranch class="w-4 h-4" />
-                    Enable Now
+                <!-- Remote locked -->
+                <div v-if="props.isLinked" class="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 mb-4">
+                    <div class="flex items-center gap-2 text-amber-500 text-sm">
+                        <Lock class="w-4 h-4" />
+                        <span>Version control is managed by the remote source</span>
+                    </div>
+                </div>
+                <Button @click="initializeVersionControl" :disabled="isLoading || props.isLinked" class="gap-1.5">
+                    <Lock v-if="props.isLinked" class="w-4 h-4" />
+                    <GitBranch v-else class="w-4 h-4" />
+                    {{ props.isLinked ? 'Locked' : 'Enable Now' }}
                 </Button>
             </div>
         </div>
@@ -542,7 +569,7 @@ watch(() => props.modpackId, () => {
                                 </div>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2 mt-3">
+                        <div v-if="!props.isLinked" class="flex items-center gap-2 mt-3">
                             <Button size="sm" variant="outline" class="gap-1.5 h-8" @click="revertChanges"
                                 :disabled="isReverting">
                                 <Undo2 v-if="!isReverting" class="w-3.5 h-3.5" />
@@ -553,6 +580,10 @@ watch(() => props.modpackId, () => {
                                 <Save class="w-3.5 h-3.5" />
                                 Save Version
                             </Button>
+                        </div>
+                        <div v-else class="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
+                            <Lock class="w-4 h-4" />
+                            <span>Version control is managed by the remote source</span>
                         </div>
                     </div>
                 </div>
@@ -602,7 +633,7 @@ watch(() => props.modpackId, () => {
                                         {{ formatDate(version.created_at) }}
                                     </span>
 
-                                    <Button v-if="version.id !== currentVersionId" size="sm" variant="ghost"
+                                    <Button v-if="version.id !== currentVersionId && !props.isLinked" size="sm" variant="ghost"
                                         class="h-7 w-7 p-0" @click.stop="rollbackTo(version)"
                                         title="Rollback to this version">
                                         <RotateCcw class="w-3.5 h-3.5" />

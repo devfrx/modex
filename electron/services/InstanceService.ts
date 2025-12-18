@@ -701,6 +701,22 @@ export class InstanceService {
       const stat = await fs.stat(overridesSource);
       
       if (stat.isDirectory()) {
+        // Check if directory has any syncable content
+        const foldersToCheck = ["config", "kubejs", "resourcepacks", "shaderpacks", "defaultconfigs", "scripts", "global_packs"];
+        let hasContent = false;
+        for (const folder of foldersToCheck) {
+          if (await fs.pathExists(path.join(overridesSource, folder))) {
+            hasContent = true;
+            break;
+          }
+        }
+        
+        if (!hasContent) {
+          console.log(`[InstanceService] overridesSource directory is empty (no config folders found)`);
+          result.warnings.push("No configuration files found. For modpacks imported from URL, configs are not included in the remote manifest.");
+          return result;
+        }
+        
         // Direct directory copy
         const copyResult = await this.copyOverridesDir(overridesSource, instancePath, configMode);
         result.filesCopied = copyResult.copied;

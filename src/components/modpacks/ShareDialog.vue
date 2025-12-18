@@ -10,7 +10,9 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Link,
 } from "lucide-vue-next";
+import Input from "@/components/ui/Input.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -61,6 +63,12 @@ const importResult = ref<{
   };
 } | null>(null);
 
+// URL Import state
+const urlImportMode = ref(false);
+const importUrl = ref("");
+const isImportingUrl = ref(false);
+const urlImportError = ref<string | null>(null);
+
 // Existing share info
 const existingShareInfo = ref<{
   shareCode: string | null;
@@ -78,6 +86,9 @@ watch(
       exportPath.value = null;
       importResult.value = null;
       copied.value = false;
+      urlImportMode.value = false;
+      importUrl.value = "";
+      urlImportError.value = null;
 
       // Load existing share info if we have a modpack
       if (props.modpackId) {
@@ -195,6 +206,54 @@ async function importModex() {
   } finally {
     removeProgressListener();
     isImporting.value = false;
+    importProgress.value = null;
+  }
+}
+
+async function importFromUrl() {
+  if (!importUrl.value.trim()) {
+    urlImportError.value = "Please enter a URL";
+    return;
+  }
+
+  isImportingUrl.value = true;
+  urlImportError.value = null;
+  importProgress.value = { current: 0, total: 0, modName: "" };
+
+  // Listen for progress updates
+  const progressHandler = (data: { current: number; total: number; modName: string }) => {
+    importProgress.value = data;
+  };
+  const removeProgressListener = window.api.on("import:progress", progressHandler);
+
+  try {
+    const result = await window.api.remote.importFromUrl(importUrl.value.trim());
+    
+    if (result.success) {
+      if (result.alreadyExists) {
+        toast.info(
+          "Already Synced",
+          result.message || "This modpack is already linked to this URL"
+        );
+      } else {
+        toast.success(
+          "Modpack Imported",
+          `Imported "${result.modpackName}" with ${result.modsImported} mods`
+        );
+      }
+      importUrl.value = "";
+      urlImportMode.value = false;
+      emit("refresh");
+      emit("close");
+    } else {
+      urlImportError.value = result.error || "Import failed";
+    }
+  } catch (err) {
+    console.error("URL Import failed:", err);
+    urlImportError.value = (err as Error).message;
+  } finally {
+    removeProgressListener();
+    isImportingUrl.value = false;
     importProgress.value = null;
   }
 }
@@ -348,22 +407,73 @@ function formatBytes(bytes: number): string {
 
       <!-- Import Tab -->
       <div v-if="activeTab === 'import'" class="space-y-4">
-        <div class="p-4 rounded-lg bg-muted/50 border border-border">
-          <div class="text-sm font-medium mb-1">Import Modpack</div>
-          <div class="text-xs text-muted-foreground">
-            Import a .modex file shared by someone else
-          </div>
+        <!-- Toggle between file import and URL import -->
+        <div class="flex gap-2">
+          <Button 
+            variant="outline" 
+            class="flex-1" 
+            :class="!urlImportMode ? 'ring-2 ring-primary' : ''"
+            @click="urlImportMode = false"
+          >
+            <Download class="w-4 h-4 mr-2" />
+            From File
+          </Button>
+          <Button 
+            variant="outline" 
+            class="flex-1" 
+            :class="urlImportMode ? 'ring-2 ring-primary' : ''"
+            @click="urlImportMode = true"
+          >
+            <Link class="w-4 h-4 mr-2" />
+            From URL
+          </Button>
         </div>
 
-        <!-- Import Button -->
-        <Button class="w-full" @click="importModex" :disabled="isImporting">
-          <RefreshCw v-if="isImporting" class="w-4 h-4 mr-2 animate-spin" />
-          <Download v-else class="w-4 h-4 mr-2" />
-          {{ isImporting ? "Importing..." : "Select .modex file" }}
-        </Button>
+        <!-- File Import Section -->
+        <template v-if="!urlImportMode">
+          <div class="p-4 rounded-lg bg-muted/50 border border-border">
+            <div class="text-sm font-medium mb-1">Import from File</div>
+            <div class="text-xs text-muted-foreground">
+              Import a .modex file shared by someone else
+            </div>
+          </div>
 
-        <!-- Import Progress -->
-        <div v-if="isImporting && importProgress && importProgress.total > 0"
+          <!-- Import Button -->
+          <Button class="w-full" @click="importModex" :disabled="isImporting">
+            <RefreshCw v-if="isImporting" class="w-4 h-4 mr-2 animate-spin" />
+            <Download v-else class="w-4 h-4 mr-2" />
+            {{ isImporting ? "Importing..." : "Select .modex file" }}
+          </Button>
+        </template>
+
+        <!-- URL Import Section -->
+        <template v-if="urlImportMode">
+          <div class="p-4 rounded-lg bg-muted/50 border border-border">
+            <div class="text-sm font-medium mb-1">Import from URL</div>
+            <div class="text-xs text-muted-foreground">
+              Paste a Gist raw URL or any URL pointing to a MODEX manifest
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <Input 
+              v-model="importUrl" 
+              placeholder="https://gist.githubusercontent.com/..." 
+              :disabled="isImportingUrl"
+              @keyup.enter="importFromUrl"
+            />
+            <p v-if="urlImportError" class="text-xs text-red-500">{{ urlImportError }}</p>
+          </div>
+
+          <Button class="w-full" @click="importFromUrl" :disabled="isImportingUrl || !importUrl.trim()">
+            <RefreshCw v-if="isImportingUrl" class="w-4 h-4 mr-2 animate-spin" />
+            <Link v-else class="w-4 h-4 mr-2" />
+            {{ isImportingUrl ? "Importing..." : "Import from URL" }}
+          </Button>
+        </template>
+
+        <!-- Import Progress (shared) -->
+        <div v-if="(isImporting || isImportingUrl) && importProgress && importProgress.total > 0"
           class="p-4 rounded-lg bg-muted/50 border border-border space-y-3">
           <div class="flex items-center justify-between text-sm">
             <span class="text-muted-foreground">Processing mods...</span>
@@ -499,9 +609,16 @@ function formatBytes(bytes: number): string {
         <!-- How it works -->
         <div class="text-xs text-muted-foreground space-y-1 pt-2 border-t border-border">
           <div class="font-medium mb-2">How it works:</div>
-          <div>1. Get a <strong>.modex</strong> file from a friend</div>
-          <div>2. Click "Select .modex file" to import</div>
-          <div>3. If you already have this modpack, it will update</div>
+          <template v-if="!urlImportMode">
+            <div>1. Get a <strong>.modex</strong> file from a friend</div>
+            <div>2. Click "Select .modex file" to import</div>
+            <div>3. If you already have this modpack, it will update</div>
+          </template>
+          <template v-else>
+            <div>1. Get a Gist raw URL or MODEX manifest URL</div>
+            <div>2. Paste the URL and click "Import from URL"</div>
+            <div>3. The modpack will be imported with remote sync enabled</div>
+          </template>
         </div>
       </div>
     </div>

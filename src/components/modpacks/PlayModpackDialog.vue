@@ -786,9 +786,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                    }}</span>
+                                                }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                    }}%</span>
+                                                }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -821,7 +821,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -831,7 +831,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -844,6 +844,20 @@ function handleConfigReverted(event: Event) {
                                     <div v-if="syncResult.errors.length > 0" class="error-notice">
                                         <AlertCircle class="w-3 h-3 inline mr-1" />
                                         {{ syncResult.errors.length }} errors occurred
+                                    </div>
+
+                                    <!-- Warnings -->
+                                    <div v-if="syncResult.warnings && syncResult.warnings.length > 0"
+                                        class="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                        <div class="flex items-start gap-2">
+                                            <AlertCircle class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                            <div class="space-y-1 text-sm">
+                                                <div v-for="(warning, idx) in syncResult.warnings" :key="idx"
+                                                    class="text-amber-400">
+                                                    {{ warning }}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -858,8 +872,8 @@ function handleConfigReverted(event: Event) {
                             <!-- Configs Tab -->
                             <div v-if="activeTab === 'configs'" class="config-browser-container">
                                 <ConfigBrowser v-if="instance" :instance-id="instance.id" :instance-name="instance.name"
-                                    @open-file="(file: ConfigFile) => handleOpenConfigExternal(file)"
-                                    @open-structured="(file: ConfigFile) => handleOpenStructuredEditor(file)" />
+                                    @open-file="handleOpenConfigExternal"
+                                    @open-structured="handleOpenStructuredEditor" />
                             </div>
 
                             <!-- Folders Tab -->

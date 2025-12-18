@@ -88,6 +88,7 @@ export interface Modpack {
     url: string;
     auto_check: boolean;
     last_checked?: string;
+    skip_initial_check?: boolean;
   };
   profiles?: ModpackProfile[];
   // Track mods that failed to import due to incompatibility
@@ -109,6 +110,7 @@ export interface CreateModpackData {
   version?: string;
   minecraft_version?: string;
   loader?: string;
+  loader_version?: string;
   description?: string;
 }
 
@@ -674,6 +676,7 @@ export class MetadataManager {
       version: data.version || "1.0.0",
       minecraft_version: data.minecraft_version,
       loader: data.loader,
+      loader_version: data.loader_version,
       description: data.description,
       created_at: new Date().toISOString(),
       mod_ids: [],
@@ -1140,35 +1143,80 @@ export class MetadataManager {
 
   /**
    * Revert all unsaved changes to the last saved version
+   * Returns detailed info about what was reverted and any issues
    */
-  async revertUnsavedChanges(modpackId: string): Promise<boolean> {
+  async revertUnsavedChanges(modpackId: string): Promise<{
+    success: boolean;
+    restoredMods: number;
+    skippedMods: number;
+    missingMods: Array<{ id: string; name: string }>;
+  }> {
+    const result = {
+      success: false,
+      restoredMods: 0,
+      skippedMods: 0,
+      missingMods: [] as Array<{ id: string; name: string }>,
+    };
+
     const modpack = await this.getModpackById(modpackId);
-    if (!modpack) return false;
+    if (!modpack) return result;
 
     const history = await this.getVersionHistory(modpackId);
     if (!history || history.versions.length === 0) {
       console.log(`No version history for ${modpackId}, cannot revert`);
-      return false;
+      return result;
     }
 
     // Get the current (latest) version
     const currentVersion = history.versions.find(v => v.id === history.current_version_id) 
       || history.versions[history.versions.length - 1];
 
-    // Restore mod list
-    modpack.mod_ids = [...(currentVersion.mod_ids || [])];
-    modpack.disabled_mod_ids = [...(currentVersion.disabled_mod_ids || [])];
+    // Load library to check which mods still exist
+    const library = await this.loadLibrary();
+    const libraryModIds = new Set(library.mods.map(m => m.id));
+
+    // Filter mod_ids to only include mods that still exist in library
+    const validModIds: string[] = [];
+    const missingModIds: string[] = [];
+
+    for (const modId of (currentVersion.mod_ids || [])) {
+      if (libraryModIds.has(modId)) {
+        validModIds.push(modId);
+      } else {
+        missingModIds.push(modId);
+        // Try to get name from snapshot
+        const snapshot = currentVersion.mod_snapshots?.find((s: any) => s.id === modId);
+        result.missingMods.push({
+          id: modId,
+          name: snapshot?.name || modId,
+        });
+      }
+    }
+
+    // Filter disabled_mod_ids to only include mods that exist
+    const validDisabledIds = (currentVersion.disabled_mod_ids || []).filter(
+      (id: string) => libraryModIds.has(id)
+    );
+
+    // Restore mod list (only existing mods)
+    modpack.mod_ids = validModIds;
+    modpack.disabled_mod_ids = validDisabledIds;
     modpack.updated_at = new Date().toISOString();
 
     await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
 
-    // Restore mod versions from snapshots
+    result.restoredMods = validModIds.length;
+    result.skippedMods = missingModIds.length;
+
+    // Restore mod versions from snapshots (only for mods that exist)
     const savedSnapshots = currentVersion.mod_snapshots || [];
     if (savedSnapshots.length > 0) {
-      const library = await this.loadLibrary();
       let libraryChanged = false;
       
       for (const snapshot of savedSnapshots) {
+        // Only restore versions for mods that still exist
+        if (!libraryModIds.has(snapshot.id)) continue;
+        
         const mod = library.mods.find(m => m.id === snapshot.id);
         if (mod && mod.cf_file_id !== snapshot.cf_file_id) {
           // Restore the saved file ID
@@ -1193,7 +1241,11 @@ export class MetadataManager {
     await this.revertInstanceConfigChanges(modpackId);
 
     console.log(`[Version Control] Reverted modpack ${modpackId} to version ${currentVersion.id}`);
-    return true;
+    console.log(`  - Restored: ${result.restoredMods} mods`);
+    console.log(`  - Skipped (deleted from library): ${result.skippedMods} mods`);
+
+    result.success = true;
+    return result;
   }
 
   /**
@@ -1614,7 +1666,7 @@ export class MetadataManager {
     return result;
   }
 
-  async addModToModpack(modpackId: string, modId: string): Promise<boolean> {
+  async addModToModpack(modpackId: string, modId: string, disabled: boolean = false): Promise<boolean> {
     const modpack = await this.getModpackById(modpackId);
     if (!modpack) return false;
 
@@ -1670,6 +1722,17 @@ export class MetadataManager {
     }
 
     modpack.mod_ids.push(modId);
+    
+    // Handle disabled state
+    if (disabled) {
+      if (!modpack.disabled_mod_ids) {
+        modpack.disabled_mod_ids = [];
+      }
+      if (!modpack.disabled_mod_ids.includes(modId)) {
+        modpack.disabled_mod_ids.push(modId);
+      }
+    }
+    
     modpack.updated_at = new Date().toISOString();
 
     await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
@@ -2263,6 +2326,34 @@ export class MetadataManager {
   ): Promise<void> {
     const historyPath = this.getVersionHistoryPath(history.modpack_id);
     await this.safeWriteJson(historyPath, history);
+  }
+
+  /**
+   * Import version history from remote manifest
+   */
+  async importVersionHistory(
+    modpackId: string,
+    versions: ModpackVersion[]
+  ): Promise<void> {
+    if (!versions || versions.length === 0) {
+      // No versions to import, initialize fresh
+      await this.initializeVersionControl(modpackId, "Initial import from remote");
+      return;
+    }
+
+    // Find the latest version ID
+    const sortedVersions = [...versions].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    const currentVersionId = sortedVersions[0].id;
+
+    const history: ModpackVersionHistory = {
+      modpack_id: modpackId,
+      current_version_id: currentVersionId,
+      versions: versions,
+    };
+
+    await this.saveVersionHistory(history);
   }
 
   /**
@@ -2937,65 +3028,141 @@ export class MetadataManager {
       (m) => m.source === "curseforge" && m.cf_project_id && m.cf_file_id
     );
 
-    // Fetch valid modloaders from CurseForge
-    let loaderId = `${modpack.loader || "forge"}-unknown`;
+    // Build the modloader ID
     const mcVersion = modpack.minecraft_version || "1.20.1";
     const targetLoaderType = (modpack.loader || "forge").toLowerCase();
-
-    try {
-      if (cfService && typeof cfService.getModLoaders === "function") {
-        const loaders = await cfService.getModLoaders(mcVersion);
-
-        // Find best matching loader
-        // 1. Match type (forge/fabric/etc)
-        // 2. Match exact version if possible (not stored currently, so tricky)
-        // 3. Prefer recommended
-        // 4. Default to latest
-
-        // Filter by type
-        const typeLoaders = loaders.filter((l: any) => {
-          // Map CF loader names to our internal names
-          const name = l.name.toLowerCase();
-          return name.includes(targetLoaderType);
-        });
-
-        if (typeLoaders.length > 0) {
-          // Find recommended
-          const recommended = typeLoaders.find((l: any) => l.recommended);
-          if (recommended) {
-            loaderId = recommended.name;
-          } else {
-            // Fallback to latest (first in list usually, or sort by date)
-            typeLoaders.sort(
-              (a: any, b: any) =>
-                new Date(b.dateModified).getTime() -
-                new Date(a.dateModified).getTime()
-            );
-            loaderId = typeLoaders[0].name;
+    let loaderId: string | null = null;
+    
+    // Try to get loader_version - if not saved, try to fetch from original CF manifest
+    let loaderVersion = modpack.loader_version;
+    if (!loaderVersion && modpack.cf_project_id && modpack.cf_file_id && cfService) {
+      try {
+        console.log(`[Export] No loader_version saved, fetching from CF API for file ${modpack.cf_file_id}...`);
+        const fileInfo = await cfService.getModFile(modpack.cf_project_id, modpack.cf_file_id);
+        if (fileInfo?.downloadUrl) {
+          // Download and extract manifest to get loader version
+          const response = await fetch(fileInfo.downloadUrl);
+          const arrayBuffer = await response.arrayBuffer();
+          const AdmZip = (await import("adm-zip")).default;
+          const zip = new AdmZip(Buffer.from(arrayBuffer));
+          const manifestEntry = zip.getEntry("manifest.json");
+          if (manifestEntry) {
+            const originalManifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+            const primaryLoader = originalManifest.minecraft?.modLoaders?.find((l: any) => l.primary);
+            if (primaryLoader?.id) {
+              // Extract version from loader ID
+              // CurseForge uses fabric-X.X.X, but also handle fabric-loader-X.X.X
+              const fabricLoaderMatch = primaryLoader.id.match(/^fabric-loader-(.+)/i);
+              const fabricMatch = primaryLoader.id.match(/^fabric-([\d.]+)/i);
+              if (fabricLoaderMatch) {
+                loaderVersion = fabricLoaderMatch[1];
+              } else if (fabricMatch) {
+                loaderVersion = fabricMatch[1];
+              } else {
+                const match = primaryLoader.id.match(/^(?:forge|quilt|neoforge)-(.+)/i);
+                if (match) {
+                  loaderVersion = match[1];
+                }
+              }
+              console.log(`[Export] Extracted loader version from CF manifest: ${loaderVersion}`);
+              
+              // Save it for future exports
+              if (loaderVersion) {
+                await this.updateModpack(modpackId, { loader_version: loaderVersion });
+              }
+            }
           }
-          console.log(
-            `[Export] Selected modloader: ${loaderId} for ${targetLoaderType} ${mcVersion}`
-          );
-        } else {
-          console.warn(
-            `[Export] No matching modloaders found for ${targetLoaderType} ${mcVersion}`
-          );
         }
+      } catch (err) {
+        console.warn(`[Export] Failed to fetch loader version from CF:`, err);
       }
-    } catch (error) {
-      console.warn(
-        `[Export] Failed to fetch modloaders, using fallback:`,
-        error
-      );
     }
 
-    // Fallback if still unknown/generic
-    if (loaderId.endsWith("-unknown")) {
-      // Try to construct a somewhat valid looking one if we fail completely,
-      // but strictly speaking this will likely fail import on CF side.
-      // Better to maybe use a known recent version if possible?
-      // For now, valid format is name-version, e.g. "forge-47.2.0"
-      loaderId = `${targetLoaderType}-0.0.0`;
+    // First, try to use the loader_version (saved or fetched from CF)
+    if (loaderVersion) {
+      let cleanVersion = loaderVersion;
+      
+      // Clean up version if it contains loader prefix (from old bug)
+      // e.g., "loader-0.18.2" should become "0.18.2"
+      if (cleanVersion.startsWith("loader-")) {
+        cleanVersion = cleanVersion.replace("loader-", "");
+      }
+      
+      // For Fabric, CurseForge uses "fabric-X.X.X" format (not "fabric-loader-X.X.X")
+      if (targetLoaderType === "fabric") {
+        loaderId = `fabric-${cleanVersion}`;
+      } else {
+        loaderId = `${targetLoaderType}-${cleanVersion}`;
+      }
+      console.log(`[Export] Using loader version: ${loaderId}`);
+    }
+
+    // If no saved version, try to fetch from CurseForge API
+    if (!loaderId) {
+      try {
+        if (cfService && typeof cfService.getModLoaders === "function") {
+          const loaders = await cfService.getModLoaders(mcVersion);
+
+          // Filter by type - handle different naming conventions
+          const typeLoaders = loaders.filter((l: any) => {
+            const name = l.name.toLowerCase();
+            // Fabric loaders are named "fabric-loader-X.X.X"
+            if (targetLoaderType === "fabric") {
+              return name.startsWith("fabric-loader-") || name.startsWith("fabric-");
+            }
+            // Other loaders are typically "loader-version"
+            return name.startsWith(`${targetLoaderType}-`);
+          });
+
+          if (typeLoaders.length > 0) {
+            // Find recommended or latest
+            const recommended = typeLoaders.find((l: any) => l.recommended);
+            if (recommended) {
+              loaderId = recommended.name;
+            } else {
+              // Sort by date to get latest
+              typeLoaders.sort(
+                (a: any, b: any) =>
+                  new Date(b.dateModified).getTime() -
+                  new Date(a.dateModified).getTime()
+              );
+              loaderId = typeLoaders[0].name;
+            }
+            console.log(
+              `[Export] Selected modloader from API: ${loaderId} for ${targetLoaderType} ${mcVersion}`
+            );
+          } else {
+            console.warn(
+              `[Export] No matching modloaders found for ${targetLoaderType} ${mcVersion}`
+            );
+          }
+        }
+      } catch (error) {
+        console.warn(
+          `[Export] Failed to fetch modloaders, using fallback:`,
+          error
+        );
+      }
+    }
+
+    // Final fallback - construct a valid-looking ID based on loader type
+    if (!loaderId) {
+      // Use known recent versions as fallbacks (updated for 2024+)
+      const fallbackVersions: Record<string, string> = {
+        "forge": "47.2.0",       // Common 1.20.1 version
+        "fabric": "0.16.9",      // Recent Fabric version  
+        "neoforge": "20.4.167",  // Common version
+        "quilt": "0.19.0",       // Common version
+      };
+      
+      const fallbackVersion = fallbackVersions[targetLoaderType] || "0.0.0";
+      if (targetLoaderType === "fabric") {
+        loaderId = `fabric-${fallbackVersion}`;
+      } else {
+        const fallbackVersion = fallbackVersions[targetLoaderType] || "0.0.0";
+        loaderId = `${targetLoaderType}-${fallbackVersion}`;
+      }
+      console.warn(`[Export] Using fallback loader: ${loaderId}`);
     }
 
     const manifest = {
@@ -3431,28 +3598,27 @@ ${modLinks}
       }
 
       // Check for version history changes
+      // Only report changes if the REMOTE has versions that the LOCAL doesn't have
+      // (not the reverse - local can have more versions after updates)
       let hasVersionHistoryChanges = false;
-      if (remoteManifest.version_history_hash) {
-        // Calculate local version history hash
+      if (remoteManifest.version_history) {
         const localHistory = await this.getVersionHistory(modpackId);
-        let localVhHash: string | undefined;
-        if (localHistory && localHistory.versions.length > 0) {
-          const vhData = JSON.stringify(localHistory.versions.map(v => ({
-            id: v.id,
-            tag: v.tag,
-            message: v.message,
-            created_at: v.created_at,
-            config_snapshot_id: v.config_snapshot_id
-          })));
-          localVhHash = crypto
-            .createHash("sha256")
-            .update(vhData)
-            .digest("hex")
-            .substring(0, 16);
-        }
+        const localVersionIds = new Set(
+          localHistory?.versions.map(v => v.id) || []
+        );
         
-        if (localVhHash !== remoteManifest.version_history_hash) {
-          hasVersionHistoryChanges = true;
+        // Get remote versions (handle both array and object format)
+        const remoteVersions = Array.isArray(remoteManifest.version_history)
+          ? remoteManifest.version_history
+          : remoteManifest.version_history.versions || [];
+        
+        // Check if any remote version is missing locally
+        for (const remoteVersion of remoteVersions) {
+          const remoteId = remoteVersion.version_id || remoteVersion.id;
+          if (remoteId && !localVersionIds.has(remoteId)) {
+            hasVersionHistoryChanges = true;
+            break;
+          }
         }
       }
 
@@ -3567,22 +3733,43 @@ ${modLinks}
     
     // Extract loader from modLoaders
     let loader = "unknown";
+    let loaderVersion: string | undefined;
     const primaryLoader = manifest.minecraft?.modLoaders?.find(
       (l: any) => l.primary
     );
     if (primaryLoader) {
-      const match = primaryLoader.id.match(/^(forge|fabric|quilt|neoforge)/i);
-      if (match) loader = match[1].toLowerCase();
+      // CurseForge uses "fabric-X.X.X" format (not "fabric-loader-X.X.X"), others use "loader-X.X.X"
+      // Also handle "fabric-loader-X.X.X" format for compatibility
+      const fabricLoaderMatch = primaryLoader.id.match(/^fabric-loader-(.+)/i);
+      const fabricMatch = primaryLoader.id.match(/^fabric-([\d.]+)/i);
+      if (fabricLoaderMatch) {
+        loader = "fabric";
+        loaderVersion = fabricLoaderMatch[1]; // Extract version (e.g., "0.18.2" from "fabric-loader-0.18.2")
+      } else if (fabricMatch) {
+        loader = "fabric";
+        loaderVersion = fabricMatch[1]; // Extract version (e.g., "0.18.2" from "fabric-0.18.2")
+      } else {
+        const match = primaryLoader.id.match(/^(forge|quilt|neoforge)-(.+)/i);
+        if (match) {
+          loader = match[1].toLowerCase();
+          loaderVersion = match[2]; // Extract version part (e.g., "47.2.0" from "forge-47.2.0")
+        } else {
+          // Try simpler pattern without version
+          const simpleMatch = primaryLoader.id.match(/^(forge|fabric|quilt|neoforge)/i);
+          if (simpleMatch) loader = simpleMatch[1].toLowerCase();
+        }
+      }
     }
 
     const mcVersion = manifest.minecraft?.version || "1.20.1";
 
-    // Create modpack
+    // Create modpack with loader version
     const modpackId = await this.createModpack({
       name: manifest.name || "Imported Modpack",
       version: manifest.version || "1.0.0",
       minecraft_version: mcVersion,
       loader,
+      loader_version: loaderVersion,
       description: `Imported from CurseForge. Author: ${
         manifest.author || "Unknown"
       }`,
@@ -4649,6 +4836,157 @@ ${modLinks}
       code: manifest.share_code,
       isUpdate,
       changes,
+    };
+  }
+
+  /**
+   * Import from remote URL - always creates a new modpack (never updates existing)
+   */
+  async importFromUrl(
+    manifest: any,
+    remoteUrl: string,
+    cfService: any,
+    onProgress?: (current: number, total: number, modName: string) => void
+  ): Promise<{
+    success: boolean;
+    modpackId: string;
+    modpackName: string;
+    modsImported: number;
+    alreadyExists?: boolean;
+    message?: string;
+  }> {
+    if (!manifest.modex_version || !manifest.share_code) {
+      throw new Error("Invalid MODEX manifest: Missing modex_version or share_code");
+    }
+
+    // Check if a modpack with this remote_source URL already exists
+    const allModpacks = await this.getAllModpacks();
+    const existingWithSameUrl = allModpacks.find(
+      (m) => m.remote_source?.url === remoteUrl
+    );
+
+    if (existingWithSameUrl) {
+      return {
+        success: true,
+        modpackId: existingWithSameUrl.id,
+        modpackName: existingWithSameUrl.name,
+        modsImported: 0,
+        alreadyExists: true,
+        message: "This modpack is already synced with this URL. Use 'Check for Updates' instead.",
+      };
+    }
+
+    // Check if share_code conflicts with existing local modpack
+    const existingWithSameCode = allModpacks.find(
+      (m) => m.share_code === manifest.share_code
+    );
+
+    // Generate new unique share_code to avoid conflicts
+    const crypto = await import("crypto");
+    const newShareCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+
+    // Determine name - add suffix if there's a conflict
+    let modpackName = manifest.modpack.name;
+    if (existingWithSameCode) {
+      modpackName = `${manifest.modpack.name} (Remote)`;
+    }
+
+    // Create new modpack
+    const modpackId = await this.createModpack({
+      name: modpackName,
+      version: manifest.modpack.version,
+      minecraft_version: manifest.modpack.minecraft_version,
+      loader: manifest.modpack.loader,
+      description: manifest.modpack.description,
+    });
+
+    // Set new share_code and remote_source
+    // Note: skip_initial_check prevents auto-check on first load (we just imported, no need to check)
+    await this.updateModpack(modpackId, {
+      share_code: newShareCode,
+      remote_source: {
+        url: remoteUrl,
+        auto_check: true,
+        last_checked: new Date().toISOString(),
+        skip_initial_check: true, // Flag to skip first auto-check
+      },
+      last_sync: new Date().toISOString(),
+    });
+
+    // Import mods (same logic as importFromModex but simplified - no update logic needed)
+    const manifestMods = manifest.mods || [];
+    const disabledModsInManifest = new Set(manifest.disabled_mods || []);
+    let modsImported = 0;
+
+    for (let i = 0; i < manifestMods.length; i++) {
+      const modEntry = manifestMods[i];
+      onProgress?.(i + 1, manifestMods.length, modEntry.name);
+
+      try {
+        // Try to find existing mod in library using correct method
+        let existingMod: Mod | undefined;
+        
+        if (modEntry.source === "curseforge" || modEntry.cf_project_id) {
+          existingMod = await this.findModByCFIds(
+            modEntry.project_id || modEntry.cf_project_id,
+            modEntry.file_id || modEntry.cf_file_id
+          );
+        } else if (modEntry.source === "modrinth" || modEntry.mr_project_id) {
+          existingMod = await this.findModByMRIds(
+            modEntry.mr_project_id,
+            modEntry.mr_version_id
+          );
+        }
+
+        if (!existingMod) {
+          // Download mod
+          const downloadResult = await cfService.downloadMod(
+            modEntry.project_id || modEntry.cf_project_id,
+            modEntry.file_id || modEntry.cf_file_id
+          );
+
+          if (downloadResult.success && downloadResult.mod) {
+            existingMod = downloadResult.mod;
+          }
+        }
+
+        if (existingMod) {
+          // Add to modpack - check disabled status using the mod's project_id or cf_project_id
+          const projectId = modEntry.project_id || modEntry.cf_project_id;
+          const isDisabled = disabledModsInManifest.has(String(projectId)) || 
+                            disabledModsInManifest.has(existingMod.id);
+          await this.addModToModpack(modpackId, existingMod.id, isDisabled);
+          modsImported++;
+        }
+      } catch (err) {
+        console.error(`[ImportFromUrl] Failed to import mod ${modEntry.name}:`, err);
+      }
+    }
+
+    // Import version history if present (can be object or array format)
+    const versionHistoryData = manifest.version_history;
+    if (versionHistoryData) {
+      // Handle both formats: direct array or object with versions property
+      const versions = Array.isArray(versionHistoryData) 
+        ? versionHistoryData 
+        : versionHistoryData.versions;
+      
+      if (versions && versions.length > 0) {
+        await this.importVersionHistory(modpackId, versions);
+      } else {
+        // No versions, initialize fresh
+        await this.initializeVersionControl(modpackId, "Initial import from remote URL");
+      }
+    } else {
+      // No version history at all, initialize fresh
+      await this.initializeVersionControl(modpackId, "Initial import from remote URL");
+    }
+
+    return {
+      success: true,
+      modpackId,
+      modpackName,
+      modsImported,
     };
   }
 

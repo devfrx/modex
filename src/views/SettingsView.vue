@@ -193,14 +193,17 @@ async function clearAllData() {
   isClearingData.value = true;
 
   try {
+    // Delete modpacks first (they reference mods)
     const modpacks = await window.api.modpacks.getAll();
     for (const pack of modpacks) {
       await window.api.modpacks.delete(pack.id);
     }
 
+    // Delete all mods using bulk API
     const mods = await window.api.mods.getAll();
-    for (const mod of mods) {
-      await window.api.mods.delete(mod.id);
+    const modIds = mods.map(m => m.id);
+    if (modIds.length > 0) {
+      await window.api.mods.bulkDelete(modIds);
     }
 
     await loadSettings();

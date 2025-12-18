@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { Users, Plus, Trash2, RotateCcw, Save, Play } from "lucide-vue-next";
+import { Users, Plus, Trash2, RotateCcw, Save, Play, Lock } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -9,6 +9,8 @@ import type { Modpack, ModpackProfile } from "@/types";
 
 const props = defineProps<{
   modpack: Modpack;
+  /** Whether this modpack is managed by a remote source (read-only) */
+  isLinked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -107,10 +109,15 @@ function formatDate(date: string) {
         </p>
       </div>
 
-      <Button size="sm" class="gap-2" @click="isDialogOpen = true">
+      <Button v-if="!props.isLinked" size="sm" class="gap-2" @click="isDialogOpen = true">
         <Plus class="w-4 h-4" />
         Save Current Profile
       </Button>
+      <!-- Remote locked indicator -->
+      <div v-else class="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Lock class="w-4 h-4" />
+        <span>Managed by remote</span>
+      </div>
 
       <Dialog :open="isDialogOpen" title="Save Mod Profile"
         description="Create a new profile from the currently enabled mods." maxWidth="sm" @close="isDialogOpen = false">
@@ -153,12 +160,15 @@ function formatDate(date: string) {
                 {{ formatDate(profile.created_at) }}
               </p>
             </div>
-            <div class="flex gap-1">
+            <div v-if="!props.isLinked" class="flex gap-1">
               <Button variant="ghost" size="icon"
                 class="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                 @click="deleteProfile(profile)" title="Delete Profile">
                 <Trash2 class="w-4 h-4" />
               </Button>
+            </div>
+            <div v-else class="flex items-center">
+              <Lock class="w-4 h-4 text-muted-foreground" title="Managed by remote" />
             </div>
           </div>
         </div>
@@ -168,9 +178,10 @@ function formatDate(date: string) {
               {{ profile.enabled_mod_ids.length }} mods enabled
             </span>
           </div>
-          <Button class="w-full gap-2" variant="secondary" @click="applyProfile(profile)">
-            <Play class="w-4 h-4" />
-            Load Profile
+          <Button class="w-full gap-2" variant="secondary" @click="applyProfile(profile)" :disabled="props.isLinked">
+            <Lock v-if="props.isLinked" class="w-4 h-4" />
+            <Play v-else class="w-4 h-4" />
+            {{ props.isLinked ? 'Locked' : 'Load Profile' }}
           </Button>
         </div>
       </div>

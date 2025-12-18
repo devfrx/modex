@@ -137,6 +137,9 @@ export interface Modpack {
   /** Target mod loader */
   loader?: string;
 
+  /** Mod loader version (e.g., "47.2.0" for Forge, "0.14.21" for Fabric) */
+  loader_version?: string;
+
   /** Description */
   description?: string;
 
@@ -175,6 +178,8 @@ export interface Modpack {
     auto_check: boolean;
     /** Last time updates were checked */
     last_checked?: string;
+    /** Skip initial auto-check (set after fresh import) */
+    skip_initial_check?: boolean;
   };
 
   /** Saved configuration profiles (sets of enabled mods) */
@@ -214,6 +219,7 @@ export interface CreateModpackData {
   version?: string;
   minecraft_version?: string;
   loader?: string;
+  loader_version?: string;
   description?: string;
 }
 
@@ -247,6 +253,8 @@ export interface ModexManifest {
   checksum: string;
   /** Checksum captured at the start of import for conflict detection */
   import_checksum?: string;
+  /** Hash of version history for detecting version control changes */
+  version_history_hash?: string;
   exported_at: string;
   modpack: {
     name: string;
@@ -256,8 +264,17 @@ export interface ModexManifest {
     description?: string;
   };
   mods: ModexManifestMod[];
+  /** Internal mod IDs of disabled mods (for backwards compatibility) */
+  disabled_mods?: string[];
+  /** Disabled mods by project ID (stable cross-import identifiers) */
+  disabled_mods_by_project?: Array<{
+    cf_project_id?: number;
+    mr_project_id?: string;
+    name: string;
+  }>;
   stats: {
     mod_count: number;
+    disabled_count?: number;
   };
   /** Version control history (optional, included if modpack has versions) */
   version_history?: ModpackVersionHistory;
@@ -269,28 +286,45 @@ export interface ModexManifestMod {
   version: string;
   filename: string;
   source: "curseforge" | "modrinth";
+  content_type?: "mod" | "resourcepack" | "shader";
   cf_project_id?: number;
   cf_file_id?: number;
   mr_project_id?: string;
   mr_version_id?: string;
+  description?: string;
+  author?: string;
+  thumbnail_url?: string;
 }
 
 // ==================== UPDATE INFO ====================
 
 export interface ModUpdateInfo {
   modId: string;
+  projectId: string | null;
+  projectName: string;
   currentVersion: string;
   latestVersion: string | null;
   hasUpdate: boolean;
+  source: "curseforge" | "modrinth" | "unknown" | string;
   updateUrl: string | null;
-  source: "curseforge" | "modrinth" | "unknown";
-  projectId: string | null;
-  projectName: string | null;
-  changelog: string | null;
-  releaseDate: string | null;
-  /** New file ID to update to */
+  /** New file ID to update to (CurseForge) */
   newFileId?: number;
+  /** New version ID to update to (Modrinth) */
   newVersionId?: string;
+  /** Release date of the new version */
+  releaseDate?: string | number;
+  /** Changelog for the update */
+  changelog?: string | null;
+}
+
+// ==================== REMOTE UPDATE RESULT ====================
+
+/** Result of checking for remote updates from a Gist or remote manifest */
+export interface RemoteUpdateResult {
+  hasUpdate: boolean;
+  changes: ModpackChange[];
+  remoteManifest?: ModexManifest;
+  error?: string;
 }
 
 // ==================== VERSION CONTROL ====================

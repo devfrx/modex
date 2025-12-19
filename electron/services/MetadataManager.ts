@@ -155,6 +155,14 @@ export interface ModpackVersion {
   }>;
   /** ID of the config snapshot for this version (stored in overrides/{modpackId}/snapshots/{versionId}/) */
   config_snapshot_id?: string;
+  /** Config changes included in this version */
+  config_changes?: Array<{
+    filePath: string;
+    keyPath: string;
+    line?: number;
+    oldValue: any;
+    newValue: any;
+  }>;
 }
 
 export interface ModpackVersionHistory {
@@ -2528,6 +2536,9 @@ export class MetadataManager {
     // Create config snapshot if modpack has overrides
     const configSnapshotId = await this.createConfigSnapshot(modpackId, versionId);
 
+    // Get uncommitted config changes to store in the version
+    const configChanges = await this.getUncommittedConfigChanges(modpackId);
+
     const newVersion: ModpackVersion = {
       id: versionId,
       tag: versionTag,
@@ -2539,6 +2550,7 @@ export class MetadataManager {
       parent_id: currentVersion.id,
       mod_snapshots: modSnapshots,
       config_snapshot_id: configSnapshotId || undefined,
+      config_changes: configChanges.length > 0 ? configChanges : undefined,
     };
 
     history.versions.push(newVersion);
@@ -2587,6 +2599,54 @@ export class MetadataManager {
     } catch (err) {
       console.error("Error marking config changes as committed:", err);
     }
+  }
+
+  /**
+   * Get uncommitted config changes for a modpack
+   */
+  private async getUncommittedConfigChanges(modpackId: string): Promise<Array<{
+    filePath: string;
+    keyPath: string;
+    line?: number;
+    oldValue: any;
+    newValue: any;
+  }>> {
+    const configChanges: Array<{
+      filePath: string;
+      keyPath: string;
+      line?: number;
+      oldValue: any;
+      newValue: any;
+    }> = [];
+
+    try {
+      if (!this.instanceService) return configChanges;
+      
+      const instance = await this.instanceService.getInstanceByModpack(modpackId);
+      if (!instance) return configChanges;
+      
+      const configChangesPath = path.join(instance.path, ".modex-changes", "config-changes.json");
+      if (!await fs.pathExists(configChangesPath)) return configChanges;
+      
+      const changeSets = JSON.parse(await fs.readFile(configChangesPath, "utf-8"));
+      const uncommittedChanges = changeSets.filter((cs: any) => !cs.committed);
+      
+      for (const changeSet of uncommittedChanges) {
+        for (const mod of changeSet.modifications) {
+          configChanges.push({
+            filePath: mod.filePath,
+            keyPath: mod.keyPath,
+            line: mod.line,
+            oldValue: mod.oldValue,
+            newValue: mod.newValue,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error getting uncommitted config changes:", err);
+    }
+
+    return configChanges;
   }
 
   /**

@@ -41,8 +41,8 @@ import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ProgressDialog from "@/components/ui/ProgressDialog.vue";
-import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import ModUpdateDialog from "@/components/mods/ModUpdateDialog.vue";
+import FilePickerDialog from "@/components/mods/FilePickerDialog.vue";
 import VersionHistoryPanel from "@/components/modpacks/VersionHistoryPanel.vue";
 import ModpackAnalysisPanel from "@/components/modpacks/ModpackAnalysisPanel.vue";
 import RecommendationsPanel from "@/components/modpacks/RecommendationsPanel.vue";
@@ -75,11 +75,12 @@ const isLoading = ref(true);
 const sortBy = ref<"name" | "version">("name");
 const sortDir = ref<"asc" | "desc">("asc");
 const selectedModIds = ref<Set<string>>(new Set());
-const showUpdatesDialog = ref(false);
 const showSingleModUpdateDialog = ref(false);
 const selectedUpdateMod = ref<any>(null);
+const showVersionPickerDialog = ref(false);
+const versionPickerMod = ref<any>(null);
 const isSaving = ref(false);
-const modsFilter = ref<"all" | "incompatible" | "disabled">("all");
+const modsFilter = ref<"all" | "incompatible" | "disabled" | "updates" | "recent-updated" | "recent-added">("all");
 const activeTab = ref<
   | "mods"
   | "discover"
@@ -283,6 +284,15 @@ const filteredInstalledMods = computed(() => {
     if (modsFilter.value === "disabled") {
       return disabledModIds.value.has(m.id);
     }
+    if (modsFilter.value === "updates") {
+      return !!updateAvailable.value[m.id];
+    }
+    if (modsFilter.value === "recent-updated") {
+      return recentlyUpdatedMods.value.has(m.id);
+    }
+    if (modsFilter.value === "recent-added") {
+      return recentlyAddedMods.value.has(m.id);
+    }
     return true;
   });
   mods.sort((a, b) => {
@@ -338,6 +348,11 @@ const incompatibleModCount = computed(() => {
 // Update Checking
 const checkingUpdates = ref<Record<string, boolean>>({});
 const updateAvailable = ref<Record<string, any>>({});
+const isCheckingAllUpdates = ref(false);
+const recentlyUpdatedMods = ref<Set<string>>(new Set()); // Mod IDs updated in last 5 min
+const recentlyAddedMods = ref<Set<string>>(new Set()); // Mod IDs added in last 5 min
+const RECENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const isLibraryCollapsed = ref(false); // Collapsible library panel
 
 function openSingleModUpdate(mod: any) {
   selectedUpdateMod.value = mod;
@@ -345,13 +360,20 @@ function openSingleModUpdate(mod: any) {
 }
 
 function handleSingleModUpdated() {
-  loadData();
-  emit("update");
+  // Mark as recently updated
   if (selectedUpdateMod.value) {
+    recentlyUpdatedMods.value.add(selectedUpdateMod.value.id);
+    // Clear after 5 minutes
+    setTimeout(() => {
+      recentlyUpdatedMods.value.delete(selectedUpdateMod.value?.id);
+    }, RECENT_THRESHOLD_MS);
+
     if (updateAvailable.value[selectedUpdateMod.value.id]) {
       delete updateAvailable.value[selectedUpdateMod.value.id];
     }
   }
+  loadData();
+  emit("update");
 }
 
 async function checkModUpdate(mod: any) {
@@ -402,6 +424,158 @@ async function updateMod(mod: any) {
   }
 }
 
+// Version picker for changing mod version
+function openVersionPicker(mod: any) {
+  if (!mod.cf_project_id) return;
+  versionPickerMod.value = {
+    id: mod.cf_project_id,
+    name: mod.name,
+    slug: mod.slug,
+    logo: mod.thumbnail_url ? { thumbnailUrl: mod.thumbnail_url } : undefined,
+    libraryModId: mod.id,
+    currentFileId: mod.cf_file_id,
+    content_type: mod.content_type || "mod"
+  };
+  showVersionPickerDialog.value = true;
+}
+
+async function handleVersionSelected(fileId: number) {
+  if (!versionPickerMod.value) return;
+
+  try {
+    const result = await window.api.updates.applyUpdate(
+      versionPickerMod.value.libraryModId,
+      fileId
+    );
+    if (result.success) {
+      // Mark as recently updated
+      recentlyUpdatedMods.value.add(versionPickerMod.value.libraryModId);
+      setTimeout(() => {
+        recentlyUpdatedMods.value.delete(versionPickerMod.value?.libraryModId);
+      }, RECENT_THRESHOLD_MS);
+
+      // Clear any cached update status
+      if (updateAvailable.value[versionPickerMod.value.libraryModId]) {
+        delete updateAvailable.value[versionPickerMod.value.libraryModId];
+      }
+      await loadData();
+      emit("update");
+      toast.success(`${versionPickerMod.value.name} version changed`);
+    } else {
+      toast.error(`Failed to change version: ${result.error || 'Unknown error'}`);
+    }
+  } catch (err: any) {
+    console.error("Version change failed:", err);
+    toast.error(`Failed to change mod version: ${err?.message || 'Unknown error'}`);
+  }
+
+  showVersionPickerDialog.value = false;
+  versionPickerMod.value = null;
+}
+
+// Check all mods for updates (auto-triggered on load)
+async function checkAllUpdates() {
+  if (isCheckingAllUpdates.value) return;
+
+  const cfMods = currentMods.value.filter(m => m.cf_project_id && m.cf_file_id);
+  if (cfMods.length === 0) return;
+
+  isCheckingAllUpdates.value = true;
+
+  // Process in parallel batches
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
+    const batch = cfMods.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(mod => checkModUpdate(mod)));
+  }
+
+  isCheckingAllUpdates.value = false;
+}
+
+// Quick update a single mod to latest
+async function quickUpdateMod(mod: any) {
+  const latest = updateAvailable.value[mod.id];
+  if (!latest) return;
+
+  checkingUpdates.value[mod.id] = true;
+  try {
+    const result = await window.api.updates.applyUpdate(mod.id, latest.id);
+    if (result.success) {
+      // Mark as recently updated
+      recentlyUpdatedMods.value.add(mod.id);
+      setTimeout(() => {
+        recentlyUpdatedMods.value.delete(mod.id);
+      }, RECENT_THRESHOLD_MS);
+
+      delete updateAvailable.value[mod.id];
+      await loadData();
+      emit("update");
+      toast.success(`Updated ${mod.name}`);
+    } else {
+      toast.error(`Failed to update ${mod.name}: ${result.error}`);
+    }
+  } catch (err) {
+    console.error("Update failed:", err);
+    toast.error(`Failed to update ${mod.name}`);
+  } finally {
+    checkingUpdates.value[mod.id] = false;
+  }
+}
+
+// Update all mods with available updates
+async function updateAllMods() {
+  const modsToUpdate = currentMods.value.filter(m => updateAvailable.value[m.id]);
+  if (modsToUpdate.length === 0) return;
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const mod of modsToUpdate) {
+    try {
+      const latest = updateAvailable.value[mod.id];
+      const result = await window.api.updates.applyUpdate(mod.id, latest.id);
+      if (result.success) {
+        recentlyUpdatedMods.value.add(mod.id);
+        setTimeout(() => {
+          recentlyUpdatedMods.value.delete(mod.id);
+        }, RECENT_THRESHOLD_MS);
+        delete updateAvailable.value[mod.id];
+        successCount++;
+      } else {
+        failCount++;
+      }
+    } catch {
+      failCount++;
+    }
+  }
+
+  await loadData();
+  emit("update");
+
+  if (failCount === 0) {
+    toast.success(`Updated ${successCount} mods`);
+  } else {
+    toast.warning(`Updated ${successCount} mods, ${failCount} failed`);
+  }
+}
+
+// Count of mods with updates available (per tab)
+const updatesAvailableCount = computed(() => {
+  return currentMods.value.filter((m) => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod")
+      return false;
+    if (
+      contentTypeTab.value === "resourcepacks" &&
+      modContentType !== "resourcepack"
+    )
+      return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
+      return false;
+    return updateAvailable.value[m.id];
+  }).length;
+});
+
 // Count of disabled mods (per tab)
 const disabledModCount = computed(() => {
   return currentMods.value.filter((m) => {
@@ -416,6 +590,34 @@ const disabledModCount = computed(() => {
     if (contentTypeTab.value === "shaders" && modContentType !== "shader")
       return false;
     return disabledModIds.value.has(m.id);
+  }).length;
+});
+
+// Count of recently updated mods (per tab)
+const recentlyUpdatedCount = computed(() => {
+  return currentMods.value.filter((m) => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod")
+      return false;
+    if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack")
+      return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
+      return false;
+    return recentlyUpdatedMods.value.has(m.id);
+  }).length;
+});
+
+// Count of recently added mods (per tab)
+const recentlyAddedCount = computed(() => {
+  return currentMods.value.filter((m) => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod")
+      return false;
+    if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack")
+      return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
+      return false;
+    return recentlyAddedMods.value.has(m.id);
   }).length;
 });
 
@@ -470,6 +672,12 @@ const enabledModCount = computed(() => {
     .length;
 });
 
+// Refresh data and notify parent to update modpack list (e.g., for unsaved changes icon)
+async function refreshAndNotify() {
+  await loadData();
+  emit("update");
+}
+
 async function loadData() {
   if (!props.modpackId) return;
   isLoading.value = true;
@@ -517,6 +725,7 @@ async function loadData() {
           checkForRemoteUpdates();
         }
       }
+
     }
   } catch (err) {
     console.error("Failed to load modpack data:", err);
@@ -568,6 +777,13 @@ async function addMod(modId: string) {
   }
   try {
     await window.api.modpacks.addMod(props.modpackId, modId);
+
+    // Mark as recently added
+    recentlyAddedMods.value.add(modId);
+    setTimeout(() => {
+      recentlyAddedMods.value.delete(modId);
+    }, RECENT_THRESHOLD_MS);
+
     await loadData();
     emit("update");
   } catch (err) {
@@ -590,7 +806,11 @@ async function removeMod(modId: string) {
   try {
     const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "remove");
 
-    if (impact.dependentMods.filter(d => d.willBreak).length > 0 || impact.orphanedDependencies.length > 0) {
+    // Only show dialog if there are actual visible items (mods that will break OR orphaned dependencies not used by others)
+    const breakingMods = impact.dependentMods.filter(d => d.willBreak);
+    const unusedOrphans = impact.orphanedDependencies.filter(d => !d.usedByOthers);
+
+    if (breakingMods.length > 0 || unusedOrphans.length > 0) {
       // Show impact dialog
       dependencyImpact.value = { ...impact, action: "remove" };
       pendingModAction.value = { modId, action: "remove" };
@@ -1250,18 +1470,41 @@ async function reSearchIncompatibleMods() {
   }
 }
 
+// Track if initial check has been done for this modpack session
+const hasCheckedUpdatesOnOpen = ref(false);
+
 watch(
   () => props.isOpen,
-  (newVal) => {
-    if (newVal) loadData();
+  async (newVal) => {
+    if (newVal) {
+      hasCheckedUpdatesOnOpen.value = false;
+      await loadData();
+      // Check for mod updates only on initial open
+      setTimeout(() => {
+        if (!hasCheckedUpdatesOnOpen.value) {
+          hasCheckedUpdatesOnOpen.value = true;
+          checkAllUpdates();
+        }
+      }, 500);
+    }
   },
   { immediate: true }
 );
 
 watch(
   () => props.modpackId,
-  () => {
-    if (props.isOpen) loadData();
+  async () => {
+    if (props.isOpen) {
+      hasCheckedUpdatesOnOpen.value = false;
+      await loadData();
+      // Check for mod updates only on modpack change
+      setTimeout(() => {
+        if (!hasCheckedUpdatesOnOpen.value) {
+          hasCheckedUpdatesOnOpen.value = true;
+          checkAllUpdates();
+        }
+      }, 500);
+    }
   }
 );
 </script>
@@ -1344,12 +1587,9 @@ watch(
                 title="Set cover image">
                 <ImagePlus class="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg"
-                :disabled="!modpack?.minecraft_version || !modpack?.loader" :title="!modpack?.minecraft_version || !modpack?.loader
-                  ? 'Set version and loader first'
-                  : 'Check updates'
-                  " @click="showUpdatesDialog = true">
-                <ArrowUpCircle class="w-4 h-4" />
+              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg" :disabled="isCheckingAllUpdates"
+                title="Check for mod updates" @click="checkAllUpdates">
+                <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingAllUpdates }" />
               </Button>
               <div class="w-px h-6 bg-border/50 mx-1"></div>
               <Button variant="outline" size="sm" class="h-9 px-3 gap-2 rounded-lg" @click="$emit('export')">
@@ -1441,7 +1681,7 @@ watch(
                 <BookOpen class="w-5 h-5 text-primary" />
               </div>
               <div class="flex-1 min-w-0">
-                <h4 class="font-semibold text-foreground mb-2">📦 Resources - Manage Your Mod Content</h4>
+                <h4 class="font-semibold text-foreground mb-2">Resources - Manage Your Mod Content</h4>
                 <p class="text-sm text-muted-foreground mb-3">
                   This is where you manage all the mods, resource packs, and shaders in your modpack.
                 </p>
@@ -1456,9 +1696,11 @@ watch(
                     <ul class="space-y-1 text-muted-foreground ml-6 list-disc">
                       <li><b>Toggle ON/OFF:</b> Click the green switch to enable/disable mods</li>
                       <li><b>Checkbox:</b> Select multiple mods for bulk actions</li>
+                      <li><b>Arrow up icon:</b> Quick update to latest release version</li>
+                      <li><b>Branch icon:</b> Change to any specific version (downgrade/beta/alpha)</li>
                       <li><b>Trash icon:</b> Remove a mod from the modpack</li>
-                      <li><b>Search:</b> Filter by name</li>
-                      <li><b>Quick filters:</b> Show all, only incompatible, or only disabled</li>
+                      <li><b>Updated badge:</b> Shows mods updated in last 5 minutes</li>
+                      <li><b>New badge:</b> Shows recently added mods</li>
                     </ul>
                   </div>
 
@@ -1466,13 +1708,14 @@ watch(
                     <h5 class="font-medium text-foreground flex items-center gap-1.5">
                       <span
                         class="w-5 h-5 rounded bg-blue-500/20 text-blue-500 flex items-center justify-center text-xs">2</span>
-                      Right Panel: Your Library
+                      Filters & Actions
                     </h5>
                     <ul class="space-y-1 text-muted-foreground ml-6 list-disc">
-                      <li><b>Green mods:</b> Compatible with your modpack version</li>
-                      <li><b>Dimmed mods:</b> Incompatible (wrong version or loader)</li>
-                      <li><b>+ Button:</b> Click to add a compatible mod</li>
-                      <li><b>Lock icon:</b> Cannot be added (incompatible)</li>
+                      <li><b>All:</b> Show all installed mods</li>
+                      <li><b>Incompatible:</b> Show only mods with wrong version/loader</li>
+                      <li><b>Disabled:</b> Show only disabled mods</li>
+                      <li><b>Updates:</b> Show only mods with updates available</li>
+                      <li><b>Update All:</b> Update all mods to latest version at once</li>
                     </ul>
                   </div>
                 </div>
@@ -1480,7 +1723,8 @@ watch(
                 <div
                   class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
                   <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
-                  <span><b>Tip:</b> Use the sub-tabs above to switch between Mods, Resource Packs, and Shaders!</span>
+                  <span><b>Tip:</b> Updates are checked automatically when you open the modpack. Use the arrow for quick
+                    updates, or Branch icon to pick a specific version!</span>
                 </div>
               </div>
             </div>
@@ -1493,7 +1737,7 @@ watch(
                 <BookOpen class="w-5 h-5 text-primary" />
               </div>
               <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">✨ Discover - Find New Content</h4>
+                <h4 class="font-semibold text-foreground mb-2">Discover - Find New Content</h4>
                 <p class="text-sm text-muted-foreground mb-3">
                   Get smart recommendations for mods that work well with your current modpack.
                 </p>
@@ -1525,7 +1769,7 @@ watch(
                 <BookOpen class="w-5 h-5 text-primary" />
               </div>
               <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">🏥 Health - Diagnose Modpack Issues</h4>
+                <h4 class="font-semibold text-foreground mb-2">Health - Diagnose Modpack Issues</h4>
                 <p class="text-sm text-muted-foreground mb-3">
                   Analyze your modpack for problems like missing dependencies, conflicts, and performance issues.
                 </p>
@@ -1568,7 +1812,7 @@ watch(
                 <BookOpen class="w-5 h-5 text-primary" />
               </div>
               <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">📜 History - Version Control</h4>
+                <h4 class="font-semibold text-foreground mb-2">History - Version Control</h4>
                 <p class="text-sm text-muted-foreground mb-3">
                   Save snapshots of your modpack and rollback if something breaks. Like "undo" but for your entire
                   modpack!
@@ -1613,7 +1857,7 @@ watch(
                 <BookOpen class="w-5 h-5 text-primary" />
               </div>
               <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">👥 Profiles - Save Mod Configurations</h4>
+                <h4 class="font-semibold text-foreground mb-2">Profiles - Save Mod Configurations</h4>
                 <p class="text-sm text-muted-foreground mb-3">
                   Create and switch between different mod setups without removing mods. Perfect for different
                   playstyles!
@@ -1657,7 +1901,7 @@ watch(
                 <BookOpen class="w-5 h-5 text-primary" />
               </div>
               <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">🌐 Remote - Updates & Collaboration</h4>
+                <h4 class="font-semibold text-foreground mb-2">Remote - Updates & Collaboration</h4>
                 <p class="text-sm text-muted-foreground mb-3">
                   Keep your modpack updated and share it with others using remote sync.
                 </p>
@@ -1699,7 +1943,7 @@ watch(
                 <BookOpen class="w-5 h-5 text-primary" />
               </div>
               <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">⚙️ Settings - Modpack Configuration</h4>
+                <h4 class="font-semibold text-foreground mb-2">Settings - Modpack Configuration</h4>
                 <p class="text-sm text-muted-foreground mb-3">
                   Basic settings for your modpack. Some settings are locked after creation to prevent issues.
                 </p>
@@ -1708,8 +1952,8 @@ watch(
                   <ul class="space-y-1 text-muted-foreground list-disc ml-4">
                     <li><b>Name:</b> The display name of your modpack</li>
                     <li><b>Version:</b> Your modpack's version number (e.g., 1.0.0)</li>
-                    <li><b>Minecraft Version:</b> The game version (🔒 locked after creation)</li>
-                    <li><b>Mod Loader:</b> Forge, Fabric, NeoForge, or Quilt (🔒 locked after creation)</li>
+                    <li><b>Minecraft Version:</b> The game version (locked after creation)</li>
+                    <li><b>Mod Loader:</b> Forge, Fabric, NeoForge, or Quilt (locked after creation)</li>
                     <li><b>Description:</b> A description of what the modpack is about</li>
                   </ul>
                 </div>
@@ -1767,7 +2011,8 @@ watch(
           <!-- Content Split View -->
           <div class="flex-1 flex overflow-hidden">
             <!-- Left: Installed Mods -->
-            <div class="w-1/2 border-r border-border/50 flex flex-col">
+            <div class="flex-1 border-r border-border/50 flex flex-col"
+              :class="isLibraryCollapsed ? '' : 'max-w-[50%]'">
               <!-- Header -->
               <div class="shrink-0 p-3 border-b border-border/30 bg-muted/20">
                 <div class="flex items-center justify-between mb-2">
@@ -1780,6 +2025,14 @@ watch(
                     </span>
                     <span v-if="incompatibleModCount > 0" class="text-xs text-red-500 font-medium">
                       ({{ incompatibleModCount }} incompatible)
+                    </span>
+                    <!-- Update check progress indicator -->
+                    <span v-if="isCheckingAllUpdates" class="text-xs text-primary flex items-center gap-1">
+                      <RefreshCw class="w-3 h-3 animate-spin" />
+                      Checking updates...
+                    </span>
+                    <span v-else-if="updatesAvailableCount > 0" class="text-xs text-emerald-500 font-medium">
+                      ({{ updatesAvailableCount }} updates available)
                     </span>
                   </div>
                   <!-- Bulk Actions -->
@@ -1800,7 +2053,7 @@ watch(
                 </div>
 
                 <!-- Quick Filters -->
-                <div class="flex items-center gap-1 mb-2">
+                <div class="flex items-center gap-1 mb-2 flex-wrap">
                   <button class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'all'
                     ? 'bg-primary/15 text-primary font-medium'
                     : 'hover:bg-muted text-muted-foreground'
@@ -1812,17 +2065,50 @@ watch(
                     : 'hover:bg-muted text-muted-foreground'
                     " @click="modsFilter = 'incompatible'">
                     <AlertCircle class="w-3 h-3 inline mr-0.5" />
-                    Incompatible ({{ incompatibleModCount }})
+                    {{ incompatibleModCount }}
                   </button>
                   <button v-if="disabledModCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'disabled'
                     ? 'bg-amber-500/15 text-amber-500 font-medium'
                     : 'hover:bg-muted text-muted-foreground'
                     " @click="modsFilter = 'disabled'">
-                    Disabled ({{ disabledModCount }})
+                    <ToggleLeft class="w-3 h-3 inline mr-0.5" />
+                    {{ disabledModCount }}
+                  </button>
+                  <button v-if="updatesAvailableCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors"
+                    :class="modsFilter === 'updates'
+                      ? 'bg-emerald-500/15 text-emerald-500 font-medium'
+                      : 'hover:bg-muted text-muted-foreground'
+                      " @click="modsFilter = 'updates'">
+                    <ArrowUpCircle class="w-3 h-3 inline mr-0.5" />
+                    {{ updatesAvailableCount }}
+                  </button>
+                  <button v-if="recentlyUpdatedCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'recent-updated'
+                    ? 'bg-cyan-500/15 text-cyan-500 font-medium'
+                    : 'hover:bg-muted text-muted-foreground'
+                    " @click="modsFilter = 'recent-updated'">
+                    <Check class="w-3 h-3 inline mr-0.5" />
+                    {{ recentlyUpdatedCount }}
+                  </button>
+                  <button v-if="recentlyAddedCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'recent-added'
+                    ? 'bg-blue-500/15 text-blue-500 font-medium'
+                    : 'hover:bg-muted text-muted-foreground'
+                    " @click="modsFilter = 'recent-added'">
+                    <Plus class="w-3 h-3 inline mr-0.5" />
+                    {{ recentlyAddedCount }}
+                  </button>
+
+                  <div class="flex-1"></div>
+
+                  <!-- Update All button -->
+                  <button v-if="updatesAvailableCount > 0 && !isLinked"
+                    class="h-6 text-[10px] px-2 rounded transition-colors flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20"
+                    @click="updateAllMods" title="Update all mods to latest version">
+                    <ArrowUpCircle class="w-3 h-3" />
+                    Update All
                   </button>
 
                   <!-- Remove all incompatible mods button -->
-                  <button v-if="incompatibleModCount > 0 && !isLinked"
+                  <button v-if="incompatibleModCount > 0 && !isLinked && updatesAvailableCount === 0"
                     class="h-6 text-[10px] px-2.5 rounded transition-colors ml-auto flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
                     @click="removeIncompatibleMods" title="Remove all incompatible mods from this modpack">
                     <Trash2 class="w-3 h-3" />
@@ -1896,6 +2182,16 @@ watch(
                   <div class="min-w-0 flex-1">
                     <div class="font-medium text-sm truncate flex items-center gap-1.5">
                       {{ mod.name }}
+                      <!-- Recently Updated Badge -->
+                      <span v-if="recentlyUpdatedMods.has(mod.id)"
+                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-medium animate-pulse">
+                        Updated
+                      </span>
+                      <!-- Recently Added Badge -->
+                      <span v-else-if="recentlyAddedMods.has(mod.id)"
+                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-500 font-medium">
+                        New
+                      </span>
                       <span v-if="disabledModIds.has(mod.id)"
                         class="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-medium">
                         disabled
@@ -1949,28 +2245,36 @@ watch(
                   </div>
 
                   <!-- Update Actions -->
-                  <div v-if="!isLinked && mod.cf_project_id" class="flex items-center">
-                    <!-- Update Available -->
-                    <Button v-if="updateAvailable[mod.id]" variant="ghost" size="icon"
+                  <div v-if="!isLinked && mod.cf_project_id" class="flex items-center gap-0.5">
+                    <!-- Quick Update Button (when update available) -->
+                    <Button v-if="updateAvailable[mod.id] && !checkingUpdates[mod.id]" variant="ghost" size="icon"
                       class="h-7 w-7 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 transition-all shrink-0"
-                      :title="`Update to ${updateAvailable[mod.id].displayName
-                        }`" @click.stop="openSingleModUpdate(mod)">
-                      <Download class="w-3.5 h-3.5" />
+                      :title="`Update to ${updateAvailable[mod.id].displayName}`" @click.stop="quickUpdateMod(mod)">
+                      <ArrowUpCircle class="w-3.5 h-3.5" />
                     </Button>
 
-                    <!-- Checking -->
+                    <!-- Checking Indicator -->
                     <div v-else-if="checkingUpdates[mod.id]" class="h-7 w-7 flex items-center justify-center shrink-0"
                       title="Checking for updates...">
                       <RefreshCw class="w-3.5 h-3.5 animate-spin text-primary" />
                     </div>
 
-                    <!-- Check Button -->
-                    <Button v-else variant="ghost" size="icon"
-                      class="h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                      title="Check for update" @click.stop="openSingleModUpdate(mod)">
-                      <RefreshCw class="w-3.5 h-3.5" />
-                    </Button>
+                    <!-- Up to date indicator (checked, no update) -->
+                    <div v-else-if="updateAvailable[mod.id] === null"
+                      class="h-7 w-7 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100"
+                      title="Up to date">
+                      <Check class="w-3.5 h-3.5 text-muted-foreground/50" />
+                    </div>
+
+                    <!-- Unchecked - show nothing, auto-check runs in background -->
                   </div>
+
+                  <!-- Change Version Button -->
+                  <Button v-if="!isLinked && mod.cf_project_id" variant="ghost" size="icon"
+                    class="h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                    title="Change version" @click.stop="openVersionPicker(mod)">
+                    <GitBranch class="w-3.5 h-3.5" />
+                  </Button>
 
                   <!-- Remove Button -->
                   <Button v-if="!isLinked" variant="ghost" size="icon"
@@ -2021,19 +2325,30 @@ watch(
               </div>
             </div>
 
-            <!-- Right: Available Mods -->
-            <div class="w-1/2 flex flex-col bg-muted/5">
+            <!-- Right: Available Mods (Library) -->
+            <div class="flex flex-col bg-muted/5 transition-all duration-300"
+              :class="isLibraryCollapsed ? 'w-10' : 'w-1/2'">
               <!-- Header -->
               <div class="shrink-0 p-3 border-b border-border/30 bg-muted/20">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="font-semibold text-sm">Library</span>
-                  <div class="flex items-center gap-2 text-xs">
-                    <span class="text-emerald-500">{{ compatibleCount }} compatible</span>
-                    <span v-if="incompatibleCount > 0" class="text-amber-500">{{ incompatibleCount }}
-                      incompatible</span>
-                  </div>
+                <div class="flex items-center gap-2">
+                  <!-- Collapse/Expand Button -->
+                  <button @click="isLibraryCollapsed = !isLibraryCollapsed"
+                    class="h-6 w-6 flex items-center justify-center rounded hover:bg-muted transition-colors"
+                    :title="isLibraryCollapsed ? 'Expand Library' : 'Collapse Library'">
+                    <ChevronDown class="w-4 h-4 transition-transform"
+                      :class="isLibraryCollapsed ? '-rotate-90' : 'rotate-90'" />
+                  </button>
+
+                  <template v-if="!isLibraryCollapsed">
+                    <span class="font-semibold text-sm">Library</span>
+                    <div class="flex items-center gap-2 text-xs ml-auto">
+                      <span class="text-emerald-500">{{ compatibleCount }} compatible</span>
+                      <span v-if="incompatibleCount > 0" class="text-amber-500">{{ incompatibleCount }}
+                        incompatible</span>
+                    </div>
+                  </template>
                 </div>
-                <div class="relative">
+                <div v-if="!isLibraryCollapsed" class="relative mt-2">
                   <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <input v-model="searchQueryAvailable" placeholder="Search library..."
                     class="w-full h-8 pl-8 pr-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all" />
@@ -2041,7 +2356,7 @@ watch(
               </div>
 
               <!-- Mod List -->
-              <div class="flex-1 overflow-y-auto p-2 space-y-1">
+              <div v-if="!isLibraryCollapsed" class="flex-1 overflow-y-auto p-2 space-y-1">
                 <div v-for="mod in filteredAvailableMods" :key="mod.id"
                   class="flex items-center justify-between p-2.5 rounded-lg transition-all relative" :class="mod.isCompatible
                     ? 'hover:bg-accent/50 cursor-pointer group'
@@ -2133,7 +2448,7 @@ watch(
         <!-- Version History Tab -->
         <div v-else-if="activeTab === 'versions'" class="flex-1 p-6 overflow-auto">
           <VersionHistoryPanel v-if="modpack" :modpack-id="modpackId" :modpack-name="modpack.name"
-            :instance-id="linkedInstanceId || undefined" :is-linked="isLinked" @refresh="loadData" />
+            :instance-id="linkedInstanceId || undefined" :is-linked="isLinked" @refresh="refreshAndNotify" />
         </div>
 
         <!-- Profiles Tab -->
@@ -2431,10 +2746,6 @@ watch(
       </div>
     </div>
 
-    <!-- Updates Dialog -->
-    <UpdatesDialog :open="showUpdatesDialog" :modpack-id="modpackId" @close="showUpdatesDialog = false"
-      @updated="loadData" />
-
     <!-- Remote Update Review Dialog -->
     <UpdateReviewDialog v-if="updateResult && modpack" :open="showReviewDialog" :modpack-name="modpack.name"
       :changes="updateResult.changes" :new-version="updateResult.remoteManifest?.modpack.version"
@@ -2508,6 +2819,11 @@ watch(
     <ModUpdateDialog :open="showSingleModUpdateDialog" :mod="selectedUpdateMod" :modpack-id="modpackId"
       :minecraft-version="modpack?.minecraft_version" :loader="modpack?.loader"
       @close="showSingleModUpdateDialog = false" @updated="handleSingleModUpdated" />
+
+    <!-- Version Picker Dialog -->
+    <FilePickerDialog :open="showVersionPickerDialog" :mod="versionPickerMod" :game-version="modpack?.minecraft_version"
+      :mod-loader="modpack?.loader" :content-type="versionPickerMod?.content_type || 'mod'"
+      @close="showVersionPickerDialog = false" @select="handleVersionSelected" />
 
     <!-- CurseForge Changelog Dialog -->
     <Dialog :open="showCFChangelog" @close="showCFChangelog = false" title="Modpack Changelog" size="lg">

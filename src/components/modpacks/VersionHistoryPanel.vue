@@ -455,13 +455,14 @@ watch(() => props.modpackId, () => {
                 </p>
             </div>
 
-            <Button v-if="hasVersionControl && !props.isLinked" size="sm" class="gap-1.5" @click="showCommitDialog = true"
-                :disabled="isLoading">
+            <Button v-if="hasVersionControl && !props.isLinked" size="sm" class="gap-1.5"
+                @click="showCommitDialog = true" :disabled="isLoading">
                 <Save class="w-4 h-4" />
                 Save Version
             </Button>
             <!-- Remote locked indicator -->
-            <div v-else-if="hasVersionControl && props.isLinked" class="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <div v-else-if="hasVersionControl && props.isLinked"
+                class="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Lock class="w-4 h-4" />
                 <span>Managed by remote</span>
             </div>
@@ -515,34 +516,97 @@ watch(() => props.modpackId, () => {
                         <h4 class="font-medium text-yellow-600 dark:text-yellow-400 mb-1">
                             Unsaved Changes ({{ unsavedChangeCount }})
                         </h4>
-                        <div class="space-y-1 text-sm text-muted-foreground">
-                            <div v-if="unsavedChanges.changes.modsAdded.length > 0" class="flex items-center gap-1.5">
-                                <Plus class="w-3.5 h-3.5 text-emerald-500" />
-                                <span>{{ unsavedChanges.changes.modsAdded.length }} mods added</span>
+                        <div class="space-y-2 text-sm text-muted-foreground">
+                            <!-- Mods Added -->
+                            <div v-if="unsavedChanges.changes.modsAdded.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5">
+                                    <Plus class="w-3.5 h-3.5 text-emerald-500" />
+                                    <span>{{ unsavedChanges.changes.modsAdded.length }} mods added</span>
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span v-for="mod in unsavedChanges.changes.modsAdded.slice(0, 5)" :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <span v-if="unsavedChanges.changes.modsAdded.length > 5"
+                                        class="text-xs text-muted-foreground">
+                                        +{{ unsavedChanges.changes.modsAdded.length - 5 }} more
+                                    </span>
+                                </div>
                             </div>
-                            <div v-if="unsavedChanges.changes.modsRemoved.length > 0" class="flex items-center gap-1.5">
-                                <Minus class="w-3.5 h-3.5 text-red-500" />
-                                <span>{{ unsavedChanges.changes.modsRemoved.length }} mods removed</span>
+                            <!-- Mods Removed -->
+                            <div v-if="unsavedChanges.changes.modsRemoved.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5">
+                                    <Minus class="w-3.5 h-3.5 text-red-500" />
+                                    <span>{{ unsavedChanges.changes.modsRemoved.length }} mods removed</span>
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span v-for="mod in unsavedChanges.changes.modsRemoved.slice(0, 5)" :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <span v-if="unsavedChanges.changes.modsRemoved.length > 5"
+                                        class="text-xs text-muted-foreground">
+                                        +{{ unsavedChanges.changes.modsRemoved.length - 5 }} more
+                                    </span>
+                                </div>
                             </div>
-                            <div v-if="unsavedChanges.changes.modsUpdated?.length > 0"
-                                class="flex items-center gap-1.5">
-                                <RefreshCw class="w-3.5 h-3.5 text-blue-500" />
-                                <span>{{ unsavedChanges.changes.modsUpdated.length }} mods updated</span>
+                            <!-- Mods Updated -->
+                            <div v-if="unsavedChanges.changes.modsUpdated?.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5">
+                                    <RefreshCw class="w-3.5 h-3.5 text-blue-500" />
+                                    <span>{{ unsavedChanges.changes.modsUpdated.length }} mods updated</span>
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span v-for="mod in unsavedChanges.changes.modsUpdated.slice(0, 5)" :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <span v-if="unsavedChanges.changes.modsUpdated.length > 5"
+                                        class="text-xs text-muted-foreground">
+                                        +{{ unsavedChanges.changes.modsUpdated.length - 5 }} more
+                                    </span>
+                                </div>
                             </div>
-                            <div v-if="unsavedChanges.changes.modsEnabled.length > 0" class="flex items-center gap-1.5">
-                                <ToggleRight class="w-3.5 h-3.5 text-emerald-500" />
-                                <span>{{ unsavedChanges.changes.modsEnabled.length }} mods enabled</span>
+                            <!-- Mods Enabled -->
+                            <div v-if="unsavedChanges.changes.modsEnabled.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5">
+                                    <ToggleRight class="w-3.5 h-3.5 text-emerald-500" />
+                                    <span>{{ unsavedChanges.changes.modsEnabled.length }} mods enabled</span>
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span v-for="mod in unsavedChanges.changes.modsEnabled.slice(0, 5)" :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <span v-if="unsavedChanges.changes.modsEnabled.length > 5"
+                                        class="text-xs text-muted-foreground">
+                                        +{{ unsavedChanges.changes.modsEnabled.length - 5 }} more
+                                    </span>
+                                </div>
                             </div>
-                            <div v-if="unsavedChanges.changes.modsDisabled.length > 0"
-                                class="flex items-center gap-1.5">
-                                <ToggleLeft class="w-3.5 h-3.5 text-amber-500" />
-                                <span>{{ unsavedChanges.changes.modsDisabled.length }} mods disabled</span>
+                            <!-- Mods Disabled -->
+                            <div v-if="unsavedChanges.changes.modsDisabled.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5">
+                                    <ToggleLeft class="w-3.5 h-3.5 text-amber-500" />
+                                    <span>{{ unsavedChanges.changes.modsDisabled.length }} mods disabled</span>
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span v-for="mod in unsavedChanges.changes.modsDisabled.slice(0, 5)" :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <span v-if="unsavedChanges.changes.modsDisabled.length > 5"
+                                        class="text-xs text-muted-foreground">
+                                        +{{ unsavedChanges.changes.modsDisabled.length - 5 }} more
+                                    </span>
+                                </div>
                             </div>
                             <div v-if="unsavedChanges.changes.configsChanged" class="flex flex-col gap-1">
                                 <div class="flex items-center gap-1.5">
                                     <Settings class="w-3.5 h-3.5 text-purple-500" />
                                     <span>{{ configChangeCount }} config change{{ configChangeCount !== 1 ? 's' : ''
-                                        }}</span>
+                                    }}</span>
                                 </div>
                                 <!-- Config change details -->
                                 <div v-if="unsavedChanges.changes.configDetails?.length"
@@ -551,7 +615,7 @@ watch(() => props.modpackId, () => {
                                         :key="idx"
                                         class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
                                         <span v-if="cfg.line" class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
-                                            }}</span>
+                                        }}</span>
                                         <span class="text-white/60 truncate max-w-[100px]" :title="cfg.filePath">{{
                                             getFileName(cfg.filePath) }}</span>
                                         <span class="text-white/80 font-medium truncate max-w-[80px]">{{
@@ -633,8 +697,8 @@ watch(() => props.modpackId, () => {
                                         {{ formatDate(version.created_at) }}
                                     </span>
 
-                                    <Button v-if="version.id !== currentVersionId && !props.isLinked" size="sm" variant="ghost"
-                                        class="h-7 w-7 p-0" @click.stop="rollbackTo(version)"
+                                    <Button v-if="version.id !== currentVersionId && !props.isLinked" size="sm"
+                                        variant="ghost" class="h-7 w-7 p-0" @click.stop="rollbackTo(version)"
                                         title="Rollback to this version">
                                         <RotateCcw class="w-3.5 h-3.5" />
                                     </Button>
@@ -660,7 +724,8 @@ watch(() => props.modpackId, () => {
                                     </div>
 
                                     <!-- Changes -->
-                                    <div v-if="version.changes.length > 0">
+                                    <div
+                                        v-if="version.changes.length > 0 || (version.config_changes && version.config_changes.length > 0)">
                                         <div
                                             class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
                                             Changes</div>
@@ -687,8 +752,38 @@ watch(() => props.modpackId, () => {
                                             </div>
                                         </div>
 
-                                        <!-- Config snapshot indicator -->
-                                        <div v-if="version.config_snapshot_id"
+                                        <!-- Config changes details -->
+                                        <div v-if="version.config_changes && version.config_changes.length > 0"
+                                            class="mt-3">
+                                            <div class="flex items-center gap-2 text-xs text-purple-400 mb-2">
+                                                <Settings class="w-3 h-3" />
+                                                <span>{{ version.config_changes.length }} config change{{
+                                                    version.config_changes.length !== 1 ? 's' : '' }}</span>
+                                            </div>
+                                            <div class="ml-5 space-y-1 max-h-24 overflow-y-auto text-xs">
+                                                <div v-for="(cfg, idx) in version.config_changes.slice(0, 5)" :key="idx"
+                                                    class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
+                                                    <span v-if="cfg.line"
+                                                        class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
+                                                        }}</span>
+                                                    <span class="text-white/60 truncate max-w-[100px]"
+                                                        :title="cfg.filePath">{{ getFileName(cfg.filePath) }}</span>
+                                                    <span class="text-white/80 font-medium truncate max-w-[80px]">{{
+                                                        cfg.keyPath.split('.').pop() }}</span>
+                                                    <span class="text-red-400/70 line-through truncate max-w-[50px]">{{
+                                                        formatConfigValue(cfg.oldValue) }}</span>
+                                                    <span class="text-white/40">→</span>
+                                                    <span class="text-green-400 truncate max-w-[50px]">{{
+                                                        formatConfigValue(cfg.newValue) }}</span>
+                                                </div>
+                                                <div v-if="version.config_changes.length > 5"
+                                                    class="text-muted-foreground/60 text-[10px] pl-2">
+                                                    ... and {{ version.config_changes.length - 5 }} more
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- Config snapshot indicator (for versions without detailed changes) -->
+                                        <div v-else-if="version.config_snapshot_id"
                                             class="mt-2 flex items-center gap-2 text-xs text-purple-400">
                                             <Settings class="w-3 h-3" />
                                             <span>Config snapshot saved</span>

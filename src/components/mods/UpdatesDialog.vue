@@ -330,7 +330,7 @@ function getSourceLabel(source: string) {
         <div>
           <div class="font-medium">API Key CurseForge mancante</div>
           <div class="text-xs opacity-80">
-            Clicca su ⚙️ per configurare la API key e abilitare il controllo
+            Clicca sull'icona ingranaggio per configurare la API key e abilitare il controllo
             aggiornamenti da CurseForge.
           </div>
         </div>

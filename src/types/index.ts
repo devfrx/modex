@@ -373,6 +373,14 @@ export interface ModpackVersion {
   }>;
   /** ID of the config snapshot for this version */
   config_snapshot_id?: string;
+  /** Config changes included in this version */
+  config_changes?: Array<{
+    filePath: string;
+    keyPath: string;
+    line?: number;
+    oldValue: any;
+    newValue: any;
+  }>;
 }
 
 /** Version control history for a modpack */

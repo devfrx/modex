@@ -621,7 +621,7 @@ export class CurseForgeService {
     const isModContent = !contentType || contentType === "mod";
 
     // First try exact match with version and loader (for mods only)
-    const files = isModContent
+    let files = isModContent
       ? await this.getModFiles(modId, {
           gameVersion,
           modLoader,
@@ -634,21 +634,26 @@ export class CurseForgeService {
       if (allFiles.length > 0) {
         if (isModContent) {
           const loaderLower = modLoader.toLowerCase();
-          const matching = allFiles.find((f) =>
+          files = allFiles.filter((f) =>
             f.gameVersions.some((gv) => gv.toLowerCase() === loaderLower)
           );
-          return matching || null; // Return null if no matching loader found
+          if (files.length === 0) return null;
         } else {
-          // For non-mods, return the first file
-          return allFiles[0];
+          files = allFiles;
         }
+      } else {
+        return null;
       }
-      return null;
     }
 
-    // Prefer release files over beta/alpha
-    const releaseFile = files.find((f) => f.releaseType === 1);
-    return releaseFile || files[0];
+    // Sort by file ID descending (higher ID = newer file)
+    files.sort((a, b) => b.id - a.id);
+
+    // Filter only release files first
+    const releaseFiles = files.filter((f) => f.releaseType === 1);
+    
+    // Return the newest release file, or if no releases exist, the newest file overall
+    return releaseFiles.length > 0 ? releaseFiles[0] : files[0];
   }
 
   /**

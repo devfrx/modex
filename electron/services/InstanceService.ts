@@ -102,11 +102,20 @@ export interface RunningGameInfo {
   launcherPid?: number;
   gamePid?: number;
   startTime: number;
+  /** 
+   * Status meanings:
+   * - launching: Launcher started, waiting for game process
+   * - loading_mods: Game process found, mods loading
+   * - running: Game fully loaded and running
+   * - stopped: Game has stopped
+   */
   status: "launching" | "loading_mods" | "running" | "stopped";
   loadedMods: number;
   totalMods: number;
   currentMod?: string;
   logWatcher?: fs.FSWatcher;
+  /** Whether the actual game (Java) is running vs just the launcher */
+  gameProcessRunning: boolean;
 }
 
 interface LauncherConfig {
@@ -148,6 +157,71 @@ export class InstanceService {
     await fs.ensureDir(this.instancesPath);
     await this.loadConfig();
     await this.loadInstances();
+    
+    // Scan for already running games on startup
+    await this.scanRunningGames();
+  }
+
+  /**
+   * Scan for Java processes that match our instances (for app restart detection)
+   */
+  async scanRunningGames(): Promise<void> {
+    if (process.platform !== "win32") return;
+    
+    try {
+      const { execSync } = await import("child_process");
+      const result = execSync(
+        `powershell -Command "Get-CimInstance Win32_Process -Filter \\"Name like '%java%'\\" | Select-Object ProcessId, CommandLine, CreationDate | ConvertTo-Json"`,
+        { encoding: "utf-8", timeout: 15000 }
+      );
+      
+      let processes: any[] = [];
+      try {
+        const parsed = JSON.parse(result);
+        processes = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        return;
+      }
+      
+      for (const proc of processes) {
+        if (!proc || !proc.CommandLine) continue;
+        
+        const cmdLine = proc.CommandLine as string;
+        
+        // Find which instance this belongs to
+        for (const instance of this.instances) {
+          if (cmdLine.includes(instance.path) || cmdLine.includes(instance.path.replace(/\\/g, "/"))) {
+            // Found a running game for this instance
+            console.log(`[InstanceService] Found running game for instance ${instance.id} (PID: ${proc.ProcessId})`);
+            
+            const gameInfo: RunningGameInfo = {
+              instanceId: instance.id,
+              gamePid: proc.ProcessId,
+              startTime: proc.CreationDate ? new Date(proc.CreationDate).getTime() : Date.now(),
+              status: "running",
+              loadedMods: instance.modCount || 0,
+              totalMods: instance.modCount || 0,
+              gameProcessRunning: true
+            };
+            
+            this.runningGames.set(instance.id, gameInfo);
+            this.onGameStatusChange?.(instance.id, gameInfo);
+            
+            // Start monitoring this process
+            this.monitorGameProcess(instance);
+            this.watchGameLogs(instance);
+            
+            break;
+          }
+        }
+      }
+      
+      if (this.runningGames.size > 0) {
+        console.log(`[InstanceService] Detected ${this.runningGames.size} running game(s) from previous session`);
+      }
+    } catch (error) {
+      console.warn("[InstanceService] Failed to scan for running games:", error);
+    }
   }
 
   // ==================== CONFIG ====================
@@ -279,6 +353,11 @@ export class InstanceService {
     if (!instance) return false;
 
     try {
+      // Stop the game if running
+      if (this.runningGames.has(id)) {
+        await this.killGame(id);
+      }
+      
       // Remove directory
       await fs.remove(instance.path);
       
@@ -422,10 +501,11 @@ export class InstanceService {
       if (options.clearExisting) {
         options.onProgress?.("Clearing existing content...", 0, 1);
         
-        // Clear mods
+        // Clear mods (includes .jar and .zip mods/datapacks)
         const existingMods = await fs.readdir(modsPath);
         for (const file of existingMods) {
-          if (file.endsWith(".jar") || file.endsWith(".jar.disabled")) {
+          if (file.endsWith(".jar") || file.endsWith(".jar.disabled") ||
+              file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
             await fs.remove(path.join(modsPath, file));
           }
         }
@@ -505,10 +585,12 @@ export class InstanceService {
           ...(modpackData.disabledMods || []).map(m => m.filename)
         ]);
 
-        // Check mods folder
+        // Check mods folder (includes .jar and .zip mods/datapacks)
         for (const file of existingModFiles) {
           const baseFilename = file.replace(".disabled", "");
-          if ((file.endsWith(".jar") || file.endsWith(".jar.disabled")) && !currentModFilenames.has(baseFilename)) {
+          const isModFile = file.endsWith(".jar") || file.endsWith(".jar.disabled") || 
+                           file.endsWith(".zip") || file.endsWith(".zip.disabled");
+          if (isModFile && !currentModFilenames.has(baseFilename)) {
             await fs.remove(path.join(modsPath, file));
             console.log(`[Sync] Removed mod no longer in pack: ${file}`);
             result.warnings.push(`Removed outdated mod: ${baseFilename}`);
@@ -1807,16 +1889,17 @@ export class InstanceService {
       const modsPath = path.join(instance.path, "mods");
       const disabledSet = new Set(disabledModIds);
       
-      // Get all jar files in instance (both enabled and disabled)
+      // Get all mod files in instance (both enabled and disabled)
+      // Mods can be .jar or .zip (datapacks, compat packs)
       const instanceFiles: Map<string, boolean> = new Map(); // filename -> isEnabled
       
       if (await fs.pathExists(modsPath)) {
         const files = await fs.readdir(modsPath);
         for (const file of files) {
-          if (file.endsWith(".jar")) {
+          if (file.endsWith(".jar") || file.endsWith(".zip")) {
             instanceFiles.set(file, true);
-          } else if (file.endsWith(".jar.disabled")) {
-            const enabledName = file.replace(".jar.disabled", ".jar");
+          } else if (file.endsWith(".jar.disabled") || file.endsWith(".zip.disabled")) {
+            const enabledName = file.replace(".disabled", "");
             instanceFiles.set(enabledName, false);
           }
         }
@@ -1904,15 +1987,203 @@ export class InstanceService {
       // Configs are managed directly as physical files, not as virtual modpack references
       // The user edits configs directly on the instance, so there's nothing to "sync"
 
+      // Extra files in instance are NOT counted as requiring sync
+      // These are user-added files that should be preserved
+      // Only missingInInstance and disabledMismatch require sync action
       result.totalDifferences = 
         result.missingInInstance.length + 
-        result.extraInInstance.length + 
         result.disabledMismatch.length;
       
       result.needsSync = result.totalDifferences > 0;
 
     } catch (error) {
       console.error("[InstanceService] Error checking sync status:", error);
+    }
+
+    return result;
+  }
+
+  /**
+   * Get list of config files that were modified in instance compared to modpack overrides
+   */
+  async getModifiedConfigs(instanceId: string, overridesPath?: string): Promise<{
+    modifiedConfigs: Array<{
+      relativePath: string;
+      instancePath: string;
+      overridePath?: string;
+      status: 'modified' | 'new' | 'deleted';
+      lastModified: Date;
+      size: number;
+    }>;
+    instanceConfigPath: string;
+    overridesConfigPath?: string;
+  }> {
+    const result: {
+      modifiedConfigs: Array<{
+        relativePath: string;
+        instancePath: string;
+        overridePath?: string;
+        status: 'modified' | 'new' | 'deleted';
+        lastModified: Date;
+        size: number;
+      }>;
+      instanceConfigPath: string;
+      overridesConfigPath?: string;
+    } = {
+      modifiedConfigs: [],
+      instanceConfigPath: '',
+      overridesConfigPath: undefined
+    };
+
+    const instance = await this.getInstance(instanceId);
+    if (!instance) {
+      return result;
+    }
+
+    result.instanceConfigPath = path.join(instance.path, 'config');
+
+    // Use provided overrides path
+    if (overridesPath && await fs.pathExists(overridesPath)) {
+      result.overridesConfigPath = path.join(overridesPath, 'config');
+    }
+
+    // Get all config files from instance
+    if (await fs.pathExists(result.instanceConfigPath)) {
+      const instanceConfigs = await this.getAllFiles(result.instanceConfigPath, result.instanceConfigPath);
+      
+      for (const relPath of instanceConfigs) {
+        const instanceFilePath = path.join(result.instanceConfigPath, relPath);
+        const stat = await fs.stat(instanceFilePath);
+        
+        let status: 'modified' | 'new' | 'deleted' = 'new';
+        let overridePath: string | undefined;
+        
+        // Check if file exists in overrides
+        if (result.overridesConfigPath) {
+          const overrideFilePath = path.join(result.overridesConfigPath, relPath);
+          if (await fs.pathExists(overrideFilePath)) {
+            overridePath = overrideFilePath;
+            
+            // Compare content
+            const instanceContent = await fs.readFile(instanceFilePath);
+            const overrideContent = await fs.readFile(overrideFilePath);
+            
+            if (!instanceContent.equals(overrideContent)) {
+              status = 'modified';
+            } else {
+              // File is same, skip
+              continue;
+            }
+          }
+        }
+        
+        result.modifiedConfigs.push({
+          relativePath: relPath,
+          instancePath: instanceFilePath,
+          overridePath,
+          status,
+          lastModified: stat.mtime,
+          size: stat.size
+        });
+      }
+    }
+
+    // Check for deleted configs (in overrides but not in instance)
+    if (result.overridesConfigPath && await fs.pathExists(result.overridesConfigPath)) {
+      const overrideConfigs = await this.getAllFiles(result.overridesConfigPath, result.overridesConfigPath);
+      
+      for (const relPath of overrideConfigs) {
+        const instanceFilePath = path.join(result.instanceConfigPath, relPath);
+        
+        if (!await fs.pathExists(instanceFilePath)) {
+          result.modifiedConfigs.push({
+            relativePath: relPath,
+            instancePath: instanceFilePath,
+            overridePath: path.join(result.overridesConfigPath, relPath),
+            status: 'deleted',
+            lastModified: new Date(),
+            size: 0
+          });
+        }
+      }
+    }
+
+    // Sort by status and then by path
+    result.modifiedConfigs.sort((a, b) => {
+      const statusOrder = { modified: 0, new: 1, deleted: 2 };
+      if (statusOrder[a.status] !== statusOrder[b.status]) {
+        return statusOrder[a.status] - statusOrder[b.status];
+      }
+      return a.relativePath.localeCompare(b.relativePath);
+    });
+
+    return result;
+  }
+
+  /**
+   * Import config files from instance to modpack overrides
+   */
+  async importConfigsToModpack(
+    instanceId: string, 
+    overridesPath: string, 
+    configPaths: string[] // relative paths to import
+  ): Promise<{
+    success: boolean;
+    imported: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    const result = {
+      success: true,
+      imported: 0,
+      skipped: 0,
+      errors: [] as string[]
+    };
+
+    const instance = await this.getInstance(instanceId);
+    if (!instance) {
+      result.success = false;
+      result.errors.push("Instance not found");
+      return result;
+    }
+
+    if (!overridesPath) {
+      result.success = false;
+      result.errors.push("Overrides path not provided");
+      return result;
+    }
+
+    const instanceConfigPath = path.join(instance.path, 'config');
+    
+    // Ensure overrides config path exists
+    const overridesConfigPath = path.join(overridesPath, 'config');
+    await fs.ensureDir(overridesConfigPath);
+
+    for (const relPath of configPaths) {
+      try {
+        const instanceFilePath = path.join(instanceConfigPath, relPath);
+        const overrideFilePath = path.join(overridesConfigPath, relPath);
+
+        if (await fs.pathExists(instanceFilePath)) {
+          // Ensure parent directory exists
+          await fs.ensureDir(path.dirname(overrideFilePath));
+          
+          // Copy file from instance to overrides
+          await fs.copy(instanceFilePath, overrideFilePath, { overwrite: true });
+          result.imported++;
+          console.log(`[ConfigSync] Imported config: ${relPath}`);
+        } else {
+          result.skipped++;
+          console.log(`[ConfigSync] Skipped (not found): ${relPath}`);
+        }
+      } catch (err: any) {
+        result.errors.push(`Failed to import ${relPath}: ${err.message}`);
+        console.error(`[ConfigSync] Error importing ${relPath}:`, err);
+      }
+    }
+
+    if (result.errors.length > 0) {
+      result.success = false;
     }
 
     return result;
@@ -2134,7 +2405,8 @@ export class InstanceService {
       startTime: Date.now(),
       status: "launching",
       loadedMods: 0,
-      totalMods: instance.modCount || 0
+      totalMods: instance.modCount || 0,
+      gameProcessRunning: false // Not running yet, just launcher
     };
 
     this.runningGames.set(instance.id, gameInfo);
@@ -2187,6 +2459,7 @@ export class InstanceService {
                 if (pid && !isNaN(pid)) {
                   gameInfo.gamePid = pid;
                   gameInfo.status = "loading_mods";
+                  gameInfo.gameProcessRunning = true; // Now the actual game is running
                   this.onGameStatusChange?.(instance.id, gameInfo);
                   console.log(`[InstanceService] Found game process PID: ${pid}`);
                   clearInterval(checkInterval);
@@ -2515,7 +2788,7 @@ export class InstanceService {
   }
 
   /**
-   * Kill a running game
+   * Kill a running game (and optionally the launcher)
    */
   async killGame(instanceId: string): Promise<boolean> {
     const gameInfo = this.runningGames.get(instanceId);
@@ -2525,13 +2798,32 @@ export class InstanceService {
       const platform = process.platform;
       const { execSync } = await import("child_process");
 
+      // Kill the Java game process if it exists
       if (gameInfo.gamePid) {
-        if (platform === "win32") {
-          execSync(`taskkill /F /PID ${gameInfo.gamePid}`, { encoding: "utf-8" });
-        } else {
-          process.kill(gameInfo.gamePid, "SIGKILL");
+        try {
+          if (platform === "win32") {
+            execSync(`taskkill /F /PID ${gameInfo.gamePid}`, { encoding: "utf-8" });
+          } else {
+            process.kill(gameInfo.gamePid, "SIGKILL");
+          }
+          console.log(`[InstanceService] Killed game process ${gameInfo.gamePid}`);
+        } catch (e) {
+          console.warn(`[InstanceService] Failed to kill game PID ${gameInfo.gamePid}:`, e);
         }
-        console.log(`[InstanceService] Killed game process ${gameInfo.gamePid}`);
+      }
+
+      // Kill the launcher process if it exists
+      if (gameInfo.launcherPid) {
+        try {
+          if (platform === "win32") {
+            execSync(`taskkill /F /PID ${gameInfo.launcherPid}`, { encoding: "utf-8" });
+          } else {
+            process.kill(gameInfo.launcherPid, "SIGKILL");
+          }
+          console.log(`[InstanceService] Killed launcher process ${gameInfo.launcherPid}`);
+        } catch (e) {
+          console.warn(`[InstanceService] Failed to kill launcher PID ${gameInfo.launcherPid}:`, e);
+        }
       }
 
       // Also try to kill any remaining java processes for this instance
@@ -2555,6 +2847,7 @@ export class InstanceService {
               if (proc.CommandLine.includes(instance.path)) {
                 try {
                   execSync(`taskkill /F /PID ${proc.ProcessId}`);
+                  console.log(`[InstanceService] Killed related java process ${proc.ProcessId}`);
                 } catch {}
               }
             }

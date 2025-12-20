@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useToast } from "@/composables/useToast";
+import { useInstances } from "@/composables/useInstances";
 import {
   X,
   Plus,
@@ -36,6 +37,23 @@ import {
   ChevronDown,
   BookOpen,
   Lightbulb,
+  Play,
+  Loader2,
+  FolderOpen,
+  FileCode,
+  Clock,
+  HardDrive,
+  Gamepad2,
+  Terminal,
+  ChevronUp,
+  Cpu,
+  MemoryStick,
+  Sliders,
+  Rocket,
+  FileWarning,
+  FolderSync,
+  FileEdit,
+  FolderTree,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -48,12 +66,15 @@ import ModpackAnalysisPanel from "@/components/modpacks/ModpackAnalysisPanel.vue
 import RecommendationsPanel from "@/components/modpacks/RecommendationsPanel.vue";
 import ProfilesPanel from "@/components/modpacks/ProfilesPanel.vue";
 import UpdateReviewDialog from "@/components/modpacks/UpdateReviewDialog.vue";
+import ConfigBrowser from "@/components/configs/ConfigBrowser.vue";
+import ConfigStructuredEditor from "@/components/configs/ConfigStructuredEditor.vue";
 import UpdateAvailableBanner from "@/components/modpacks/UpdateAvailableBanner.vue";
-import type { Mod, Modpack, ModpackChange, RemoteUpdateResult } from "@/types";
+import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
 
 const props = defineProps<{
   modpackId: string;
   isOpen: boolean;
+  initialTab?: "play" | "mods" | "discover" | "health" | "versions" | "profiles" | "settings" | "remote" | "configs";
 }>();
 
 const emit = defineEmits<{
@@ -61,9 +82,26 @@ const emit = defineEmits<{
   (e: "update"): void;
   (e: "export"): void;
   (e: "updated"): void;
+  (e: "launched", instance: ModexInstance): void;
 }>();
 
 const toast = useToast();
+
+// Instance composable for play functionality
+const {
+  syncProgress,
+  runningGames,
+  getInstanceByModpack,
+  createFromModpack,
+  syncModpackToInstance,
+  launchInstance,
+  openInstanceFolder,
+  getInstanceStats,
+  killGame,
+  onGameLogLine,
+  updateInstance,
+  smartLaunch,
+} = useInstances();
 
 const modpack = ref<Modpack | null>(null);
 const currentMods = ref<Mod[]>([]);
@@ -82,6 +120,7 @@ const versionPickerMod = ref<any>(null);
 const isSaving = ref(false);
 const modsFilter = ref<"all" | "incompatible" | "disabled" | "updates" | "recent-updated" | "recent-added">("all");
 const activeTab = ref<
+  | "play"
   | "mods"
   | "discover"
   | "health"
@@ -89,6 +128,7 @@ const activeTab = ref<
   | "profiles"
   | "settings"
   | "remote"
+  | "configs"
 >("mods");
 const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
 
@@ -97,6 +137,117 @@ const showHelp = ref(false);
 
 // Linked instance (for config sync in version control)
 const linkedInstanceId = ref<string | null>(null);
+
+// ========== PLAY/INSTANCE STATE ==========
+const instance = ref<ModexInstance | null>(null);
+const instanceStats = ref<{ modCount: number; configCount: number; totalSize: string } | null>(null);
+const isInstanceLoading = ref(false);
+const isCreatingInstance = ref(false);
+const isSyncingInstance = ref(false);
+const isLaunching = ref(false);
+const syncResult = ref<InstanceSyncResult | null>(null);
+
+// Sync Status for instance
+const instanceSyncStatus = ref<{
+  needsSync: boolean;
+  missingInInstance: Array<{ filename: string; type: string }>;
+  extraInInstance: Array<{ filename: string; type: string }>;
+  disabledMismatch: Array<{ filename: string; issue: string }>;
+  configDifferences: number;
+  totalDifferences: number;
+} | null>(null);
+
+// Sync UI State
+const showSyncDetails = ref(false);
+const selectedSyncMode = ref<'overwrite' | 'new_only' | 'skip'>('new_only');
+const syncSettings = ref({
+  autoSyncEnabled: true,
+  showConfirmation: true
+});
+
+// Loader Installation Progress
+const loaderProgress = ref<{
+  stage: string;
+  current: number;
+  total: number;
+  detail: string;
+} | null>(null);
+
+// Game Launch State
+const gameLaunched = ref(false);
+const gameLoadingMessage = ref("");
+
+// Instance Settings (RAM & JVM Args)
+const showInstanceSettings = ref(false);
+const memoryMin = ref(2048);
+const memoryMax = ref(4096);
+const customJavaArgs = ref("");
+const systemMemory = ref<{ total: number; suggestedMax: number } | null>(null);
+
+// Computed max RAM based on system
+const maxAllowedRam = computed(() => {
+  if (systemMemory.value) {
+    return systemMemory.value.suggestedMax;
+  }
+  return 32768; // fallback
+});
+
+// Live Log State
+const gameLogs = ref<Array<{ time: string; level: string; message: string }>>([]);
+const showLogConsole = ref(false);
+const logScrollRef = ref<HTMLDivElement | null>(null);
+const maxLogLines = 200;
+
+// Running game computed
+const runningGame = computed(() => {
+  if (!instance.value) return null;
+  return runningGames.value.get(instance.value.id) || null;
+});
+
+const isGameRunning = computed(() => {
+  return runningGame.value !== null && runningGame.value.status !== "stopped";
+});
+
+// Config Editor State
+const showStructuredEditor = ref(false);
+const structuredEditorFile = ref<ConfigFile | null>(null);
+const configRefreshKey = ref(0);
+
+// Bidirectional Config Sync State
+const modifiedConfigs = ref<Array<{
+  relativePath: string;
+  instancePath: string;
+  overridePath?: string;
+  status: 'modified' | 'new' | 'deleted';
+  lastModified: Date;
+  size: number;
+}>>([]);
+const showModifiedConfigsDetails = ref(false);
+const selectedConfigsForImport = ref<Set<string>>(new Set());
+const isImportingConfigs = ref(false);
+
+// Computed: Only importable configs (new or modified, not deleted)
+const importableConfigs = computed(() =>
+  modifiedConfigs.value.filter(c => c.status !== 'deleted')
+);
+
+// Computed: Deleted configs (exist in overrides but not in instance)
+const deletedConfigs = computed(() =>
+  modifiedConfigs.value.filter(c => c.status === 'deleted')
+);
+
+// Sync Options
+const clearExistingMods = ref(false);
+
+// Smart Launch Confirmation
+const showSyncConfirmDialog = ref(false);
+const pendingLaunchData = ref<{
+  needsSync: boolean;
+  differences: number;
+  lastSynced?: string;
+} | null>(null);
+
+// ========== END PLAY/INSTANCE STATE ==========
 
 // Confirm dialog state for removing incompatible mods
 const showRemoveIncompatibleDialog = ref(false);
@@ -733,6 +884,397 @@ async function loadData() {
     isLoading.value = false;
   }
 }
+
+// ========== INSTANCE/PLAY FUNCTIONS ==========
+
+// Load system memory info
+async function loadSystemInfo() {
+  try {
+    systemMemory.value = await window.api.system.getMemoryInfo();
+  } catch (err) {
+    console.error("Failed to get system memory info:", err);
+  }
+}
+
+// Load instance for this modpack
+async function loadInstance() {
+  if (!props.modpackId) return;
+  isInstanceLoading.value = true;
+
+  // Load system info in parallel
+  loadSystemInfo();
+
+  try {
+    instance.value = await getInstanceByModpack(props.modpackId);
+    if (instance.value) {
+      const stats = await getInstanceStats(instance.value.id);
+      if (stats) {
+        instanceStats.value = {
+          modCount: stats.modCount,
+          configCount: stats.configCount,
+          totalSize: stats.totalSize,
+        };
+      }
+
+      // Load instance settings
+      memoryMin.value = instance.value.memory?.min || 2048;
+      memoryMax.value = instance.value.memory?.max || 4096;
+      customJavaArgs.value = instance.value.javaArgs || "";
+
+      // Check sync status
+      try {
+        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
+      } catch (err) {
+        console.error("Failed to check sync status:", err);
+      }
+    }
+  } finally {
+    isInstanceLoading.value = false;
+  }
+}
+
+// Create instance for modpack
+async function handleCreateInstance() {
+  isCreatingInstance.value = true;
+  syncResult.value = null;
+
+  try {
+    const result = await createFromModpack(props.modpackId);
+    if (result) {
+      instance.value = result.instance;
+      syncResult.value = result.syncResult;
+
+      if (result.syncResult.success) {
+        toast.success("Instance Ready!", `Downloaded ${result.syncResult.modsDownloaded} mods`);
+
+        const stats = await getInstanceStats(result.instance.id);
+        if (stats) {
+          instanceStats.value = {
+            modCount: stats.modCount,
+            configCount: stats.configCount,
+            totalSize: stats.totalSize,
+          };
+        }
+      } else {
+        toast.error("Instance created with issues", `${result.syncResult.errors.length} errors`);
+      }
+    }
+  } catch (err: any) {
+    toast.error("Failed to create instance", err.message);
+  } finally {
+    isCreatingInstance.value = false;
+  }
+}
+
+// Load sync settings
+async function loadSyncSettings() {
+  try {
+    const settings = await window.api.settings.getInstanceSync();
+    syncSettings.value = {
+      autoSyncEnabled: settings.autoSyncBeforeLaunch ?? true,
+      showConfirmation: settings.showSyncConfirmation ?? true
+    };
+  } catch (err) {
+    console.error("Failed to load sync settings:", err);
+  }
+}
+
+// Toggle auto-sync setting
+async function toggleAutoSync() {
+  const newValue = !syncSettings.value.autoSyncEnabled;
+  syncSettings.value.autoSyncEnabled = newValue;
+  try {
+    await window.api.settings.setInstanceSync({
+      autoSyncBeforeLaunch: newValue
+    });
+  } catch (err) {
+    console.error("Failed to save sync setting:", err);
+  }
+}
+
+// Toggle sync confirmation setting
+async function toggleSyncConfirmation() {
+  const newValue = !syncSettings.value.showConfirmation;
+  syncSettings.value.showConfirmation = newValue;
+  try {
+    await window.api.settings.setInstanceSync({
+      showSyncConfirmation: newValue
+    });
+  } catch (err) {
+    console.error("Failed to save sync setting:", err);
+  }
+}
+
+// Sync instance with modpack
+async function handleSyncInstance() {
+  if (!instance.value) return;
+
+  isSyncingInstance.value = true;
+  syncResult.value = null;
+
+  try {
+    const result = await syncModpackToInstance(instance.value.id, props.modpackId, {
+      clearExisting: clearExistingMods.value,
+      configSyncMode: selectedSyncMode.value
+    });
+
+    syncResult.value = result;
+
+    if (result.success) {
+      toast.success("Sync Complete", `${result.modsDownloaded} mods updated`);
+
+      const stats = await getInstanceStats(instance.value!.id);
+      if (stats) {
+        instanceStats.value = {
+          modCount: stats.modCount,
+          configCount: stats.configCount,
+          totalSize: stats.totalSize,
+        };
+      }
+
+      instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value!.id, props.modpackId);
+      showSyncDetails.value = false; // Collapse details after sync
+    } else {
+      toast.error("Sync had errors", result.errors.join(", "));
+    }
+  } catch (err: any) {
+    toast.error("Sync failed", err.message);
+  } finally {
+    isSyncingInstance.value = false;
+  }
+}
+
+// Launch instance
+async function handleLaunch(options?: { forceSync?: boolean; skipSync?: boolean }) {
+  if (!instance.value) return;
+
+  isLaunching.value = true;
+  loaderProgress.value = null;
+  gameLaunched.value = false;
+  gameLoadingMessage.value = "";
+
+  const removeProgressListener = window.api.on("loader:installProgress", (data: any) => {
+    loaderProgress.value = {
+      stage: data.stage,
+      current: data.current,
+      total: data.total,
+      detail: data.detail || ""
+    };
+  });
+
+  try {
+    const result = await smartLaunch(instance.value.id, props.modpackId, {
+      forceSync: options?.forceSync,
+      skipSync: options?.skipSync
+      // Note: Auto-sync always uses new_only mode (hardcoded in backend)
+      // selectedSyncMode is only for manual sync from the banner
+    });
+
+    if (result.requiresConfirmation && result.syncStatus) {
+      pendingLaunchData.value = {
+        needsSync: result.syncStatus.needsSync,
+        differences: result.syncStatus.differences,
+        lastSynced: result.syncStatus.lastSynced
+      };
+      showSyncConfirmDialog.value = true;
+      isLaunching.value = false;
+      removeProgressListener();
+      return;
+    }
+
+    if (result.success) {
+      gameLaunched.value = true;
+      gameLoadingMessage.value = "Launching Minecraft...";
+
+      if (result.syncPerformed) {
+        toast.success("Synced & Launched", "Instance synced, Minecraft loading...");
+        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value!.id, props.modpackId);
+      } else {
+        toast.success("Minecraft Launcher Started", "Game is loading...");
+      }
+
+      emit("launched", instance.value);
+    } else {
+      toast.error("Launch failed", result.error || "Unknown error");
+    }
+  } catch (err: any) {
+    toast.error("Launch failed", err.message);
+  } finally {
+    removeProgressListener();
+    isLaunching.value = false;
+    loaderProgress.value = null;
+  }
+}
+
+// Handle sync confirmation
+function handleSyncConfirmation(action: "sync" | "skip" | "cancel") {
+  showSyncConfirmDialog.value = false;
+  pendingLaunchData.value = null;
+
+  if (action === "cancel") return;
+
+  handleLaunch({
+    forceSync: action === "sync",
+    skipSync: action === "skip"
+  });
+}
+
+// Kill running game
+async function handleKillGame() {
+  if (!instance.value) return;
+
+  try {
+    const result = await killGame(instance.value.id);
+    if (result) {
+      toast.success("Game Stopped", "Minecraft has been terminated.");
+      gameLaunched.value = false;
+    } else {
+      toast.error("Failed to stop game", "Could not terminate the process.");
+    }
+  } catch (err: any) {
+    toast.error("Error stopping game", err.message);
+  }
+}
+
+// Open instance folder
+async function handleOpenInstanceFolder(subfolder?: string) {
+  if (!instance.value) return;
+  await openInstanceFolder(instance.value.id, subfolder);
+}
+
+// Save instance settings
+async function saveInstanceSettings() {
+  if (!instance.value) return;
+
+  try {
+    await updateInstance(instance.value.id, {
+      memory: { min: memoryMin.value, max: memoryMax.value },
+      javaArgs: customJavaArgs.value || undefined
+    });
+    toast.success("Settings Saved", "Memory and JVM arguments updated");
+    showInstanceSettings.value = false;
+  } catch (err: any) {
+    toast.error("Failed to save", err.message);
+  }
+}
+
+// Open config file
+function handleOpenStructuredEditor(file: ConfigFile) {
+  structuredEditorFile.value = file;
+  showStructuredEditor.value = true;
+}
+
+function handleCloseStructuredEditor() {
+  showStructuredEditor.value = false;
+  structuredEditorFile.value = null;
+}
+
+// ========== BIDIRECTIONAL CONFIG SYNC ==========
+
+// Load modified configs from instance
+async function loadModifiedConfigs() {
+  if (!instance.value) return;
+
+  try {
+    const result = await window.api.instances.getModifiedConfigs(instance.value.id, props.modpackId);
+    modifiedConfigs.value = result.modifiedConfigs;
+
+    // Auto-select all modified configs
+    selectedConfigsForImport.value = new Set(
+      modifiedConfigs.value
+        .filter(c => c.status !== 'deleted')
+        .map(c => c.relativePath)
+    );
+  } catch (err) {
+    console.error("Failed to load modified configs:", err);
+  }
+}
+
+// Toggle config selection for import
+function toggleConfigSelection(relativePath: string) {
+  if (selectedConfigsForImport.value.has(relativePath)) {
+    selectedConfigsForImport.value.delete(relativePath);
+  } else {
+    selectedConfigsForImport.value.add(relativePath);
+  }
+  // Trigger reactivity
+  selectedConfigsForImport.value = new Set(selectedConfigsForImport.value);
+}
+
+// Select all configs
+function selectAllConfigs() {
+  selectedConfigsForImport.value = new Set(
+    modifiedConfigs.value
+      .filter(c => c.status !== 'deleted')
+      .map(c => c.relativePath)
+  );
+}
+
+// Deselect all configs
+function deselectAllConfigs() {
+  selectedConfigsForImport.value = new Set();
+}
+
+// Import selected configs to modpack
+async function importSelectedConfigs() {
+  if (!instance.value || selectedConfigsForImport.value.size === 0) return;
+
+  isImportingConfigs.value = true;
+
+  try {
+    const configPaths = Array.from(selectedConfigsForImport.value);
+    const result = await window.api.instances.importConfigs(
+      instance.value.id,
+      props.modpackId,
+      configPaths
+    );
+
+    if (result.success) {
+      toast.success("Configs Imported", `${result.imported} config files added to modpack`);
+
+      // Reload modified configs
+      await loadModifiedConfigs();
+      showModifiedConfigsDetails.value = false;
+    } else {
+      toast.error("Import Error", result.errors.join(", "));
+    }
+  } catch (err: any) {
+    toast.error("Import Failed", err.message);
+  } finally {
+    isImportingConfigs.value = false;
+  }
+}
+
+// Format file size
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ========== END BIDIRECTIONAL CONFIG SYNC ==========
+
+// Format date helper
+function formatPlayDate(dateString?: string): string {
+  if (!dateString) return "Never";
+  const date = new Date(dateString);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+
+  return date.toLocaleDateString();
+}
+
+// ========== END INSTANCE/PLAY FUNCTIONS ==========
 
 // Save modpack info
 async function saveModpackInfo() {
@@ -1473,12 +2015,40 @@ async function reSearchIncompatibleMods() {
 // Track if initial check has been done for this modpack session
 const hasCheckedUpdatesOnOpen = ref(false);
 
+// Game log listener cleanup
+let removeLogListener: (() => void) | null = null;
+
 watch(
   () => props.isOpen,
   async (newVal) => {
     if (newVal) {
       hasCheckedUpdatesOnOpen.value = false;
+
+      // Set initial tab if provided
+      if (props.initialTab) {
+        activeTab.value = props.initialTab;
+      }
+
       await loadData();
+      await loadInstance();
+      await loadSyncSettings();
+      await loadModifiedConfigs();
+
+      // Set up game log listener
+      removeLogListener = onGameLogLine((instanceId, logLine) => {
+        if (instance.value && instanceId === instance.value.id) {
+          gameLogs.value.push({
+            time: logLine.time,
+            level: logLine.level,
+            message: logLine.message
+          });
+          // Keep only last maxLogLines
+          if (gameLogs.value.length > maxLogLines) {
+            gameLogs.value = gameLogs.value.slice(-maxLogLines);
+          }
+        }
+      });
+
       // Check for mod updates only on initial open
       setTimeout(() => {
         if (!hasCheckedUpdatesOnOpen.value) {
@@ -1486,6 +2056,13 @@ watch(
           checkAllUpdates();
         }
       }, 500);
+    } else {
+      // Cleanup on close
+      if (removeLogListener) {
+        removeLogListener();
+        removeLogListener = null;
+      }
+      gameLogs.value = [];
     }
   },
   { immediate: true }
@@ -1497,6 +2074,8 @@ watch(
     if (props.isOpen) {
       hasCheckedUpdatesOnOpen.value = false;
       await loadData();
+      await loadInstance();
+
       // Check for mod updates only on modpack change
       setTimeout(() => {
         if (!hasCheckedUpdatesOnOpen.value) {
@@ -1612,6 +2191,14 @@ watch(
           <!-- Tab Navigation - Modern Segment Style -->
           <div class="px-6 pb-4">
             <div class="flex items-center gap-1 p-1 rounded-xl bg-muted/30 border border-border/30 w-fit">
+              <!-- Play Tab - Primary action -->
+              <button class="tab-pill"
+                :class="activeTab === 'play' ? 'tab-pill-active tab-pill-play' : 'tab-pill-inactive'"
+                @click="activeTab = 'play'">
+                <Play class="w-4 h-4" />
+                <span>Play</span>
+                <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              </button>
               <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'mods'">
                 <Layers class="w-4 h-4" />
@@ -1621,6 +2208,11 @@ watch(
                 @click="activeTab = 'discover'">
                 <Sparkles class="w-4 h-4" />
                 <span>Discover</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'configs'">
+                <FileCode class="w-4 h-4" />
+                <span>Configs</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'health'">
@@ -1674,8 +2266,73 @@ watch(
 
         <!-- Help Content (expanded) -->
         <div v-if="showHelp" class="px-6 pb-4 pt-2 bg-muted/20 border-t border-border/20">
+          <!-- Play Tab Help -->
+          <div v-if="activeTab === 'play'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+                <Play class="w-5 h-5 text-green-500" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <h4 class="font-semibold text-foreground mb-2">Play - Launch Your Modpack</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Create an isolated game instance and launch Minecraft with your modpack.
+                </p>
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
+                      <Gamepad2 class="w-4 h-4 text-green-500" />
+                      Instance System
+                    </h5>
+                    <p class="text-muted-foreground">Each modpack has its own isolated instance with separate mods,
+                      configs, and saves.</p>
+                  </div>
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
+                      <RefreshCw class="w-4 h-4 text-blue-500" />
+                      Auto-Sync
+                    </h5>
+                    <p class="text-muted-foreground">Keep your instance updated with the latest modpack changes
+                      automatically.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Configs Tab Help -->
+          <div v-else-if="activeTab === 'configs'" class="help-content">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                <FileCode class="w-5 h-5 text-blue-500" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <h4 class="font-semibold text-foreground mb-2">Configs - Edit Game Settings</h4>
+                <p class="text-sm text-muted-foreground mb-3">
+                  Browse and edit configuration files for your mods directly from ModEx.
+                </p>
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
+                      <FileEdit class="w-4 h-4 text-blue-500" />
+                      Structured Editor
+                    </h5>
+                    <p class="text-muted-foreground">Edit TOML, JSON, and properties files with a friendly interface.
+                    </p>
+                  </div>
+                  <div class="space-y-2">
+                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
+                      <FolderOpen class="w-4 h-4 text-amber-500" />
+                      Quick Access
+                    </h5>
+                    <p class="text-muted-foreground">Open config files in your default editor with one click.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Resources Tab Help -->
-          <div v-if="activeTab === 'mods'" class="help-content">
+          <div v-else-if="activeTab === 'mods'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <BookOpen class="w-5 h-5 text-primary" />
@@ -1972,8 +2629,477 @@ watch(
 
       <!-- Content -->
       <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- PLAY TAB -->
+        <template v-if="activeTab === 'play'">
+          <div class="flex-1 overflow-y-auto">
+            <!-- No Instance State - Hero Style -->
+            <div v-if="!instance" class="flex flex-col items-center justify-center h-full p-8">
+              <!-- Background Effects -->
+              <div class="absolute inset-0 overflow-hidden pointer-events-none">
+                <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-[100px]" />
+                <div class="absolute bottom-1/4 right-1/4 w-48 h-48 bg-purple-500/10 rounded-full blur-[80px]" />
+              </div>
+
+              <div class="relative z-10 text-center max-w-md">
+                <div class="mb-8 flex justify-center">
+                  <div class="relative">
+                    <div
+                      class="absolute inset-0 bg-gradient-to-r from-primary to-purple-500 rounded-3xl blur-xl opacity-40 animate-pulse" />
+                    <div
+                      class="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center">
+                      <Rocket class="w-12 h-12 text-primary" />
+                    </div>
+                  </div>
+                </div>
+
+                <h3 class="text-2xl font-bold mb-3">Ready to Play?</h3>
+                <p class="text-muted-foreground mb-8 leading-relaxed">
+                  Create an isolated game instance for this modpack. Your mods and configs will be synced automatically.
+                </p>
+
+                <button @click="handleCreateInstance" :disabled="isCreatingInstance"
+                  class="px-8 py-4 rounded-2xl bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-500 text-primary-foreground font-semibold text-lg flex items-center gap-3 mx-auto transition-all shadow-xl shadow-primary/25 hover:scale-105">
+                  <Loader2 v-if="isCreatingInstance" class="w-6 h-6 animate-spin" />
+                  <Play v-else class="w-6 h-6" />
+                  {{ isCreatingInstance ? 'Creating Instance...' : 'Create & Play' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Instance Ready State -->
+            <div v-else class="p-6 space-y-6">
+              <!-- Main Play Card -->
+              <div class="rounded-2xl bg-gradient-to-br from-card to-card/50 border border-border overflow-hidden">
+                <!-- Play Header -->
+                <div
+                  class="p-6 bg-gradient-to-r from-primary/10 via-purple-500/5 to-transparent border-b border-border/50">
+                  <div class="flex items-center gap-6">
+                    <!-- Big Play Button -->
+                    <button @click="handleLaunch()"
+                      :disabled="instance.state !== 'ready' || isLaunching || isGameRunning"
+                      class="w-24 h-24 rounded-2xl flex items-center justify-center transition-all shrink-0" :class="isGameRunning
+                        ? 'bg-green-500/20 text-green-400 ring-2 ring-green-500/50'
+                        : instance.state === 'ready' && !isLaunching
+                          ? 'bg-gradient-to-br from-primary to-purple-600 hover:from-primary/90 hover:to-purple-500 text-primary-foreground shadow-xl shadow-primary/30 hover:scale-105'
+                          : 'bg-muted text-muted-foreground cursor-not-allowed'">
+                      <Loader2 v-if="isLaunching" class="w-12 h-12 animate-spin" />
+                      <Gamepad2 v-else-if="isGameRunning" class="w-12 h-12" />
+                      <Play v-else class="w-12 h-12" />
+                    </button>
+
+                    <div class="flex-1 min-w-0">
+                      <h3 class="text-2xl font-bold mb-1">
+                        {{ runningGame?.gameProcessRunning
+                          ? (runningGame?.status === 'loading_mods' ? 'Loading Mods...' : 'Game Running')
+                          : isGameRunning
+                            ? 'Launching...'
+                            : isLaunching
+                              ? 'Starting Launcher...'
+                              : 'Ready to Play' }}
+                      </h3>
+                      <p class="text-muted-foreground">
+                        {{ instanceStats?.modCount || 0 }} mods • {{ modpack?.loader }} {{ modpack?.minecraft_version }}
+                      </p>
+
+                      <!-- First launch info -->
+                      <div v-if="!isGameRunning && !isLaunching && !instance?.lastPlayed"
+                        class="flex items-center gap-2 mt-3 text-xs text-blue-400/80 bg-blue-500/10 px-3 py-1.5 rounded-lg w-fit">
+                        <Info class="w-3.5 h-3.5" />
+                        <span>{{ modpack?.loader }} will be installed on first launch</span>
+                      </div>
+
+                      <!-- Loader Progress -->
+                      <div v-if="loaderProgress && isLaunching" class="mt-3 space-y-1">
+                        <div class="flex items-center gap-2 text-sm">
+                          <Loader2 class="w-4 h-4 animate-spin text-primary" />
+                          <span>{{ loaderProgress.stage }}</span>
+                          <span v-if="loaderProgress.total > 0" class="text-primary font-medium">
+                            {{ loaderProgress.current }}/{{ loaderProgress.total }}
+                          </span>
+                        </div>
+                        <div v-if="loaderProgress.detail" class="text-xs text-muted-foreground truncate">
+                          {{ loaderProgress.detail }}
+                        </div>
+                      </div>
+
+                      <!-- Game Running Actions -->
+                      <div v-if="isGameRunning" class="flex items-center gap-3 mt-3">
+                        <button @click="handleKillGame"
+                          class="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                          :class="runningGame?.gameProcessRunning
+                            ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
+                            : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400'">
+                          <X class="w-4 h-4" />
+                          {{ runningGame?.gameProcessRunning ? 'Stop Game' : 'Cancel Launch' }}
+                        </button>
+                        <button v-if="runningGame?.gameProcessRunning" @click="showLogConsole = !showLogConsole"
+                          class="px-4 py-2 rounded-lg bg-muted/50 hover:bg-muted text-sm font-medium flex items-center gap-2 transition-colors">
+                          <Terminal class="w-4 h-4" />
+                          {{ showLogConsole ? 'Hide' : 'Show' }} Logs
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="flex flex-col gap-2 shrink-0">
+                      <button @click="showInstanceSettings = true"
+                        class="p-3 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Settings">
+                        <Sliders class="w-5 h-5" />
+                      </button>
+                      <button @click="handleOpenInstanceFolder()"
+                        class="p-3 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Open Folder">
+                        <FolderOpen class="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Log Console -->
+                <div v-if="showLogConsole && isGameRunning" class="border-t border-border/50">
+                  <div class="bg-card/80 px-4 py-2 border-b border-border/50 flex items-center justify-between">
+                    <span class="text-sm font-medium flex items-center gap-2">
+                      <Terminal class="w-4 h-4 text-primary" />
+                      Game Logs
+                    </span>
+                    <span class="text-xs text-muted-foreground">{{ gameLogs.length }} lines</span>
+                  </div>
+                  <div ref="logScrollRef" class="h-48 overflow-y-auto bg-black/50 p-3 font-mono text-xs space-y-0.5">
+                    <div v-if="gameLogs.length === 0" class="text-muted-foreground text-center py-4">
+                      Waiting for logs...
+                    </div>
+                    <div v-for="(log, idx) in gameLogs" :key="idx" class="flex gap-2">
+                      <span class="text-muted-foreground shrink-0">{{ log.time }}</span>
+                      <span class="shrink-0 font-medium" :class="{
+                        'text-blue-400': log.level === 'INFO',
+                        'text-amber-400': log.level === 'WARN',
+                        'text-red-400': log.level === 'ERROR',
+                        'text-muted-foreground': log.level === 'DEBUG'
+                      }">{{ log.level }}</span>
+                      <span class="text-foreground/90 break-all">{{ log.message }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sync Status Card -->
+              <div v-if="instanceSyncStatus?.needsSync"
+                class="rounded-2xl bg-amber-500/5 border border-amber-500/20 overflow-hidden">
+                <div class="p-4 flex items-center justify-between">
+                  <button @click="showSyncDetails = !showSyncDetails"
+                    class="flex items-center gap-3 hover:bg-amber-500/5 -m-2 p-2 rounded-lg transition-colors flex-1">
+                    <div class="p-2 rounded-xl bg-amber-500/20">
+                      <AlertTriangle class="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div class="text-left">
+                      <div class="font-medium">Instance Out of Sync</div>
+                      <div class="text-sm text-muted-foreground">
+                        {{ instanceSyncStatus.totalDifferences }} differences detected
+                      </div>
+                    </div>
+                    <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform ml-auto"
+                      :class="{ 'rotate-180': showSyncDetails }" />
+                  </button>
+                  <button @click="handleSyncInstance" :disabled="isSyncingInstance"
+                    class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium flex items-center gap-2 transition-colors ml-4">
+                    <Loader2 v-if="isSyncingInstance" class="w-4 h-4 animate-spin" />
+                    <RefreshCw v-else class="w-4 h-4" />
+                    {{ isSyncingInstance ? 'Syncing...' : 'Sync Now' }}
+                  </button>
+                </div>
+
+                <!-- Expanded Details -->
+                <div v-if="showSyncDetails" class="px-4 pb-4 space-y-3 border-t border-amber-500/10 pt-3">
+                  <!-- Missing in Instance -->
+                  <div v-if="instanceSyncStatus.missingInInstance.length > 0"
+                    class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <div class="flex items-center gap-2 text-emerald-400 font-medium text-sm mb-2">
+                      <Plus class="w-4 h-4" />
+                      {{ instanceSyncStatus.missingInInstance.length }} files to add
+                    </div>
+                    <div class="space-y-1 max-h-32 overflow-y-auto">
+                      <div v-for="item in instanceSyncStatus.missingInInstance" :key="item.filename"
+                        class="text-xs text-muted-foreground flex items-center gap-2">
+                        <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] uppercase">{{
+                          item.type }}</span>
+                        <span class="truncate">{{ item.filename }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Extra in Instance -->
+                  <div v-if="instanceSyncStatus.extraInInstance.length > 0"
+                    class="p-3 rounded-xl bg-zinc-500/10 border border-zinc-500/20">
+                    <div class="flex items-center gap-2 text-zinc-400 font-medium text-sm mb-2">
+                      <Plus class="w-4 h-4" />
+                      {{ instanceSyncStatus.extraInInstance.length }} additional files
+                    </div>
+                    <p class="text-xs text-muted-foreground mb-2">
+                      These are files you added manually. They will be preserved.
+                    </p>
+                    <div class="space-y-1 max-h-32 overflow-y-auto">
+                      <div v-for="item in instanceSyncStatus.extraInInstance" :key="item.filename"
+                        class="text-xs text-muted-foreground flex items-center gap-2">
+                        <span class="px-1.5 py-0.5 rounded bg-zinc-500/20 text-zinc-400 text-[10px] uppercase">{{
+                          item.type }}</span>
+                        <span class="truncate">{{ item.filename }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Disabled State Mismatch -->
+                  <div v-if="instanceSyncStatus.disabledMismatch.length > 0"
+                    class="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                    <div class="flex items-center gap-2 text-blue-400 font-medium text-sm mb-2">
+                      <FileWarning class="w-4 h-4" />
+                      {{ instanceSyncStatus.disabledMismatch.length }} state mismatches
+                    </div>
+                    <div class="space-y-1 max-h-32 overflow-y-auto">
+                      <div v-for="item in instanceSyncStatus.disabledMismatch" :key="item.filename"
+                        class="text-xs text-muted-foreground flex items-center gap-2">
+                        <span class="truncate flex-1">{{ item.filename }}</span>
+                        <span class="text-blue-400 text-[10px]">{{ item.issue }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Sync Mode -->
+                  <div class="p-3 rounded-xl bg-muted/30 border border-border/30">
+                    <div class="text-sm font-medium mb-3">Sync Mode</div>
+                    <div class="flex gap-2 flex-wrap">
+                      <button @click="selectedSyncMode = 'new_only'"
+                        class="px-4 py-2 rounded-lg text-sm font-medium transition-all" :class="selectedSyncMode === 'new_only'
+                          ? 'bg-primary text-primary-foreground shadow-lg'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
+                        Only New Files
+                      </button>
+                      <button @click="selectedSyncMode = 'overwrite'"
+                        class="px-4 py-2 rounded-lg text-sm font-medium transition-all" :class="selectedSyncMode === 'overwrite'
+                          ? 'bg-amber-500 text-white shadow-lg'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
+                        Overwrite All
+                      </button>
+                      <button @click="selectedSyncMode = 'skip'"
+                        class="px-4 py-2 rounded-lg text-sm font-medium transition-all" :class="selectedSyncMode === 'skip'
+                          ? 'bg-zinc-600 text-white shadow-lg'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
+                        Skip Existing
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Synced Status -->
+              <div v-else-if="instanceSyncStatus && !instanceSyncStatus.needsSync"
+                class="rounded-2xl bg-emerald-500/5 border border-emerald-500/20 p-4">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 rounded-xl bg-emerald-500/20">
+                    <Check class="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div class="flex-1">
+                    <div class="font-medium text-emerald-400">Instance In Sync</div>
+                    <div class="text-sm text-muted-foreground">
+                      All modpack content matches the instance
+                      <span v-if="instanceSyncStatus.extraInInstance.length > 0" class="text-muted-foreground/70">
+                        • {{ instanceSyncStatus.extraInInstance.length }} additional files
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quick Access Grid -->
+              <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <button @click="handleOpenInstanceFolder('mods')"
+                  class="group p-5 rounded-2xl bg-card/50 hover:bg-card border border-border/50 hover:border-emerald-500/30 text-center transition-all hover:shadow-lg hover:shadow-emerald-500/5">
+                  <div
+                    class="w-12 h-12 mx-auto mb-3 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 flex items-center justify-center transition-colors">
+                    <Layers class="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <span class="font-medium">Mods</span>
+                  <p class="text-xs text-muted-foreground mt-1">{{ instanceStats?.modCount || 0 }} files</p>
+                </button>
+                <button @click="handleOpenInstanceFolder('config')"
+                  class="group p-5 rounded-2xl bg-card/50 hover:bg-card border border-border/50 hover:border-blue-500/30 text-center transition-all hover:shadow-lg hover:shadow-blue-500/5">
+                  <div
+                    class="w-12 h-12 mx-auto mb-3 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 flex items-center justify-center transition-colors">
+                    <FileCode class="w-6 h-6 text-blue-400" />
+                  </div>
+                  <span class="font-medium">Configs</span>
+                  <p class="text-xs text-muted-foreground mt-1">Game settings</p>
+                </button>
+                <button @click="handleOpenInstanceFolder('resourcepacks')"
+                  class="group p-5 rounded-2xl bg-card/50 hover:bg-card border border-border/50 hover:border-purple-500/30 text-center transition-all hover:shadow-lg hover:shadow-purple-500/5">
+                  <div
+                    class="w-12 h-12 mx-auto mb-3 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 flex items-center justify-center transition-colors">
+                    <Image class="w-6 h-6 text-purple-400" />
+                  </div>
+                  <span class="font-medium">Resources</span>
+                  <p class="text-xs text-muted-foreground mt-1">Texture packs</p>
+                </button>
+                <button @click="handleOpenInstanceFolder('saves')"
+                  class="group p-5 rounded-2xl bg-card/50 hover:bg-card border border-border/50 hover:border-amber-500/30 text-center transition-all hover:shadow-lg hover:shadow-amber-500/5">
+                  <div
+                    class="w-12 h-12 mx-auto mb-3 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 flex items-center justify-center transition-colors">
+                    <Save class="w-6 h-6 text-amber-400" />
+                  </div>
+                  <span class="font-medium">Saves</span>
+                  <p class="text-xs text-muted-foreground mt-1">World files</p>
+                </button>
+              </div>
+
+              <!-- Instance Info Card -->
+              <div class="rounded-2xl bg-card/30 border border-border/30 p-5">
+                <div class="flex items-center gap-4 mb-4">
+                  <div class="w-14 h-14 rounded-xl flex items-center justify-center"
+                    :class="instance.state === 'ready' ? 'bg-green-500/20' : 'bg-amber-500/20'">
+                    <Gamepad2 class="w-7 h-7"
+                      :class="instance.state === 'ready' ? 'text-green-400' : 'text-amber-400'" />
+                  </div>
+                  <div class="flex-1">
+                    <h4 class="font-semibold">{{ instance.name }}</h4>
+                    <div class="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                      <span class="flex items-center gap-1.5">
+                        <Clock class="w-3.5 h-3.5" />
+                        {{ formatPlayDate(instance.lastPlayed) }}
+                      </span>
+                      <span class="flex items-center gap-1.5">
+                        <HardDrive class="w-3.5 h-3.5" />
+                        {{ instanceStats?.totalSize || 'Calculating...' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sync Settings -->
+                <div class="border-t border-border/30 pt-4 space-y-3">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="text-sm font-medium">Auto-sync before launch</div>
+                      <div class="text-xs text-muted-foreground">Sync modpack changes automatically</div>
+                    </div>
+                    <button @click="toggleAutoSync" class="relative w-11 h-6 rounded-full transition-colors"
+                      :class="syncSettings.autoSyncEnabled ? 'bg-primary' : 'bg-muted'">
+                      <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                        :class="{ 'translate-x-5': syncSettings.autoSyncEnabled }" />
+                    </button>
+                  </div>
+
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="text-sm font-medium">Show sync confirmation</div>
+                      <div class="text-xs text-muted-foreground">Ask before syncing</div>
+                    </div>
+                    <button @click="toggleSyncConfirmation" class="relative w-11 h-6 rounded-full transition-colors"
+                      :class="syncSettings.showConfirmation ? 'bg-primary' : 'bg-muted'">
+                      <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                        :class="{ 'translate-x-5': syncSettings.showConfirmation }" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- CONFIGS TAB -->
+        <template v-else-if="activeTab === 'configs'">
+          <div class="flex-1 overflow-hidden flex flex-col">
+            <div v-if="!instance" class="flex flex-col items-center justify-center h-full gap-4 p-6">
+              <FileCode class="w-16 h-16 text-muted-foreground/50" />
+              <div class="text-center">
+                <h3 class="font-semibold text-lg">No Instance Found</h3>
+                <p class="text-sm text-muted-foreground">Create an instance in the Play tab to manage configs</p>
+              </div>
+              <button @click="activeTab = 'play'"
+                class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium">
+                Go to Play Tab
+              </button>
+            </div>
+
+            <template v-else>
+              <!-- Modified Configs Banner -->
+              <div v-if="importableConfigs.length > 0"
+                class="shrink-0 m-4 mb-0 rounded-xl bg-blue-500/10 border border-blue-500/30 overflow-hidden">
+                <button @click="showModifiedConfigsDetails = !showModifiedConfigsDetails"
+                  class="w-full p-4 flex items-center justify-between hover:bg-blue-500/5 transition-colors">
+                  <div class="flex items-center gap-3">
+                    <FolderSync class="w-5 h-5 text-blue-400" />
+                    <div class="text-left">
+                      <div class="font-medium text-blue-400">Config Changes Detected</div>
+                      <div class="text-sm text-muted-foreground">
+                        {{ importableConfigs.length }} config files modified in instance
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button @click.stop="importSelectedConfigs"
+                      :disabled="selectedConfigsForImport.size === 0 || isImportingConfigs"
+                      class="px-3 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-sm font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      <Loader2 v-if="isImportingConfigs" class="w-4 h-4 animate-spin" />
+                      <Download v-else class="w-4 h-4" />
+                      Import Selected
+                    </button>
+                    <ChevronDown class="w-4 h-4 text-blue-400 transition-transform"
+                      :class="{ 'rotate-180': showModifiedConfigsDetails }" />
+                  </div>
+                </button>
+
+                <!-- Details -->
+                <div v-if="showModifiedConfigsDetails" class="px-4 pb-4 border-t border-blue-500/20 pt-3">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="text-xs text-muted-foreground">
+                      Select configs to import to modpack overrides
+                    </div>
+                    <div class="flex gap-2">
+                      <button @click="selectAllConfigs" class="text-xs text-primary hover:underline">Select All</button>
+                      <button @click="deselectAllConfigs"
+                        class="text-xs text-muted-foreground hover:underline">Clear</button>
+                    </div>
+                  </div>
+
+                  <div class="space-y-1 max-h-48 overflow-y-auto">
+                    <label v-for="config in importableConfigs" :key="config.relativePath"
+                      class="flex items-center gap-3 p-2 rounded-lg hover:bg-blue-500/5 cursor-pointer group">
+                      <input type="checkbox" :checked="selectedConfigsForImport.has(config.relativePath)"
+                        @change="toggleConfigSelection(config.relativePath)"
+                        class="w-4 h-4 rounded border-blue-500/30 text-blue-500 focus:ring-blue-500/30" />
+                      <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium truncate">{{ config.relativePath }}</div>
+                        <div class="text-xs text-muted-foreground">
+                          {{ formatFileSize(config.size) }}
+                        </div>
+                      </div>
+                      <span class="px-2 py-0.5 rounded text-[10px] font-medium uppercase" :class="{
+                        'bg-amber-500/20 text-amber-400': config.status === 'modified',
+                        'bg-emerald-500/20 text-emerald-400': config.status === 'new'
+                      }">
+                        {{ config.status }}
+                      </span>
+                    </label>
+                  </div>
+
+                  <p class="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
+                    <Info class="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    Importing configs adds them to the modpack's overrides folder. This makes your customizations part
+                    of the modpack.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Config Browser -->
+              <div class="flex-1 overflow-hidden">
+                <ConfigBrowser :instance-id="instance.id" :instance-name="instance.name" :key="configRefreshKey"
+                  @open-structured="handleOpenStructuredEditor" />
+              </div>
+            </template>
+          </div>
+        </template>
+
         <!-- Mods Tab -->
-        <template v-if="activeTab === 'mods'">
+        <template v-else-if="activeTab === 'mods'">
           <!-- Content Type Sub-tabs -->
           <div class="shrink-0 px-4 py-2 border-b border-border/30 bg-muted/10 flex items-center gap-1">
             <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5" :class="contentTypeTab === 'mods'
@@ -2907,6 +4033,177 @@ watch(
         </Button>
       </template>
     </Dialog>
+
+    <!-- Instance Settings Dialog -->
+    <Dialog :open="showInstanceSettings" @close="showInstanceSettings = false">
+      <template #header>
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+            <Sliders class="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h3 class="font-semibold">Instance Settings</h3>
+            <p class="text-sm text-muted-foreground">Configure memory and JVM arguments</p>
+          </div>
+        </div>
+      </template>
+
+      <div class="space-y-6 py-4">
+        <!-- Memory Settings -->
+        <div class="space-y-4">
+          <h4 class="font-medium flex items-center gap-2">
+            <MemoryStick class="w-4 h-4 text-primary" />
+            Memory Allocation
+            <span v-if="systemMemory" class="text-xs text-muted-foreground font-normal ml-auto">
+              System: {{ (systemMemory.total / 1024).toFixed(1) }} GB total
+            </span>
+          </h4>
+
+          <!-- Min RAM Slider -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-sm text-muted-foreground">Minimum RAM</label>
+              <span class="text-sm font-mono text-primary">{{ (memoryMin / 1024).toFixed(1) }} GB</span>
+            </div>
+            <input type="range" v-model.number="memoryMin" min="512" :max="Math.min(memoryMax - 512, maxAllowedRam)"
+              step="256" class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
+            <div class="flex justify-between text-[10px] text-muted-foreground">
+              <span>512 MB</span>
+              <span>{{ ((Math.min(memoryMax - 512, maxAllowedRam)) / 1024).toFixed(1) }} GB</span>
+            </div>
+          </div>
+
+          <!-- Max RAM Slider -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-sm text-muted-foreground">Maximum RAM</label>
+              <span class="text-sm font-mono text-primary">{{ (memoryMax / 1024).toFixed(1) }} GB</span>
+            </div>
+            <input type="range" v-model.number="memoryMax" :min="Math.max(1024, memoryMin + 512)" :max="maxAllowedRam"
+              step="256" class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
+            <div class="flex justify-between text-[10px] text-muted-foreground">
+              <span>{{ (Math.max(1024, memoryMin + 512) / 1024).toFixed(1) }} GB</span>
+              <span>{{ (maxAllowedRam / 1024).toFixed(1) }} GB</span>
+            </div>
+          </div>
+
+          <div class="text-xs text-muted-foreground bg-muted/30 rounded-lg p-2">
+            💡 Recommended: 4-6 GB for light modpacks, 8-12 GB for heavy modpacks
+          </div>
+        </div>
+
+        <!-- JVM Arguments -->
+        <div class="space-y-2">
+          <h4 class="font-medium flex items-center gap-2">
+            <Cpu class="w-4 h-4 text-primary" />
+            Custom JVM Arguments
+          </h4>
+          <textarea v-model="customJavaArgs" rows="3" placeholder="-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+            class="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border focus:border-primary outline-none font-mono text-sm resize-none"></textarea>
+          <div class="text-xs text-muted-foreground">
+            Advanced: Add custom Java arguments (leave empty for defaults)
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button variant="secondary" @click="showInstanceSettings = false">Cancel</Button>
+        <Button @click="saveInstanceSettings">Save Settings</Button>
+      </template>
+    </Dialog>
+
+    <!-- Sync Confirmation Dialog -->
+    <div v-if="showSyncConfirmDialog"
+      class="fixed inset-0 z-[70] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div
+        class="bg-card border border-border/50 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+        <div class="px-5 py-4 border-b border-border/50 bg-gradient-to-r from-amber-500/10 to-transparent">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <AlertCircle class="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h3 class="font-semibold text-foreground">Sync Before Launch?</h3>
+              <p class="text-sm text-muted-foreground">Instance is out of sync</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-5 py-4 space-y-3">
+          <p class="text-sm text-muted-foreground">
+            <span class="font-medium text-foreground">{{ pendingLaunchData?.differences || 0 }} differences</span>
+            detected between modpack and instance.
+          </p>
+
+          <div v-if="pendingLaunchData?.lastSynced" class="text-xs text-muted-foreground flex items-center gap-1.5">
+            <Clock class="w-3.5 h-3.5" />
+            Last sync: {{ formatPlayDate(pendingLaunchData.lastSynced) }}
+          </div>
+
+          <div class="bg-muted/30 rounded-lg p-3 space-y-2">
+            <div class="flex items-start gap-2">
+              <Download class="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+              <div class="text-sm">
+                <span class="text-foreground font-medium">Sync</span>
+                <span class="text-muted-foreground"> - Update mods before launching</span>
+              </div>
+            </div>
+            <div class="flex items-start gap-2">
+              <Play class="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+              <div class="text-sm">
+                <span class="text-foreground font-medium">Launch Anyway</span>
+                <span class="text-muted-foreground"> - Play with current mods</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-5 py-4 border-t border-border/50 bg-muted/20 flex gap-3">
+          <button @click="handleSyncConfirmation('cancel')"
+            class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-muted/50 hover:bg-muted text-foreground transition-colors">
+            Cancel
+          </button>
+          <button @click="handleSyncConfirmation('skip')"
+            class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors flex items-center justify-center gap-2">
+            <Play class="w-4 h-4" />
+            Launch
+          </button>
+          <button @click="handleSyncConfirmation('sync')"
+            class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors flex items-center justify-center gap-2">
+            <Download class="w-4 h-4" />
+            Sync & Launch
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Structured Config Editor -->
+    <div v-if="showStructuredEditor"
+      class="fixed inset-0 z-[60] bg-black/70 backdrop-blur-md flex items-center justify-center p-8 animate-in fade-in duration-200">
+      <div
+        class="bg-background border border-border/50 rounded-xl shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div class="shrink-0 border-b border-border/50 bg-card/50 px-4 py-3 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+              <Settings class="w-4 h-4 text-purple-400" />
+            </div>
+            <div>
+              <h3 class="font-semibold text-foreground">Config Editor</h3>
+              <p class="text-xs text-muted-foreground">{{ structuredEditorFile?.name }}</p>
+            </div>
+          </div>
+          <button @click="handleCloseStructuredEditor"
+            class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <ConfigStructuredEditor v-if="instance && structuredEditorFile" :instance-id="instance.id"
+            :config-path="structuredEditorFile.path" :refresh-key="configRefreshKey"
+            @close="handleCloseStructuredEditor" @saved="handleCloseStructuredEditor" />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -2928,6 +4225,10 @@ watch(
 
 .tab-pill-active {
   @apply bg-primary text-primary-foreground shadow-md shadow-primary/25;
+}
+
+.tab-pill-play {
+  @apply bg-green-500 shadow-green-500/25;
 }
 
 .tab-pill-inactive {

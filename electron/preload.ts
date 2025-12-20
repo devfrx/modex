@@ -895,6 +895,26 @@ contextBridge.exposeInMainWorld("api", {
       totalDifferences: number;
     }> => ipcRenderer.invoke("instance:checkSyncStatus", instanceId, modpackId),
 
+    getModifiedConfigs: (instanceId: string, modpackId: string): Promise<{
+      modifiedConfigs: Array<{
+        relativePath: string;
+        instancePath: string;
+        overridePath?: string;
+        status: 'modified' | 'new' | 'deleted';
+        lastModified: Date;
+        size: number;
+      }>;
+      instanceConfigPath: string;
+      overridesConfigPath?: string;
+    }> => ipcRenderer.invoke("instance:getModifiedConfigs", instanceId, modpackId),
+
+    importConfigs: (instanceId: string, modpackId: string, configPaths: string[]): Promise<{
+      success: boolean;
+      imported: number;
+      skipped: number;
+      errors: string[];
+    }> => ipcRenderer.invoke("instance:importConfigs", instanceId, modpackId, configPaths),
+
     export: (instanceId: string): Promise<boolean> =>
       ipcRenderer.invoke("instance:export", instanceId),
 
@@ -945,6 +965,7 @@ contextBridge.exposeInMainWorld("api", {
       loadedMods: number;
       totalMods: number;
       currentMod?: string;
+      gameProcessRunning: boolean;
     } | null> => ipcRenderer.invoke("instance:getRunningGame", instanceId),
 
     killGame: (instanceId: string): Promise<boolean> =>
@@ -959,6 +980,7 @@ contextBridge.exposeInMainWorld("api", {
       loadedMods: number;
       totalMods: number;
       currentMod?: string;
+      gameProcessRunning: boolean;
     }) => void) => {
       const handler = (_: any, data: any) => callback(data);
       ipcRenderer.on("game:statusChange", handler);
@@ -1003,6 +1025,53 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("cache:clear"),
   },
 
+  // ========== SETTINGS ==========
+  settings: {
+    getInstanceSync: (): Promise<{
+      autoSyncBeforeLaunch: boolean;
+      autoImportConfigsAfterGame: boolean;
+      showSyncConfirmation: boolean;
+      defaultConfigSyncMode: "overwrite" | "new_only" | "skip";
+    }> => ipcRenderer.invoke("settings:getInstanceSync"),
+    
+    setInstanceSync: (settings: {
+      autoSyncBeforeLaunch?: boolean;
+      autoImportConfigsAfterGame?: boolean;
+      showSyncConfirmation?: boolean;
+      defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+    }): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("settings:setInstanceSync", settings),
+    
+    /** Smart launch with automatic sync if needed */
+    smartLaunch: (instanceId: string, modpackId: string, options?: {
+      forceSync?: boolean;
+      skipSync?: boolean;
+      configSyncMode?: "overwrite" | "new_only" | "skip";
+    }): Promise<{
+      success: boolean;
+      error?: string;
+      needsSync?: boolean;
+      syncStatus?: {
+        needsSync: boolean;
+        missingInInstance: Array<{ filename: string; type: string }>;
+        extraInInstance: Array<{ filename: string; type: string }>;
+        disabledMismatch: Array<{ filename: string; issue: string }>;
+        configDifferences: number;
+        totalDifferences: number;
+      };
+      syncPerformed: boolean;
+      syncResult?: {
+        success: boolean;
+        modsDownloaded: number;
+        modsSkipped: number;
+        configsCopied: number;
+        configsSkipped: number;
+        errors: string[];
+        warnings: string[];
+      };
+    }> => ipcRenderer.invoke("instance:smartLaunch", instanceId, modpackId, options),
+  },
+
   // ========== MODPACK PREVIEW/ANALYSIS ==========
   preview: {
     fromZip: (zipPath: string): Promise<{
@@ -1044,9 +1113,11 @@ contextBridge.exposeInMainWorld("api", {
       performanceImpact: number;
       loadTimeImpact: number;
       storageImpact: number;
+      modCategories: Record<string, number>;
       warnings: string[];
       recommendations: string[];
       compatibilityScore: number;
+      compatibilityNotes: string[];
     } | null> => ipcRenderer.invoke("preview:analyzeModpack", modpackId),
     
     selectAndPreview: (): Promise<{
@@ -1284,6 +1355,16 @@ contextBridge.exposeInMainWorld("api", {
     return () => {
       ipcRenderer.off(channel, handler);
     };
+  },
+
+  // ========== SYSTEM INFO ==========
+  system: {
+    getMemoryInfo: (): Promise<{
+      total: number;
+      free: number;
+      used: number;
+      suggestedMax: number;
+    }> => ipcRenderer.invoke("system:getMemoryInfo"),
   },
 });
 

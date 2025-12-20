@@ -3023,7 +3023,8 @@ async function initializeBackend() {
       status: info.status,
       loadedMods: info.loadedMods,
       totalMods: info.totalMods,
-      currentMod: info.currentMod
+      currentMod: info.currentMod,
+      gameProcessRunning: info.gameProcessRunning || false
     };
   });
 
@@ -3043,7 +3044,8 @@ async function initializeBackend() {
         status: info.status,
         loadedMods: info.loadedMods,
         totalMods: info.totalMods,
-        currentMod: info.currentMod
+        currentMod: info.currentMod,
+        gameProcessRunning: info.gameProcessRunning || false
       });
     }
   });
@@ -3086,6 +3088,33 @@ async function initializeBackend() {
     const overridesPath = modpack.overridesPath;
     
     return instanceService.checkSyncStatus(instanceId, modData, modpack.disabled_mod_ids || [], overridesPath);
+  });
+
+  // Get modified configs in instance compared to modpack
+  ipcMain.handle("instance:getModifiedConfigs", async (_, instanceId: string, modpackId: string) => {
+    const modpack = await metadataManager.getModpackById(modpackId);
+    const overridesPath = modpack?.overridesPath;
+    return instanceService.getModifiedConfigs(instanceId, overridesPath);
+  });
+
+  // Import configs from instance to modpack
+  ipcMain.handle("instance:importConfigs", async (_, instanceId: string, modpackId: string, configPaths: string[]) => {
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack?.overridesPath) {
+      // Create overrides path if it doesn't exist
+      const modpackBasePath = modpack?.path ? path.dirname(modpack.path) : '';
+      if (!modpackBasePath) {
+        return { success: false, imported: 0, skipped: 0, errors: ["Modpack path not found"] };
+      }
+      const overridesPath = path.join(modpackBasePath, 'overrides');
+      await fs.ensureDir(overridesPath);
+      
+      // Update modpack with overrides path
+      await metadataManager.updateModpack(modpackId, { overridesPath });
+      
+      return instanceService.importConfigsToModpack(instanceId, overridesPath, configPaths);
+    }
+    return instanceService.importConfigsToModpack(instanceId, modpack.overridesPath, configPaths);
   });
 
   ipcMain.handle("instance:export", async (_, instanceId: string) => {
@@ -3210,6 +3239,146 @@ async function initializeBackend() {
 
   ipcMain.handle("cache:clear", async () => {
     return imageCacheService.clearCache();
+  });
+
+  // ========== SETTINGS IPC HANDLERS ==========
+
+  ipcMain.handle("settings:getInstanceSync", async () => {
+    return metadataManager.getInstanceSyncSettings();
+  });
+
+  ipcMain.handle("settings:setInstanceSync", async (_, settings: {
+    autoSyncBeforeLaunch?: boolean;
+    autoImportConfigsAfterGame?: boolean;
+    showSyncConfirmation?: boolean;
+    defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+  }) => {
+    await metadataManager.setInstanceSyncSettings(settings);
+    return { success: true };
+  });
+
+  // Smart launch with auto-sync
+  ipcMain.handle("instance:smartLaunch", async (_, instanceId: string, modpackId: string, options?: {
+    forceSync?: boolean;
+    skipSync?: boolean;
+    configSyncMode?: "overwrite" | "new_only" | "skip";
+  }) => {
+    const syncSettings = await metadataManager.getInstanceSyncSettings();
+    
+    // Get instance and modpack
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) {
+      return { success: false, error: "Instance not found", syncPerformed: false };
+    }
+    
+    const modpack = await metadataManager.getModpackById(modpackId);
+    if (!modpack) {
+      return { success: false, error: "Modpack not found", syncPerformed: false };
+    }
+    
+    let syncPerformed = false;
+    let syncResult = null;
+    
+    // Check if sync is needed (unless skipped)
+    if (!options?.skipSync) {
+      const mods = await metadataManager.getModsInModpack(modpackId);
+      const modData = mods.map(m => ({
+        id: m.id,
+        filename: m.filename,
+        content_type: m.content_type
+      }));
+      
+      const overridesPath = modpack.overridesPath;
+      const syncStatus = await instanceService.checkSyncStatus(
+        instanceId, 
+        modData, 
+        modpack.disabled_mod_ids || [], 
+        overridesPath
+      );
+      
+      // If needs sync and auto-sync is enabled (or forced)
+      if (syncStatus.needsSync && (syncSettings.autoSyncBeforeLaunch || options?.forceSync)) {
+        // Return sync needed info if confirmation is required and not forced
+        if (syncSettings.showSyncConfirmation && !options?.forceSync) {
+          return { 
+            success: false, 
+            requiresConfirmation: true,
+            needsSync: true, 
+            syncStatus: {
+              ...syncStatus,
+              differences: syncStatus.totalDifferences,
+              lastSynced: instance.lastSynced
+            },
+            syncPerformed: false 
+          };
+        }
+        
+        // Perform sync
+        try {
+          const library = await metadataManager.getAllMods();
+          const modsInPack = mods.map(m => ({
+            id: m.id,
+            name: m.name,
+            filename: m.filename,
+            downloadUrl: m.downloadUrl,
+            cf_project_id: m.cf_project_id,
+            cf_file_id: m.cf_file_id,
+            content_type: m.content_type as "mod" | "resourcepack" | "shader"
+          }));
+          
+          const disabledMods = (modpack.disabled_mod_ids || [])
+            .map(id => library.find(m => m.id === id))
+            .filter((m): m is typeof library[0] => !!m)
+            .map(m => ({
+              id: m.id,
+              filename: m.filename,
+              content_type: m.content_type as "mod" | "resourcepack" | "shader"
+            }));
+          
+          syncResult = await instanceService.syncModpackToInstance(instanceId, {
+            mods: modsInPack,
+            disabledMods,
+            overridesZipPath: overridesPath
+          }, {
+            // Auto-sync ALWAYS uses new_only to never overwrite user configs/resources
+            // Manual sync from UI can use other modes if user explicitly chooses
+            configSyncMode: "new_only"
+          });
+          
+          syncPerformed = true;
+          
+          if (!syncResult.success) {
+            return { 
+              success: false, 
+              error: `Sync failed: ${syncResult.errors.join(", ")}`,
+              syncPerformed: true,
+              syncResult
+            };
+          }
+        } catch (err: any) {
+          return { 
+            success: false, 
+            error: `Sync error: ${err.message}`,
+            syncPerformed: false
+          };
+        }
+      }
+    }
+    
+    // Launch the instance
+    const onProgress = (stage: string, current: number, total: number, detail?: string) => {
+      if (win) {
+        win.webContents.send("loader:installProgress", { stage, current, total, detail });
+      }
+    };
+    
+    const launchResult = await instanceService.launchInstance(instanceId, onProgress);
+    
+    return {
+      ...launchResult,
+      syncPerformed,
+      syncResult
+    };
   });
 
   // ========== MODPACK PREVIEW/ANALYSIS IPC HANDLERS ==========
@@ -3576,6 +3745,22 @@ async function initializeBackend() {
     if (!instance) throw new Error("Instance not found");
     await configService.rollbackConfigChanges(instance.path, changeSetId);
     return { success: true };
+  });
+
+  // ========== SYSTEM INFO IPC HANDLERS ==========
+
+  // Get system memory info
+  ipcMain.handle("system:getMemoryInfo", async () => {
+    const os = await import("os");
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    return {
+      total: Math.floor(totalMem / (1024 * 1024)), // MB
+      free: Math.floor(freeMem / (1024 * 1024)), // MB
+      used: Math.floor((totalMem - freeMem) / (1024 * 1024)), // MB
+      // Suggested max for Minecraft (leave 2GB for system)
+      suggestedMax: Math.max(4096, Math.floor((totalMem / (1024 * 1024)) - 2048))
+    };
   });
 }
 

@@ -13,7 +13,6 @@ import ShareDialog from "@/components/modpacks/ShareDialog.vue";
 import ConvertModpackDialog from "@/components/modpacks/ConvertModpackDialog.vue";
 import CurseForgeModpackSearch from "@/components/modpacks/CurseForgeModpackSearch.vue";
 import SyncModpackDialog from "@/components/modpacks/SyncModpackDialog.vue";
-import PlayModpackDialog from "@/components/modpacks/PlayModpackDialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
@@ -47,11 +46,14 @@ import type { Modpack, Mod } from "@/types/electron";
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
-const { getInstanceByModpack, createFromModpack, launchInstance } = useInstances();
+const { getInstanceByModpack, createFromModpack, launchInstance, runningGames, loadInstances } = useInstances();
 
 interface ModpackWithCount extends Modpack {
   modCount: number;
 }
+
+// Map instance to modpack for running game detection
+const instanceToModpack = ref<Map<string, string>>(new Map());
 
 const modpacks = ref<ModpackWithCount[]>([]);
 const isLoading = ref(true);
@@ -110,13 +112,8 @@ const convertModpack = ref<Modpack | null>(null);
 // CurseForge Browse State
 const showCFBrowse = ref(false);
 
-// Sync State
-const showSyncDialog = ref(false);
-const syncModpackId = ref<string | null>(null);
-const syncModpackName = ref<string>("");
-const syncModpackVersion = ref<string>("");
-const syncModpackLoader = ref<string>("");
-const syncModpackModCount = ref<number>(0);
+// Sync State (now unified with Editor)
+const editorInitialTab = ref<"play" | "mods" | "discover" | "health" | "versions" | "profiles" | "settings" | "remote" | "configs">("mods");
 
 // Import State
 const showProgress = ref(false);
@@ -159,6 +156,32 @@ const loaderBreakdown = computed(() => {
 // Check if running in Electron
 const isElectron = () => window.api !== undefined;
 
+// Check if a modpack has a running instance
+function isModpackRunning(modpackId: string): boolean {
+  for (const [instanceId, gameInfo] of runningGames.value.entries()) {
+    if (instanceToModpack.value.get(instanceId) === modpackId) {
+      return gameInfo.status !== 'stopped';
+    }
+  }
+  return false;
+}
+
+// Load instance-to-modpack mapping
+async function loadInstanceMapping() {
+  try {
+    const instances = await loadInstances();
+    const mapping = new Map<string, string>();
+    for (const inst of instances) {
+      if (inst.modpackId) {
+        mapping.set(inst.id, inst.modpackId);
+      }
+    }
+    instanceToModpack.value = mapping;
+  } catch (err) {
+    console.error("Failed to load instance mapping:", err);
+  }
+}
+
 async function loadModpacks() {
   if (!isElectron()) {
     error.value = "This app must be run in Electron, not in a browser.";
@@ -169,6 +192,9 @@ async function loadModpacks() {
   isLoading.value = true;
   error.value = null;
   try {
+    // Load instance mapping in parallel
+    loadInstanceMapping();
+
     const packs = await window.api.modpacks.getAll();
 
     const packsWithCounts = await Promise.all(
@@ -658,6 +684,13 @@ function openEditor(id: string) {
   showEditor.value = true;
 }
 
+// Open editor with play tab
+function openPlayTab(id: string) {
+  selectedModpackId.value = id;
+  editorInitialTab.value = "play";
+  showEditor.value = true;
+}
+
 // Share
 function openShareExport(id: string, name: string) {
   shareModpackId.value = id;
@@ -941,54 +974,9 @@ watch(
   { immediate: true }
 );
 
-// Sync to Minecraft (now uses instance-based play)
-function openSyncDialog(modpackId: string, modpackName: string) {
-  const modpack = modpacks.value.find(m => m.id === modpackId);
-  syncModpackId.value = modpackId;
-  syncModpackName.value = modpackName;
-  syncModpackVersion.value = modpack?.minecraft_version || "";
-  syncModpackLoader.value = modpack?.loader || "";
-  syncModpackModCount.value = modpack?.modCount || 0;
-  showSyncDialog.value = true;
-}
-
-// Quick Play - Launch directly without opening dialog
-async function quickPlay(modpackId: string) {
-  const modpack = modpacks.value.find(m => m.id === modpackId);
-  if (!modpack) return;
-
-  try {
-    // Check if instance exists
-    let instance = await getInstanceByModpack(modpackId);
-
-    if (!instance) {
-      // Create instance first
-      toast.info("Creating Instance", `Setting up ${modpack.name}...`);
-      const result = await createFromModpack(modpackId);
-      if (!result?.instance) {
-        toast.error("Failed", "Could not create instance");
-        return;
-      }
-      instance = result.instance;
-    }
-
-    // Launch the instance
-    toast.info("Launching", `Starting ${modpack.name}...`);
-    const launchResult = await launchInstance(instance.id);
-
-    if (launchResult.success) {
-      toast.success("Launched", "Minecraft is starting...");
-    } else {
-      toast.error("Launch Failed", launchResult.error || "Unknown error");
-    }
-  } catch (err: any) {
-    toast.error("Error", err.message);
-  }
-}
-
 function handleSyncComplete() {
-  showSyncDialog.value = false;
-  toast.success("Ready to Play", `${syncModpackName.value} instance is ready!`);
+  showEditor.value = false;
+  toast.success("Ready to Play", "Instance is ready!");
 }
 
 onMounted(() => {
@@ -1300,9 +1288,10 @@ onMounted(() => {
           class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
             :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
-            @delete="confirmDelete" @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack"
-            @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack" @share="openShareExport"
-            @convert="openConvertDialog" @sync="openSyncDialog" @play="quickPlay" />
+            :is-running="isModpackRunning(pack.id!)" @delete="confirmDelete" @edit="openEditor"
+            @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
+            @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog"
+            @play="openPlayTab" />
         </div>
 
         <!-- List View -->
@@ -1380,10 +1369,11 @@ onMounted(() => {
       </Button>
     </BulkActionBar>
 
-    <!-- Modpack Editor Modal -->
+    <!-- Modpack Editor Modal (unified with play functionality) -->
     <ModpackEditor v-if="selectedModpackId" :modpack-id="selectedModpackId" :is-open="showEditor"
-      @close="showEditor = false" @update="loadModpacks" @export="exportModpack(selectedModpackId || '')"
-      @exportToGame="exportModpackToGame(selectedModpackId || '')" />
+      :initial-tab="editorInitialTab" @close="showEditor = false; editorInitialTab = 'mods'" @update="loadModpacks"
+      @export="exportModpack(selectedModpackId || '')" @exportToGame="exportModpackToGame(selectedModpackId || '')"
+      @launched="handleSyncComplete" />
 
     <!-- Compare Dialog -->
     <ModpackCompareDialog :open="showCompare" :pre-selected-pack-a="comparePackA || undefined"
@@ -1584,11 +1574,6 @@ onMounted(() => {
         <Button @click="showMergeSummary = false"> Close </Button>
       </template>
     </Dialog>
-
-    <!-- Play Modpack Dialog (Instance-based) -->
-    <PlayModpackDialog v-if="syncModpackId" :open="showSyncDialog" :modpack-id="syncModpackId"
-      :modpack-name="syncModpackName" :minecraft-version="syncModpackVersion" :loader="syncModpackLoader"
-      :mod-count="syncModpackModCount" @close="showSyncDialog = false" @launched="handleSyncComplete" />
   </div>
 </template>
 <style scoped>

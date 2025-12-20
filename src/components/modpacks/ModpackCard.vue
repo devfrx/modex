@@ -49,6 +49,7 @@ defineProps<{
   modpack: ModpackWithCount;
   selected?: boolean;
   favorite?: boolean;
+  isRunning?: boolean;
 }>();
 
 defineEmits<{
@@ -60,7 +61,6 @@ defineEmits<{
   (e: "toggle-favorite", id: string): void;
   (e: "share", id: string, name: string): void;
   (e: "convert", id: string): void;
-  (e: "sync", id: string, name: string): void;
   (e: "play", id: string): void;
 }>();
 
@@ -115,10 +115,19 @@ function closeMoreActions() {
     <div v-else
       class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-xl" />
 
+    <!-- Running Indicator Border -->
+    <div v-if="isRunning"
+      class="absolute inset-0 rounded-xl ring-2 ring-green-500 ring-offset-2 ring-offset-background animate-pulse pointer-events-none z-30" />
+
     <!-- Top Bar: Favorite + Selection -->
     <div class="absolute top-3 left-3 right-3 z-20 flex items-center justify-between">
-      <!-- Favorite Button -->
-      <button
+      <!-- Running Badge or Favorite Button -->
+      <div v-if="isRunning"
+        class="px-2 py-1 rounded-full bg-green-500/90 text-white text-[10px] font-bold flex items-center gap-1 shadow-lg">
+        <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+        RUNNING
+      </div>
+      <button v-else
         class="transition-all duration-200 p-2 rounded-full bg-background/60 backdrop-blur-md border border-white/10 hover:bg-background/80 hover:scale-110"
         :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         @click.stop="$emit('toggle-favorite', modpack.id)" title="Toggle favorite">
@@ -213,19 +222,19 @@ function closeMoreActions() {
 
       <!-- Action Buttons -->
       <div class="pt-3 border-t border-border/30 flex items-center gap-2" @click.stop>
-        <!-- Primary: Play Button (Direct Launch) -->
-        <Button variant="default" size="sm"
-          class="gap-1.5 h-9 px-4 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 border-0"
-          @click.stop="$emit('play', modpack.id)" title="Quick Play">
+        <!-- Primary: Play Button (disabled/different when running) -->
+        <Button v-if="!isRunning" variant="default" size="sm"
+          class="gap-1.5 h-9 px-4 flex-1 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 border-0"
+          @click.stop="$emit('play', modpack.id)" title="Play Modpack">
           <Play class="w-4 h-4 fill-current" />
+          <span class="font-medium">Play</span>
         </Button>
-
-        <!-- Open Play Dialog -->
-        <Button variant="outline" size="sm"
-          class="flex-1 gap-1.5 h-9 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50"
-          @click.stop="$emit('sync', modpack.id, modpack.name)" title="Open Play Dialog">
-          <span class="font-medium">Open</span>
-        </Button>
+        <!-- Running state: Show running indicator instead of play -->
+        <div v-else
+          class="gap-1.5 h-9 px-4 flex-1 flex items-center justify-center bg-gradient-to-r from-green-600/80 to-green-500/80 text-white rounded-md cursor-not-allowed">
+          <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+          <span class="font-medium text-sm">Running...</span>
+        </div>
 
         <!-- Secondary Actions -->
         <Button variant="ghost" size="icon"

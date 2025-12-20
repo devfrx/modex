@@ -132,7 +132,10 @@ const isImporting = ref(false);
 async function loadFolders() {
     isLoading.value = true;
     try {
-        folders.value = await window.api.configs.getFolders(props.instanceId);
+        const allFolders = await window.api.configs.getFolders(props.instanceId);
+        // Only show config and defaultconfigs folders in the browser
+        const allowedFolders = ['config', 'defaultconfigs'];
+        folders.value = allFolders.filter(f => allowedFolders.includes(f.name));
     } catch (error: any) {
         console.error("Failed to load config folders:", error);
         toast.error("Failed to load configs", error.message);

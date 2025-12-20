@@ -23,9 +23,11 @@ interface ModpackAnalysis {
   performanceImpact: number;
   loadTimeImpact: number;
   storageImpact: number;
+  modCategories?: Record<string, number>;
   warnings: string[];
   recommendations: string[];
   compatibilityScore: number;
+  compatibilityNotes?: string[];
 }
 
 interface ModpackPreview {
@@ -124,12 +126,9 @@ const compatibilityBadge = computed(() => {
             by {{ preview.author }}
           </p>
         </div>
-        
+
         <!-- Compatibility Badge -->
-        <div 
-          class="px-2.5 py-1 rounded-lg border text-xs font-medium"
-          :class="compatibilityBadge.color"
-        >
+        <div class="px-2.5 py-1 rounded-lg border text-xs font-medium" :class="compatibilityBadge.color">
           {{ compatibilityBadge.label }}
         </div>
       </div>
@@ -215,11 +214,8 @@ const compatibilityBadge = computed(() => {
           </div>
           <div class="text-xl font-bold text-foreground">{{ impactLevel.label }}</div>
           <div class="w-full bg-muted rounded-full h-1.5 mt-2">
-            <div 
-              class="h-1.5 rounded-full transition-all"
-              :class="impactLevel.color.replace('text-', 'bg-')"
-              :style="{ width: `${preview.analysis.performanceImpact}%` }"
-            ></div>
+            <div class="h-1.5 rounded-full transition-all" :class="impactLevel.color.replace('text-', 'bg-')"
+              :style="{ width: `${preview.analysis.performanceImpact}%` }"></div>
           </div>
         </div>
 
@@ -233,10 +229,8 @@ const compatibilityBadge = computed(() => {
             {{ preview.analysis.loadTimeImpact }}%
           </div>
           <div class="w-full bg-muted rounded-full h-1.5 mt-2">
-            <div 
-              class="h-1.5 rounded-full bg-purple-500 transition-all"
-              :style="{ width: `${preview.analysis.loadTimeImpact}%` }"
-            ></div>
+            <div class="h-1.5 rounded-full bg-purple-500 transition-all"
+              :style="{ width: `${preview.analysis.loadTimeImpact}%` }"></div>
           </div>
         </div>
       </div>
@@ -250,10 +244,12 @@ const compatibilityBadge = computed(() => {
         <div v-if="preview.configFilesCount > 0" class="px-2 py-1 rounded bg-muted border border-border">
           {{ preview.configFilesCount }} config files
         </div>
-        <div v-if="preview.resourcePackCount > 0" class="px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+        <div v-if="preview.resourcePackCount > 0"
+          class="px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
           {{ preview.resourcePackCount }} resource packs
         </div>
-        <div v-if="preview.shaderCount > 0" class="px-2 py-1 rounded bg-pink-500/20 text-pink-400 border border-pink-500/30">
+        <div v-if="preview.shaderCount > 0"
+          class="px-2 py-1 rounded bg-pink-500/20 text-pink-400 border border-pink-500/30">
           {{ preview.shaderCount }} shaders
         </div>
       </div>
@@ -266,11 +262,8 @@ const compatibilityBadge = computed(() => {
         Warnings
       </h4>
       <ul class="space-y-1.5">
-        <li 
-          v-for="(warning, i) in preview.analysis.warnings" 
-          :key="i"
-          class="text-xs text-orange-300/80 flex items-start gap-2"
-        >
+        <li v-for="(warning, i) in preview.analysis.warnings" :key="i"
+          class="text-xs text-orange-300/80 flex items-start gap-2">
           <XCircle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
           {{ warning }}
         </li>
@@ -284,11 +277,8 @@ const compatibilityBadge = computed(() => {
         Recommendations
       </h4>
       <ul class="space-y-1.5">
-        <li 
-          v-for="(rec, i) in preview.analysis.recommendations" 
-          :key="i"
-          class="text-xs text-blue-300/80 flex items-start gap-2"
-        >
+        <li v-for="(rec, i) in preview.analysis.recommendations" :key="i"
+          class="text-xs text-blue-300/80 flex items-start gap-2">
           <CheckCircle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
           {{ rec }}
         </li>

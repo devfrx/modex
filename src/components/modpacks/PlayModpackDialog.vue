@@ -83,6 +83,8 @@ const {
     killGame,
     onGameLogLine,
     updateInstance,
+    smartLaunch,
+    getInstanceSyncSettings,
 } = useInstances();
 const { success, error: showError } = useToast();
 
@@ -149,6 +151,14 @@ const configRefreshKey = ref(0);
 // Sync Options
 const clearExistingMods = ref(false);
 const configSyncMode = ref<"overwrite" | "new_only" | "skip">("new_only");
+
+// Smart Launch - Confirmation Dialog State
+const showSyncConfirmDialog = ref(false);
+const pendingLaunchData = ref<{
+    needsSync: boolean;
+    differences: number;
+    lastSynced?: string;
+} | null>(null);
 
 // Check for existing instance
 async function checkInstance() {
@@ -295,7 +305,7 @@ function loadInstanceSettings() {
 }
 
 // Launch instance
-async function handleLaunch() {
+async function handleLaunch(options?: { forceSync?: boolean; skipSync?: boolean }) {
     if (!instance.value) return;
 
     isLaunching.value = true;
@@ -314,13 +324,42 @@ async function handleLaunch() {
     });
 
     try {
-        const result = await launchInstance(instance.value.id);
+        // Use smartLaunch instead of direct launchInstance
+        const result = await smartLaunch(instance.value.id, props.modpackId, {
+            forceSync: options?.forceSync,
+            skipSync: options?.skipSync,
+            configSyncMode: configSyncMode.value
+        });
+
+        // If confirmation is required, show dialog
+        if (result.requiresConfirmation && result.syncStatus) {
+            pendingLaunchData.value = {
+                needsSync: result.syncStatus.needsSync,
+                differences: result.syncStatus.differences,
+                lastSynced: result.syncStatus.lastSynced
+            };
+            showSyncConfirmDialog.value = true;
+            isLaunching.value = false;
+            removeProgressListener();
+            return;
+        }
 
         if (result.success) {
             // Switch to game tracking mode
             gameLaunched.value = true;
             gameLoadingMessage.value = "Launching Minecraft... Waiting for the game to start.";
-            success("Minecraft Launcher Started", "The game is now loading...");
+
+            if (result.syncPerformed) {
+                success("Synced & Launched", `Instance synced, Minecraft is loading...`);
+            } else {
+                success("Minecraft Launcher Started", "The game is now loading...");
+            }
+
+            // Refresh sync status after launch (in case sync was performed)
+            if (result.syncPerformed) {
+                syncStatus.value = await window.api.instances.checkSyncStatus(instance.value!.id, props.modpackId);
+            }
+
             emit("launched", instance.value);
         } else {
             showError("Launch failed", result.error || "Unknown error");
@@ -332,6 +371,20 @@ async function handleLaunch() {
         isLaunching.value = false;
         loaderProgress.value = null;
     }
+}
+
+// Handle sync confirmation dialog response
+function handleSyncConfirmation(action: "sync" | "skip" | "cancel") {
+    showSyncConfirmDialog.value = false;
+    pendingLaunchData.value = null;
+
+    if (action === "cancel") return;
+
+    // Re-launch with the chosen action
+    handleLaunch({
+        forceSync: action === "sync",
+        skipSync: action === "skip"
+    });
 }
 
 // Kill running game
@@ -868,7 +921,7 @@ function handleConfigReverted(event: Event) {
                                         <!-- Main Play Section -->
                                         <div class="play-main-section">
                                             <!-- Play Button -->
-                                            <button @click="handleLaunch"
+                                            <button @click="handleLaunch()"
                                                 :disabled="instance.state !== 'ready' || isLaunching"
                                                 class="play-button-new">
                                                 <div class="play-button-inner">
@@ -884,7 +937,7 @@ function handleConfigReverted(event: Event) {
                                                 </h3>
                                                 <p class="text-sm text-muted-foreground">
                                                     {{ stats?.modCount || 0 }} mods • {{ props.loader || 'Forge' }} {{
-                                                    props.minecraftVersion }}
+                                                        props.minecraftVersion }}
                                                 </p>
                                             </div>
                                         </div>
@@ -1167,9 +1220,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                    }}</span>
+                                                }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                    }}%</span>
+                                                }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1202,7 +1255,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1212,7 +1265,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -1329,6 +1382,77 @@ function handleConfigReverted(event: Event) {
                 <ConfigStructuredEditor v-if="instance && structuredEditorFile" :instance-id="instance.id"
                     :config-path="structuredEditorFile.path" :refresh-key="configRefreshKey"
                     @close="handleCloseStructuredEditor" @saved="handleCloseStructuredEditor" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Confirmation Dialog -->
+    <div v-if="showSyncConfirmDialog"
+        class="fixed inset-0 z-[70] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div
+            class="bg-card border border-border/50 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <!-- Header -->
+            <div class="px-5 py-4 border-b border-border/50 bg-gradient-to-r from-amber-500/10 to-transparent">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                        <AlertCircle class="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-foreground">Sync prima di Avviare?</h3>
+                        <p class="text-sm text-muted-foreground">L'istanza non è sincronizzata</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <div class="px-5 py-4 space-y-3">
+                <p class="text-sm text-muted-foreground">
+                    Sono state rilevate
+                    <span class="font-medium text-foreground">{{ pendingLaunchData?.differences || 0 }}
+                        differenze</span>
+                    tra il modpack e l'istanza di gioco.
+                </p>
+
+                <div v-if="pendingLaunchData?.lastSynced"
+                    class="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Clock class="w-3.5 h-3.5" />
+                    Ultimo sync: {{ formatDate(pendingLaunchData.lastSynced) }}
+                </div>
+
+                <div class="bg-muted/30 rounded-lg p-3 space-y-2">
+                    <div class="flex items-start gap-2">
+                        <Download class="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+                        <div class="text-sm">
+                            <span class="text-foreground font-medium">Sincronizza</span>
+                            <span class="text-muted-foreground"> - Aggiorna le mod prima di avviare il gioco</span>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <Play class="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+                        <div class="text-sm">
+                            <span class="text-foreground font-medium">Avvia Comunque</span>
+                            <span class="text-muted-foreground"> - Gioca con le mod attuali</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="px-5 py-4 border-t border-border/50 bg-muted/20 flex gap-3">
+                <button @click="handleSyncConfirmation('cancel')"
+                    class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-muted/50 hover:bg-muted text-foreground transition-colors">
+                    Annulla
+                </button>
+                <button @click="handleSyncConfirmation('skip')"
+                    class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors flex items-center justify-center gap-2">
+                    <Play class="w-4 h-4" />
+                    Avvia
+                </button>
+                <button @click="handleSyncConfirmation('sync')"
+                    class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors flex items-center justify-center gap-2">
+                    <Download class="w-4 h-4" />
+                    Sync & Avvia
+                </button>
             </div>
         </div>
     </div>

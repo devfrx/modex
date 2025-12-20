@@ -11,10 +11,11 @@ export interface ModpackAnalysis {
   performanceImpact: number;
   loadTimeImpact: number;
   storageImpact: number;
+  modCategories?: Record<string, number>;
   warnings: string[];
   recommendations: string[];
   compatibilityScore: number;
-  compatibilityNotes?: string[];
+  compatibilityNotes: string[];
 }
 
 export interface ModpackPreview {

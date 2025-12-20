@@ -122,6 +122,17 @@ interface LibraryData {
 interface AppConfig {
   curseforge_api_key?: string;
   modrinth_api_key?: string;
+  /** Instance sync settings */
+  instanceSync?: {
+    /** Auto-sync modpack to instance before launching */
+    autoSyncBeforeLaunch?: boolean;
+    /** Auto-import config changes from instance after game closes */
+    autoImportConfigsAfterGame?: boolean;
+    /** Show confirmation dialog before auto-sync */
+    showSyncConfirmation?: boolean;
+    /** Default config sync mode when syncing */
+    defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+  };
 }
 
 // ==================== VERSION CONTROL TYPES ====================
@@ -297,6 +308,27 @@ export class MetadataManager {
     } else {
       config.modrinth_api_key = apiKey;
     }
+    await this.saveConfig(config);
+  }
+
+  // ==================== INSTANCE SYNC SETTINGS ====================
+
+  async getInstanceSyncSettings(): Promise<NonNullable<AppConfig["instanceSync"]>> {
+    const config = await this.getConfig();
+    return {
+      autoSyncBeforeLaunch: config.instanceSync?.autoSyncBeforeLaunch ?? true,
+      autoImportConfigsAfterGame: config.instanceSync?.autoImportConfigsAfterGame ?? false,
+      showSyncConfirmation: config.instanceSync?.showSyncConfirmation ?? true,
+      defaultConfigSyncMode: config.instanceSync?.defaultConfigSyncMode ?? "new_only",
+    };
+  }
+
+  async setInstanceSyncSettings(settings: Partial<NonNullable<AppConfig["instanceSync"]>>): Promise<void> {
+    const config = await this.getConfig();
+    config.instanceSync = {
+      ...config.instanceSync,
+      ...settings,
+    };
     await this.saveConfig(config);
   }
 

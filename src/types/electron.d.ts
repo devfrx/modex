@@ -559,6 +559,55 @@ export interface ElectronAPI {
     clear: () => Promise<void>;
   };
 
+  // ========== SETTINGS ==========
+  settings: {
+    getInstanceSync: () => Promise<{
+      autoSyncBeforeLaunch: boolean;
+      autoImportConfigsAfterGame: boolean;
+      showSyncConfirmation: boolean;
+      defaultConfigSyncMode: "overwrite" | "new_only" | "skip";
+    }>;
+    setInstanceSync: (settings: {
+      autoSyncBeforeLaunch?: boolean;
+      autoImportConfigsAfterGame?: boolean;
+      showSyncConfirmation?: boolean;
+      defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+    }) => Promise<{ success: boolean }>;
+    /** Smart launch with automatic sync if needed */
+    smartLaunch: (instanceId: string, modpackId: string, options?: {
+      forceSync?: boolean;
+      skipSync?: boolean;
+      configSyncMode?: "overwrite" | "new_only" | "skip";
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+      needsSync?: boolean;
+      requiresConfirmation?: boolean;
+      syncStatus?: {
+        needsSync: boolean;
+        differences: number;
+        lastSynced?: string;
+        missingInInstance: Array<{ filename: string; type: string }>;
+        extraInInstance: Array<{ filename: string; type: string }>;
+        disabledMismatch: Array<{ filename: string; issue: string }>;
+        configDifferences: number;
+        totalDifferences: number;
+      };
+      syncPerformed: boolean;
+      syncResult?: InstanceSyncResult;
+    }>;
+  };
+
+  // ========== SYSTEM INFO ==========
+  system: {
+    getMemoryInfo: () => Promise<{
+      total: number;
+      free: number;
+      used: number;
+      suggestedMax: number;
+    }>;
+  };
+
   // ========== MODPACK PREVIEW ==========
   preview: {
     fromZip: (zipPath: string) => Promise<ModpackPreview | null>;
@@ -570,9 +619,11 @@ export interface ElectronAPI {
       performanceImpact: number;
       loadTimeImpact: number;
       storageImpact: number;
+      modCategories: Record<string, number>;
       warnings: string[];
       recommendations: string[];
       compatibilityScore: number;
+      compatibilityNotes: string[];
     } | null>;
     selectAndPreview: () => Promise<{ path: string; preview: ModpackPreview } | null>;
   };
@@ -664,6 +715,7 @@ export interface ElectronAPI {
       loadedMods: number;
       totalMods: number;
       currentMod?: string;
+      gameProcessRunning: boolean;
     } | null>;
     killGame: (instanceId: string) => Promise<boolean>;
     onGameStatusChange: (callback: (data: {
@@ -675,6 +727,36 @@ export interface ElectronAPI {
       loadedMods: number;
       totalMods: number;
       currentMod?: string;
+      gameProcessRunning: boolean;
+    }) => void) => () => void;
+    
+    // Bidirectional config sync
+    getModifiedConfigs: (instanceId: string, modpackId: string) => Promise<{
+      modifiedConfigs: Array<{
+        relativePath: string;
+        instancePath: string;
+        overridePath?: string;
+        status: 'modified' | 'new' | 'deleted';
+        lastModified: Date;
+        size: number;
+      }>;
+      instanceConfigPath: string;
+      overridesConfigPath?: string;
+    }>;
+    importConfigs: (instanceId: string, modpackId: string, configPaths: string[]) => Promise<{
+      success: boolean;
+      imported: number;
+      skipped: number;
+      errors: string[];
+    }>;
+    
+    /** Subscribe to real-time game log lines */
+    onLogLine: (callback: (data: {
+      instanceId: string;
+      time: string;
+      level: string;
+      message: string;
+      raw: string;
     }) => void) => () => void;
   };
 

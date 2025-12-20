@@ -26,6 +26,7 @@ export interface RunningGameInfo {
   loadedMods: number;
   totalMods: number;
   currentMod?: string;
+  gameProcessRunning: boolean;
 }
 
 // Reactive state
@@ -332,6 +333,47 @@ export function useInstances() {
     return () => logLineCallbacks.delete(callback);
   }
 
+  /**
+   * Get instance sync settings
+   */
+  async function getInstanceSyncSettings() {
+    return window.api.settings.getInstanceSync();
+  }
+
+  /**
+   * Update instance sync settings
+   */
+  async function setInstanceSyncSettings(settings: {
+    autoSyncBeforeLaunch?: boolean;
+    autoImportConfigsAfterGame?: boolean;
+    showSyncConfirmation?: boolean;
+    defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+  }) {
+    return window.api.settings.setInstanceSync(settings);
+  }
+
+  /**
+   * Smart launch with automatic sync if needed
+   * Returns sync status if confirmation is needed
+   */
+  async function smartLaunch(instanceId: string, modpackId: string, options?: {
+    forceSync?: boolean;
+    skipSync?: boolean;
+    configSyncMode?: "overwrite" | "new_only" | "skip";
+  }) {
+    const result = await window.api.settings.smartLaunch(instanceId, modpackId, options);
+    
+    // Update lastPlayed in local state if launch was successful
+    if (result.success) {
+      const index = instances.value.findIndex(i => i.id === instanceId);
+      if (index !== -1) {
+        instances.value[index].lastPlayed = new Date().toISOString();
+      }
+    }
+    
+    return result;
+  }
+
   return {
     // State
     instances,
@@ -363,6 +405,10 @@ export function useInstances() {
     getRunningGame,
     killGame,
     onGameLogLine,
+    // Smart sync methods
+    getInstanceSyncSettings,
+    setInstanceSyncSettings,
+    smartLaunch,
   };
 }
 

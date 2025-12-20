@@ -400,6 +400,17 @@ export interface AppConfig {
   curseforge_api_key?: string;
   modrinth_api_key?: string;
   theme?: "light" | "dark" | "system";
+  /** Instance sync settings */
+  instanceSync?: {
+    /** Auto-sync modpack to instance before launching */
+    autoSyncBeforeLaunch?: boolean;
+    /** Auto-import config changes from instance after game closes */
+    autoImportConfigsAfterGame?: boolean;
+    /** Show confirmation dialog before auto-sync */
+    showSyncConfirmation?: boolean;
+    /** Default config sync mode when syncing */
+    defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+  };
 }
 
 // ==================== FOLDER ORGANIZATION (Frontend-only) ====================

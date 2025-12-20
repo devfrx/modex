@@ -87,6 +87,13 @@ const cfApiKey = ref("");
 const isCheckingUpdate = ref(false);
 const currentTab = ref("general");
 
+// Instance Sync Settings
+const syncSettings = ref({
+  autoSyncBeforeLaunch: true,
+  showSyncConfirmation: true,
+  defaultConfigSyncMode: "new_only" as "overwrite" | "new_only" | "skip"
+});
+
 // Tabs Configuration
 const tabs = [
   { id: "general", name: "General", icon: SettingsIcon },
@@ -222,11 +229,36 @@ async function refreshLibrary() {
   await loadSettings();
 }
 
+// Load instance sync settings
+async function loadSyncSettings() {
+  try {
+    const settings = await window.api.settings.getInstanceSync();
+    syncSettings.value = {
+      autoSyncBeforeLaunch: settings.autoSyncBeforeLaunch ?? true,
+      showSyncConfirmation: settings.showSyncConfirmation ?? true,
+      defaultConfigSyncMode: settings.defaultConfigSyncMode ?? "new_only"
+    };
+  } catch (err) {
+    console.error("Failed to load sync settings:", err);
+  }
+}
+
+// Save instance sync settings
+async function saveSyncSettings() {
+  try {
+    await window.api.settings.setInstanceSync(syncSettings.value);
+    toast.success("Saved", "Instance sync settings updated");
+  } catch (err) {
+    toast.error("Error", "Failed to save sync settings");
+  }
+}
+
 onMounted(() => {
   // Load theme
   // Handled by App.vue initialization
 
   loadSettings();
+  loadSyncSettings();
 });
 </script>
 
@@ -337,6 +369,81 @@ onMounted(() => {
                   <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingUpdate }" />
                   {{ isCheckingUpdate ? "Checking..." : "Check Now" }}
                 </Button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Instance Sync Settings -->
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <RefreshCw class="w-4 h-4 text-primary" />
+              Instance Sync
+            </h3>
+            <div class="p-5 rounded-xl border border-border bg-card/50 space-y-5">
+              <!-- Auto Sync Before Launch -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-medium">Auto-sync before launch</div>
+                  <div class="text-sm text-muted-foreground">
+                    Automatically sync mods when launching the game
+                  </div>
+                </div>
+                <button
+                  @click="syncSettings.autoSyncBeforeLaunch = !syncSettings.autoSyncBeforeLaunch; saveSyncSettings()"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200"
+                  :class="syncSettings.autoSyncBeforeLaunch ? 'bg-primary' : 'bg-muted'">
+                  <span
+                    class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
+                    :class="syncSettings.autoSyncBeforeLaunch ? 'translate-x-6' : 'translate-x-1'" />
+                </button>
+              </div>
+
+              <!-- Show Confirmation -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-medium">Show confirmation dialog</div>
+                  <div class="text-sm text-muted-foreground">
+                    Ask before syncing when differences are detected
+                  </div>
+                </div>
+                <button
+                  @click="syncSettings.showSyncConfirmation = !syncSettings.showSyncConfirmation; saveSyncSettings()"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200"
+                  :class="syncSettings.showSyncConfirmation ? 'bg-primary' : 'bg-muted'">
+                  <span
+                    class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
+                    :class="syncSettings.showSyncConfirmation ? 'translate-x-6' : 'translate-x-1'" />
+                </button>
+              </div>
+
+              <!-- Default Config Sync Mode -->
+              <div class="space-y-2">
+                <div>
+                  <div class="font-medium">Default config sync mode</div>
+                  <div class="text-sm text-muted-foreground">
+                    How to handle config files during sync
+                  </div>
+                </div>
+                <div class="flex gap-2 pt-1">
+                  <button @click="syncSettings.defaultConfigSyncMode = 'new_only'; saveSyncSettings()"
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border" :class="syncSettings.defaultConfigSyncMode === 'new_only'
+                      ? 'bg-primary/20 border-primary text-primary'
+                      : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'">
+                    New Only
+                  </button>
+                  <button @click="syncSettings.defaultConfigSyncMode = 'overwrite'; saveSyncSettings()"
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border" :class="syncSettings.defaultConfigSyncMode === 'overwrite'
+                      ? 'bg-primary/20 border-primary text-primary'
+                      : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'">
+                    Overwrite
+                  </button>
+                  <button @click="syncSettings.defaultConfigSyncMode = 'skip'; saveSyncSettings()"
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border" :class="syncSettings.defaultConfigSyncMode === 'skip'
+                      ? 'bg-primary/20 border-primary text-primary'
+                      : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'">
+                    Skip
+                  </button>
+                </div>
               </div>
             </div>
           </section>

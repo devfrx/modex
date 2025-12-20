@@ -214,20 +214,50 @@ export class ConfigService {
   async getConfigFolders(instancePath: string): Promise<ConfigFolder[]> {
     const folders: ConfigFolder[] = [];
     
-    // Main config locations
+    // Main config locations (comprehensive list for Minecraft modding)
     const configLocations = [
       { name: "config", path: "config" },
       { name: "defaultconfigs", path: "defaultconfigs" },
       { name: "kubejs", path: "kubejs" },
       { name: "scripts", path: "scripts" },
+      { name: "options", path: "options.txt" }, // Vanilla options
+      { name: "servers", path: "servers.dat" }, // Server list
+      { name: "resourcepacks", path: "resourcepacks" },
+      { name: "shaderpacks", path: "shaderpacks" },
+      { name: "local", path: "local" }, // Some mods use this
+      { name: "saves", path: "saves" }, // World-specific configs
     ];
 
     for (const location of configLocations) {
       const fullPath = path.join(instancePath, location.path);
       if (await fs.pathExists(fullPath)) {
-        const folder = await this.scanFolder(instancePath, location.path);
-        if (folder) {
-          folders.push(folder);
+        // Check if it's a file or directory
+        const stat = await fs.stat(fullPath);
+        if (stat.isDirectory()) {
+          const folder = await this.scanFolder(instancePath, location.path);
+          if (folder) {
+            folders.push(folder);
+          }
+        } else if (stat.isFile()) {
+          // For single files like options.txt, create a virtual folder
+          const ext = path.extname(location.path).toLowerCase().slice(1) || "txt";
+          const virtualFolder: ConfigFolder = {
+            path: path.dirname(location.path) || ".",
+            name: location.name,
+            fileCount: 1,
+            totalSize: stat.size,
+            subfolders: [],
+            files: [{
+              path: location.path,
+              name: path.basename(location.path),
+              extension: ext,
+              size: stat.size,
+              modified: stat.mtime.toISOString(),
+              type: this.getConfigType(ext),
+              folder: ".",
+            }],
+          };
+          folders.push(virtualFolder);
         }
       }
     }

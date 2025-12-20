@@ -150,6 +150,7 @@ export interface ModpackVersion {
   mod_snapshots?: Array<{
     id: string;
     name: string;
+    version?: string;
     cf_project_id: number;
     cf_file_id: number;
   }>;
@@ -1061,11 +1062,14 @@ export class MetadataManager {
       
       // Compare file IDs - if different, the mod has been updated
       if (mod.cf_file_id !== savedSnapshot.cf_file_id) {
+        // Use real versions if available, fall back to file IDs
+        const oldVersion = (savedSnapshot as any).version || `file:${savedSnapshot.cf_file_id}`;
+        const newVersion = mod.version || `file:${mod.cf_file_id}`;
         result.changes.modsUpdated.push({ 
           id: modId, 
           name: mod.name || modId,
-          oldVersion: savedSnapshot.cf_file_id?.toString(),
-          newVersion: mod.cf_file_id?.toString()
+          oldVersion,
+          newVersion
         });
       }
     }
@@ -2395,6 +2399,7 @@ export class MetadataManager {
           return {
             id: mod.id,
             name: mod.name,
+            version: mod.version,
             cf_project_id: mod.cf_project_id,
             cf_file_id: mod.cf_file_id,
           };
@@ -2525,6 +2530,7 @@ export class MetadataManager {
           return {
             id: mod.id,
             name: mod.name,
+            version: mod.version,
             cf_project_id: mod.cf_project_id,
             cf_file_id: mod.cf_file_id,
           };
@@ -2657,7 +2663,7 @@ export class MetadataManager {
     oldModIds: string[],
     newModIds: string[],
     library: LibraryData,
-    oldSnapshots?: Array<{ id: string; name: string; cf_project_id: number; cf_file_id: number }>
+    oldSnapshots?: Array<{ id: string; name: string; version?: string; cf_project_id: number; cf_file_id: number }>
   ): ModpackChange[] {
     const changes: ModpackChange[] = [];
     const oldSet = new Set(oldModIds);
@@ -2669,11 +2675,12 @@ export class MetadataManager {
     for (const modId of oldModIds) {
       if (!newSet.has(modId)) {
         const mod = modMap.get(modId);
+        const snapshot = snapshotMap.get(modId);
         changes.push({
           type: "remove",
           modId,
-          modName: mod?.name || modId,
-          previousVersion: mod?.version,
+          modName: mod?.name || snapshot?.name || modId,
+          previousVersion: mod?.version || snapshot?.version,
         });
       }
     }
@@ -2700,12 +2707,15 @@ export class MetadataManager {
         
         if (mod && snapshot && mod.cf_file_id && snapshot.cf_file_id) {
           if (mod.cf_file_id !== snapshot.cf_file_id) {
+            // Use real versions if available, fall back to file IDs
+            const prevVersion = snapshot.version || `file:${snapshot.cf_file_id}`;
+            const newVersion = mod.version || `file:${mod.cf_file_id}`;
             changes.push({
               type: "update",
               modId,
               modName: mod.name || modId,
-              previousVersion: `file:${snapshot.cf_file_id}`,
-              newVersion: `file:${mod.cf_file_id}`,
+              previousVersion: prevVersion,
+              newVersion: newVersion,
               previousFileId: snapshot.cf_file_id,
               newFileId: mod.cf_file_id,
             });

@@ -368,6 +368,7 @@ export interface ModpackVersion {
   mod_snapshots?: Array<{
     id: string;
     name: string;
+    version?: string;
     cf_project_id: number;
     cf_file_id: number;
   }>;

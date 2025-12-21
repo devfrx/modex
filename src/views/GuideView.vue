@@ -81,8 +81,28 @@ const faqs = [
 
 <template>
     <div class="flex h-full bg-background text-foreground overflow-hidden">
-        <!-- Sidebar Navigation -->
-        <div class="w-64 flex-shrink-0 border-r border-border bg-card/30 flex flex-col">
+        <!-- Mobile Header -->
+        <div class="md:hidden fixed top-0 left-0 right-0 z-20 bg-card/95 backdrop-blur-sm border-b border-border">
+            <div class="flex items-center gap-3 p-3">
+                <BookOpen class="w-5 h-5 text-primary" />
+                <h1 class="text-lg font-bold">User Guide</h1>
+            </div>
+            <!-- Mobile Tab Navigation -->
+            <div class="flex overflow-x-auto scrollbar-hide gap-1 px-2 pb-2">
+                <button v-for="section in sections" :key="section.id" @click="activeSection = section.id"
+                    class="flex-shrink-0 px-3 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 text-sm font-medium whitespace-nowrap"
+                    :class="activeSection === section.id
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-muted/50'
+                        ">
+                    <component :is="section.icon" class="w-4 h-4" />
+                    <span class="hidden xs:inline">{{ section.name }}</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Desktop Sidebar Navigation -->
+        <div class="hidden md:flex w-64 flex-shrink-0 border-r border-border bg-card/30 flex-col">
             <div class="p-6 pb-4">
                 <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
                     <BookOpen class="w-6 h-6 text-primary" />
@@ -105,30 +125,30 @@ const faqs = [
         </div>
 
         <!-- Content Area -->
-        <div class="flex-1 overflow-auto bg-background">
-            <div class="max-w-4xl mx-auto p-8">
+        <div class="flex-1 overflow-auto bg-background pt-24 md:pt-0">
+            <div class="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
 
                 <!-- Getting Started -->
-                <div v-if="activeSection === 'getting-started'" class="space-y-8">
+                <div v-if="activeSection === 'getting-started'" class="space-y-6 sm:space-y-8">
                     <div>
-                        <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <Zap class="w-8 h-8 text-primary" />
+                        <h2 class="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2 sm:gap-3">
+                            <Zap class="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
                             Getting Started with ModEx
                         </h2>
-                        <p class="text-muted-foreground mt-2 text-lg">
+                        <p class="text-muted-foreground mt-2 text-base sm:text-lg">
                             Welcome to ModEx, the modern Minecraft mod manager. Let's get you set up!
                         </p>
                     </div>
 
-                    <div class="grid gap-6">
-                        <div class="p-6 rounded-xl border border-border bg-card/50">
-                            <div class="flex items-start gap-4">
+                    <div class="grid gap-4 sm:gap-6">
+                        <div class="p-4 sm:p-6 rounded-xl border border-border bg-card/50">
+                            <div class="flex items-start gap-3 sm:gap-4">
                                 <div
-                                    class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                                    class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm sm:text-base flex-shrink-0">
                                     1</div>
                                 <div class="flex-1">
-                                    <h3 class="text-lg font-semibold">Browse CurseForge</h3>
-                                    <p class="text-muted-foreground mt-1">
+                                    <h3 class="text-base sm:text-lg font-semibold">Browse CurseForge</h3>
+                                    <p class="text-sm sm:text-base text-muted-foreground mt-1">
                                         Go to <strong>Library</strong> and click the <strong>+ Add from
                                             CurseForge</strong> button.
                                         Search for mods, select your game version and loader (Forge, Fabric, etc.), and
@@ -138,14 +158,14 @@ const faqs = [
                             </div>
                         </div>
 
-                        <div class="p-6 rounded-xl border border-border bg-card/50">
-                            <div class="flex items-start gap-4">
+                        <div class="p-4 sm:p-6 rounded-xl border border-border bg-card/50">
+                            <div class="flex items-start gap-3 sm:gap-4">
                                 <div
-                                    class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                                    class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm sm:text-base flex-shrink-0">
                                     2</div>
                                 <div class="flex-1">
-                                    <h3 class="text-lg font-semibold">Create a Modpack</h3>
-                                    <p class="text-muted-foreground mt-1">
+                                    <h3 class="text-base sm:text-lg font-semibold">Create a Modpack</h3>
+                                    <p class="text-sm sm:text-base text-muted-foreground mt-1">
                                         Navigate to <strong>Modpacks</strong> and click <strong>+ New Modpack</strong>.
                                         Give it a name, select your Minecraft version and loader, then add mods from
                                         your library.
@@ -154,14 +174,14 @@ const faqs = [
                             </div>
                         </div>
 
-                        <div class="p-6 rounded-xl border border-border bg-card/50">
-                            <div class="flex items-start gap-4">
+                        <div class="p-4 sm:p-6 rounded-xl border border-border bg-card/50">
+                            <div class="flex items-start gap-3 sm:gap-4">
                                 <div
-                                    class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                                    class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm sm:text-base flex-shrink-0">
                                     3</div>
                                 <div class="flex-1">
-                                    <h3 class="text-lg font-semibold">Export & Play</h3>
-                                    <p class="text-muted-foreground mt-1">
+                                    <h3 class="text-base sm:text-lg font-semibold">Export & Play</h3>
+                                    <p class="text-sm sm:text-base text-muted-foreground mt-1">
                                         When your modpack is ready, use the <strong>Export</strong> button to create a
                                         file
                                         compatible with your favorite launcher (CurseForge App, Prism Launcher, etc.).

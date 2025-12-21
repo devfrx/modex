@@ -543,34 +543,39 @@ const moveDialogDescription = computed(() => {
           </div>
 
           <!-- Center: Quick Stats Cards -->
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1 sm:pb-0">
             <!-- Folders Card -->
-            <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-card border border-border">
-              <div class="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Folder class="w-4.5 h-4.5 text-amber-500" />
+            <div
+              class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl bg-card border border-border flex-shrink-0">
+              <div
+                class="w-7 h-7 sm:w-9 sm:h-9 rounded-md sm:rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Folder class="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-amber-500" />
               </div>
               <div>
-                <div class="text-lg font-semibold text-foreground leading-none">{{ folders.length }}</div>
-                <div class="text-[10px] text-muted-foreground mt-0.5">Folders</div>
+                <div class="text-base sm:text-lg font-semibold text-foreground leading-none">{{ folders.length }}</div>
+                <div class="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">Folders</div>
               </div>
             </div>
 
             <!-- Organized Card -->
-            <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-card border border-border">
-              <div class="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <FileStack class="w-4.5 h-4.5 text-emerald-500" />
+            <div
+              class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl bg-card border border-border flex-shrink-0">
+              <div
+                class="w-7 h-7 sm:w-9 sm:h-9 rounded-md sm:rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <FileStack class="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-emerald-500" />
               </div>
               <div>
-                <div class="text-lg font-semibold text-foreground leading-none flex items-center gap-1.5">
+                <div
+                  class="text-base sm:text-lg font-semibold text-foreground leading-none flex items-center gap-1 sm:gap-1.5">
                   {{ organizedMods }}
-                  <span class="text-xs font-normal text-muted-foreground">/ {{ totalMods }}</span>
+                  <span class="text-[10px] sm:text-xs font-normal text-muted-foreground">/ {{ totalMods }}</span>
                 </div>
-                <div class="text-[10px] text-muted-foreground mt-0.5">Organized</div>
+                <div class="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">Organized</div>
               </div>
             </div>
 
             <!-- Progress Ring -->
-            <div class="hidden sm:flex items-center gap-3 px-4 py-2.5 rounded-xl bg-card border border-border">
+            <div class="hidden md:flex items-center gap-3 px-4 py-2.5 rounded-xl bg-card border border-border">
               <div class="relative w-9 h-9">
                 <svg class="w-9 h-9 transform -rotate-90">
                   <circle cx="18" cy="18" r="14" stroke="currentColor" stroke-width="3" fill="none"

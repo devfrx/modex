@@ -1169,6 +1169,39 @@ onMounted(() => {
             </Button>
           </div>
         </div>
+
+        <!-- Mobile Search Bar -->
+        <div class="md:hidden px-3 pb-3">
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1">
+              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input v-model="searchQuery" placeholder="Search packs..."
+                class="w-full pl-8 pr-3 py-2 text-sm rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all" />
+            </div>
+            <button @click="showFilters = !showFilters"
+              class="relative flex items-center justify-center p-2 rounded-md transition-all" :class="showFilters || activeFilterCount > 0
+                ? 'bg-primary/20 text-primary'
+                : 'bg-muted/50 text-muted-foreground'">
+              <Filter class="w-4 h-4" />
+              <span v-if="activeFilterCount > 0"
+                class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                {{ activeFilterCount }}
+              </span>
+            </button>
+            <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
+              <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
+                title="Grid View">
+                <LayoutGrid class="w-3.5 h-3.5" />
+              </button>
+              <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
+                title="List View">
+                <List class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1215,71 +1248,78 @@ onMounted(() => {
     </div>
 
     <div v-else class="flex-1 flex overflow-hidden bg-background">
-      <!-- Filter Sidebar -->
+      <!-- Filter Sidebar / Mobile Overlay -->
       <Transition name="slide">
-        <div v-if="showFilters" class="w-64 shrink-0 border-r border-border bg-card/50 p-4 overflow-y-auto">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-sm">Filters</h3>
-            <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
-              <X class="w-4 h-4" />
-            </button>
-          </div>
+        <div v-if="showFilters" class="fixed md:relative inset-0 md:inset-auto z-40 md:z-auto md:w-64 shrink-0">
+          <!-- Mobile Backdrop -->
+          <div class="absolute inset-0 bg-black/50 md:hidden" @click="showFilters = false"></div>
 
-          <div class="space-y-4">
-            <!-- Source Filter -->
-            <div>
-              <label class="text-xs font-medium text-muted-foreground mb-2 block">Source</label>
-              <div class="space-y-1">
-                <button @click="sourceFilter = 'all'"
-                  class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
-                  :class="sourceFilter === 'all' ? 'bg-primary/20 text-primary' : 'hover:bg-muted'">
-                  <span class="w-2 h-2 rounded-full bg-muted-foreground"></span>
-                  All Sources
-                </button>
-                <button @click="sourceFilter = 'curseforge'"
-                  class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
-                  :class="sourceFilter === 'curseforge' ? 'bg-orange-500/20 text-orange-400' : 'hover:bg-muted'">
-                  <Flame class="w-3 h-3 text-orange-500" />
-                  CurseForge
-                </button>
-                <button @click="sourceFilter = 'local'"
-                  class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
-                  :class="sourceFilter === 'local' ? 'bg-blue-500/20 text-blue-400' : 'hover:bg-muted'">
-                  <Package class="w-3 h-3 text-blue-500" />
-                  Local
-                </button>
+          <!-- Filter Panel -->
+          <div
+            class="absolute md:relative right-0 top-0 bottom-0 w-72 md:w-full border-l md:border-l-0 md:border-r border-border bg-card p-4 overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-sm">Filters</h3>
+              <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+
+            <div class="space-y-4">
+              <!-- Source Filter -->
+              <div>
+                <label class="text-xs font-medium text-muted-foreground mb-2 block">Source</label>
+                <div class="space-y-1">
+                  <button @click="sourceFilter = 'all'"
+                    class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
+                    :class="sourceFilter === 'all' ? 'bg-primary/20 text-primary' : 'hover:bg-muted'">
+                    <span class="w-2 h-2 rounded-full bg-muted-foreground"></span>
+                    All Sources
+                  </button>
+                  <button @click="sourceFilter = 'curseforge'"
+                    class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
+                    :class="sourceFilter === 'curseforge' ? 'bg-orange-500/20 text-orange-400' : 'hover:bg-muted'">
+                    <Flame class="w-3 h-3 text-orange-500" />
+                    CurseForge
+                  </button>
+                  <button @click="sourceFilter = 'local'"
+                    class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
+                    :class="sourceFilter === 'local' ? 'bg-blue-500/20 text-blue-400' : 'hover:bg-muted'">
+                    <Package class="w-3 h-3 text-blue-500" />
+                    Local
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <!-- Loader Filter -->
-            <div>
-              <label class="text-xs font-medium text-muted-foreground mb-2 block">Mod Loader</label>
-              <select v-model="selectedLoader"
-                class="w-full px-3 py-2 text-xs rounded-md bg-muted border border-border focus:ring-1 focus:ring-primary outline-none">
-                <option value="all">All Loaders</option>
-                <option v-for="loader in loaderOptions" :key="loader" :value="loader" class="capitalize">
-                  {{ loader }}
-                </option>
-              </select>
-            </div>
+              <!-- Loader Filter -->
+              <div>
+                <label class="text-xs font-medium text-muted-foreground mb-2 block">Mod Loader</label>
+                <select v-model="selectedLoader"
+                  class="w-full px-3 py-2 text-xs rounded-md bg-muted border border-border focus:ring-1 focus:ring-primary outline-none">
+                  <option value="all">All Loaders</option>
+                  <option v-for="loader in loaderOptions" :key="loader" :value="loader" class="capitalize">
+                    {{ loader }}
+                  </option>
+                </select>
+              </div>
 
-            <!-- Game Version Filter -->
-            <div>
-              <label class="text-xs font-medium text-muted-foreground mb-2 block">Minecraft Version</label>
-              <select v-model="selectedGameVersion"
-                class="w-full px-3 py-2 text-xs rounded-md bg-muted border border-border focus:ring-1 focus:ring-primary outline-none">
-                <option value="all">All Versions</option>
-                <option v-for="version in gameVersionOptions" :key="version" :value="version">
-                  {{ version }}
-                </option>
-              </select>
-            </div>
+              <!-- Game Version Filter -->
+              <div>
+                <label class="text-xs font-medium text-muted-foreground mb-2 block">Minecraft Version</label>
+                <select v-model="selectedGameVersion"
+                  class="w-full px-3 py-2 text-xs rounded-md bg-muted border border-border focus:ring-1 focus:ring-primary outline-none">
+                  <option value="all">All Versions</option>
+                  <option v-for="version in gameVersionOptions" :key="version" :value="version">
+                    {{ version }}
+                  </option>
+                </select>
+              </div>
 
-            <!-- Clear Filters -->
-            <button v-if="activeFilterCount > 0" @click="clearFilters"
-              class="w-full px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all">
-              Clear All Filters
-            </button>
+              <!-- Clear Filters -->
+              <button v-if="activeFilterCount > 0" @click="clearFilters"
+                class="w-full px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all">
+                Clear All Filters
+              </button>
+            </div>
           </div>
         </div>
       </Transition>

@@ -264,8 +264,28 @@ onMounted(() => {
 
 <template>
   <div class="flex h-full bg-background text-foreground overflow-hidden">
-    <!-- Sidebar -->
-    <div class="w-64 flex-shrink-0 border-r border-border bg-card/30 flex flex-col">
+    <!-- Mobile Header -->
+    <div class="md:hidden fixed top-0 left-0 right-0 z-20 bg-card/95 backdrop-blur-sm border-b border-border">
+      <div class="flex items-center gap-3 p-3">
+        <SettingsIcon class="w-5 h-5 text-primary" />
+        <h1 class="text-lg font-bold">Settings</h1>
+      </div>
+      <!-- Mobile Tab Navigation -->
+      <div class="flex overflow-x-auto scrollbar-hide gap-1 px-2 pb-2">
+        <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id"
+          class="flex-shrink-0 px-3 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 text-sm font-medium whitespace-nowrap"
+          :class="currentTab === tab.id
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-muted/50'
+            ">
+          <component :is="tab.icon" class="w-4 h-4" />
+          <span class="hidden xs:inline">{{ tab.name }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Desktop Sidebar -->
+    <div class="hidden md:flex w-64 flex-shrink-0 border-r border-border bg-card/30 flex-col">
       <div class="p-6 pb-4">
         <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
           <SettingsIcon class="w-6 h-6 text-primary" />
@@ -302,10 +322,10 @@ onMounted(() => {
     </div>
 
     <!-- Content Area -->
-    <div class="flex-1 overflow-auto bg-background">
-      <div class="max-w-3xl mx-auto p-8">
-        <div class="mb-8">
-          <h2 class="text-2xl font-semibold tracking-tight">
+    <div class="flex-1 overflow-auto bg-background pt-24 md:pt-0">
+      <div class="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
+        <div class="mb-6 md:mb-8">
+          <h2 class="text-xl sm:text-2xl font-semibold tracking-tight">
             {{ currentTabName }}
           </h2>
           <p class="text-muted-foreground text-sm mt-1">
@@ -337,10 +357,10 @@ onMounted(() => {
                   <label class="text-sm font-medium flex items-center gap-2">
                     CurseForge API Key
                   </label>
-                  <div class="flex gap-2">
+                  <div class="flex flex-col sm:flex-row gap-2">
                     <Input v-model="cfApiKey" type="password" placeholder="Enter your API Key (Optional)"
                       class="flex-1" />
-                    <Button variant="outline" @click="saveCfApiKey">Save</Button>
+                    <Button variant="outline" @click="saveCfApiKey" class="w-full sm:w-auto">Save</Button>
                   </div>
                   <p class="text-xs text-muted-foreground">
                     Leave empty to use the built-in shared key. Required only
@@ -357,15 +377,16 @@ onMounted(() => {
               <RefreshCw class="w-4 h-4 text-primary" />
               Updates
             </h3>
-            <div class="p-5 rounded-xl border border-border bg-card/50">
-              <div class="flex items-center justify-between">
+            <div class="p-4 sm:p-5 rounded-xl border border-border bg-card/50">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
                 <div>
                   <div class="font-medium">Application Updates</div>
                   <div class="text-sm text-muted-foreground">
                     Check for the latest version of ModEx
                   </div>
                 </div>
-                <Button variant="outline" @click="checkForAppUpdates" :disabled="isCheckingUpdate" class="gap-2">
+                <Button variant="outline" @click="checkForAppUpdates" :disabled="isCheckingUpdate"
+                  class="gap-2 w-full sm:w-auto">
                   <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingUpdate }" />
                   {{ isCheckingUpdate ? "Checking..." : "Check Now" }}
                 </Button>
@@ -379,9 +400,9 @@ onMounted(() => {
               <RefreshCw class="w-4 h-4 text-primary" />
               Instance Sync
             </h3>
-            <div class="p-5 rounded-xl border border-border bg-card/50 space-y-5">
+            <div class="p-4 sm:p-5 rounded-xl border border-border bg-card/50 space-y-5">
               <!-- Auto Sync Before Launch -->
-              <div class="flex items-center justify-between">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                 <div>
                   <div class="font-medium">Auto-sync before launch</div>
                   <div class="text-sm text-muted-foreground">
@@ -390,7 +411,7 @@ onMounted(() => {
                 </div>
                 <button
                   @click="syncSettings.autoSyncBeforeLaunch = !syncSettings.autoSyncBeforeLaunch; saveSyncSettings()"
-                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 flex-shrink-0"
                   :class="syncSettings.autoSyncBeforeLaunch ? 'bg-primary' : 'bg-muted'">
                   <span
                     class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
@@ -399,7 +420,7 @@ onMounted(() => {
               </div>
 
               <!-- Show Confirmation -->
-              <div class="flex items-center justify-between">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                 <div>
                   <div class="font-medium">Show confirmation dialog</div>
                   <div class="text-sm text-muted-foreground">
@@ -408,7 +429,7 @@ onMounted(() => {
                 </div>
                 <button
                   @click="syncSettings.showSyncConfirmation = !syncSettings.showSyncConfirmation; saveSyncSettings()"
-                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 flex-shrink-0"
                   :class="syncSettings.showSyncConfirmation ? 'bg-primary' : 'bg-muted'">
                   <span
                     class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
@@ -424,7 +445,7 @@ onMounted(() => {
                     How to handle config files during sync
                   </div>
                 </div>
-                <div class="flex gap-2 pt-1">
+                <div class="flex flex-wrap gap-2 pt-1">
                   <button @click="syncSettings.defaultConfigSyncMode = 'new_only'; saveSyncSettings()"
                     class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border" :class="syncSettings.defaultConfigSyncMode === 'new_only'
                       ? 'bg-primary/20 border-primary text-primary'
@@ -621,17 +642,17 @@ onMounted(() => {
               </Button>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
               <div
-                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
-                <div class="text-3xl font-bold text-primary">
+                class="p-4 sm:p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-primary">
                   {{ modCount }}
                 </div>
                 <div class="text-sm text-muted-foreground mt-1">Total Mods</div>
               </div>
               <div
-                class="p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
-                <div class="text-3xl font-bold text-primary">
+                class="p-4 sm:p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-primary">
                   {{ modpackCount }}
                 </div>
                 <div class="text-sm text-muted-foreground mt-1">Modpacks</div>
@@ -665,8 +686,8 @@ onMounted(() => {
               <AlertTriangle class="w-4 h-4" />
               Danger Zone
             </h3>
-            <div class="p-5 rounded-xl border border-destructive/30 bg-destructive/5">
-              <div class="flex items-center justify-between">
+            <div class="p-4 sm:p-5 rounded-xl border border-destructive/30 bg-destructive/5">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
                 <div>
                   <div class="font-medium text-destructive">Clear All Data</div>
                   <div class="text-sm text-muted-foreground">
@@ -674,7 +695,7 @@ onMounted(() => {
                     undone.
                   </div>
                 </div>
-                <Button variant="destructive" @click="clearAllData" :disabled="isClearingData">
+                <Button variant="destructive" @click="clearAllData" :disabled="isClearingData" class="w-full sm:w-auto">
                   <Trash2 class="w-4 h-4 mr-2" />
                   {{ isClearingData ? "Clearing..." : "Clear All Data" }}
                 </Button>
@@ -717,13 +738,14 @@ onMounted(() => {
               </div>
 
               <!-- Collapsed Mode -->
-              <div class="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border">
-                <div>
+              <div
+                class="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg bg-muted/50 border border-border">
+                <div class="flex-1">
                   <p class="font-medium">Collapsed Mode</p>
                   <p class="text-sm text-muted-foreground">Show only icons in sidebar</p>
                 </div>
                 <button @click="setCollapsed(!sidebarSettings.collapsed)"
-                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0"
                   :class="sidebarSettings.collapsed ? 'bg-primary' : 'bg-muted'">
                   <span class="inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform"
                     :class="sidebarSettings.collapsed ? 'translate-x-6' : 'translate-x-1'" />
@@ -758,14 +780,14 @@ onMounted(() => {
           </section>
 
           <section class="space-y-4">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
               <div>
                 <h3 class="text-lg font-medium">Reset Sidebar</h3>
                 <p class="text-sm text-muted-foreground">
                   Restore sidebar to default settings
                 </p>
               </div>
-              <Button variant="outline" @click="resetSidebarSettings">
+              <Button variant="outline" @click="resetSidebarSettings" class="w-full sm:w-auto">
                 <RotateCcw class="w-4 h-4 mr-2" />
                 Reset to Default
               </Button>
@@ -796,28 +818,29 @@ onMounted(() => {
 
         <!-- About Tab -->
         <div v-if="currentTab === 'about'" class="space-y-8">
-          <div class="flex flex-col items-center justify-center py-12 text-center space-y-6">
-            <div class="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center mb-4">
-              <span class="text-5xl font-bold text-primary">M</span>
+          <div class="flex flex-col items-center justify-center py-8 sm:py-12 text-center space-y-4 sm:space-y-6">
+            <div
+              class="w-20 h-20 sm:w-24 sm:h-24 bg-primary/10 rounded-2xl sm:rounded-3xl flex items-center justify-center mb-2 sm:mb-4">
+              <span class="text-4xl sm:text-5xl font-bold text-primary">M</span>
             </div>
 
             <div>
-              <h2 class="text-3xl font-bold tracking-tight">ModEx</h2>
-              <p class="text-muted-foreground mt-2 text-lg">
+              <h2 class="text-2xl sm:text-3xl font-bold tracking-tight">ModEx</h2>
+              <p class="text-muted-foreground mt-2 text-base sm:text-lg">
                 The modern Minecraft mod manager
               </p>
             </div>
 
-            <div class="flex gap-4 mt-4">
-              <div class="px-4 py-2 rounded-full bg-muted text-sm font-medium">
+            <div class="flex flex-wrap justify-center gap-2 sm:gap-4 mt-4">
+              <div class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-muted text-xs sm:text-sm font-medium">
                 v{{ appVersion }}
               </div>
-              <div class="px-4 py-2 rounded-full bg-muted text-sm font-medium">
+              <div class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-muted text-xs sm:text-sm font-medium">
                 Electron + Vue 3
               </div>
             </div>
 
-            <div class="pt-8 text-sm text-muted-foreground">
+            <div class="pt-6 sm:pt-8 text-sm text-muted-foreground">
               <p class="flex items-center justify-center gap-1">
                 Made with
                 <Heart class="w-4 h-4 text-red-500 fill-red-500" /> for the

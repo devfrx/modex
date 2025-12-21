@@ -116,21 +116,21 @@ onMounted(loadData);
                 </div>
 
                 <!-- Hero Content -->
-                <div class="relative z-10 text-center px-6 max-w-5xl mx-auto">
+                <div class="relative z-10 text-center px-4 sm:px-6 max-w-5xl mx-auto">
                     <!-- Logo/Brand -->
-                    <div class="mb-8 flex justify-center">
+                    <div class="mb-6 sm:mb-8 flex justify-center">
                         <div class="relative">
                             <div
-                                class="absolute inset-0 bg-gradient-to-r from-primary to-purple-500 rounded-3xl blur-xl opacity-50 animate-pulse" />
+                                class="absolute inset-0 bg-gradient-to-r from-primary to-purple-500 rounded-2xl sm:rounded-3xl blur-xl opacity-50 animate-pulse" />
                             <div
-                                class="relative p-5 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 backdrop-blur-xl">
-                                <Box class="w-12 h-12 text-primary" />
+                                class="relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 backdrop-blur-xl">
+                                <Box class="w-10 h-10 sm:w-12 sm:h-12 text-primary" />
                             </div>
                         </div>
                     </div>
 
                     <!-- Headline -->
-                    <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
+                    <h1 class="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight mb-4 sm:mb-6">
                         <span class="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
                             Welcome to
                         </span>
@@ -142,40 +142,43 @@ onMounted(loadData);
                     </h1>
 
                     <!-- Subtitle -->
-                    <p class="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
+                    <p
+                        class="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 sm:mb-10 leading-relaxed px-2">
                         The ultimate Minecraft mod manager. Organize, discover, and play with your modpacks like never
                         before.
                     </p>
 
                     <!-- CTA Buttons -->
-                    <div class="flex flex-wrap items-center justify-center gap-4 mb-16">
+                    <div
+                        class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-12 sm:mb-16 px-4">
                         <Button size="lg" @click="navigate('/modpacks')"
-                            class="gap-2 px-8 h-14 text-base bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-500 border-0 shadow-xl shadow-primary/25">
+                            class="gap-2 px-6 sm:px-8 h-12 sm:h-14 text-sm sm:text-base w-full sm:w-auto bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-500 border-0 shadow-xl shadow-primary/25">
                             <Play class="w-5 h-5" />
                             Get Started
                         </Button>
                         <Button variant="outline" size="lg" @click="navigate('/modpacks?create=true')"
-                            class="gap-2 px-8 h-14 text-base border-white/20 hover:bg-white/5">
+                            class="gap-2 px-6 sm:px-8 h-12 sm:h-14 text-sm sm:text-base w-full sm:w-auto border-white/20 hover:bg-white/5">
                             <Plus class="w-5 h-5" />
                             Create Modpack
                         </Button>
                     </div>
 
                     <!-- Stats Row -->
-                    <div class="flex items-center justify-center gap-8 sm:gap-16">
+                    <div class="flex items-center justify-center gap-4 sm:gap-8 md:gap-16">
                         <div class="text-center">
-                            <p class="text-3xl sm:text-4xl font-bold text-primary">{{ modpacks.length }}</p>
-                            <p class="text-sm text-muted-foreground mt-1">Modpacks</p>
+                            <p class="text-2xl sm:text-3xl md:text-4xl font-bold text-primary">{{ modpacks.length }}</p>
+                            <p class="text-xs sm:text-sm text-muted-foreground mt-1">Modpacks</p>
                         </div>
-                        <div class="w-px h-12 bg-border" />
+                        <div class="w-px h-8 sm:h-12 bg-border" />
                         <div class="text-center">
-                            <p class="text-3xl sm:text-4xl font-bold text-purple-400">{{ totalMods }}</p>
-                            <p class="text-sm text-muted-foreground mt-1">Total Mods</p>
+                            <p class="text-2xl sm:text-3xl md:text-4xl font-bold text-purple-400">{{ totalMods }}</p>
+                            <p class="text-xs sm:text-sm text-muted-foreground mt-1">Total Mods</p>
                         </div>
-                        <div class="w-px h-12 bg-border" />
+                        <div class="w-px h-8 sm:h-12 bg-border" />
                         <div class="text-center">
-                            <p class="text-3xl sm:text-4xl font-bold text-blue-400">{{ formatSize(totalSize) }}</p>
-                            <p class="text-sm text-muted-foreground mt-1">Library Size</p>
+                            <p class="text-2xl sm:text-3xl md:text-4xl font-bold text-blue-400">{{ formatSize(totalSize)
+                                }}</p>
+                            <p class="text-xs sm:text-sm text-muted-foreground mt-1">Library</p>
                         </div>
                     </div>
                 </div>

@@ -1485,143 +1485,150 @@ onMounted(() => {
     </div>
 
     <div v-else class="flex-1 flex overflow-hidden bg-background">
-      <!-- Filter Sidebar (inline like ModpackView) -->
+      <!-- Filter Sidebar (inline like ModpackView) / Mobile Overlay -->
       <Transition name="slide">
-        <div v-if="showFilters" class="w-64 shrink-0 border-r border-border bg-card/50 p-4 overflow-y-auto">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-sm flex items-center gap-2">
-              <Filter class="w-4 h-4" />
-              Filters
-            </h3>
-            <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
-              <X class="w-4 h-4" />
-            </button>
-          </div>
+        <div v-if="showFilters" class="fixed md:relative inset-0 md:inset-auto z-40 md:z-auto md:w-64 shrink-0">
+          <!-- Mobile Backdrop -->
+          <div class="absolute inset-0 bg-black/50 md:hidden" @click="showFilters = false"></div>
 
-          <div class="space-y-4">
-            <!-- (Search Field moved to toolbar) -->
+          <!-- Filter Panel -->
+          <div
+            class="absolute md:relative right-0 top-0 bottom-0 w-72 md:w-full border-l md:border-l-0 md:border-r border-border bg-card p-4 overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-sm flex items-center gap-2">
+                <Filter class="w-4 h-4" />
+                Filters
+              </h3>
+              <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
 
-            <!-- Content Type -->
-            <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Type</label>
-              <div class="grid grid-cols-2 gap-2">
-                <button v-for="type in ['all', 'mod', 'resourcepack', 'shader']" :key="type"
-                  class="px-3 py-2 rounded-md text-sm border transition-all text-left flex items-center gap-2 capitalize"
-                  :class="type === 'all'
-                    ? selectedContentType === 'all'
+            <div class="space-y-4">
+              <!-- (Search Field moved to toolbar) -->
+
+              <!-- Content Type -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Type</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button v-for="type in ['all', 'mod', 'resourcepack', 'shader']" :key="type"
+                    class="px-3 py-2 rounded-md text-sm border transition-all text-left flex items-center gap-2 capitalize"
+                    :class="type === 'all'
+                      ? selectedContentType === 'all'
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'bg-card border-border hover:border-primary/50'
+                      : type === 'mod'
+                        ? selectedContentType === 'mod'
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
+                          : 'bg-card border-border hover:border-emerald-500/30 text-muted-foreground'
+                        : type === 'resourcepack'
+                          ? selectedContentType === 'resourcepack'
+                            ? 'bg-blue-500/10 border-blue-500 text-blue-400'
+                            : 'bg-card border-border hover:border-blue-500/30 text-muted-foreground'
+                          : selectedContentType === 'shader'
+                            ? 'bg-pink-500/10 border-pink-500 text-pink-400'
+                            : 'bg-card border-border hover:border-pink-500/30 text-muted-foreground'
+                      " @click="setContentType(type)">
+                    <span class="w-4 h-4 flex items-center justify-center text-sm">
+                      <template v-if="type === 'mod'">
+                        <Layers class="w-3 h-3" />
+                      </template>
+                      <template v-else-if="type === 'resourcepack'">
+                        <Image class="w-3 h-3" />
+                      </template>
+                      <template v-else-if="type === 'shader'">
+                        <Sparkles class="w-3 h-3" />
+                      </template>
+                      <template v-else>
+                        <Layers class="w-3 h-3" />
+                      </template>
+                    </span>
+                    <span class="truncate">{{
+                      type === "resourcepack"
+                        ? "Resource Pack"
+                        : type === "all"
+                          ? "All"
+                          : type
+                    }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Game Version -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Game Version</label>
+                <select v-model="selectedGameVersion"
+                  class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                  <option value="all">All Versions</option>
+                  <option v-for="v in gameVersions" :key="v" :value="v">
+                    {{ v }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Loader -->
+              <div class="space-y-2" v-if="
+                selectedContentType === 'all' || selectedContentType === 'mod'
+              ">
+                <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mod Loader</label>
+                <select v-model="selectedLoader"
+                  class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                  <option value="all">All Loaders</option>
+                  <option v-for="loader in loaders" :key="loader" :value="loader">
+                    {{ loader }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Modpack Status -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Modpack Status</label>
+                <select v-model="modpackFilter"
+                  class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                  <option value="all">All Mods</option>
+                  <option value="any">In Any Modpack</option>
+                  <option value="none">Unused</option>
+                  <optgroup v-if="modpacks.length > 0" label="Specific Modpack">
+                    <option v-for="pack in modpacks" :key="pack.id" :value="pack.id">
+                      {{ pack.name }}
+                    </option>
+                  </optgroup>
+                </select>
+              </div>
+
+              <!-- Sorting -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort By</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button v-for="field in sortFields" :key="field"
+                    class="px-3 py-2 rounded-md text-sm border transition-all text-left capitalize flex items-center justify-between"
+                    :class="sortBy === field
                       ? 'bg-primary/10 border-primary text-primary'
                       : 'bg-card border-border hover:border-primary/50'
-                    : type === 'mod'
-                      ? selectedContentType === 'mod'
-                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-                        : 'bg-card border-border hover:border-emerald-500/30 text-muted-foreground'
-                      : type === 'resourcepack'
-                        ? selectedContentType === 'resourcepack'
-                          ? 'bg-blue-500/10 border-blue-500 text-blue-400'
-                          : 'bg-card border-border hover:border-blue-500/30 text-muted-foreground'
-                        : selectedContentType === 'shader'
-                          ? 'bg-pink-500/10 border-pink-500 text-pink-400'
-                          : 'bg-card border-border hover:border-pink-500/30 text-muted-foreground'
-                    " @click="setContentType(type)">
-                  <span class="w-4 h-4 flex items-center justify-center text-sm">
-                    <template v-if="type === 'mod'">
-                      <Layers class="w-3 h-3" />
-                    </template>
-                    <template v-else-if="type === 'resourcepack'">
-                      <Image class="w-3 h-3" />
-                    </template>
-                    <template v-else-if="type === 'shader'">
-                      <Sparkles class="w-3 h-3" />
-                    </template>
-                    <template v-else>
-                      <Layers class="w-3 h-3" />
-                    </template>
-                  </span>
-                  <span class="truncate">{{
-                    type === "resourcepack"
-                      ? "Resource Pack"
-                      : type === "all"
-                        ? "All"
-                        : type
-                  }}</span>
-                </button>
+                      " @click="toggleSort(field)">
+                    {{ field === "created_at" ? "Date" : field }}
+                    <span v-if="sortBy === field" class="text-xs opacity-70">{{
+                      sortDir === "asc" ? "↑" : "↓"
+                      }}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <!-- Game Version -->
-            <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Game Version</label>
-              <select v-model="selectedGameVersion"
-                class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                <option value="all">All Versions</option>
-                <option v-for="v in gameVersions" :key="v" :value="v">
-                  {{ v }}
-                </option>
-              </select>
+            <div class="p-4 border-t border-border bg-muted/20 mt-auto">
+              <button
+                class="w-full px-3 py-2 text-sm rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all"
+                @click="
+                  selectedLoader = 'all';
+                selectedGameVersion = 'all';
+                selectedContentType = 'all';
+                modpackFilter = 'all';
+                searchField = 'all';
+                searchQuery = '';
+                ">
+                Clear All Filters
+              </button>
             </div>
-
-            <!-- Loader -->
-            <div class="space-y-2" v-if="
-              selectedContentType === 'all' || selectedContentType === 'mod'
-            ">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mod Loader</label>
-              <select v-model="selectedLoader"
-                class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                <option value="all">All Loaders</option>
-                <option v-for="loader in loaders" :key="loader" :value="loader">
-                  {{ loader }}
-                </option>
-              </select>
-            </div>
-
-            <!-- Modpack Status -->
-            <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Modpack Status</label>
-              <select v-model="modpackFilter"
-                class="w-full h-9 rounded-md border border-border bg-muted/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                <option value="all">All Mods</option>
-                <option value="any">In Any Modpack</option>
-                <option value="none">Unused</option>
-                <optgroup v-if="modpacks.length > 0" label="Specific Modpack">
-                  <option v-for="pack in modpacks" :key="pack.id" :value="pack.id">
-                    {{ pack.name }}
-                  </option>
-                </optgroup>
-              </select>
-            </div>
-
-            <!-- Sorting -->
-            <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort By</label>
-              <div class="grid grid-cols-2 gap-2">
-                <button v-for="field in sortFields" :key="field"
-                  class="px-3 py-2 rounded-md text-sm border transition-all text-left capitalize flex items-center justify-between"
-                  :class="sortBy === field
-                    ? 'bg-primary/10 border-primary text-primary'
-                    : 'bg-card border-border hover:border-primary/50'
-                    " @click="toggleSort(field)">
-                  {{ field === "created_at" ? "Date" : field }}
-                  <span v-if="sortBy === field" class="text-xs opacity-70">{{
-                    sortDir === "asc" ? "↑" : "↓"
-                  }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="p-4 border-t border-border bg-muted/20 mt-auto">
-            <button
-              class="w-full px-3 py-2 text-sm rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all"
-              @click="
-                selectedLoader = 'all';
-              selectedGameVersion = 'all';
-              selectedContentType = 'all';
-              modpackFilter = 'all';
-              searchField = 'all';
-              searchQuery = '';
-              ">
-              Clear All Filters
-            </button>
           </div>
         </div>
       </Transition>

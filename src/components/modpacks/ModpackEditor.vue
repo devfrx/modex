@@ -2090,9 +2090,9 @@ watch(
 
 <template>
   <div v-if="isOpen"
-    class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+    class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6 animate-in fade-in duration-200">
     <div
-      class="bg-background border border-border/50 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      class="bg-background border border-border/50 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-6xl h-[95vh] sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
 
       <!-- Modern Header with Hero Style -->
       <div class="shrink-0 relative overflow-hidden">
@@ -2105,12 +2105,12 @@ watch(
         <!-- Content -->
         <div class="relative">
           <!-- Top Bar -->
-          <div class="px-6 py-4 flex items-start gap-5">
+          <div class="px-3 sm:px-6 py-3 sm:py-4 flex items-start gap-3 sm:gap-5">
             <!-- Pack Info with larger thumbnail -->
-            <div class="flex items-start gap-4 min-w-0 flex-1">
-              <!-- Thumbnail - Larger -->
+            <div class="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+              <!-- Thumbnail - Responsive size -->
               <div v-if="modpack?.image_url"
-                class="w-16 h-16 rounded-xl overflow-hidden ring-2 ring-white/10 shadow-lg shrink-0">
+                class="w-12 h-12 sm:w-16 sm:h-16 rounded-lg sm:rounded-xl overflow-hidden ring-2 ring-white/10 shadow-lg shrink-0">
                 <img :src="modpack.image_url.startsWith('http') ||
                   modpack.image_url.startsWith('file:')
                   ? modpack.image_url
@@ -2118,22 +2118,22 @@ watch(
                   " class="w-full h-full object-cover" />
               </div>
               <div v-else
-                class="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center ring-2 ring-white/10 shadow-lg shrink-0">
-                <Package class="w-8 h-8 text-primary" />
+                class="w-12 h-12 sm:w-16 sm:h-16 rounded-lg sm:rounded-xl bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center ring-2 ring-white/10 shadow-lg shrink-0">
+                <Package class="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
               </div>
 
               <!-- Name & Meta -->
-              <div class="min-w-0 flex-1 py-1">
-                <div class="flex items-center gap-3 mb-2">
-                  <h2 class="text-xl font-bold truncate text-foreground">
+              <div class="min-w-0 flex-1 py-0.5 sm:py-1">
+                <div class="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+                  <h2 class="text-base sm:text-xl font-bold truncate text-foreground">
                     {{ modpack?.name || "Loading..." }}
                   </h2>
                   <span v-if="modpack?.version"
-                    class="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
+                    class="hidden sm:inline text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
                     v{{ modpack.version }}
                   </span>
                   <span v-if="modpack?.remote_source?.url"
-                    class="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
+                    class="hidden sm:inline px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 text-[10px] font-medium border border-purple-500/20 flex items-center gap-1"
                     title="This modpack is linked to a remote source">
                     <Share2 class="w-3 h-3" />
                     Linked
@@ -2141,103 +2141,110 @@ watch(
                 </div>
 
                 <!-- Stats Row -->
-                <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
                   <div v-if="modpack?.minecraft_version"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
-                    <span class="text-xs font-medium text-emerald-400">{{ modpack.minecraft_version }}</span>
+                    class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500"></div>
+                    <span class="text-[10px] sm:text-xs font-medium text-emerald-400">{{ modpack.minecraft_version
+                      }}</span>
                   </div>
                   <div v-if="modpack?.loader"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <div class="w-2 h-2 rounded-full bg-blue-500"></div>
-                    <span class="text-xs font-medium text-blue-400 capitalize">{{ modpack.loader }}</span>
+                    class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500"></div>
+                    <span class="text-[10px] sm:text-xs font-medium text-blue-400 capitalize">{{ modpack.loader
+                      }}</span>
                   </div>
-                  <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 border border-border/50">
-                    <Layers class="w-3.5 h-3.5 text-muted-foreground" />
-                    <span class="text-xs font-medium text-muted-foreground">{{ currentMods.length }} mods</span>
+                  <div
+                    class="hidden xs:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-muted/50 border border-border/50">
+                    <Layers class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground" />
+                    <span class="text-[10px] sm:text-xs font-medium text-muted-foreground">{{ currentMods.length }}
+                      mods</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- Actions - Vertical Stack Style -->
-            <div class="flex items-center gap-2 shrink-0">
-              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg" @click="selectImage"
+            <!-- Actions - Responsive -->
+            <div class="flex items-center gap-1 sm:gap-2 shrink-0">
+              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-lg" @click="selectImage"
                 title="Set cover image">
                 <ImagePlus class="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg" :disabled="isCheckingAllUpdates"
-                title="Check for mod updates" @click="checkAllUpdates">
+              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-lg"
+                :disabled="isCheckingAllUpdates" title="Check for mod updates" @click="checkAllUpdates">
                 <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingAllUpdates }" />
               </Button>
-              <div class="w-px h-6 bg-border/50 mx-1"></div>
-              <Button variant="outline" size="sm" class="h-9 px-3 gap-2 rounded-lg" @click="$emit('export')">
+              <div class="hidden sm:block w-px h-6 bg-border/50 mx-1"></div>
+              <Button variant="outline" size="sm" class="hidden md:flex h-9 px-3 gap-2 rounded-lg"
+                @click="$emit('export')">
                 <Download class="w-4 h-4" />
                 <span>Export</span>
               </Button>
-              <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-lg hover:bg-red-500/10 hover:text-red-400"
+              <Button variant="ghost" size="sm"
+                class="h-8 w-8 sm:h-9 sm:w-9 p-0 rounded-lg hover:bg-red-500/10 hover:text-red-400"
                 @click="$emit('close')">
-                <X class="w-5 h-5" />
+                <X class="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </div>
           </div>
 
           <!-- Remote Update Banner -->
-          <div v-if="updateResult?.hasUpdate" class="px-6 pb-4">
+          <div v-if="updateResult?.hasUpdate" class="px-3 sm:px-6 pb-3 sm:pb-4">
             <UpdateAvailableBanner :current-version="modpack?.version || 'unknown'" :new-version="updateResult.remoteManifest?.modpack.version || 'unknown'
               " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
           </div>
 
-          <!-- Tab Navigation - Modern Segment Style -->
-          <div class="px-6 pb-4">
-            <div class="flex items-center gap-1 p-1 rounded-xl bg-muted/30 border border-border/30 w-fit">
+          <!-- Tab Navigation - Scrollable on mobile -->
+          <div class="px-3 sm:px-6 pb-3 sm:pb-4 overflow-x-auto scrollbar-hide">
+            <div
+              class="flex items-center gap-1 p-1 rounded-xl bg-muted/30 border border-border/30 w-fit min-w-full sm:min-w-0">
               <!-- Play Tab - Primary action -->
               <button class="tab-pill"
                 :class="activeTab === 'play' ? 'tab-pill-active tab-pill-play' : 'tab-pill-inactive'"
                 @click="activeTab = 'play'">
                 <Play class="w-4 h-4" />
-                <span>Play</span>
+                <span class="hidden xs:inline">Play</span>
                 <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
               </button>
               <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'mods'">
                 <Layers class="w-4 h-4" />
-                <span>Resources</span>
+                <span class="hidden xs:inline">Resources</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'discover' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'discover'">
                 <Sparkles class="w-4 h-4" />
-                <span>Discover</span>
+                <span class="hidden sm:inline">Discover</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'configs'">
                 <FileCode class="w-4 h-4" />
-                <span>Configs</span>
+                <span class="hidden sm:inline">Configs</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'health'">
                 <AlertCircle class="w-4 h-4" />
-                <span>Health</span>
+                <span class="hidden md:inline">Health</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'versions' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'versions'">
                 <GitBranch class="w-4 h-4" />
-                <span>History</span>
+                <span class="hidden md:inline">History</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'profiles' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'profiles'">
                 <Users class="w-4 h-4" />
-                <span>Profiles</span>
+                <span class="hidden lg:inline">Profiles</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'remote'">
                 <Globe class="w-4 h-4" />
-                <span>Remote</span>
+                <span class="hidden lg:inline">Remote</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'settings'">
                 <Settings class="w-4 h-4" />
-                <span>Settings</span>
+                <span class="hidden lg:inline">Settings</span>
               </button>
             </div>
           </div>
@@ -2249,23 +2256,23 @@ watch(
         </div>
       </div>
 
-      <!-- Help Guide Banner (collapsible) -->
-      <div class="shrink-0 border-b border-border/30">
+      <!-- Help Guide Banner (collapsible) - Hidden on mobile -->
+      <div class="hidden sm:block shrink-0 border-b border-border/30">
         <!-- Help Toggle Button -->
         <button @click="showHelp = !showHelp"
-          class="w-full px-6 py-2 flex items-center justify-between text-sm hover:bg-muted/30 transition-colors">
+          class="w-full px-3 sm:px-6 py-2 flex items-center justify-between text-sm hover:bg-muted/30 transition-colors">
           <div class="flex items-center gap-2">
             <HelpCircle class="w-4 h-4 text-primary" />
             <span class="text-muted-foreground">
               <span class="font-medium text-foreground">Need help?</span>
-              Click to see how to use this section
+              <span class="hidden sm:inline"> Click to see how to use this section</span>
             </span>
           </div>
           <ChevronDown :class="['w-4 h-4 text-muted-foreground transition-transform', showHelp && 'rotate-180']" />
         </button>
 
         <!-- Help Content (expanded) -->
-        <div v-if="showHelp" class="px-6 pb-4 pt-2 bg-muted/20 border-t border-border/20">
+        <div v-if="showHelp" class="px-3 sm:px-6 pb-4 pt-2 bg-muted/20 border-t border-border/20">
           <!-- Play Tab Help -->
           <div v-if="activeTab === 'play'" class="help-content">
             <div class="flex items-start gap-3">

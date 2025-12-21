@@ -420,61 +420,66 @@ onMounted(() => {
     </div>
 
     <!-- Content -->
-    <div v-else class="flex-1 overflow-auto px-6 py-6 sm:px-8">
-      <div class="max-w-[1600px] mx-auto space-y-6">
+    <div v-else class="flex-1 overflow-auto px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div class="max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
         <!-- Summary Cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
           <div
-            class="group p-5 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300">
+            class="group p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300">
             <div class="flex items-start justify-between">
-              <div class="p-2 rounded-xl bg-emerald-500/20">
-                <Layers class="w-5 h-5 text-emerald-500" />
+              <div class="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-emerald-500/20">
+                <Layers class="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
               </div>
-              <ArrowUpRight class="w-4 h-4 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ArrowUpRight
+                class="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <p class="text-3xl font-bold text-emerald-500 mt-3">{{ animatedTotalMods }}</p>
-            <p class="text-sm text-muted-foreground mt-1">Total Items</p>
+            <p class="text-xl sm:text-3xl font-bold text-emerald-500 mt-2 sm:mt-3">{{ animatedTotalMods }}</p>
+            <p class="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">Total Items</p>
           </div>
 
           <div
-            class="group p-5 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-blue-500/5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300">
+            class="group p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-blue-500/5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300">
             <div class="flex items-start justify-between">
-              <div class="p-2 rounded-xl bg-blue-500/20">
-                <Package class="w-5 h-5 text-blue-500" />
+              <div class="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-blue-500/20">
+                <Package class="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
               </div>
-              <ArrowUpRight class="w-4 h-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ArrowUpRight
+                class="w-3 h-3 sm:w-4 sm:h-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <p class="text-3xl font-bold text-blue-500 mt-3">{{ animatedTotalModpacks }}</p>
-            <p class="text-sm text-muted-foreground mt-1">Modpacks</p>
+            <p class="text-xl sm:text-3xl font-bold text-blue-500 mt-2 sm:mt-3">{{ animatedTotalModpacks }}</p>
+            <p class="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">Modpacks</p>
           </div>
 
           <div
-            class="group p-5 rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5 hover:border-purple-500/40 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-300">
+            class="group p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5 hover:border-purple-500/40 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-300">
             <div class="flex items-start justify-between">
-              <div class="p-2 rounded-xl bg-purple-500/20">
-                <HardDrive class="w-5 h-5 text-purple-500" />
+              <div class="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-purple-500/20">
+                <HardDrive class="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
               </div>
-              <ArrowUpRight class="w-4 h-4 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ArrowUpRight
+                class="w-3 h-3 sm:w-4 sm:h-4 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <p class="text-3xl font-bold text-purple-500 mt-3">{{ formatSize(animatedTotalSize) }}</p>
-            <p class="text-sm text-muted-foreground mt-1">Library Size</p>
+            <p class="text-xl sm:text-3xl font-bold text-purple-500 mt-2 sm:mt-3">{{ formatSize(animatedTotalSize) }}
+            </p>
+            <p class="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">Library Size</p>
           </div>
 
           <div
-            class="group p-5 rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-orange-500/5 hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/10 transition-all duration-300">
+            class="group p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/10 to-orange-500/5 hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/10 transition-all duration-300">
             <div class="flex items-start justify-between">
-              <div class="p-2 rounded-xl bg-orange-500/20">
-                <Target class="w-5 h-5 text-orange-500" />
+              <div class="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-orange-500/20">
+                <Target class="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
               </div>
-              <ArrowUpRight class="w-4 h-4 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ArrowUpRight
+                class="w-3 h-3 sm:w-4 sm:h-4 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <p class="text-3xl font-bold text-orange-500 mt-3">{{ animatedLoaders }}</p>
-            <p class="text-sm text-muted-foreground mt-1">Loaders Used</p>
+            <p class="text-xl sm:text-3xl font-bold text-orange-500 mt-2 sm:mt-3">{{ animatedLoaders }}</p>
+            <p class="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">Loaders Used</p>
           </div>
         </div>
 
         <!-- Charts Grid -->
-        <div v-if="visibleChartCount > 0" class="grid lg:grid-cols-2 gap-6">
+        <div v-if="visibleChartCount > 0" class="grid md:grid-cols-2 gap-4 sm:gap-6">
           <!-- Loader Distribution -->
           <ChartCard v-if="chartVisibility.loader" title="Mods by Loader" :icon="PieChart"
             :chart-types="chartTypes.loader" :data="loaderChartData" :colors="customColors"

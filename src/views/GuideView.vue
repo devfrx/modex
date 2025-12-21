@@ -300,6 +300,34 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
+                                <Zap class="w-4 h-4 text-primary" />
+                                Modpack Analysis
+                            </h3>
+                            <p class="text-sm text-muted-foreground">
+                                ModEx includes a powerful analysis tool to help you optimize your modpacks.
+                                Click the <strong>Analyze</strong> button in any modpack to view:
+                            </p>
+                            <ul class="space-y-2 text-sm text-muted-foreground ml-6">
+                                <li class="flex items-start gap-2">
+                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <strong>RAM Usage Estimation:</strong> Predicted memory requirements based on mod
+                                    count and types.
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <strong>Performance Impact:</strong> Identification of heavy mods and potential
+                                    bottlenecks.
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <strong>Conflict Detection:</strong> Warnings about known incompatible mod
+                                    combinations.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
+                            <h3 class="font-semibold flex items-center gap-2">
                                 <Download class="w-4 h-4 text-primary" />
                                 Adding Mods to a Modpack
                             </h3>

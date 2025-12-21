@@ -961,6 +961,18 @@ watch(
   { immediate: true }
 );
 
+// Handle URL action parameter (e.g. browse)
+watch(
+  () => route.query.action,
+  (action) => {
+    if (action === 'browse') {
+      showCFBrowse.value = true;
+      router.replace({ query: { ...route.query, action: undefined } });
+    }
+  },
+  { immediate: true }
+);
+
 // Handle URL create parameter (open create dialog)
 watch(
   () => route.query.create,

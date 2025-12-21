@@ -32,12 +32,21 @@ export interface Mod {
   favorite?: boolean;
 }
 
+export interface ModpackProfile {
+  id: string;
+  name: string;
+  enabled_mod_ids: string[];
+  created_at: string;
+  config_overrides_path?: string;
+}
+
 export interface Modpack {
   id: string;
   name: string;
   version: string;
   minecraft_version?: string;
   loader?: string;
+  loader_version?: string;
   description?: string;
   image_url?: string;
   created_at: string;
@@ -45,7 +54,25 @@ export interface Modpack {
   mod_count?: number;
   favorite?: boolean;
   share_code?: string;
+  last_sync?: string;
   mod_ids: string[];
+  disabled_mod_ids?: string[];
+  remote_source?: {
+    url: string;
+    auto_check: boolean;
+    last_checked?: string;
+    skip_initial_check?: boolean;
+  };
+  profiles?: ModpackProfile[];
+  incompatible_mods?: Array<{
+    cf_project_id: number;
+    name: string;
+    reason: string;
+  }>;
+  cf_project_id?: number;
+  cf_file_id?: number;
+  cf_slug?: string;
+  overridesPath?: string;
 }
 
 // ==================== API ====================

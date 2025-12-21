@@ -2373,7 +2373,7 @@ async function initializeBackend() {
     
     const results: Array<{
       modId: string;
-      projectId: string;
+      projectId: string | null;
       projectName: string;
       currentVersion: string;
       latestVersion: string | null;
@@ -2481,7 +2481,7 @@ async function initializeBackend() {
     
     const results: Array<{
       modId: string;
-      projectId: string;
+      projectId: string | null;
       projectName: string;
       currentVersion: string;
       latestVersion: string | null;
@@ -3100,12 +3100,12 @@ async function initializeBackend() {
   // Import configs from instance to modpack
   ipcMain.handle("instance:importConfigs", async (_, instanceId: string, modpackId: string, configPaths: string[]) => {
     const modpack = await metadataManager.getModpackById(modpackId);
-    if (!modpack?.overridesPath) {
+    if (!modpack) {
+      return { success: false, imported: 0, skipped: 0, errors: ["Modpack not found"] };
+    }
+    if (!modpack.overridesPath) {
       // Create overrides path if it doesn't exist
-      const modpackBasePath = modpack?.path ? path.dirname(modpack.path) : '';
-      if (!modpackBasePath) {
-        return { success: false, imported: 0, skipped: 0, errors: ["Modpack path not found"] };
-      }
+      const modpackBasePath = path.join(metadataManager.getBasePath(), 'modpacks', modpackId);
       const overridesPath = path.join(modpackBasePath, 'overrides');
       await fs.ensureDir(overridesPath);
       
@@ -3320,7 +3320,9 @@ async function initializeBackend() {
             id: m.id,
             name: m.name,
             filename: m.filename,
-            downloadUrl: m.downloadUrl,
+            downloadUrl: m.cf_project_id && m.cf_file_id 
+              ? `https://edge.forgecdn.net/files/${Math.floor(m.cf_file_id / 1000)}/${m.cf_file_id % 1000}/${encodeURIComponent(m.filename)}`
+              : undefined,
             cf_project_id: m.cf_project_id,
             cf_file_id: m.cf_file_id,
             content_type: m.content_type as "mod" | "resourcepack" | "shader"

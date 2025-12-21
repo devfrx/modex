@@ -120,6 +120,7 @@ async function initPixi() {
         width: props.width,
         height: props.height,
         backgroundColor: bgColor,
+        backgroundAlpha: 1,
         antialias: !props.performanceMode,
         resolution: props.performanceMode ? 1 : (window.devicePixelRatio || 1),
         autoDensity: true,
@@ -756,11 +757,44 @@ watch(() => props.performanceMode, () => {
 });
 
 // Lifecycle
+let themeObserver: MutationObserver | null = null;
+
+function updateTheme() {
+    if (!app) return;
+    const isDark = document.documentElement.classList.contains('dark');
+    const bgColor = isDark ? 0x0a0a0b : 0xfafafa;
+
+    // Update background color
+    app.renderer.background.color = bgColor;
+    app.renderer.background.alpha = 1;
+
+    // Force a render if needed (though Pixi ticker handles this)
+    app.render();
+}
+
 onMounted(async () => {
     await initPixi();
+
+    // Initial theme check
+    updateTheme();
+
+    // Watch for theme changes
+    themeObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                updateTheme();
+            }
+        });
+    });
+
+    themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class']
+    });
 });
 
 onBeforeUnmount(() => {
+    themeObserver?.disconnect();
     destroy();
 });
 </script>

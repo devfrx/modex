@@ -24,6 +24,7 @@ export interface Modpack {
   version: string;
   minecraft_version: string; // e.g. "1.20.1", "1.21.1"
   loader: string; // 'forge' | 'fabric' | 'quilt' | 'neoforge'
+  loader_version?: string;
   description?: string;
   image_path?: string;
   created_at: string;

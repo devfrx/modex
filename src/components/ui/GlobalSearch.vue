@@ -25,6 +25,7 @@ import {
     FolderOpen,
     Share2,
     ExternalLink,
+    Globe,
 } from "lucide-vue-next";
 import type { Mod, Modpack } from "@/types/electron";
 import { useToast } from "@/composables/useToast";
@@ -52,6 +53,8 @@ const quickNav = [
     { id: "organize", name: "Organize", icon: FolderTree, route: "/organize", type: "nav" },
     { id: "stats", name: "Statistics", icon: BarChart3, route: "/stats", type: "nav" },
     { id: "sandbox", name: "Sandbox", icon: LayoutGrid, route: "/sandbox", type: "nav" },
+    { id: "browse-mods", name: "Browse Mods", icon: Globe, route: "/library?action=browse", type: "nav" },
+    { id: "browse-modpacks", name: "Browse Modpacks", icon: Package, route: "/modpacks?action=browse", type: "nav" },
     { id: "guide", name: "Guide", icon: BookOpen, route: "/guide", type: "nav" },
     { id: "settings", name: "Settings", icon: Settings, route: "/settings", type: "nav" },
 ];

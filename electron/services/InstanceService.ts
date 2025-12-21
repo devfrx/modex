@@ -58,6 +58,9 @@ export interface ModexInstance {
   /** Instance state */
   state: "ready" | "installing" | "error";
   
+  /** Last time the instance was synced with modpack */
+  lastSynced?: string;
+  
   /** Memory allocation in MB */
   memory?: {
     min: number;

@@ -47,7 +47,8 @@ import {
   GalleryVertical,
   Package,
 } from "lucide-vue-next";
-import { ref, onMounted, computed, watch, nextTick } from "vue";
+import { ref, onMounted, computed, watch, nextTick, shallowRef } from "vue";
+import { refDebounced } from "@vueuse/core";
 import { useRoute, useRouter } from "vue-router";
 import type { Mod, Modpack, ModUsageInfo } from "@/types/electron";
 
@@ -68,6 +69,7 @@ const modUsageMap = ref<Map<string, Set<string>>>(new Map()); // ModID -> Set<Mo
 const isLoading = ref(true);
 const error = ref<string | null>(null);
 const searchQuery = ref("");
+const searchQueryDebounced = refDebounced(searchQuery, 200);
 const selectedLoader = ref<string>("all");
 const selectedGameVersion = ref<string>("all");
 const selectedContentType = ref<"all" | "mod" | "resourcepack" | "shader">(
@@ -98,6 +100,12 @@ const duplicates = ref<Map<string, string[]>>(new Map());
 // Resource grouping - group same mod across different versions/loaders
 const enableGrouping = ref(true);
 const expandedGroups = ref<Set<string>>(new Set());
+
+// Pagination
+const currentPage = ref(1);
+const itemsPerPage = ref(50);
+const itemsPerPageOptions = [25, 50, 100, 200];
+const isFiltering = ref(false);
 
 // Sorting
 const sortBy = ref<"name" | "loader" | "created_at" | "version">("name");
@@ -313,7 +321,7 @@ function matchesSearchQuery(mod: Mod, query: string): boolean {
 
 const filteredMods = computed(() => {
   let result = mods.value.filter((mod) => {
-    const matchesSearch = matchesSearchQuery(mod, searchQuery.value);
+    const matchesSearch = matchesSearchQuery(mod, searchQueryDebounced.value);
 
     // Loader filter only applies to mods (resourcepacks/shaders don't have loaders)
     const modContentType = mod.content_type || "mod";
@@ -472,6 +480,35 @@ const groupedMods = computed((): ModGroup[] => {
   return result;
 });
 
+// Pagination computed values
+const totalPages = computed(() => Math.ceil(groupedMods.value.length / itemsPerPage.value));
+const paginatedGroups = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value;
+  const end = start + itemsPerPage.value;
+  return groupedMods.value.slice(start, end);
+});
+
+// Page navigation helpers
+const canGoPrev = computed(() => currentPage.value > 1);
+const canGoNext = computed(() => currentPage.value < totalPages.value);
+
+function goToPage(page: number) {
+  currentPage.value = Math.max(1, Math.min(page, totalPages.value));
+}
+
+function prevPage() {
+  if (canGoPrev.value) currentPage.value--;
+}
+
+function nextPage() {
+  if (canGoNext.value) currentPage.value++;
+}
+
+// Reset to page 1 when filters change
+watch([searchQueryDebounced, selectedLoader, selectedGameVersion, selectedContentType, modpackFilter, quickFilter, selectedFolderId], () => {
+  currentPage.value = 1;
+});
+
 // Get displayable mods (considering grouping and expansion)
 const displayMods = computed((): Mod[] => {
   if (!enableGrouping.value) {
@@ -574,6 +611,8 @@ function saveSettings() {
     selectedContentType: selectedContentType.value,
     visibleColumns: Array.from(visibleColumns.value),
     showFilters: showFilters.value,
+    itemsPerPage: itemsPerPage.value,
+    enableGrouping: enableGrouping.value,
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
@@ -600,6 +639,10 @@ function loadSettings() {
         visibleColumns.value = new Set(settings.visibleColumns);
       if (settings.showFilters !== undefined)
         showFilters.value = settings.showFilters;
+      if (settings.itemsPerPage)
+        itemsPerPage.value = settings.itemsPerPage;
+      if (settings.enableGrouping !== undefined)
+        enableGrouping.value = settings.enableGrouping;
     }
   } catch (e) {
     console.warn("Failed to load settings", e);
@@ -620,6 +663,8 @@ watch(
     selectedContentType,
     visibleColumns,
     showFilters,
+    itemsPerPage,
+    enableGrouping,
   ],
   () => {
     saveSettings();
@@ -1043,6 +1088,18 @@ watch(
       quickFilter.value = "recent";
     } else {
       quickFilter.value = "all";
+    }
+  },
+  { immediate: true }
+);
+
+// Handle URL action parameter (e.g. browse)
+watch(
+  () => route.query.action,
+  (action) => {
+    if (action === 'browse') {
+      showCurseForgeSearch.value = true;
+      router.replace({ query: { ...route.query, action: undefined } });
     }
   },
   { immediate: true }
@@ -1571,28 +1628,74 @@ onMounted(() => {
 
       <!-- Main Content Area -->
       <div class="flex-1 overflow-auto p-3 sm:p-6 pb-20">
-        <!-- Results info -->
-        <div
-          v-if="selectedLoader !== 'all' || selectedGameVersion !== 'all' || selectedContentType !== 'all' || modpackFilter !== 'all' || searchQuery || enableGrouping"
-          class="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            Showing {{ enableGrouping ? groupedMods.length + ' groups' : filteredMods.length + ' items' }}
-            <span v-if="enableGrouping && groupedMods.some(g => g.variants.length > 0)">
-              ({{ filteredMods.length }} total)
+        <!-- Results info + Pagination Controls -->
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              Showing
+              <template v-if="enableGrouping">
+                {{ paginatedGroups.length }} of {{ groupedMods.length }} groups
+              </template>
+              <template v-else>
+                {{ paginatedGroups.length }} of {{ filteredMods.length }} items
+              </template>
+              <span v-if="enableGrouping && groupedMods.some(g => g.variants.length > 0)"
+                class="text-muted-foreground/70">
+                ({{ filteredMods.length }} total mods)
+              </span>
             </span>
-          </span>
-          <button
-            v-if="selectedLoader !== 'all' || selectedGameVersion !== 'all' || selectedContentType !== 'all' || modpackFilter !== 'all' || searchQuery"
-            @click="selectedLoader = 'all'; selectedGameVersion = 'all'; selectedContentType = 'all'; modpackFilter = 'all'; searchQuery = '';"
-            class="text-primary hover:underline">
-            Clear filters
-          </button>
+            <button
+              v-if="selectedLoader !== 'all' || selectedGameVersion !== 'all' || selectedContentType !== 'all' || modpackFilter !== 'all' || searchQuery"
+              @click="selectedLoader = 'all'; selectedGameVersion = 'all'; selectedContentType = 'all'; modpackFilter = 'all'; searchQuery = '';"
+              class="text-primary hover:underline">
+              Clear filters
+            </button>
+          </div>
+
+          <!-- Pagination Controls -->
+          <div v-if="totalPages > 1" class="flex items-center gap-2">
+            <!-- Items per page selector -->
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs text-muted-foreground hidden sm:inline">Show:</span>
+              <select v-model.number="itemsPerPage"
+                class="h-7 rounded-md border border-border bg-muted/50 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+                <option v-for="opt in itemsPerPageOptions" :key="opt" :value="opt">{{ opt }}</option>
+              </select>
+            </div>
+
+            <div class="h-4 w-px bg-border mx-1" />
+
+            <!-- Page navigation -->
+            <div class="flex items-center gap-1">
+              <button @click="goToPage(1)" :disabled="!canGoPrev"
+                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                ««
+              </button>
+              <button @click="prevPage" :disabled="!canGoPrev"
+                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                ‹
+              </button>
+
+              <span class="px-2 text-xs text-muted-foreground tabular-nums">
+                {{ currentPage }} / {{ totalPages }}
+              </span>
+
+              <button @click="nextPage" :disabled="!canGoNext"
+                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                ›
+              </button>
+              <button @click="goToPage(totalPages)" :disabled="!canGoNext"
+                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                »»
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Grid View -->
         <div v-if="viewMode === 'grid'">
           <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            <template v-for="group in groupedMods" :key="group.groupKey">
+            <template v-for="group in paginatedGroups" :key="group.groupKey">
               <!-- Primary mod card with group indicator -->
               <ModCard :mod="group.primary" :selected="selectedModIds.has(group.primary.id)"
                 :favorite="favoriteMods.has(group.primary.id)" :is-duplicate="duplicateModIds.has(group.primary.id)"
@@ -1617,7 +1720,7 @@ onMounted(() => {
         <!-- Gallery View - Image-focused masonry layout -->
         <div v-else-if="viewMode === 'gallery'">
           <div class="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
-            <template v-for="group in groupedMods" :key="group.groupKey">
+            <template v-for="group in paginatedGroups" :key="group.groupKey">
               <GalleryCard :mod="group.primary" :selected="selectedModIds.has(group.primary.id)"
                 :favorite="favoriteMods.has(group.primary.id)" :is-duplicate="duplicateModIds.has(group.primary.id)"
                 :usage-count="modUsageMap.get(group.primary.id)?.size || 0" :group-variant-count="group.variants.length"
@@ -1686,7 +1789,7 @@ onMounted(() => {
                 </tr>
               </thead>
               <tbody>
-                <template v-for="group in groupedMods" :key="group.groupKey">
+                <template v-for="group in paginatedGroups" :key="group.groupKey">
                   <tr class="border-b border-border last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
                     :class="{ 'bg-primary/10': selectedModIds.has(group.primary.id) }"
                     @click="toggleSelection(group.primary.id)">
@@ -1848,7 +1951,7 @@ onMounted(() => {
         <!-- Compact View -->
         <div v-else>
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-1.5 sm:gap-2">
-            <template v-for="group in groupedMods" :key="group.groupKey">
+            <template v-for="group in paginatedGroups" :key="group.groupKey">
               <div
                 class="relative p-2 rounded-lg border border-border cursor-pointer transition-all hover:bg-muted/50 hover:border-border group"
                 :class="{

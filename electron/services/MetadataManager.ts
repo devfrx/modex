@@ -74,6 +74,7 @@ export interface Modpack {
   version: string;
   minecraft_version?: string;
   loader?: string;
+  loader_version?: string;
   description?: string;
   image_url?: string;
   created_at: string;

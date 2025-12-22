@@ -2050,11 +2050,28 @@ export class InstanceService {
       result.overridesConfigPath = path.join(overridesPath, 'config');
     }
 
+    // Valid config file extensions
+    const validConfigExtensions = new Set([
+      'toml', 'json', 'json5', 'properties', 'cfg', 
+      'yaml', 'yml', 'txt', 'snbt', 'conf', 'ini', 'xml'
+    ]);
+
+    // Helper to check if file is a valid config
+    const isConfigFile = (filePath: string): boolean => {
+      const ext = path.extname(filePath).toLowerCase().slice(1);
+      return validConfigExtensions.has(ext);
+    };
+
     // Get all config files from instance
     if (await fs.pathExists(result.instanceConfigPath)) {
       const instanceConfigs = await this.getAllFiles(result.instanceConfigPath, result.instanceConfigPath);
       
       for (const relPath of instanceConfigs) {
+        // Skip non-config files (images, binaries, etc.)
+        if (!isConfigFile(relPath)) {
+          continue;
+        }
+        
         const instanceFilePath = path.join(result.instanceConfigPath, relPath);
         const stat = await fs.stat(instanceFilePath);
         
@@ -2096,6 +2113,11 @@ export class InstanceService {
       const overrideConfigs = await this.getAllFiles(result.overridesConfigPath, result.overridesConfigPath);
       
       for (const relPath of overrideConfigs) {
+        // Skip non-config files (images, binaries, etc.)
+        if (!isConfigFile(relPath)) {
+          continue;
+        }
+        
         const instanceFilePath = path.join(result.instanceConfigPath, relPath);
         
         if (!await fs.pathExists(instanceFilePath)) {

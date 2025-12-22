@@ -37,18 +37,22 @@ const props = defineProps<{
   gameVersion?: string;
   modLoader?: string;
   installedProjectFiles?: Map<number, Set<number>>;
+  initialContentType?: "mods" | "resourcepacks" | "shaders";
+  // Lock mode - when opened from ModpackEditor
+  lockedModpackId?: string;
+  lockFilters?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "added", mod: any): void;
+  (e: "added", mod: any | null, addedIds?: string[]): void;
 }>();
 
 // State
 const searchQuery = ref("");
 const selectedVersion = ref(props.gameVersion || "");
 const selectedLoader = ref(props.modLoader || "");
-const selectedContentType = ref<"mods" | "resourcepacks" | "shaders">("mods");
+const selectedContentType = ref<"mods" | "resourcepacks" | "shaders">(props.initialContentType || "mods");
 const searchResults = ref<any[]>([]);
 const isSearching = ref(false);
 const isAddingMod = ref<number | null>(null);
@@ -282,8 +286,34 @@ watch([filterRelease, filterBeta, filterAlpha], () => {
 watch(
   () => props.open,
   (isOpen) => {
-    if (isOpen && hasApiKey.value && searchResults.value.length === 0) {
-      loadPopular();
+    if (isOpen) {
+      // Reset content type to initial when opening
+      if (props.initialContentType) {
+        selectedContentType.value = props.initialContentType;
+      }
+      // Reset version/loader if provided
+      if (props.gameVersion) {
+        selectedVersion.value = props.gameVersion;
+      }
+      if (props.modLoader) {
+        selectedLoader.value = props.modLoader;
+      }
+      // Set locked modpack if provided
+      if (props.lockedModpackId) {
+        targetModpackId.value = props.lockedModpackId;
+      }
+      if (hasApiKey.value && searchResults.value.length === 0) {
+        loadPopular();
+      }
+    } else {
+      // Reset state when dialog closes
+      selectedModIds.value.clear();
+      selectedFilesMap.value.clear();
+      isSelectionMode.value = false;
+      // Reset targetModpackId only if not locked
+      if (!props.lockedModpackId) {
+        targetModpackId.value = null;
+      }
     }
   }
 );
@@ -549,7 +579,7 @@ async function executeBulkAdd() {
       }
     }
 
-    emit("added", null);
+    emit("added", null, addedModIds);
   } catch (e) {
     console.error(e);
     toast.error("Error", (e as Error).message);
@@ -912,32 +942,35 @@ function getReleaseColor(type: number) {
         <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 md:space-y-6">
           <!-- Content Type -->
           <div class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Type</label>
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              Content Type
+              <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
+            </label>
             <div class="flex flex-wrap gap-1">
               <button
                 class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
                 :class="selectedContentType === 'mods'
-                    ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
-                    : 'bg-muted/50 hover:bg-muted text-muted-foreground'
-                  " @click="selectedContentType = 'mods'">
+                  ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                  " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'mods')">
                 <Layers class="w-3 h-3" />
                 Mods
               </button>
               <button
                 class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
                 :class="selectedContentType === 'resourcepacks'
-                    ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
-                    : 'bg-muted/50 hover:bg-muted text-muted-foreground'
-                  " @click="selectedContentType = 'resourcepacks'">
+                  ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                  " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'resourcepacks')">
                 <Image class="w-3 h-3" />
                 Packs
               </button>
               <button
                 class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
                 :class="selectedContentType === 'shaders'
-                    ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
-                    : 'bg-muted/50 hover:bg-muted text-muted-foreground'
-                  " @click="selectedContentType = 'shaders'">
+                  ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
+                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                  " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'shaders')">
                 <Sparkles class="w-3 h-3" />
                 Shaders
               </button>
@@ -946,10 +979,13 @@ function getReleaseColor(type: number) {
 
           <!-- Game Version -->
           <div class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Game Version</label>
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              Game Version
+              <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
+            </label>
             <div class="relative">
-              <select v-model="selectedVersion"
-                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
+              <select v-model="selectedVersion" :disabled="lockFilters"
+                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none disabled:opacity-60 disabled:cursor-not-allowed"
                 @change="searchQuery ? searchMods() : loadPopular()">
                 <option value="" class="bg-popover text-popover-foreground">
                   All Versions
@@ -965,10 +1001,13 @@ function getReleaseColor(type: number) {
 
           <!-- Mod Loader (only for mods) -->
           <div v-if="selectedContentType === 'mods'" class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Mod Loader</label>
+            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              Mod Loader
+              <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
+            </label>
             <div class="relative">
-              <select v-model="selectedLoader"
-                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
+              <select v-model="selectedLoader" :disabled="lockFilters"
+                class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none disabled:opacity-60 disabled:cursor-not-allowed"
                 @change="searchQuery ? searchMods() : loadPopular()">
                 <option v-for="l in modLoaders" :key="l.value" :value="l.value"
                   class="bg-popover text-popover-foreground">
@@ -1050,9 +1089,27 @@ function getReleaseColor(type: number) {
             <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
               <Package class="w-3 h-3" />
               Add to Modpack
+              <span v-if="lockedModpackId" class="text-[10px] text-amber-500">(locked)</span>
             </label>
+            <!-- Locked modpack mode -->
+            <template v-if="lockedModpackId">
+              <div class="relative">
+                <select v-model="targetModpackId" disabled
+                  class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm appearance-none opacity-60 cursor-not-allowed">
+                  <option v-for="pack in allModpacks.filter(p => p.id === lockedModpackId)" :key="pack.id"
+                    :value="pack.id" class="bg-popover text-popover-foreground">
+                    {{ pack.name }} ({{ pack.minecraft_version }} {{ pack.loader }})
+                  </option>
+                </select>
+                <ChevronDown
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
+              </div>
+              <p class="text-xs text-emerald-500">
+                Adding directly to this modpack
+              </p>
+            </template>
             <!-- Only show select when both filters are set -->
-            <template v-if="selectedVersion && selectedLoader">
+            <template v-else-if="selectedVersion && selectedLoader">
               <div class="relative">
                 <select v-model="targetModpackId"
                   class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
@@ -1177,8 +1234,8 @@ function getReleaseColor(type: number) {
                 <button v-if="isSelectionMode" @click.stop="toggleModHeaderSelection(mod.id)"
                   class="p-1 rounded hover:bg-background transition-colors mr-1" title="Select Latest Release">
                   <div class="w-5 h-5 border rounded flex items-center justify-center transition-all" :class="selectedModIds.has(mod.id)
-                      ? 'bg-primary border-primary text-primary-foreground'
-                      : 'border-muted-foreground/30 bg-background'
+                    ? 'bg-primary border-primary text-primary-foreground'
+                    : 'border-muted-foreground/30 bg-background'
                     ">
                     <Check v-if="selectedModIds.has(mod.id)" class="w-3.5 h-3.5" />
                   </div>
@@ -1206,7 +1263,7 @@ function getReleaseColor(type: number) {
                   <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                     <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
                       formatDownloads(mod.downloadCount)
-                    }}</span>
+                        }}</span>
                       downloads</span>
                     <span class="w-1 h-1 rounded-full bg-border"></span>
                     <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>
@@ -1255,8 +1312,8 @@ function getReleaseColor(type: number) {
                       'pointer-events-none': selectedModIds.has(mod.id),
                     }">
                       <button class="w-4 h-4 rounded border flex items-center justify-center transition-colors" :class="selectedFilesMap.has(file.id)
-                          ? 'bg-primary border-primary text-primary-foreground'
-                          : 'border-muted-foreground/30 bg-background'
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-muted-foreground/30 bg-background'
                         " @click.stop="toggleFileSelectionMap(file.id, mod.id)">
                         <Check v-if="selectedFilesMap.has(file.id)" class="w-3 h-3" />
                       </button>
@@ -1317,8 +1374,8 @@ function getReleaseColor(type: number) {
                       </Button>
 
                       <Button size="sm" :variant="isFileInstalled(mod.id, file.id)
-                          ? 'secondary'
-                          : 'ghost'
+                        ? 'secondary'
+                        : 'ghost'
                         " class="h-8 w-24 ml-2 text-xs" :disabled="isFileInstalled(mod.id, file.id) ||
                           isAddingMod === mod.id
                           " @click="addFileToLibrary(mod, file)">

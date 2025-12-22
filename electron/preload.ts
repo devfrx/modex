@@ -155,6 +155,8 @@ contextBridge.exposeInMainWorld("api", {
       ),
     getChangelog: (modId: number, fileId: number): Promise<string> =>
       ipcRenderer.invoke("curseforge:getChangelog", modId, fileId),
+    getModDescription: (modId: number): Promise<string> =>
+      ipcRenderer.invoke("curseforge:getModDescription", modId),
     getRecommendations: (
       installedCategoryIds: number[],
       gameVersion?: string,

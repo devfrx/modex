@@ -1258,7 +1258,10 @@ onMounted(() => {
           <div
             class="absolute md:relative right-0 top-0 bottom-0 w-72 md:w-full border-l md:border-l-0 md:border-r border-border bg-card p-4 overflow-y-auto">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold text-sm">Filters</h3>
+              <h3 class="font-semibold text-sm flex items-center gap-2">
+                <Filter class="w-4 h-4" />
+                Filters
+              </h3>
               <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
                 <X class="w-4 h-4" />
               </button>
@@ -1315,10 +1318,15 @@ onMounted(() => {
               </div>
 
               <!-- Clear Filters -->
-              <button v-if="activeFilterCount > 0" @click="clearFilters"
-                class="w-full px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all">
-                Clear All Filters
-              </button>
+              <div class="pt-4 border-t border-border mt-auto">
+                <button v-if="activeFilterCount > 0"
+                  class="w-full px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all flex items-center justify-center gap-2"
+                  @click="clearFilters">
+                  <X class="w-3.5 h-3.5" />
+                  Clear All Filters
+                </button>
+                <p v-else class="text-xs text-muted-foreground text-center">No active filters</p>
+              </div>
             </div>
           </div>
         </div>

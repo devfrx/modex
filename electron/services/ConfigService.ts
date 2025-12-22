@@ -289,6 +289,12 @@ export class ConfigService {
       files: [],
     };
 
+    // Valid config file extensions
+    const validConfigExtensions = new Set([
+      'toml', 'json', 'json5', 'properties', 'cfg', 
+      'yaml', 'yml', 'txt', 'snbt', 'conf', 'ini', 'xml'
+    ]);
+
     const entries = await fs.readdir(fullPath, { withFileTypes: true });
 
     for (const entry of entries) {
@@ -302,9 +308,15 @@ export class ConfigService {
           folder.totalSize += subfolder.totalSize;
         }
       } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase().slice(1);
+        
+        // Skip non-config files (images, binaries, etc.)
+        if (!validConfigExtensions.has(ext)) {
+          continue;
+        }
+        
         const filePath = path.join(fullPath, entry.name);
         const fileStat = await fs.stat(filePath);
-        const ext = path.extname(entry.name).toLowerCase().slice(1);
         
         const configFile: ConfigFile = {
           path: entryPath,

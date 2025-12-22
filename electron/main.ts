@@ -229,6 +229,13 @@ async function initializeBackend() {
   );
 
   ipcMain.handle(
+    "curseforge:getModDescription",
+    async (_, modId: number) => {
+      return curseforgeService.getModDescription(modId);
+    }
+  );
+
+  ipcMain.handle(
     "curseforge:getCategories",
     async (_, contentType?: string) => {
       return curseforgeService.getCategories(contentType as any);

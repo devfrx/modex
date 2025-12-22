@@ -69,6 +69,7 @@ import UpdateReviewDialog from "@/components/modpacks/UpdateReviewDialog.vue";
 import ConfigBrowser from "@/components/configs/ConfigBrowser.vue";
 import ConfigStructuredEditor from "@/components/configs/ConfigStructuredEditor.vue";
 import UpdateAvailableBanner from "@/components/modpacks/UpdateAvailableBanner.vue";
+import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
 
 const props = defineProps<{
@@ -504,6 +505,37 @@ const recentlyUpdatedMods = ref<Set<string>>(new Set()); // Mod IDs updated in l
 const recentlyAddedMods = ref<Set<string>>(new Set()); // Mod IDs added in last 5 min
 const RECENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const isLibraryCollapsed = ref(false); // Collapsible library panel
+
+// CurseForge Browse Dialog State
+const showCFSearch = ref(false);
+
+function handleCFSearchClose() {
+  showCFSearch.value = false;
+}
+
+async function handleCFModAdded(mod: any, addedIds?: string[]) {
+  // Reload data after a mod is added from CurseForge search
+  await loadData();
+  emit("update");
+
+  // Mark as recently added - handle single mod or bulk add
+  if (mod?.id) {
+    // Single mod added
+    recentlyAddedMods.value.add(mod.id);
+    setTimeout(() => {
+      recentlyAddedMods.value.delete(mod.id);
+    }, RECENT_THRESHOLD_MS);
+    toast.success("Added to modpack", `${mod.name} has been added`);
+  } else if (addedIds && addedIds.length > 0) {
+    // Bulk add - mark all added mods as new
+    for (const modId of addedIds) {
+      recentlyAddedMods.value.add(modId);
+      setTimeout(() => {
+        recentlyAddedMods.value.delete(modId);
+      }, RECENT_THRESHOLD_MS);
+    }
+  }
+}
 
 function openSingleModUpdate(mod: any) {
   selectedUpdateMod.value = mod;
@@ -1625,6 +1657,12 @@ watch(
   }
 );
 
+// Reset filters when content type tab changes
+watch(contentTypeTab, () => {
+  modsFilter.value = "all";
+  searchQueryInstalled.value = "";
+});
+
 // Add mod from analysis (CurseForge project ID) or Discovery (with optional fileId)
 async function handleAddModFromAnalysis(cfProjectId: number, fileId?: number) {
   if (!modpack.value) return;
@@ -1674,6 +1712,13 @@ async function handleAddModFromAnalysis(cfProjectId: number, fileId?: number) {
     if (addedMod) {
       // Add to modpack
       await window.api.modpacks.addMod(props.modpackId, addedMod.id);
+
+      // Mark as recently added
+      recentlyAddedMods.value.add(addedMod.id);
+      setTimeout(() => {
+        recentlyAddedMods.value.delete(addedMod.id);
+      }, RECENT_THRESHOLD_MS);
+
       await loadData();
       emit("update");
       toast.success("Mod added", `${cfMod.name} has been added`);
@@ -2146,13 +2191,13 @@ watch(
                     class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                     <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500"></div>
                     <span class="text-[10px] sm:text-xs font-medium text-emerald-400">{{ modpack.minecraft_version
-                      }}</span>
+                    }}</span>
                   </div>
                   <div v-if="modpack?.loader"
                     class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-blue-500/10 border border-blue-500/20">
                     <div class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500"></div>
                     <span class="text-[10px] sm:text-xs font-medium text-blue-400 capitalize">{{ modpack.loader
-                      }}</span>
+                    }}</span>
                   </div>
                   <div
                     class="hidden xs:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-muted/50 border border-border/50">
@@ -3107,166 +3152,205 @@ watch(
 
         <!-- Mods Tab -->
         <template v-else-if="activeTab === 'mods'">
-          <!-- Content Type Sub-tabs -->
-          <div class="shrink-0 px-4 py-2 border-b border-border/30 bg-muted/10 flex items-center gap-1">
-            <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5" :class="contentTypeTab === 'mods'
-              ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
-              : 'hover:bg-muted text-muted-foreground'
-              " @click="contentTypeTab = 'mods'">
-              <Layers class="w-3.5 h-3.5" />
-              Mods
-              <span class="text-[10px] px-1 py-0.5 rounded bg-emerald-500/10">{{
-                contentTypeCounts.mods
-              }}</span>
-            </button>
-            <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5" :class="contentTypeTab === 'resourcepacks'
-              ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
-              : 'hover:bg-muted text-muted-foreground'
-              " @click="contentTypeTab = 'resourcepacks'">
-              <Image class="w-3.5 h-3.5" />
-              Resource Packs
-              <span class="text-[10px] px-1 py-0.5 rounded bg-blue-500/10">{{
-                contentTypeCounts.resourcepacks
-              }}</span>
-            </button>
-            <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5" :class="contentTypeTab === 'shaders'
-              ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
-              : 'hover:bg-muted text-muted-foreground'
-              " @click="contentTypeTab = 'shaders'">
-              <Sparkles class="w-3.5 h-3.5" />
-              Shaders
-              <span class="text-[10px] px-1 py-0.5 rounded bg-pink-500/10">{{
-                contentTypeCounts.shaders
-              }}</span>
-            </button>
+          <!-- Header Bar (ModpackView style) -->
+          <div class="shrink-0 px-4 py-3 border-b border-border/30 bg-muted/10">
+            <div class="flex items-center justify-between gap-4">
+              <!-- Left: Content Type Tabs -->
+              <div class="flex items-center gap-1">
+                <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
+                  :class="contentTypeTab === 'mods'
+                    ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+                    : 'hover:bg-muted text-muted-foreground'
+                    " @click="contentTypeTab = 'mods'">
+                  <Layers class="w-3.5 h-3.5" />
+                  Mods
+                  <span class="text-[10px] px-1 py-0.5 rounded bg-emerald-500/10">{{
+                    contentTypeCounts.mods
+                  }}</span>
+                </button>
+                <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
+                  :class="contentTypeTab === 'resourcepacks'
+                    ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
+                    : 'hover:bg-muted text-muted-foreground'
+                    " @click="contentTypeTab = 'resourcepacks'">
+                  <Image class="w-3.5 h-3.5" />
+                  Packs
+                  <span class="text-[10px] px-1 py-0.5 rounded bg-blue-500/10">{{
+                    contentTypeCounts.resourcepacks
+                  }}</span>
+                </button>
+                <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
+                  :class="contentTypeTab === 'shaders'
+                    ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
+                    : 'hover:bg-muted text-muted-foreground'
+                    " @click="contentTypeTab = 'shaders'">
+                  <Sparkles class="w-3.5 h-3.5" />
+                  Shaders
+                  <span class="text-[10px] px-1 py-0.5 rounded bg-pink-500/10">{{
+                    contentTypeCounts.shaders
+                  }}</span>
+                </button>
+              </div>
+
+              <!-- Center: Search -->
+              <div class="flex-1 max-w-md">
+                <div class="relative">
+                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <input v-model="searchQueryInstalled" placeholder="Search installed..."
+                    class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
+                </div>
+              </div>
+
+              <!-- Right: Actions -->
+              <div class="flex items-center gap-2">
+                <!-- Quick Filters -->
+                <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
+                  <button class="px-2 py-1 text-[10px] rounded transition-all" :class="modsFilter === 'all'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'all'">
+                    All
+                  </button>
+                  <button v-if="incompatibleModCount > 0"
+                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'incompatible'
+                      ? 'bg-red-500/20 text-red-400 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'incompatible'">
+                    <AlertCircle class="w-3 h-3" />
+                    {{ incompatibleModCount }}
+                  </button>
+                  <button v-if="disabledModCount > 0"
+                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'disabled'
+                      ? 'bg-amber-500/20 text-amber-400 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'disabled'">
+                    <ToggleLeft class="w-3 h-3" />
+                    {{ disabledModCount }}
+                  </button>
+                  <button v-if="updatesAvailableCount > 0"
+                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
+                      ? 'bg-emerald-500/20 text-emerald-400 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'updates'">
+                    <ArrowUpCircle class="w-3 h-3" />
+                    {{ updatesAvailableCount }}
+                  </button>
+                  <button v-if="recentlyUpdatedCount > 0"
+                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-updated'
+                      ? 'bg-cyan-500/20 text-cyan-400 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'recent-updated'">
+                    <Check class="w-3 h-3" />
+                    {{ recentlyUpdatedCount }}
+                  </button>
+                  <button v-if="recentlyAddedCount > 0"
+                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-added'
+                      ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'recent-added'">
+                    <Plus class="w-3 h-3" />
+                    {{ recentlyAddedCount }}
+                  </button>
+                </div>
+
+                <!-- Library Toggle -->
+                <button @click="isLibraryCollapsed = !isLibraryCollapsed"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="!isLibraryCollapsed
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'">
+                  <Package class="w-3.5 h-3.5" />
+                  <span>Library</span>
+                </button>
+
+                <!-- CurseForge Button -->
+                <button v-if="!isLinked"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-orange-500 hover:bg-orange-600 text-white transition-colors shadow-sm"
+                  @click="showCFSearch = true">
+                  <Globe class="w-3.5 h-3.5" />
+                  <span>CurseForge</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Secondary bar: Bulk actions & Update All -->
+            <div v-if="selectedModIds.size > 0 || updatesAvailableCount > 0 || incompatibleModCount > 0"
+              class="flex items-center justify-between mt-2 pt-2 border-t border-border/20">
+              <!-- Bulk Actions -->
+              <div v-if="selectedModIds.size > 0 && !isLinked" class="flex items-center gap-2">
+                <span class="text-xs text-muted-foreground">{{ selectedModIds.size }} selected</span>
+                <button
+                  class="h-6 px-2 text-[10px] rounded bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 flex items-center gap-1"
+                  @click="bulkEnableSelected">
+                  <ToggleRight class="w-3 h-3" />
+                  Enable
+                </button>
+                <button
+                  class="h-6 px-2 text-[10px] rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 flex items-center gap-1"
+                  @click="bulkDisableSelected">
+                  <ToggleLeft class="w-3 h-3" />
+                  Disable
+                </button>
+                <button
+                  class="h-6 px-2 text-[10px] rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 flex items-center gap-1"
+                  @click="removeSelectedMods">
+                  <Trash2 class="w-3 h-3" />
+                  Remove
+                </button>
+              </div>
+              <div v-else class="flex-1"></div>
+
+              <!-- Action Buttons -->
+              <div class="flex items-center gap-2">
+                <button v-if="updatesAvailableCount > 0 && !isLinked"
+                  class="h-6 text-[10px] px-2.5 rounded flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20"
+                  @click="updateAllMods">
+                  <ArrowUpCircle class="w-3 h-3" />
+                  Update All ({{ updatesAvailableCount }})
+                </button>
+                <button v-if="incompatibleModCount > 0 && !isLinked"
+                  class="h-6 text-[10px] px-2.5 rounded flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
+                  @click="removeIncompatibleMods">
+                  <Trash2 class="w-3 h-3" />
+                  Remove Incompatible
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Content Split View -->
           <div class="flex-1 flex overflow-hidden">
             <!-- Left: Installed Mods -->
             <div class="flex-1 border-r border-border/50 flex flex-col"
-              :class="isLibraryCollapsed ? '' : 'max-w-[50%]'">
-              <!-- Header -->
-              <div class="shrink-0 p-3 border-b border-border/30 bg-muted/20">
-                <div class="flex items-center justify-between mb-2">
-                  <div class="flex items-center gap-2">
-                    <span class="font-semibold text-sm">Installed</span>
-                    <span class="text-xs text-muted-foreground">
-                      {{ filteredInstalledMods.length
-                      }}<span v-if="disabledModCount > 0" class="text-amber-500">
-                        (+{{ disabledModCount }} disabled)</span>
-                    </span>
-                    <span v-if="incompatibleModCount > 0" class="text-xs text-red-500 font-medium">
-                      ({{ incompatibleModCount }} incompatible)
-                    </span>
-                    <!-- Update check progress indicator -->
-                    <span v-if="isCheckingAllUpdates" class="text-xs text-primary flex items-center gap-1">
-                      <RefreshCw class="w-3 h-3 animate-spin" />
-                      Checking updates...
-                    </span>
-                    <span v-else-if="updatesAvailableCount > 0" class="text-xs text-emerald-500 font-medium">
-                      ({{ updatesAvailableCount }} updates available)
-                    </span>
-                  </div>
-                  <!-- Bulk Actions -->
-                  <div v-if="selectedModIds.size > 0 && !isLinked" class="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" class="h-7 text-xs gap-1 text-emerald-500 hover:text-emerald-600"
-                      @click="bulkEnableSelected" title="Enable selected">
-                      <ToggleRight class="w-3 h-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" class="h-7 text-xs gap-1 text-amber-500 hover:text-amber-600"
-                      @click="bulkDisableSelected" title="Disable selected">
-                      <ToggleLeft class="w-3 h-3" />
-                    </Button>
-                    <Button variant="destructive" size="sm" class="h-7 text-xs gap-1" @click="removeSelectedMods">
-                      <Trash2 class="w-3 h-3" />
-                      {{ selectedModIds.size }}
-                    </Button>
-                  </div>
-                </div>
-
-                <!-- Quick Filters -->
-                <div class="flex items-center gap-1 mb-2 flex-wrap">
-                  <button class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'all'
-                    ? 'bg-primary/15 text-primary font-medium'
-                    : 'hover:bg-muted text-muted-foreground'
-                    " @click="modsFilter = 'all'">
-                    All
-                  </button>
-                  <button v-if="incompatibleModCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'incompatible'
-                    ? 'bg-red-500/15 text-red-500 font-medium'
-                    : 'hover:bg-muted text-muted-foreground'
-                    " @click="modsFilter = 'incompatible'">
-                    <AlertCircle class="w-3 h-3 inline mr-0.5" />
-                    {{ incompatibleModCount }}
-                  </button>
-                  <button v-if="disabledModCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'disabled'
-                    ? 'bg-amber-500/15 text-amber-500 font-medium'
-                    : 'hover:bg-muted text-muted-foreground'
-                    " @click="modsFilter = 'disabled'">
-                    <ToggleLeft class="w-3 h-3 inline mr-0.5" />
-                    {{ disabledModCount }}
-                  </button>
-                  <button v-if="updatesAvailableCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors"
-                    :class="modsFilter === 'updates'
-                      ? 'bg-emerald-500/15 text-emerald-500 font-medium'
-                      : 'hover:bg-muted text-muted-foreground'
-                      " @click="modsFilter = 'updates'">
-                    <ArrowUpCircle class="w-3 h-3 inline mr-0.5" />
-                    {{ updatesAvailableCount }}
-                  </button>
-                  <button v-if="recentlyUpdatedCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'recent-updated'
-                    ? 'bg-cyan-500/15 text-cyan-500 font-medium'
-                    : 'hover:bg-muted text-muted-foreground'
-                    " @click="modsFilter = 'recent-updated'">
-                    <Check class="w-3 h-3 inline mr-0.5" />
-                    {{ recentlyUpdatedCount }}
-                  </button>
-                  <button v-if="recentlyAddedCount > 0" class="h-6 text-[10px] px-2 rounded transition-colors" :class="modsFilter === 'recent-added'
-                    ? 'bg-blue-500/15 text-blue-500 font-medium'
-                    : 'hover:bg-muted text-muted-foreground'
-                    " @click="modsFilter = 'recent-added'">
-                    <Plus class="w-3 h-3 inline mr-0.5" />
-                    {{ recentlyAddedCount }}
-                  </button>
-
-                  <div class="flex-1"></div>
-
-                  <!-- Update All button -->
-                  <button v-if="updatesAvailableCount > 0 && !isLinked"
-                    class="h-6 text-[10px] px-2 rounded transition-colors flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20"
-                    @click="updateAllMods" title="Update all mods to latest version">
-                    <ArrowUpCircle class="w-3 h-3" />
-                    Update All
-                  </button>
-
-                  <!-- Remove all incompatible mods button -->
-                  <button v-if="incompatibleModCount > 0 && !isLinked && updatesAvailableCount === 0"
-                    class="h-6 text-[10px] px-2.5 rounded transition-colors ml-auto flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
-                    @click="removeIncompatibleMods" title="Remove all incompatible mods from this modpack">
-                    <Trash2 class="w-3 h-3" />
-                    <span>Remove All Incompatible</span>
-                  </button>
+              :class="isLibraryCollapsed ? '' : 'max-w-[60%]'">
+              <!-- Compact Header -->
+              <div class="shrink-0 px-3 py-2 border-b border-border/20 bg-muted/10 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-medium text-muted-foreground">
+                    {{ filteredInstalledMods.length }} installed
+                    <span v-if="disabledModCount > 0" class="text-amber-500">({{ disabledModCount }} disabled)</span>
+                  </span>
+                  <span v-if="isCheckingAllUpdates" class="text-xs text-primary flex items-center gap-1">
+                    <RefreshCw class="w-3 h-3 animate-spin" />
+                    Checking...
+                  </span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="relative flex-1">
-                    <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <input v-model="searchQueryInstalled" placeholder="Search installed..."
-                      class="w-full h-8 pl-8 pr-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all" />
-                  </div>
-                  <div class="flex rounded-lg border border-border/50 overflow-hidden">
-                    <button class="h-8 text-xs px-3 transition-colors" :class="sortBy === 'name'
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'hover:bg-muted'
+                  <!-- Sort buttons -->
+                  <div class="flex rounded border border-border/30 overflow-hidden">
+                    <button class="h-6 text-[10px] px-2 transition-colors" :class="sortBy === 'name'
+                      ? 'bg-muted text-foreground'
+                      : 'hover:bg-muted/50 text-muted-foreground'
                       " @click="toggleSort('name')">
                       Name
                     </button>
-                    <button class="h-8 text-xs px-3 border-l border-border/50 transition-colors" :class="sortBy === 'version'
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'hover:bg-muted'
+                    <button class="h-6 text-[10px] px-2 border-l border-border/30 transition-colors" :class="sortBy === 'version'
+                      ? 'bg-muted text-foreground'
+                      : 'hover:bg-muted/50 text-muted-foreground'
                       " @click="toggleSort('version')">
                       Version
                     </button>
+                  </div>
+                  <!-- Select All / Clear -->
+                  <div v-if="currentMods.length > 0 && !isLinked" class="flex items-center gap-1 text-[10px]">
+                    <button class="text-muted-foreground hover:text-foreground transition-colors"
+                      @click="selectAll">All</button>
+                    <span class="text-muted-foreground/50">|</span>
+                    <button class="text-muted-foreground hover:text-foreground transition-colors"
+                      @click="clearSelection">None</button>
                   </div>
                 </div>
               </div>
@@ -3441,57 +3525,35 @@ watch(
                   </p>
                 </div>
               </div>
-
-              <!-- Selection Footer -->
-              <div v-if="currentMods.length > 0 && !isLinked"
-                class="shrink-0 px-3 py-2 border-t border-border/30 bg-muted/10 flex items-center justify-between text-xs">
-                <span class="text-muted-foreground">{{ selectedModIds.size }} of
-                  {{ currentMods.length }} selected</span>
-                <div class="flex gap-3">
-                  <button class="text-muted-foreground hover:text-foreground transition-colors" @click="selectAll">
-                    Select All
-                  </button>
-                  <button class="text-muted-foreground hover:text-foreground transition-colors" @click="clearSelection">
-                    Clear
-                  </button>
-                </div>
-              </div>
             </div>
 
             <!-- Right: Available Mods (Library) -->
-            <div class="flex flex-col bg-muted/5 transition-all duration-300"
-              :class="isLibraryCollapsed ? 'w-10' : 'w-1/2'">
+            <div v-if="!isLibraryCollapsed" class="flex flex-col bg-muted/5 transition-all duration-300 w-[40%]">
               <!-- Header -->
-              <div class="shrink-0 p-3 border-b border-border/30 bg-muted/20">
-                <div class="flex items-center gap-2">
-                  <!-- Collapse/Expand Button -->
-                  <button @click="isLibraryCollapsed = !isLibraryCollapsed"
-                    class="h-6 w-6 flex items-center justify-center rounded hover:bg-muted transition-colors"
-                    :title="isLibraryCollapsed ? 'Expand Library' : 'Collapse Library'">
-                    <ChevronDown class="w-4 h-4 transition-transform"
-                      :class="isLibraryCollapsed ? '-rotate-90' : 'rotate-90'" />
+              <div class="shrink-0 px-3 py-2 border-b border-border/20 bg-muted/10">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <Package class="w-3.5 h-3.5 text-muted-foreground" />
+                    <span class="text-xs font-medium">Library</span>
+                    <span class="text-[10px] text-emerald-500">{{ compatibleCount }} compatible</span>
+                  </div>
+                  <button @click="isLibraryCollapsed = true"
+                    class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                    title="Collapse Library">
+                    <X class="w-3.5 h-3.5" />
                   </button>
-
-                  <template v-if="!isLibraryCollapsed">
-                    <span class="font-semibold text-sm">Library</span>
-                    <div class="flex items-center gap-2 text-xs ml-auto">
-                      <span class="text-emerald-500">{{ compatibleCount }} compatible</span>
-                      <span v-if="incompatibleCount > 0" class="text-amber-500">{{ incompatibleCount }}
-                        incompatible</span>
-                    </div>
-                  </template>
                 </div>
-                <div v-if="!isLibraryCollapsed" class="relative mt-2">
-                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <div class="relative mt-2">
+                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                   <input v-model="searchQueryAvailable" placeholder="Search library..."
-                    class="w-full h-8 pl-8 pr-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all" />
+                    class="w-full h-7 pl-7 pr-3 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all" />
                 </div>
               </div>
 
               <!-- Mod List -->
-              <div v-if="!isLibraryCollapsed" class="flex-1 overflow-y-auto p-2 space-y-1">
+              <div class="flex-1 overflow-y-auto p-2 space-y-1">
                 <div v-for="mod in filteredAvailableMods" :key="mod.id"
-                  class="flex items-center justify-between p-2.5 rounded-lg transition-all relative" :class="mod.isCompatible
+                  class="flex items-center justify-between p-2 rounded-lg transition-all relative" :class="mod.isCompatible
                     ? 'hover:bg-accent/50 cursor-pointer group'
                     : 'opacity-40'
                     ">
@@ -3952,6 +4014,11 @@ watch(
     <ModUpdateDialog :open="showSingleModUpdateDialog" :mod="selectedUpdateMod" :modpack-id="modpackId"
       :minecraft-version="modpack?.minecraft_version" :loader="modpack?.loader"
       @close="showSingleModUpdateDialog = false" @updated="handleSingleModUpdated" />
+
+    <!-- CurseForge Browse Dialog -->
+    <CurseForgeSearch :open="showCFSearch" :game-version="modpack?.minecraft_version" :mod-loader="modpack?.loader"
+      :initial-content-type="contentTypeTab" :locked-modpack-id="modpackId" :lock-filters="true"
+      @close="handleCFSearchClose" @added="handleCFModAdded" />
 
     <!-- Version Picker Dialog -->
     <FilePickerDialog :open="showVersionPickerDialog" :mod="versionPickerMod" :game-version="modpack?.minecraft_version"

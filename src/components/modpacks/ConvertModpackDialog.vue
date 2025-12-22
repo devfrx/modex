@@ -186,7 +186,7 @@ async function convertModpack() {
                 // For shaders/resourcepacks: only check version compatibility
                 const targetLoaderLower = targetLoader.value.toLowerCase();
                 let file;
-                
+
                 if (isModContent) {
                     // STRICT: The file must explicitly list the target loader - no cross-loader compatibility
                     file = files.find(f => {
@@ -201,8 +201,8 @@ async function convertModpack() {
                     // For shaders/resourcepacks: only check if version is in gameVersions list
                     file = files.find(f => {
                         const gameVersions = f.gameVersions || [];
-                        return gameVersions.some((gv: string) => 
-                            gv === targetVersion.value || 
+                        return gameVersions.some((gv: string) =>
+                            gv === targetVersion.value ||
                             gv.startsWith(targetVersion.value + ".") ||
                             targetVersion.value.startsWith(gv + ".")
                         );
@@ -335,7 +335,16 @@ function handleClose() {
 <template>
     <Dialog :open="open" @close="handleClose" maxWidth="2xl">
         <template #header>
-            <div class="flex items-center gap-2">
+            <div v-if="conversionResult" class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <CheckCircle2 class="w-5 h-5 text-green-500" />
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-green-500">Conversion Complete!</h2>
+                    <p class="text-sm text-muted-foreground">Your modpack has been converted successfully</p>
+                </div>
+            </div>
+            <div v-else class="flex items-center gap-2">
                 <RefreshCw class="w-5 h-5" />
                 Convert Modpack
             </div>
@@ -401,7 +410,7 @@ function handleClose() {
                     <div class="flex items-center justify-between text-sm">
                         <span class="text-muted-foreground">Converting mods...</span>
                         <span class="font-medium">{{ conversionProgress.current }} / {{ conversionProgress.total
-                        }}</span>
+                            }}</span>
                     </div>
                     <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
                         <div class="bg-primary h-full transition-all duration-300"
@@ -416,6 +425,22 @@ function handleClose() {
 
             <!-- Conversion Results -->
             <div v-if="conversionResult" class="space-y-4">
+                <!-- Success Banner -->
+                <div
+                    class="p-4 bg-gradient-to-r from-green-500/10 via-green-500/5 to-transparent border border-green-500/20 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="flex-1">
+                            <p class="text-sm text-foreground">
+                                Created <strong class="text-green-400">"{{ newName }}"</strong> with
+                                <strong class="text-green-400">{{ conversionResult.success }}</strong> mods.
+                            </p>
+                            <p class="text-xs text-muted-foreground mt-1">
+                                Target: {{ targetVersion }} {{ targetLoader }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-3 gap-3">
                     <button @click="summaryFilter = summaryFilter === 'success' ? 'all' : 'success'"

@@ -10,8 +10,9 @@ export type Theme =
 
 export interface ThemeCustomization {
   // Colors
-  primaryHue: number;
+  primaryHue: number; // -10 to 370: -10 to 0 = black, 0-360 = hue, 360-370 = white
   primarySaturation: number;
+  primaryLightness: number; // Auto-calculated for normal hues, 0-100 for B/W
   
   // Borders
   borderRadius: number; // in px
@@ -34,87 +35,127 @@ export interface StylePreset {
 }
 
 const defaultCustomization: ThemeCustomization = {
-  primaryHue: 262,
-  primarySaturation: 83,
-  borderRadius: 12,
+  primaryHue: 153,  // Green/Emerald for Supabase style
+  primarySaturation: 60,
+  primaryLightness: 55, // Default lightness for normal colors
+  borderRadius: 8,  // Matches rounded-lg
   borderWidth: 1,
-  glassEffect: true,
-  shadowIntensity: 30,
+  glassEffect: false,
+  shadowIntensity: 20,
   stylePreset: "default",
 };
 
 export const stylePresets: StylePreset[] = [
   {
     id: "default",
-    name: "Default",
-    description: "The original ModEx style",
+    name: "Emerald",
+    description: "Modern Supabase-inspired green",
+    preview: "#3ecf8e",
+    config: {
+      primaryHue: 153,
+      primarySaturation: 60,
+      borderRadius: 8,
+      borderWidth: 1,
+      glassEffect: false,
+      shadowIntensity: 20,
+    },
+  },
+  {
+    id: "ocean",
+    name: "Ocean",
+    description: "Calm blue tones",
+    preview: "#3b82f6",
+    config: {
+      primaryHue: 217,
+      primarySaturation: 91,
+      borderRadius: 8,
+      borderWidth: 1,
+      glassEffect: false,
+      shadowIntensity: 20,
+    },
+  },
+  {
+    id: "violet",
+    name: "Violet",
+    description: "Rich purple accents",
     preview: "#8b5cf6",
     config: {
       primaryHue: 262,
       primarySaturation: 83,
-      borderRadius: 12,
-      borderWidth: 1,
-      glassEffect: true,
-      shadowIntensity: 30,
-    },
-  },
-  {
-    id: "rounded",
-    name: "Rounded",
-    description: "Extra rounded corners",
-    preview: "#8b5cf6",
-    config: {
-      borderRadius: 20,
-      borderWidth: 1,
-      glassEffect: true,
-    },
-  },
-  {
-    id: "sharp",
-    name: "Sharp",
-    description: "Minimal border radius",
-    preview: "#8b5cf6",
-    config: {
-      borderRadius: 4,
+      borderRadius: 8,
       borderWidth: 1,
       glassEffect: false,
+      shadowIntensity: 20,
     },
   },
   {
-    id: "blocky",
-    name: "Blocky",
-    description: "No rounded corners",
-    preview: "#8b5cf6",
+    id: "rose",
+    name: "Rose",
+    description: "Warm pink tones",
+    preview: "#f43f5e",
     config: {
-      borderRadius: 0,
-      borderWidth: 2,
-      glassEffect: false,
-    },
-  },
-  {
-    id: "glass",
-    name: "Glassmorphism",
-    description: "Heavy glass effect",
-    preview: "#8b5cf6",
-    config: {
-      borderRadius: 16,
+      primaryHue: 350,
+      primarySaturation: 89,
+      borderRadius: 8,
       borderWidth: 1,
-      glassEffect: true,
+      glassEffect: false,
+      shadowIntensity: 20,
+    },
+  },
+  {
+    id: "amber",
+    name: "Amber",
+    description: "Warm orange glow",
+    preview: "#f59e0b",
+    config: {
+      primaryHue: 38,
+      primarySaturation: 92,
+      borderRadius: 8,
+      borderWidth: 1,
+      glassEffect: false,
       shadowIntensity: 20,
     },
   },
   {
     id: "neon",
     name: "Neon",
-    description: "Strong borders and shadows",
+    description: "Vibrant cyberpunk style",
     preview: "#00ff88",
     config: {
       primaryHue: 150,
       primarySaturation: 100,
-      borderRadius: 8,
+      borderRadius: 6,
       borderWidth: 2,
       glassEffect: false,
-      shadowIntensity: 60,
+      shadowIntensity: 50,
+    },
+  },
+  {
+    id: "glass",
+    name: "Glass",
+    description: "Frosted glassmorphism",
+    preview: "#3ecf8e",
+    config: {
+      primaryHue: 153,
+      primarySaturation: 60,
+      borderRadius: 12,
+      borderWidth: 1,
+      glassEffect: true,
+      shadowIntensity: 15,
+    },
+  },
+  {
+    id: "minimal",
+    name: "Minimal",
+    description: "Clean monochrome look",
+    preview: "#a1a1aa",
+    config: {
+      primaryHue: 240,
+      primarySaturation: 5,
+      borderRadius: 6,
+      borderWidth: 1,
+      glassEffect: false,
+      shadowIntensity: 10,
     },
   },
 ];
@@ -170,19 +211,47 @@ export function useTheme() {
     const root = document.documentElement;
     const config = customization.value;
 
-    // Primary color (HSL)
-    root.style.setProperty("--primary-hue", config.primaryHue.toString());
-    root.style.setProperty("--primary-sat", `${config.primarySaturation}%`);
-    root.style.setProperty(
-      "--primary",
-      `${config.primaryHue} ${config.primarySaturation}% 65%`
-    );
+    // Primary color (HSL) - handle extended range for black/white
+    // Range: -10 to 0 = black, 0-360 = hue colors, 360-370 = white
+    let hue = config.primaryHue;
+    let sat = config.primarySaturation;
+    let lightness = config.primaryLightness || 55;
+
+    if (hue < 0) {
+      // Black range: -10 to 0 maps to lightness 0% to 10%
+      const blackProgress = (hue + 10) / 10; // 0 to 1
+      hue = 0;
+      sat = 0;
+      lightness = blackProgress * 10; // 0% to 10%
+    } else if (hue > 360) {
+      // White range: 360 to 370 maps to lightness 90% to 100%
+      const whiteProgress = (hue - 360) / 10; // 0 to 1
+      hue = 0;
+      sat = 0;
+      lightness = 90 + whiteProgress * 10; // 90% to 100%
+    } else {
+      // Normal hue range
+      lightness = 55; // Standard lightness for colored hues
+    }
+
+    // Primary color (HSL) - only apply if not using a preset theme's color
+    // or if explicitly customized (different from default)
+    const isCustomColor = config.primaryHue !== 262 || config.primarySaturation !== 83;
+    if (isCustomColor || currentTheme.value === "dark") {
+      root.style.setProperty("--primary-hue", hue.toString());
+      root.style.setProperty("--primary-sat", `${sat}%`);
+      root.style.setProperty(
+        "--primary",
+        `${hue} ${sat}% ${lightness}%`
+      );
+      root.style.setProperty(
+        "--ring",
+        `${hue} ${sat}% ${lightness}%`
+      );
+    }
 
     // Border radius
     root.style.setProperty("--radius", `${config.borderRadius}px`);
-    root.style.setProperty("--radius-sm", `${Math.max(0, config.borderRadius - 4)}px`);
-    root.style.setProperty("--radius-lg", `${config.borderRadius + 4}px`);
-    root.style.setProperty("--radius-xl", `${config.borderRadius + 8}px`);
 
     // Border width
     root.style.setProperty("--border-width", `${config.borderWidth}px`);

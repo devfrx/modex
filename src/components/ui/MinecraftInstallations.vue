@@ -161,7 +161,7 @@ async function handleSelectModsPath() {
 
 async function handleAddInstallation() {
   if (!newInstallation.value.name || !newInstallation.value.path) return;
-  
+
   isAdding.value = true;
   try {
     await addCustomInstallation(
@@ -192,8 +192,9 @@ async function handleLaunch(installation: MinecraftInstallation) {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/10 border border-green-500/20 flex items-center justify-center">
-          <Gamepad2 class="w-5 h-5 text-green-500" />
+        <div
+          class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center">
+          <Gamepad2 class="w-5 h-5 text-primary" />
         </div>
         <div>
           <h3 class="font-semibold text-foreground">Minecraft Installations</h3>
@@ -202,30 +203,17 @@ async function handleLaunch(installation: MinecraftInstallation) {
           </p>
         </div>
       </div>
-      
+
       <div class="flex items-center gap-2">
-        <Button 
-          variant="ghost" 
-          size="sm"
-          @click="showLauncherConfig = true; loadLauncherPaths()"
-          title="Configure Launcher Paths"
-        >
+        <Button variant="ghost" size="sm" @click="showLauncherConfig = true; loadLauncherPaths()"
+          title="Configure Launcher Paths">
           <Settings class="w-4 h-4" />
         </Button>
-        <Button 
-          variant="ghost" 
-          size="sm"
-          :disabled="isScanning"
-          @click="scanInstallations"
-        >
+        <Button variant="ghost" size="sm" :disabled="isScanning" @click="scanInstallations">
           <RefreshCw class="w-4 h-4" :class="isScanning && 'animate-spin'" />
           <span class="hidden sm:inline ml-2">Rescan</span>
         </Button>
-        <Button 
-          variant="secondary" 
-          size="sm"
-          @click="showAddDialog = true"
-        >
+        <Button variant="secondary" size="sm" @click="showAddDialog = true">
           <Plus class="w-4 h-4" />
           <span class="hidden sm:inline ml-2">Add Custom</span>
         </Button>
@@ -234,47 +222,40 @@ async function handleLaunch(installation: MinecraftInstallation) {
 
     <!-- Loading State -->
     <div v-if="isLoading" class="flex items-center justify-center py-12">
-      <Loader2 class="w-8 h-8 animate-spin text-primary" />
+      <Loader2 class="w-6 h-6 animate-spin text-primary" />
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="!hasInstallations" class="text-center py-12 border border-dashed border-border rounded-xl">
-      <Gamepad2 class="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
-      <p class="text-muted-foreground mb-4">No Minecraft installations found</p>
+    <div v-else-if="!hasInstallations" class="text-center py-10 border border-dashed border-border/50 rounded-lg">
+      <Gamepad2 class="w-10 h-10 mx-auto text-muted-foreground mb-3 opacity-50" />
+      <p class="text-muted-foreground text-sm mb-4">No Minecraft installations found</p>
       <div class="flex justify-center gap-2">
-        <Button variant="secondary" @click="scanInstallations">
-          <RefreshCw class="w-4 h-4 mr-2" />
+        <Button variant="secondary" size="sm" @click="scanInstallations">
+          <RefreshCw class="w-3.5 h-3.5 mr-2" />
           Scan Again
         </Button>
-        <Button variant="default" @click="showAddDialog = true">
-          <Plus class="w-4 h-4 mr-2" />
+        <Button variant="default" size="sm" @click="showAddDialog = true">
+          <Plus class="w-3.5 h-3.5 mr-2" />
           Add Custom
         </Button>
       </div>
     </div>
 
     <!-- Installations List -->
-    <div v-else class="space-y-3">
-      <div
-        v-for="installation in installations"
-        :key="installation.id"
-        class="group relative p-4 rounded-xl border border-border bg-card hover:border-primary/30 transition-all"
-        :class="installation.isDefault && 'ring-1 ring-primary/50 border-primary/30'"
-      >
+    <div v-else class="space-y-2.5">
+      <div v-for="installation in installations" :key="installation.id"
+        class="group relative p-3.5 rounded-lg border border-border/50 bg-card/50 hover:border-border hover:bg-card/70 transition-all"
+        :class="installation.isDefault && 'ring-1 ring-primary/50 border-primary/30'">
         <!-- Default Badge -->
-        <div 
-          v-if="installation.isDefault" 
-          class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-medium"
-        >
+        <div v-if="installation.isDefault"
+          class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-medium">
           Default
         </div>
 
-        <div class="flex items-start gap-4">
+        <div class="flex items-start gap-3">
           <!-- Icon -->
-          <div 
-            class="w-12 h-12 rounded-xl border flex items-center justify-center text-xl shrink-0"
-            :class="getTypeColor(installation.type)"
-          >
+          <div class="w-10 h-10 rounded-lg border flex items-center justify-center text-lg shrink-0"
+            :class="getTypeColor(installation.type)">
             {{ getTypeIcon(installation.type) }}
           </div>
 
@@ -282,18 +263,16 @@ async function handleLaunch(installation: MinecraftInstallation) {
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <h4 class="font-medium text-foreground truncate">{{ installation.name }}</h4>
-              <span 
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium border"
-                :class="getTypeColor(installation.type)"
-              >
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-medium border"
+                :class="getTypeColor(installation.type)">
                 {{ getTypeName(installation.type) }}
               </span>
             </div>
-            
+
             <p class="text-xs text-muted-foreground mt-1 truncate" :title="installation.path">
               {{ installation.path }}
             </p>
-            
+
             <div class="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
               <span v-if="installation.version" class="flex items-center gap-1">
                 <HardDrive class="w-3 h-3" />
@@ -310,42 +289,22 @@ async function handleLaunch(installation: MinecraftInstallation) {
 
           <!-- Actions -->
           <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              title="Open mods folder"
-              @click="openModsFolder(installation.id)"
-            >
+            <Button variant="ghost" size="icon" title="Open mods folder" @click="openModsFolder(installation.id)">
               <FolderOpen class="w-4 h-4" />
             </Button>
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              title="Set as default"
-              :disabled="installation.isDefault"
-              @click="setDefault(installation.id)"
-            >
+
+            <Button variant="ghost" size="icon" title="Set as default" :disabled="installation.isDefault"
+              @click="setDefault(installation.id)">
               <Star class="w-4 h-4" :class="installation.isDefault && 'fill-yellow-500 text-yellow-500'" />
             </Button>
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              title="Launch Minecraft"
-              @click="handleLaunch(installation)"
-            >
+
+            <Button variant="ghost" size="icon" title="Launch Minecraft" @click="handleLaunch(installation)">
               <Play class="w-4 h-4" />
             </Button>
-            
-            <Button 
-              v-if="installation.type === 'custom'"
-              variant="ghost" 
-              size="icon"
-              class="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-              title="Remove"
-              @click="removeInstallation(installation.id)"
-            >
+
+            <Button v-if="installation.type === 'custom'" variant="ghost" size="icon"
+              class="text-red-400 hover:text-red-300 hover:bg-red-500/10" title="Remove"
+              @click="removeInstallation(installation.id)">
               <Trash2 class="w-4 h-4" />
             </Button>
           </div>
@@ -356,16 +315,13 @@ async function handleLaunch(installation: MinecraftInstallation) {
     <!-- Add Custom Dialog -->
     <Dialog :open="showAddDialog" @close="showAddDialog = false">
       <template #title>Add Custom Installation</template>
-      
+
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-foreground mb-1.5">
             Installation Name
           </label>
-          <Input 
-            v-model="newInstallation.name"
-            placeholder="My Minecraft Install"
-          />
+          <Input v-model="newInstallation.name" placeholder="My Minecraft Install" />
         </div>
 
         <div>
@@ -373,11 +329,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
             Minecraft Folder
           </label>
           <div class="flex gap-2">
-            <Input 
-              v-model="newInstallation.path"
-              placeholder="C:\Users\...\minecraft"
-              class="flex-1"
-            />
+            <Input v-model="newInstallation.path" placeholder="C:\Users\...\minecraft" class="flex-1" />
             <Button variant="secondary" @click="handleSelectPath">
               <FolderOpen class="w-4 h-4" />
             </Button>
@@ -392,11 +344,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
             Mods Folder <span class="text-muted-foreground">(optional)</span>
           </label>
           <div class="flex gap-2">
-            <Input 
-              v-model="newInstallation.modsPath"
-              placeholder="Auto-detected from above"
-              class="flex-1"
-            />
+            <Input v-model="newInstallation.modsPath" placeholder="Auto-detected from above" class="flex-1" />
             <Button variant="secondary" @click="handleSelectModsPath">
               <FolderOpen class="w-4 h-4" />
             </Button>
@@ -408,11 +356,8 @@ async function handleLaunch(installation: MinecraftInstallation) {
         <Button variant="ghost" @click="showAddDialog = false">
           Cancel
         </Button>
-        <Button 
-          variant="default" 
-          :disabled="!newInstallation.name || !newInstallation.path || isAdding"
-          @click="handleAddInstallation"
-        >
+        <Button variant="default" :disabled="!newInstallation.name || !newInstallation.path || isAdding"
+          @click="handleAddInstallation">
           <Loader2 v-if="isAdding" class="w-4 h-4 mr-2 animate-spin" />
           Add Installation
         </Button>
@@ -425,13 +370,9 @@ async function handleLaunch(installation: MinecraftInstallation) {
         <p class="text-sm text-muted-foreground">
           If the launcher isn't detected automatically, you can specify the executable path manually.
         </p>
-        
+
         <div class="space-y-3">
-          <div 
-            v-for="launcher in launcherTypes" 
-            :key="launcher.id"
-            class="p-3 rounded-lg border border-border bg-card"
-          >
+          <div v-for="launcher in launcherTypes" :key="launcher.id" class="p-3 rounded-lg border border-border bg-card">
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-3">
                 <span class="text-xl">{{ launcher.icon }}</span>
@@ -446,44 +387,34 @@ async function handleLaunch(installation: MinecraftInstallation) {
                   </div>
                 </div>
               </div>
-              
+
               <div class="flex items-center gap-2">
-                <Button 
-                  variant="secondary" 
-                  size="sm"
-                  @click="handleSetLauncherPath(launcher.id)"
-                >
+                <Button variant="secondary" size="sm" @click="handleSetLauncherPath(launcher.id)">
                   <FolderOpen class="w-4 h-4" />
                   <span class="ml-1 hidden sm:inline">Browse</span>
                 </Button>
-                <Button 
-                  v-if="launcherPaths[launcher.id]"
-                  variant="ghost" 
-                  size="sm"
-                  @click="handleClearLauncherPath(launcher.id)"
-                >
+                <Button v-if="launcherPaths[launcher.id]" variant="ghost" size="sm"
+                  @click="handleClearLauncherPath(launcher.id)">
                   <Trash2 class="w-4 h-4 text-red-400" />
                 </Button>
               </div>
             </div>
-            
+
             <!-- Current/Custom Path -->
-            <div v-if="launcherPaths[launcher.id]" class="mt-2 p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
+            <div v-if="launcherPaths[launcher.id]"
+              class="mt-2 p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
               <div class="text-xs text-muted-foreground mb-1">Custom path:</div>
               <div class="text-xs font-mono text-emerald-400 break-all">{{ launcherPaths[launcher.id] }}</div>
             </div>
-            
+
             <!-- Default Paths -->
             <details class="mt-2">
               <summary class="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                 Show auto-detection paths
               </summary>
               <div class="mt-2 p-2 rounded bg-muted/50 space-y-1">
-                <div 
-                  v-for="(path, idx) in defaultLauncherPaths[launcher.id]" 
-                  :key="idx"
-                  class="text-xs font-mono text-muted-foreground break-all"
-                >
+                <div v-for="(path, idx) in defaultLauncherPaths[launcher.id]" :key="idx"
+                  class="text-xs font-mono text-muted-foreground break-all">
                   {{ path }}
                 </div>
               </div>

@@ -901,7 +901,7 @@ function onSearchInput() {
 const hasMore = computed(() => searchResults.value.length < totalResults.value);
 
 function getReleaseColor(type: number) {
-  if (type === 1) return "bg-green-500/10 text-green-500 border-green-500/20";
+  if (type === 1) return "bg-primary/10 text-primary border-primary/20";
   if (type === 2) return "bg-blue-500/10 text-blue-500 border-blue-500/20";
   return "bg-orange-500/10 text-orange-500 border-orange-500/20";
 }
@@ -950,7 +950,7 @@ function getReleaseColor(type: number) {
               <button
                 class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
                 :class="selectedContentType === 'mods'
-                  ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+                  ? 'bg-primary/15 text-primary border border-primary/30'
                   : 'bg-muted/50 hover:bg-muted text-muted-foreground'
                   " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'mods')">
                 <Layers class="w-3 h-3" />
@@ -1058,7 +1058,7 @@ function getReleaseColor(type: number) {
                 <input type="checkbox" v-model="filterRelease"
                   class="rounded border-input text-primary focus:ring-primary/50" />
                 <span class="inline-flex items-center gap-1.5">
-                  <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                  <div class="w-2 h-2 rounded-full bg-primary"></div>
                   Release
                 </span>
               </label>
@@ -1104,7 +1104,7 @@ function getReleaseColor(type: number) {
                 <ChevronDown
                   class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
               </div>
-              <p class="text-xs text-emerald-500">
+              <p class="text-xs text-primary">
                 Adding directly to this modpack
               </p>
             </template>
@@ -1201,7 +1201,7 @@ function getReleaseColor(type: number) {
         <div class="flex-1 overflow-y-auto p-4 relative">
           <!-- API Warning -->
           <div v-if="!hasApiKey"
-            class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-background/80 backdrop-blur-sm z-10">
+            class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-background/80 z-10">
             <AlertTriangle class="w-12 h-12 text-yellow-500 mb-4" />
             <h3 class="text-xl font-bold mb-2">API Key Required</h3>
             <p class="text-muted-foreground max-w-md mb-6">
@@ -1213,8 +1213,7 @@ function getReleaseColor(type: number) {
           </div>
 
           <!-- Loading -->
-          <div v-if="isSearching"
-            class="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-[1px] z-10">
+          <div v-if="isSearching" class="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
             <Loader2 class="w-10 h-10 animate-spin text-primary" />
           </div>
 
@@ -1252,7 +1251,7 @@ function getReleaseColor(type: number) {
                   <div class="flex items-center gap-2 mb-1">
                     <h4 class="font-bold text-base truncate">{{ mod.name }}</h4>
                     <span v-if="isModInstalled(mod.id)"
-                      class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20 flex items-center gap-0.5">
+                      class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 flex items-center gap-0.5">
                       <Check class="w-3 h-3" /> INSTALLED
                     </span>
                   </div>

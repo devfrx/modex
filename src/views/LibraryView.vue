@@ -1264,83 +1264,165 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Compact Header -->
+    <!-- Compact Header - Single Row -->
     <div class="shrink-0 relative border-b border-border z-20">
-      <div class="relative px-3 sm:px-8 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
-        <!-- Mobile: Stack vertically, Desktop: Row -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+      <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
+        <div class="flex items-center gap-3 sm:gap-4">
           <!-- Left: Title & Stats -->
-          <div class="flex items-center gap-3 sm:gap-4">
-            <div class="flex items-center gap-2 sm:gap-3">
-              <div
-                class="p-2 sm:p-2.5 bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 rounded-xl border border-emerald-500/20">
-                <HardDrive class="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
-              </div>
-              <div>
-                <h1 class="text-base sm:text-lg font-semibold tracking-tight">
-                  Library
-                </h1>
-                <p class="text-[10px] sm:text-xs text-muted-foreground">
-                  {{ mods.length }} mods
-                  <span class="hidden md:inline" v-if="Object.keys(loaderStats).length > 1">
-                    •
-                    <span v-for="(count, loader, idx) in loaderStats" :key="loader">
-                      {{ count }} {{ loader
-                      }}{{
-                        idx < Object.keys(loaderStats).length - 1 ? ", " : "" }} </span>
-                    </span>
-                </p>
-              </div>
+          <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div
+              class="p-2 sm:p-2.5 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg border border-primary/20">
+              <HardDrive class="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
             </div>
+            <div>
+              <h1 class="text-base sm:text-lg font-semibold tracking-tight">
+                Library
+              </h1>
+              <p class="text-[10px] sm:text-xs text-muted-foreground">
+                {{ mods.length }} mods
+                <span class="hidden lg:inline" v-if="Object.keys(loaderStats).length > 1">
+                  •
+                  <span v-for="(count, loader, idx) in loaderStats" :key="loader">
+                    {{ count }} {{ loader }}{{ idx < Object.keys(loaderStats).length - 1 ? ", " : "" }} </span>
+                  </span>
+              </p>
+            </div>
+          </div>
 
-            <!-- Separator - hidden on mobile -->
-            <div class="hidden sm:block h-8 w-px bg-border" />
+          <!-- Separator -->
+          <div class="hidden sm:block h-8 w-px bg-border shrink-0" />
 
-            <!-- Quick Filters -->
-            <div class="flex items-center gap-1 sm:gap-1.5 py-0.5">
-              <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
-                ? 'bg-primary text-primary-foreground shadow-md'
+          <!-- Quick Filters -->
+          <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              " @click="
+                quickFilter = 'all';
+              router.push('/library');
+              ">
+              All
+            </button>
+            <button
+              class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
+              :class="quickFilter === 'favorites'
+                ? 'bg-rose-500/20 text-rose-400 shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 " @click="
-                  quickFilter = 'all';
-                router.push('/library');
+                  quickFilter = 'favorites';
+                router.push('/library?filter=favorites');
                 ">
-                All
+              <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
+            </button>
+            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'recent'
+              ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              " @click="
+                quickFilter = 'recent';
+              router.push('/library?filter=recent');
+              ">
+              Recent
+            </button>
+          </div>
+
+          <!-- Center: Search, Filters, View Toggles -->
+          <div class="hidden md:flex items-center gap-2 flex-1 justify-center max-w-xl">
+            <!-- Search Icon Button (opens inline search) -->
+            <div class="relative flex-1 max-w-xs">
+              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input v-model="searchQuery" :placeholder="searchField === 'all' ? 'Search...' : `By ${searchField}...`"
+                class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
+            </div>
+
+            <!-- Filter Toggle -->
+            <button @click="showFilters = !showFilters"
+              class="relative flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="showFilters || activeFilterCount > 0
+                ? 'bg-primary/20 text-primary'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'">
+              <Filter class="w-3.5 h-3.5" />
+              <span class="hidden lg:inline">Filters</span>
+              <span v-if="activeFilterCount > 0"
+                class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                {{ activeFilterCount }}
+              </span>
+            </button>
+
+            <!-- View Mode Toggle -->
+            <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
+              <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                title="Grid View">
+                <LayoutGrid class="w-3.5 h-3.5" />
               </button>
-              <button
-                class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
-                :class="quickFilter === 'favorites'
-                  ? 'bg-rose-500/20 text-rose-400 shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  " @click="
-                    quickFilter = 'favorites';
-                  router.push('/library?filter=favorites');
-                  ">
-                <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
-                <span v-if="favoriteMods.size > 0" class="hidden xs:inline">({{ favoriteMods.size }})</span>
+              <button @click="viewMode = 'gallery'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'gallery' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                title="Gallery View">
+                <GalleryVertical class="w-3.5 h-3.5" />
               </button>
-              <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'recent'
-                ? 'bg-blue-500/20 text-blue-400 shadow-md'
-                : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
-                " @click="
-                  quickFilter = 'recent';
-                router.push('/library?filter=recent');
-                ">
-                Recent
+              <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                title="List View">
+                <List class="w-3.5 h-3.5" />
+              </button>
+              <button @click="viewMode = 'compact'" class="p-1.5 rounded transition-all"
+                :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+                title="Compact View">
+                <LayoutList class="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <!-- Column Selector (List View Only) -->
+            <div class="relative" v-if="viewMode === 'list'">
+              <button @click="showColumnSelector = !showColumnSelector" class="p-1.5 rounded-md transition-all"
+                :class="showColumnSelector ? 'bg-muted text-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'"
+                title="Configure columns">
+                <Columns class="w-3.5 h-3.5" />
               </button>
 
-              <!-- Duplicate Warning Badge -->
-              <div v-if="duplicateCount > 0"
-                class="flex items-center gap-1 px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs bg-orange-500/20 text-orange-400 rounded-md cursor-pointer hover:bg-orange-500/30 transition-colors"
-                @click="searchQuery = ''" title="Click to show all and review duplicates">
-                <AlertTriangle class="w-3 h-3" />
-                <span class="hidden sm:inline">{{ duplicateCount }}</span>
+              <!-- Column Selector Dropdown -->
+              <div v-if="showColumnSelector"
+                class="absolute top-full right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-[100] p-2 space-y-1">
+                <div class="text-xs font-medium text-muted-foreground px-2 py-1">
+                  Visible Columns
+                </div>
+                <label v-for="col in availableColumns" :key="col.id"
+                  class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer text-sm">
+                  <input type="checkbox" :checked="visibleColumns.has(col.id)" @change="
+                    visibleColumns.has(col.id)
+                      ? visibleColumns.delete(col.id)
+                      : visibleColumns.add(col.id)
+                    " class="rounded border-muted-foreground/30 text-primary focus:ring-primary" />
+                  {{ col.label }}
+                </label>
               </div>
+
+              <!-- Backdrop for dropdown -->
+              <div v-if="showColumnSelector" class="fixed inset-0 z-40" @click="showColumnSelector = false" />
+            </div>
+
+            <!-- Group Toggle -->
+            <button @click="enableGrouping = !enableGrouping" class="p-1.5 rounded-md transition-all" :class="enableGrouping
+              ? 'bg-primary/20 text-primary'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'"
+              title="Group identical resources">
+              <Layers class="w-3.5 h-3.5" />
+            </button>
+
+            <!-- Selection Actions -->
+            <div class="flex items-center gap-1 border-l border-border pl-2 ml-1">
+              <button @click="selectAll" :disabled="filteredMods.length === 0"
+                class="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+                Select All
+              </button>
+              <button @click="selectNone" :disabled="selectedModIds.size === 0"
+                class="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+                Clear
+              </button>
             </div>
           </div>
 
           <!-- Right: Actions -->
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5 sm:gap-2 ml-auto shrink-0">
             <Button @click="showUpdatesDialog = true" :disabled="!isElectron()" variant="secondary" size="sm"
               class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shadow-sm hover:shadow transition-all"
               title="Check for mod updates">
@@ -1350,114 +1432,39 @@ onMounted(() => {
             <Button @click="showCurseForgeSearch = true" variant="default" size="sm"
               class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
               <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden xs:inline">CurseForge</span>
             </Button>
           </div>
         </div>
 
-        <!-- Toolbar -->
-        <div class="hidden md:flex items-center gap-2 mt-3 sm:mt-4 flex-1 max-w-2xl mx-auto">
-          <!-- Search -->
+        <!-- Mobile Toolbar -->
+        <div class="md:hidden flex items-center gap-2 mt-3">
           <div class="relative flex-1">
             <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <input v-model="searchQuery" :placeholder="searchField === 'all' ? 'Search...' : `By ${searchField}...`"
-              class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
+            <input v-model="searchQuery" placeholder="Search..."
+              class="w-full pl-8 pr-3 py-2 text-sm rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all" />
           </div>
-
-          <!-- Search Field Selector (beside search) -->
-          <select v-model="searchField" title="Search field"
-            class="text-xs bg-muted/50 border-none rounded-md py-1.5 pl-2 pr-6 focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:bg-muted transition-colors">
-            <option value="all">All</option>
-            <option value="name">Name</option>
-            <option value="author">Author</option>
-            <option value="version">Version</option>
-            <option value="description">Description</option>
-          </select>
-
-          <!-- Filter Toggle -->
           <button @click="showFilters = !showFilters"
-            class="relative flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="showFilters || activeFilterCount > 0
+            class="relative flex items-center justify-center p-2 rounded-md transition-all" :class="showFilters || activeFilterCount > 0
               ? 'bg-primary/20 text-primary'
-              : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'">
-            <Filter class="w-3.5 h-3.5" />
-            <span class="hidden lg:inline">Filters</span>
+              : 'bg-muted/50 text-muted-foreground'">
+            <Filter class="w-4 h-4" />
             <span v-if="activeFilterCount > 0"
               class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
               {{ activeFilterCount }}
             </span>
           </button>
-
-          <!-- View Mode Toggle -->
           <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
             <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
-              :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
               title="Grid View">
               <LayoutGrid class="w-3.5 h-3.5" />
             </button>
-            <button @click="viewMode = 'gallery'" class="p-1.5 rounded transition-all"
-              :class="viewMode === 'gallery' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-              title="Gallery View">
-              <GalleryVertical class="w-3.5 h-3.5" />
-            </button>
             <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
-              :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
               title="List View">
               <List class="w-3.5 h-3.5" />
             </button>
-            <button @click="viewMode = 'compact'" class="p-1.5 rounded transition-all"
-              :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-              title="Compact View">
-              <LayoutList class="w-3.5 h-3.5" />
-            </button>
           </div>
-
-          <!-- Column Selector (List View Only) -->
-          <div class="relative" v-if="viewMode === 'list'">
-            <button @click="showColumnSelector = !showColumnSelector" class="p-1.5 rounded-md transition-all"
-              :class="showColumnSelector ? 'bg-muted text-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'"
-              title="Configure columns">
-              <Columns class="w-3.5 h-3.5" />
-            </button>
-
-            <!-- Column Selector Dropdown -->
-            <div v-if="showColumnSelector"
-              class="absolute top-full right-0 mt-2 w-48 bg-popover border border-border rounded-md shadow-lg z-[100] p-2 space-y-1">
-              <div class="text-xs font-medium text-muted-foreground px-2 py-1">
-                Visible Columns
-              </div>
-              <label v-for="col in availableColumns" :key="col.id"
-                class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer text-sm">
-                <input type="checkbox" :checked="visibleColumns.has(col.id)" @change="
-                  visibleColumns.has(col.id)
-                    ? visibleColumns.delete(col.id)
-                    : visibleColumns.add(col.id)
-                  " class="rounded border-muted-foreground/30 text-primary focus:ring-primary" />
-                {{ col.label }}
-              </label>
-            </div>
-
-            <!-- Backdrop for dropdown -->
-            <div v-if="showColumnSelector" class="fixed inset-0 z-40" @click="showColumnSelector = false" />
-          </div>
-
-          <!-- Group Toggle -->
-          <button @click="enableGrouping = !enableGrouping"
-            class="p-1.5 rounded-md transition-all flex items-center gap-1.5" :class="enableGrouping
-              ? 'bg-primary/20 text-primary'
-              : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'"
-            title="Group identical resources">
-            <Layers class="w-3.5 h-3.5" />
-          </button>
-
-          <!-- Selection Actions -->
-          <button @click="selectAll" :disabled="filteredMods.length === 0"
-            class="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
-            Select All
-          </button>
-          <button @click="selectNone" :disabled="selectedModIds.size === 0"
-            class="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
-            Clear
-          </button>
         </div>
       </div>
     </div>
@@ -2062,18 +2069,18 @@ onMounted(() => {
 
           <div>
             <span class="text-xs text-muted-foreground">Source</span>
-            <p class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5">
+            <p class="text-xs mt-1 font-mono break-all bg-muted/30 p-2 rounded-md border border-border/30">
               {{ detailsMod.source }} (ID: {{ detailsMod.cf_project_id }})
             </p>
           </div>
           <div>
             <span class="text-xs text-muted-foreground">Filename</span>
-            <p class="text-xs mt-1 font-mono break-all bg-white/5 p-2 rounded-md border border-white/5">
+            <p class="text-xs mt-1 font-mono break-all bg-muted/30 p-2 rounded-md border border-border/30">
               {{ detailsMod.filename }}
             </p>
           </div>
         </div>
-        <div class="p-4 border-t border-white/5 flex gap-2">
+        <div class="p-4 border-t border-border/30 flex gap-2">
           <Button variant="destructive" class="flex-1" @click="confirmDelete(detailsMod.id)">Delete</Button>
         </div>
       </div>

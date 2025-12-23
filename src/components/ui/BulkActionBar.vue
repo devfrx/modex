@@ -16,7 +16,7 @@ defineEmits<{
   <div
     class="fixed bottom-3 sm:bottom-6 left-1/2 sm:left-[calc(50%+8rem)] -translate-x-1/2 z-[60] animate-in slide-in-from-bottom-10 fade-in duration-300 w-[calc(100%-1.5rem)] sm:w-auto max-w-full">
     <div
-      class="bg-popover/80 border border-border backdrop-blur-xl px-3 sm:px-5 py-2 sm:py-3 rounded-xl sm:rounded-2xl shadow-2xl flex items-center gap-2 sm:gap-4 overflow-x-auto scrollbar-hide">
+      class="bg-card/95 border border-border/50 backdrop-blur-xl px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg shadow-lg shadow-black/10 flex items-center gap-2 sm:gap-3 overflow-x-auto scrollbar-hide">
       <!-- Selection count badge -->
       <div class="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-4 border-r border-border flex-shrink-0">
         <div class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/20">

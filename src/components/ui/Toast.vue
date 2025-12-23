@@ -26,10 +26,10 @@ const icons = {
 };
 
 const colors = {
-    success: 'bg-green-500/10 border-green-500/20 text-green-500',
-    error: 'bg-red-500/10 border-red-500/20 text-red-500',
-    warning: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500',
-    info: 'bg-blue-500/10 border-blue-500/20 text-blue-500',
+    success: 'bg-card border-primary/30 text-primary',
+    error: 'bg-card border-destructive/30 text-destructive',
+    warning: 'bg-card border-yellow-500/30 text-yellow-500',
+    info: 'bg-card border-blue-500/30 text-blue-500',
 };
 
 watch(() => props.messages, (newMessages) => {
@@ -42,24 +42,25 @@ watch(() => props.messages, (newMessages) => {
 </script>
 
 <template>
-    <div class="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-md">
-        <TransitionGroup enter-active-class="transition-all duration-300" enter-from-class="opacity-0 translate-x-full"
-            enter-to-class="opacity-100 translate-x-0" leave-active-class="transition-all duration-200"
-            leave-from-class="opacity-100 translate-x-0" leave-to-class="opacity-0 translate-x-full">
+    <div class="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-sm">
+        <TransitionGroup enter-active-class="transition-all duration-200"
+            enter-from-class="opacity-0 translate-x-full scale-95" enter-to-class="opacity-100 translate-x-0 scale-100"
+            leave-active-class="transition-all duration-150" leave-from-class="opacity-100 translate-x-0 scale-100"
+            leave-to-class="opacity-0 translate-x-full scale-95">
             <div v-for="msg in messages" :key="msg.id" :class="[
-                'flex items-start gap-3 p-4 rounded-lg border backdrop-blur-sm shadow-lg',
+                'flex items-start gap-3 p-3 rounded-lg border backdrop-blur-xl shadow-xl shadow-black/20',
                 colors[msg.type]
             ]">
-                <component :is="icons[msg.type]" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <component :is="icons[msg.type]" class="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm">{{ msg.title }}</p>
-                    <p v-if="msg.message" class="text-sm opacity-90 mt-1 whitespace-pre-wrap">
+                    <p class="font-medium text-sm text-foreground">{{ msg.title }}</p>
+                    <p v-if="msg.message" class="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">
                         {{ msg.message }}
                     </p>
                 </div>
                 <button @click="emit('remove', msg.id)"
-                    class="p-1 hover:bg-white/10 rounded transition-colors flex-shrink-0">
-                    <X class="w-4 h-4" />
+                    class="p-1 hover:bg-muted rounded transition-colors flex-shrink-0 text-muted-foreground hover:text-foreground">
+                    <X class="w-3.5 h-3.5" />
                 </button>
             </div>
         </TransitionGroup>

@@ -1069,6 +1069,8 @@ export class MetadataManager {
     const currentModIds = new Set(modpack.mod_ids || []);
     const savedDisabledIds = new Set(currentVersion.disabled_mod_ids || []);
     const currentDisabledIds = new Set(modpack.disabled_mod_ids || []);
+    const savedSnapshots = currentVersion.mod_snapshots || [];
+    const snapshotMap = new Map(savedSnapshots.map(s => [s.id, s]));
 
     const library = await this.loadLibrary();
 
@@ -1080,18 +1082,21 @@ export class MetadataManager {
       }
     }
 
-    // Find removed mods
+    // Find removed mods - use snapshots to get names for deleted mods
     for (const modId of savedModIds) {
       if (!currentModIds.has(modId)) {
-        const mod = library.mods.find(m => m.id === modId);
-        result.changes.modsRemoved.push({ id: modId, name: mod?.name || modId });
+        // First try to find in library
+        let modName = library.mods.find(m => m.id === modId)?.name;
+        // If not in library, try to get from saved version snapshots
+        if (!modName && savedSnapshots.length > 0) {
+          const snapshot = savedSnapshots.find(s => s.id === modId);
+          modName = snapshot?.name;
+        }
+        result.changes.modsRemoved.push({ id: modId, name: modName || modId });
       }
     }
 
     // Find updated mods (same project, different file/version)
-    const savedSnapshots = currentVersion.mod_snapshots || [];
-    const snapshotMap = new Map(savedSnapshots.map(s => [s.id, s]));
-    
     for (const modId of currentModIds) {
       // Only check mods that exist in both saved and current
       if (!savedModIds.has(modId)) continue;

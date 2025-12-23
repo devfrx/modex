@@ -62,7 +62,7 @@ const contentTypeConfig = {
   mod: {
     label: "Mod",
     icon: Layers,
-    class: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    class: "bg-primary/10 text-primary border-primary/20",
   },
   resourcepack: {
     label: "Resource",
@@ -87,25 +87,25 @@ function handleImageError(e: Event) {
 
 <template>
   <div
-    class="relative rounded-xl border border-border bg-card overflow-hidden group transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
+    class="relative rounded-lg border border-border/40 bg-card/50 overflow-hidden group transition-all duration-150 hover:border-border/70 hover:bg-card/70"
     :class="{
       'ring-1 ring-primary bg-primary/5': selected,
       'ring-1 ring-orange-500/50': isDuplicate && !selected,
       'ring-2 ring-primary/50': isGroupExpanded && groupVariantCount,
-      'ring-2 ring-primary/30 bg-muted/20': isVariant,
+      'ring-1 ring-primary/20 bg-muted/20': isVariant,
     }" @click="$emit('toggle-select', mod.id)" @dblclick.stop="$emit('show-details', mod)">
     <!-- Background Gradient on Hover -->
     <div
-      class="absolute inset-0 bg-gradient-to-br from-foreground/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+      class="absolute inset-0 bg-gradient-to-br from-foreground/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
     <!-- Top Actions (Favorite, Checkbox) -->
-    <div class="absolute top-3 left-3 z-20 flex gap-2">
+    <div class="absolute top-2.5 left-2.5 z-20 flex gap-2">
       <!-- Favorite -->
       <button
-        class="p-1.5 rounded-full bg-background/20 backdrop-blur-sm border border-white/10 hover:bg-background/40 transition-all duration-200"
+        class="p-1.5 rounded-md bg-background/30 backdrop-blur-sm border border-border/30 hover:bg-background/50 transition-all duration-150"
         :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         @click.stop="$emit('toggle-favorite', mod.id)" title="Toggle favorite">
-        <Heart class="w-4 h-4 transition-colors" :class="favorite
+        <Heart class="w-3.5 h-3.5 transition-colors" :class="favorite
           ? 'fill-rose-500 text-rose-500'
           : 'text-muted-foreground hover:text-rose-500'
           " />
@@ -113,41 +113,41 @@ function handleImageError(e: Event) {
 
       <!-- Duplicate Indicator -->
       <div v-if="isDuplicate" title="Potential duplicate mod" class="animate-pulse">
-        <AlertTriangle class="w-4 h-4 text-orange-500" />
+        <AlertTriangle class="w-3.5 h-3.5 text-orange-500" />
       </div>
     </div>
 
     <!-- Top Right: Usage + Checkbox -->
-    <div class="absolute top-3 right-2 z-20 flex items-center gap-2">
+    <div class="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
       <!-- Checkbox -->
-      <div class="transition-all duration-200" :class="selected
+      <div class="transition-all duration-150" :class="selected
         ? 'opacity-100 scale-100'
         : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'
         ">
-        <div class="w-5 h-5 rounded-md border flex items-center justify-center transition-colors shadow-sm" :class="selected
+        <div class="w-4.5 h-4.5 rounded border flex items-center justify-center transition-colors" :class="selected
           ? 'bg-primary border-primary'
-          : 'bg-muted/40 border-border hover:border-primary/50'
+          : 'bg-muted/30 border-border hover:border-primary/50'
           ">
-          <Check v-if="selected" class="w-3.5 h-3.5 text-primary-foreground" />
+          <Check v-if="selected" class="w-3 h-3 text-primary-foreground" />
         </div>
       </div>
 
       <!-- Usage Indicator -->
-      <div v-if="usageCount && usageCount > 0" class="transition-all duration-200"
+      <div v-if="usageCount && usageCount > 0" class="transition-all duration-150"
         :class="selected ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'" title="Used in modpacks">
         <div
-          class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/20 text-primary text-[10px] font-medium border border-primary/30 backdrop-blur-sm">
-          <Package class="w-3 h-3" />
+          class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[10px] font-medium border border-primary/20 backdrop-blur-sm">
+          <Package class="w-2.5 h-2.5" />
           <span>{{ usageCount }}</span>
         </div>
       </div>
     </div>
 
-    <div class="p-4 relative z-10 flex flex-col h-full">
+    <div class="p-3.5 relative z-10 flex flex-col h-full">
       <!-- Header with Icon -->
-      <div class="flex items-start gap-3 mb-3">
+      <div class="flex items-start gap-2.5 mb-2.5">
         <div
-          class="w-11 h-11 shrink-0 rounded-xl overflow-hidden bg-white/5 border border-white/5 group-hover:border-primary/20 transition-colors">
+          class="w-10 h-10 shrink-0 rounded-md overflow-hidden bg-muted/30 border border-border/30 group-hover:border-primary/20 transition-colors">
           <img v-if="showThumbnail && (mod.thumbnail_url || mod.logo_url)" :src="mod.logo_url || mod.thumbnail_url"
             :alt="mod.name" class="w-full h-full object-cover" @error="handleImageError" />
           <div v-else class="w-full h-full flex items-center justify-center">
@@ -205,7 +205,7 @@ function handleImageError(e: Event) {
             contentType !== 'mod' &&
             mod.game_versions &&
             mod.game_versions.length >= 1
-          " class="text-[9px] font-medium text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded"
+          " class="text-[9px] font-medium text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded"
             :title="mod.game_versions.join(', ')">
             {{ mod.game_versions.slice(0, 1).join(", ")
             }}{{
@@ -214,13 +214,13 @@ function handleImageError(e: Event) {
                 : ""
             }}
           </span>
-          <span v-else class="text-[9px] font-medium text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">
+          <span v-else class="text-[9px] font-medium text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded">
             {{ mod.game_version }}
           </span>
         </div>
 
         <!-- Actions Row - Full width with proper spacing -->
-        <div class="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-border/30">
           <!-- Group Badge (left side) -->
           <div class="flex items-center gap-1">
             <button v-if="groupVariantCount && groupVariantCount > 0" @click.stop="$emit('toggle-group')"
@@ -242,7 +242,7 @@ function handleImageError(e: Event) {
           <!-- Action Buttons (right side) -->
           <div class="flex items-center gap-0.5 shrink-0" @click.stop>
             <Button v-if="mod.cf_project_id" variant="ghost" size="icon"
-              class="h-6 w-6 text-muted-foreground/70 hover:text-green-500 hover:bg-green-500/10"
+              class="h-6 w-6 text-muted-foreground/70 hover:text-primary hover:bg-primary/10"
               @click.stop="$emit('request-update', mod)" title="Check for Update">
               <RefreshCw class="w-3 h-3" />
             </Button>
@@ -252,7 +252,7 @@ function handleImageError(e: Event) {
               <Globe class="w-3 h-3" />
             </Button>
             <Button variant="ghost" size="icon"
-              class="h-6 w-6 text-muted-foreground/70 hover:text-foreground hover:bg-white/10"
+              class="h-6 w-6 text-muted-foreground/70 hover:text-foreground hover:bg-muted/50"
               @click.stop="$emit('show-details', mod)" title="Details">
               <Info class="w-3 h-3" />
             </Button>

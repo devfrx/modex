@@ -120,25 +120,24 @@ onMounted(() => {
 <template>
   <div class="h-full flex flex-col bg-background/50">
     <!-- Header Section -->
-    <div class="flex flex-col gap-6 p-6 pb-2 shrink-0 border-b border-white/5 bg-background/20 backdrop-blur-md z-10">
+    <div class="flex flex-col gap-5 p-5 pb-2 shrink-0 border-b border-border/30 bg-background/30 backdrop-blur-md z-10">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="p-2.5 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-white/10">
-            <Sparkles class="w-6 h-6 text-purple-400" />
+          <div class="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20">
+            <Sparkles class="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h3 class="text-xl font-bold tracking-tight text-white">
+            <h3 class="text-lg font-semibold tracking-tight">
               Discover Content
             </h3>
-            <p class="text-sm text-white/60">
+            <p class="text-xs text-muted-foreground">
               Smart recommendations based on your modpack
             </p>
           </div>
         </div>
 
-        <Button variant="outline" size="sm" class="gap-2 bg-white/5 border-white/10 hover:bg-white/10"
-          :disabled="isLoading" @click="loadRecommendations(true)">
-          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
+        <Button variant="secondary" size="sm" class="gap-1.5" :disabled="isLoading" @click="loadRecommendations(true)">
+          <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isLoading }" />
           Shuffle
         </Button>
       </div>
@@ -146,16 +145,16 @@ onMounted(() => {
       <!-- Tabs -->
       <div class="flex items-center gap-1">
         <button v-for="tab in tabs" :key="tab.id"
-          class="flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition-all relative" :class="[
+          class="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all relative" :class="[
             activeTab === tab.id
-              ? 'text-white bg-white/10'
-              : 'text-white/40 hover:text-white/80 hover:bg-white/5',
+              ? 'text-foreground bg-muted'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
           ]" @click="activeTab = tab.id">
-          <component :is="tab.icon" class="w-4 h-4" />
+          <component :is="tab.icon" class="w-3.5 h-3.5" />
           {{ tab.label }}
 
           <!-- Active Indicator -->
-          <div v-if="activeTab === tab.id" class="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500"></div>
+          <div v-if="activeTab === tab.id" class="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full"></div>
         </button>
       </div>
     </div>
@@ -179,15 +178,16 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 pb-6">
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 pb-6">
         <div v-for="{ mod, reason } in recommendations" :key="mod.id"
-          class="bg-card/40 border border-white/5 group relative rounded-xl overflow-hidden hover:bg-card/60 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 flex flex-col h-full shadow-lg shadow-black/20">
+          class="bg-card/50 border border-border/40 group relative rounded-lg overflow-hidden hover:bg-card/70 hover:border-border/70 transition-all duration-150 flex flex-col h-full">
           <!-- Thumbnail / Header -->
           <div
-            class="relative h-32 bg-gradient-to-br from-black/40 to-black/60 flex items-center justify-center overflow-hidden">
+            class="relative h-28 bg-gradient-to-br from-muted/40 to-muted/60 flex items-center justify-center overflow-hidden">
             <img v-if="mod.logo?.thumbnailUrl" :src="mod.logo.thumbnailUrl"
-              class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" />
-            <component :is="tabs.find((t) => t.id === activeTab)?.icon" v-else class="w-8 h-8 text-white/20" />
+              class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300" />
+            <component :is="tabs.find((t) => t.id === activeTab)?.icon" v-else
+              class="w-8 h-8 text-muted-foreground/20" />
 
             <!-- Gradient Overlay -->
             <div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-90">
@@ -195,39 +195,38 @@ onMounted(() => {
 
             <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button size="icon" variant="secondary"
-                class="h-8 w-8 rounded-lg bg-black/60 backdrop-blur-md text-white border border-white/10 hover:bg-white hover:text-black"
+                class="h-7 w-7 rounded-md bg-background/60 backdrop-blur-md border border-border/30 hover:bg-background"
                 @click.stop="openCurseForge(mod.links?.websiteUrl)" title="View on CurseForge">
-                <ExternalLink class="w-4 h-4" />
+                <ExternalLink class="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>
 
           <!-- Content -->
-          <div class="p-4 flex-1 flex flex-col relative -mt-8">
-            <div class="mb-3">
+          <div class="p-3.5 flex-1 flex flex-col relative -mt-8">
+            <div class="mb-2.5">
               <div class="flex justify-between items-start gap-2 mb-1">
-                <h4 class="font-bold truncate text-base text-white group-hover:text-purple-400 transition-colors"
-                  :title="mod.name">
+                <h4 class="font-semibold truncate text-sm group-hover:text-primary transition-colors" :title="mod.name">
                   {{ mod.name }}
                 </h4>
               </div>
-              <p class="text-xs text-white/50 line-clamp-2 min-h-[2.5em] leading-relaxed">
+              <p class="text-xs text-muted-foreground line-clamp-2 min-h-[2.5em] leading-relaxed">
                 {{ mod.summary }}
               </p>
             </div>
 
-            <div class="mt-auto space-y-3">
+            <div class="mt-auto space-y-2.5">
               <!-- Reason Badge -->
               <div
-                class="flex items-center gap-1.5 text-[10px] text-purple-300 font-medium bg-purple-500/10 px-2.5 py-1 rounded-md w-fit border border-purple-500/20">
+                class="flex items-center gap-1.5 text-[10px] text-primary font-medium bg-primary/10 px-2 py-1 rounded w-fit border border-primary/20">
                 <Sparkles class="w-3 h-3" />
                 {{ reason }}
               </div>
 
               <!-- Stats / Meta -->
-              <div class="flex items-center justify-between text-xs text-white/40 font-medium">
+              <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
                 <span
-                  class="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded text-[10px] border border-white/5">
+                  class="flex items-center gap-1.5 bg-muted/30 px-2 py-0.5 rounded text-[10px] border border-border/30">
                   <Tag class="w-3 h-3" />
                   {{ mod.categories?.[0]?.name || "Content" }}
                 </span>
@@ -236,9 +235,9 @@ onMounted(() => {
                 </span>
               </div>
 
-              <Button class="w-full gap-2 transition-all shadow-lg hover:shadow-purple-500/20"
-                :variant="isLinked ? 'ghost' : 'default'" :disabled="isLinked" @click="handleAdd(mod)">
-                <Plus class="w-4 h-4" />
+              <Button class="w-full gap-1.5 h-8 text-xs" :variant="isLinked ? 'ghost' : 'default'" :disabled="isLinked"
+                @click="handleAdd(mod)">
+                <Plus class="w-3.5 h-3.5" />
                 {{ isLinked ? "Managed by Remote" : "Add to Pack" }}
               </Button>
             </div>

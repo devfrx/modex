@@ -52,17 +52,17 @@ const contentTypeConfig = {
   mod: {
     label: "Mod",
     icon: Layers,
-    class: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    class: "bg-primary/15 text-primary border-primary/30",
   },
   resourcepack: {
     label: "Resource",
     icon: Image,
-    class: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+    class: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   },
   shader: {
     label: "Shader",
     icon: Sparkles,
-    class: "bg-pink-500/20 text-pink-400 border-pink-500/30",
+    class: "bg-pink-500/15 text-pink-400 border-pink-500/30",
   },
 };
 
@@ -217,16 +217,17 @@ function handleImageError(e: Event) {
           </div>
 
           <Button v-if="mod.cf_project_id" variant="ghost" size="icon"
-            class="h-7 w-7 text-white/60 hover:text-green-400 hover:bg-green-500/10"
+            class="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
             @click.stop="$emit('request-update', mod)" title="Check for Update">
             <RefreshCw class="w-3.5 h-3.5" />
           </Button>
           <Button v-if="mod.slug" variant="ghost" size="icon"
-            class="h-7 w-7 text-white/60 hover:text-white hover:bg-white/10" @click.stop="openCurseForge"
+            class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50" @click.stop="openCurseForge"
             title="View on CurseForge">
             <Globe class="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" class="h-7 w-7 text-white/60 hover:text-white hover:bg-white/10"
+          <Button variant="ghost" size="icon"
+            class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
             @click.stop="$emit('show-details', mod)" title="Details">
             <Info class="w-3.5 h-3.5" />
           </Button>

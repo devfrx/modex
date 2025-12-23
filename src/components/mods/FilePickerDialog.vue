@@ -112,7 +112,7 @@ const filteredFiles = computed(() => {
 function getReleaseTypeClass(type: number) {
     switch (type) {
         case 1:
-            return "bg-green-500/10 text-green-500 border-green-500/20";
+            return "bg-primary/10 text-primary border-primary/20";
         case 2:
             return "bg-blue-500/10 text-blue-500 border-blue-500/20";
         case 3:
@@ -215,7 +215,7 @@ watch(
                 <label class="flex items-center gap-1.5 text-sm cursor-pointer">
                     <input type="checkbox" v-model="filterRelease" class="rounded border-input text-primary" />
                     <span class="flex items-center gap-1">
-                        <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                        <div class="w-2 h-2 rounded-full bg-primary"></div>
                         Release
                     </span>
                 </label>
@@ -256,14 +256,14 @@ watch(
             <div v-else class="max-h-[400px] overflow-y-auto space-y-2">
                 <button v-for="file in filteredFiles" :key="file.id"
                     class="w-full text-left p-3 rounded-lg border transition-all" :class="selectedFileId === file.id
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50 hover:bg-muted/30'
                         " @click="selectedFileId = file.id">
                     <div class="flex items-start gap-3">
                         <div class="w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 mt-0.5"
                             :class="selectedFileId === file.id
-                                    ? 'bg-primary border-primary'
-                                    : 'border-muted-foreground/30'
+                                ? 'bg-primary border-primary'
+                                : 'border-muted-foreground/30'
                                 ">
                             <Check v-if="selectedFileId === file.id" class="w-3 h-3 text-primary-foreground" />
                         </div>

@@ -93,209 +93,200 @@ onMounted(loadData);
         <div v-else class="flex-1 overflow-auto">
             <!-- Hero Section -->
             <section class="relative min-h-[70vh] flex items-center justify-center overflow-hidden">
-                <!-- Animated Background -->
+                <!-- Animated Background - Supabase style -->
                 <div class="absolute inset-0">
-                    <!-- Gradient Mesh -->
-                    <div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-purple-900/10" />
+                    <!-- Base gradient -->
+                    <div class="absolute inset-0 bg-gradient-to-b from-background via-background to-card" />
 
-                    <!-- Floating Orbs -->
+                    <!-- Subtle grid -->
                     <div
-                        class="absolute top-20 left-[10%] w-72 h-72 bg-primary/20 rounded-full blur-[100px] animate-pulse" />
-                    <div class="absolute bottom-20 right-[10%] w-96 h-96 bg-purple-500/15 rounded-full blur-[120px] animate-pulse"
-                        style="animation-delay: 1s;" />
-                    <div
-                        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[150px]" />
+                        class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
 
-                    <!-- Grid Pattern -->
+                    <!-- Primary glow - top -->
                     <div
-                        class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.015)_1px,transparent_1px)] bg-[size:60px_60px]" />
+                        class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-primary/10 rounded-full blur-[120px]" />
 
-                    <!-- Radial Fade -->
+                    <!-- Secondary glows -->
+                    <div class="absolute top-40 right-[10%] w-64 h-64 bg-primary/5 rounded-full blur-[100px]" />
+                    <div class="absolute bottom-20 left-[15%] w-72 h-72 bg-cyan-500/5 rounded-full blur-[100px]" />
+
+                    <!-- Radial fade -->
                     <div
-                        class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
+                        class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,hsl(var(--background))_70%)]" />
                 </div>
 
                 <!-- Hero Content -->
-                <div class="relative z-10 text-center px-4 sm:px-6 max-w-5xl mx-auto">
+                <div class="relative z-10 text-center px-4 sm:px-6 max-w-4xl mx-auto">
                     <!-- Logo/Brand -->
-                    <div class="mb-6 sm:mb-8 flex justify-center">
-                        <div class="relative">
+                    <div class="mb-8 flex justify-center">
+                        <div class="relative group">
                             <div
-                                class="absolute inset-0 bg-gradient-to-r from-primary to-purple-500 rounded-2xl sm:rounded-3xl blur-xl opacity-50 animate-pulse" />
-                            <div
-                                class="relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 backdrop-blur-xl">
-                                <Box class="w-10 h-10 sm:w-12 sm:h-12 text-primary" />
+                                class="absolute inset-0 bg-primary/30 rounded-2xl blur-xl opacity-60 group-hover:opacity-80 transition-opacity" />
+                            <div class="relative p-4 rounded-2xl bg-card/80 border border-primary/20 backdrop-blur-xl">
+                                <Box class="w-10 h-10 text-primary" />
                             </div>
                         </div>
                     </div>
 
                     <!-- Headline -->
-                    <h1 class="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight mb-4 sm:mb-6">
-                        <span class="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
+                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-5">
+                        <span class="text-foreground">
                             Welcome to
                         </span>
                         <br />
-                        <span
-                            class="bg-gradient-to-r from-primary via-purple-400 to-blue-400 bg-clip-text text-transparent">
+                        <span class="text-primary">
                             ModEx
                         </span>
                     </h1>
 
                     <!-- Subtitle -->
-                    <p
-                        class="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8 sm:mb-10 leading-relaxed px-2">
+                    <p class="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
                         The ultimate Minecraft mod manager. Organize, discover, and play with your modpacks like never
                         before.
                     </p>
 
                     <!-- CTA Buttons -->
-                    <div
-                        class="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-12 sm:mb-16 px-4">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-14 px-4">
                         <Button size="lg" @click="navigate('/modpacks')"
-                            class="gap-2 px-6 sm:px-8 h-12 sm:h-14 text-sm sm:text-base w-full sm:w-auto bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-500 border-0 shadow-xl shadow-primary/25">
-                            <Play class="w-5 h-5" />
+                            class="gap-2 px-6 h-11 text-sm w-full sm:w-auto shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all">
+                            <Play class="w-4 h-4" />
                             Get Started
                         </Button>
                         <Button variant="outline" size="lg" @click="navigate('/modpacks?create=true')"
-                            class="gap-2 px-6 sm:px-8 h-12 sm:h-14 text-sm sm:text-base w-full sm:w-auto border-white/20 hover:bg-white/5">
-                            <Plus class="w-5 h-5" />
+                            class="gap-2 px-6 h-11 text-sm w-full sm:w-auto">
+                            <Plus class="w-4 h-4" />
                             Create Modpack
                         </Button>
                     </div>
 
                     <!-- Stats Row -->
-                    <div class="flex items-center justify-center gap-4 sm:gap-8 md:gap-16">
+                    <div class="flex items-center justify-center gap-8 md:gap-12">
                         <div class="text-center">
-                            <p class="text-2xl sm:text-3xl md:text-4xl font-bold text-primary">{{ modpacks.length }}</p>
-                            <p class="text-xs sm:text-sm text-muted-foreground mt-1">Modpacks</p>
+                            <p class="text-2xl sm:text-3xl font-semibold text-foreground">{{ modpacks.length }}</p>
+                            <p class="text-xs text-muted-foreground mt-1">Modpacks</p>
                         </div>
-                        <div class="w-px h-8 sm:h-12 bg-border" />
+                        <div class="w-px h-10 bg-border/50" />
                         <div class="text-center">
-                            <p class="text-2xl sm:text-3xl md:text-4xl font-bold text-purple-400">{{ totalMods }}</p>
-                            <p class="text-xs sm:text-sm text-muted-foreground mt-1">Total Mods</p>
+                            <p class="text-2xl sm:text-3xl font-semibold text-foreground">{{ totalMods }}</p>
+                            <p class="text-xs text-muted-foreground mt-1">Total Mods</p>
                         </div>
-                        <div class="w-px h-8 sm:h-12 bg-border" />
+                        <div class="w-px h-10 bg-border/50" />
                         <div class="text-center">
-                            <p class="text-2xl sm:text-3xl md:text-4xl font-bold text-blue-400">{{ formatSize(totalSize)
-                                }}</p>
-                            <p class="text-xs sm:text-sm text-muted-foreground mt-1">Library</p>
+                            <p class="text-2xl sm:text-3xl font-semibold text-foreground">{{ formatSize(totalSize) }}
+                            </p>
+                            <p class="text-xs text-muted-foreground mt-1">Library</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- Scroll Indicator -->
-                <div class="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
+                <div class="absolute bottom-8 left-1/2 -translate-x-1/2">
                     <div
-                        class="w-6 h-10 rounded-full border-2 border-muted-foreground/30 flex items-start justify-center p-1.5">
-                        <div class="w-1.5 h-2.5 bg-muted-foreground/50 rounded-full animate-pulse" />
+                        class="w-5 h-8 rounded-full border border-muted-foreground/20 flex items-start justify-center p-1">
+                        <div class="w-1 h-2 bg-muted-foreground/40 rounded-full animate-bounce" />
                     </div>
                 </div>
             </section>
 
             <!-- Features Section -->
-            <section class="py-24 px-6 bg-gradient-to-b from-background to-muted/20">
-                <div class="max-w-6xl mx-auto">
+            <section class="py-20 px-6 bg-card/30">
+                <div class="max-w-5xl mx-auto">
                     <!-- Section Header -->
-                    <div class="text-center mb-16">
+                    <div class="text-center mb-14">
                         <div
-                            class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-6">
-                            <Sparkles class="w-4 h-4" />
+                            class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium mb-4">
+                            <Sparkles class="w-3 h-3" />
                             Features
                         </div>
-                        <h2 class="text-3xl sm:text-4xl font-bold mb-4">Everything you need</h2>
-                        <p class="text-muted-foreground max-w-xl mx-auto">
+                        <h2 class="text-2xl sm:text-3xl font-semibold mb-3">Everything you need</h2>
+                        <p class="text-sm text-muted-foreground max-w-md mx-auto">
                             Powerful tools to manage your Minecraft modding experience
                         </p>
                     </div>
 
                     <!-- Features Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <!-- Feature 1 -->
-                        <div class="group p-6 rounded-2xl bg-card border border-border hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 cursor-pointer"
+                        <div class="group p-5 rounded-lg bg-card border border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer"
                             @click="navigate('/modpacks')">
                             <div
-                                class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                                <Package class="w-6 h-6 text-violet-400" />
+                                class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
+                                <Package class="w-5 h-5 text-primary" />
                             </div>
-                            <h3 class="text-lg font-semibold mb-2 group-hover:text-primary transition-colors">Modpack
+                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">Modpack
                                 Management</h3>
-                            <p class="text-sm text-muted-foreground leading-relaxed">
-                                Create, organize, and manage your modpacks with an intuitive interface. Import from
-                                CurseForge or build from scratch.
+                            <p class="text-xs text-muted-foreground leading-relaxed">
+                                Create, organize, and manage your modpacks with an intuitive interface.
                             </p>
                         </div>
 
                         <!-- Feature 2 -->
-                        <div class="group p-6 rounded-2xl bg-card border border-border hover:border-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/5 transition-all duration-300 cursor-pointer"
+                        <div class="group p-5 rounded-lg bg-card border border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer"
                             @click="navigate('/library')">
                             <div
-                                class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                                <Folder class="w-6 h-6 text-emerald-400" />
+                                class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
+                                <Folder class="w-5 h-5 text-primary" />
                             </div>
-                            <h3 class="text-lg font-semibold mb-2 group-hover:text-emerald-400 transition-colors">Mod
+                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">Mod
                                 Library</h3>
-                            <p class="text-sm text-muted-foreground leading-relaxed">
-                                Your central hub for all mods. Search, filter, and organize your collection with
-                                powerful tools.
+                            <p class="text-xs text-muted-foreground leading-relaxed">
+                                Your central hub for all mods. Search, filter, and organize your collection.
                             </p>
                         </div>
 
                         <!-- Feature 3 -->
-                        <div class="group p-6 rounded-2xl bg-card border border-border hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-300 cursor-pointer"
+                        <div class="group p-5 rounded-lg bg-card border border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer"
                             @click="navigate('/sandbox')">
                             <div
-                                class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                                <Compass class="w-6 h-6 text-blue-400" />
+                                class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
+                                <Compass class="w-5 h-5 text-primary" />
                             </div>
-                            <h3 class="text-lg font-semibold mb-2 group-hover:text-blue-400 transition-colors">
+                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">
                                 Dependency Sandbox</h3>
-                            <p class="text-sm text-muted-foreground leading-relaxed">
-                                Visualize mod relationships and dependencies. Understand how your mods connect and
-                                interact.
+                            <p class="text-xs text-muted-foreground leading-relaxed">
+                                Visualize mod relationships and dependencies interactively.
                             </p>
                         </div>
 
                         <!-- Feature 4 -->
-                        <div class="group p-6 rounded-2xl bg-card border border-border hover:border-orange-500/30 hover:shadow-xl hover:shadow-orange-500/5 transition-all duration-300 cursor-pointer"
+                        <div class="group p-5 rounded-lg bg-card border border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 cursor-pointer"
                             @click="navigate('/stats')">
                             <div
-                                class="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                                <BarChart3 class="w-6 h-6 text-orange-400" />
+                                class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
+                                <BarChart3 class="w-5 h-5 text-primary" />
                             </div>
-                            <h3 class="text-lg font-semibold mb-2 group-hover:text-orange-400 transition-colors">
+                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">
                                 Statistics</h3>
-                            <p class="text-sm text-muted-foreground leading-relaxed">
-                                Deep insights into your mod collection. Track downloads, sizes, and loader
-                                distributions.
+                            <p class="text-xs text-muted-foreground leading-relaxed">
+                                Deep insights into your mod collection with beautiful charts.
                             </p>
                         </div>
 
                         <!-- Feature 5 -->
                         <div
-                            class="group p-6 rounded-2xl bg-card border border-border hover:border-pink-500/30 hover:shadow-xl hover:shadow-pink-500/5 transition-all duration-300">
+                            class="group p-5 rounded-lg bg-card border border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200">
                             <div
-                                class="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500/20 to-rose-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                                <Globe class="w-6 h-6 text-pink-400" />
+                                class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
+                                <Globe class="w-5 h-5 text-primary" />
                             </div>
-                            <h3 class="text-lg font-semibold mb-2 group-hover:text-pink-400 transition-colors">Cloud
+                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">Cloud
                                 Sync</h3>
-                            <p class="text-sm text-muted-foreground leading-relaxed">
-                                Share modpacks via Gist integration. Collaborate with friends and sync across devices.
+                            <p class="text-xs text-muted-foreground leading-relaxed">
+                                Share modpacks via Gist. Collaborate with friends seamlessly.
                             </p>
                         </div>
 
                         <!-- Feature 6 -->
                         <div
-                            class="group p-6 rounded-2xl bg-card border border-border hover:border-cyan-500/30 hover:shadow-xl hover:shadow-cyan-500/5 transition-all duration-300">
+                            class="group p-5 rounded-lg bg-card border border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200">
                             <div
-                                class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-sky-500/20 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
-                                <Shield class="w-6 h-6 text-cyan-400" />
+                                class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
+                                <Shield class="w-5 h-5 text-primary" />
                             </div>
-                            <h3 class="text-lg font-semibold mb-2 group-hover:text-cyan-400 transition-colors">Health
+                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">Health
                                 Analysis</h3>
-                            <p class="text-sm text-muted-foreground leading-relaxed">
-                                Detect conflicts, missing dependencies, and compatibility issues before they cause
-                                problems.
+                            <p class="text-xs text-muted-foreground leading-relaxed">
+                                Detect conflicts and compatibility issues automatically.
                             </p>
                         </div>
                     </div>
@@ -303,49 +294,48 @@ onMounted(loadData);
             </section>
 
             <!-- Recent Modpacks Section -->
-            <section v-if="recentModpacks.length > 0" class="py-20 px-6">
-                <div class="max-w-6xl mx-auto">
+            <section v-if="recentModpacks.length > 0" class="py-16 px-6 bg-background">
+                <div class="max-w-5xl mx-auto">
                     <!-- Section Header -->
-                    <div class="flex items-center justify-between mb-10">
+                    <div class="flex items-center justify-between mb-8">
                         <div>
-                            <h2 class="text-2xl font-bold mb-2">Your Modpacks</h2>
-                            <p class="text-muted-foreground">Jump back into your recent projects</p>
+                            <h2 class="text-xl font-semibold mb-1">Your Modpacks</h2>
+                            <p class="text-sm text-muted-foreground">Jump back into your recent projects</p>
                         </div>
-                        <Button variant="outline" @click="navigate('/modpacks')" class="gap-2">
+                        <Button variant="ghost" size="sm" @click="navigate('/modpacks')"
+                            class="gap-1.5 text-muted-foreground hover:text-foreground">
                             View All
-                            <ArrowRight class="w-4 h-4" />
+                            <ArrowRight class="w-3.5 h-3.5" />
                         </Button>
                     </div>
 
                     <!-- Modpack Cards -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div v-for="pack in recentModpacks" :key="pack.id"
-                            class="group relative rounded-2xl bg-card border border-border overflow-hidden cursor-pointer hover:border-primary/30 hover:shadow-xl transition-all duration-300"
+                            class="group relative rounded-lg bg-card border border-border/50 overflow-hidden cursor-pointer hover:border-primary/40 transition-all duration-200"
                             @click="goToModpack(pack.id!)">
-                            <!-- Color Bar -->
-                            <div class="h-1.5" :style="{ backgroundColor: getPackColor(pack) }" />
-
-                            <div class="p-5">
-                                <div class="flex items-start gap-4 mb-4">
+                            <div class="p-4">
+                                <div class="flex items-start gap-3 mb-3">
                                     <!-- Icon -->
-                                    <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shrink-0 text-white"
-                                        :style="{ backgroundColor: getPackColor(pack) }">
+                                    <div
+                                        class="w-10 h-10 rounded-md flex items-center justify-center text-sm font-semibold shrink-0 bg-primary/10 text-primary">
                                         {{ pack.name.substring(0, 2).toUpperCase() }}
                                     </div>
                                     <div class="flex-1 min-w-0">
-                                        <h4 class="font-semibold truncate group-hover:text-primary transition-colors">
+                                        <h4
+                                            class="text-sm font-medium truncate group-hover:text-primary transition-colors">
                                             {{ pack.name }}
                                         </h4>
-                                        <p class="text-xs text-muted-foreground mt-1">
+                                        <p class="text-[11px] text-muted-foreground mt-0.5">
                                             {{ pack.minecraft_version }} • {{ pack.loader }}
                                         </p>
                                     </div>
                                 </div>
 
                                 <!-- Play Button -->
-                                <Button variant="outline" size="sm"
-                                    class="w-full gap-2 group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-all">
-                                    <Play class="w-4 h-4" />
+                                <Button variant="ghost" size="sm"
+                                    class="w-full gap-1.5 h-8 text-xs text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-all">
+                                    <Play class="w-3.5 h-3.5" />
                                     Open
                                 </Button>
                             </div>
@@ -355,48 +345,47 @@ onMounted(loadData);
             </section>
 
             <!-- Quick Actions Footer -->
-            <section class="py-16 px-6 border-t border-border">
+            <section class="py-12 px-6 border-t border-border/30 bg-card/30">
                 <div class="max-w-4xl mx-auto">
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <button @click="navigate('/modpacks?create=true')"
-                            class="group flex flex-col items-center gap-3 p-6 rounded-2xl bg-muted/30 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all">
-                            <div class="p-3 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                                <Plus class="w-5 h-5 text-primary" />
+                            class="group flex flex-col items-center gap-2.5 p-5 rounded-lg bg-background/50 hover:bg-primary/5 border border-border/40 hover:border-primary/30 transition-all duration-200">
+                            <div class="p-2.5 rounded-md bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                                <Plus class="w-4 h-4 text-primary" />
                             </div>
-                            <span class="text-sm font-medium">New Modpack</span>
+                            <span class="text-xs font-medium">New Modpack</span>
                         </button>
 
                         <button @click="navigate('/library')"
-                            class="group flex flex-col items-center gap-3 p-6 rounded-2xl bg-muted/30 hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/20 transition-all">
-                            <div
-                                class="p-3 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
-                                <Layers class="w-5 h-5 text-emerald-400" />
+                            class="group flex flex-col items-center gap-2.5 p-5 rounded-lg bg-background/50 hover:bg-primary/5 border border-border/40 hover:border-primary/30 transition-all duration-200">
+                            <div class="p-2.5 rounded-md bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                                <Layers class="w-4 h-4 text-primary" />
                             </div>
-                            <span class="text-sm font-medium">Library</span>
+                            <span class="text-xs font-medium">Library</span>
                         </button>
 
                         <button @click="navigate('/stats')"
-                            class="group flex flex-col items-center gap-3 p-6 rounded-2xl bg-muted/30 hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20 transition-all">
-                            <div class="p-3 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
-                                <BarChart3 class="w-5 h-5 text-orange-400" />
+                            class="group flex flex-col items-center gap-2.5 p-5 rounded-lg bg-background/50 hover:bg-primary/5 border border-border/40 hover:border-primary/30 transition-all duration-200">
+                            <div class="p-2.5 rounded-md bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                                <BarChart3 class="w-4 h-4 text-primary" />
                             </div>
-                            <span class="text-sm font-medium">Statistics</span>
+                            <span class="text-xs font-medium">Statistics</span>
                         </button>
 
                         <button @click="navigate('/settings')"
-                            class="group flex flex-col items-center gap-3 p-6 rounded-2xl bg-muted/30 hover:bg-muted/50 border border-transparent hover:border-border transition-all">
-                            <div class="p-3 rounded-xl bg-muted group-hover:bg-muted/80 transition-colors">
-                                <Settings class="w-5 h-5 text-muted-foreground" />
+                            class="group flex flex-col items-center gap-2.5 p-5 rounded-lg bg-background/50 hover:bg-muted/50 border border-border/40 hover:border-border transition-all duration-200">
+                            <div class="p-2.5 rounded-md bg-muted group-hover:bg-muted/80 transition-colors">
+                                <Settings class="w-4 h-4 text-muted-foreground" />
                             </div>
-                            <span class="text-sm font-medium">Settings</span>
+                            <span class="text-xs font-medium">Settings</span>
                         </button>
                     </div>
                 </div>
             </section>
 
             <!-- Footer -->
-            <footer class="py-8 px-6 border-t border-border/50 text-center">
-                <p class="text-xs text-muted-foreground">
+            <footer class="py-6 px-6 border-t border-border/20 text-center bg-background">
+                <p class="text-[11px] text-muted-foreground/70">
                     ModEx — Your Minecraft Modding Companion
                 </p>
             </footer>

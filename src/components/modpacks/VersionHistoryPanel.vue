@@ -503,8 +503,8 @@ watch(() => props.modpackId, () => {
         <!-- No Version Control -->
         <div v-else-if="!hasVersionControl" class="flex-1 flex items-center justify-center">
             <div class="text-center max-w-sm">
-                <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <Sparkles class="w-8 h-8 text-primary" />
+                <div class="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <Sparkles class="w-7 h-7 text-primary" />
                 </div>
                 <h4 class="font-semibold mb-2">Enable Version Control</h4>
                 <p class="text-sm text-muted-foreground mb-4">
@@ -529,13 +529,13 @@ watch(() => props.modpackId, () => {
         <div v-else class="flex-1 overflow-y-auto -mx-2 px-2">
             <!-- Unsaved Changes Banner -->
             <div v-if="hasUnsavedChanges && unsavedChanges"
-                class="mb-4 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10">
+                class="mb-4 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
                 <div class="flex items-start gap-3">
-                    <div class="p-2 rounded-lg bg-yellow-500/20">
-                        <AlertTriangle class="w-5 h-5 text-yellow-500" />
+                    <div class="p-1.5 rounded-lg bg-amber-500/15">
+                        <AlertTriangle class="w-4 h-4 text-amber-500" />
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-medium text-yellow-600 dark:text-yellow-400 mb-1">
+                        <h4 class="font-medium text-amber-500 mb-1">
                             Unsaved Changes ({{ unsavedChangeCount }})
                         </h4>
                         <div class="space-y-2 text-sm text-muted-foreground">
@@ -549,11 +549,14 @@ watch(() => props.modpackId, () => {
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
-                                    <span v-for="mod in (expandedChangeSections.has('added') ? unsavedChanges.changes.modsAdded : unsavedChanges.changes.modsAdded.slice(0, 5))" :key="mod.id"
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('added') ? unsavedChanges.changes.modsAdded : unsavedChanges.changes.modsAdded.slice(0, 5))"
+                                        :key="mod.id"
                                         class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
                                         {{ mod.name }}
                                     </span>
-                                    <button v-if="unsavedChanges.changes.modsAdded.length > 5 && !expandedChangeSections.has('added')"
+                                    <button
+                                        v-if="unsavedChanges.changes.modsAdded.length > 5 && !expandedChangeSections.has('added')"
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('added')">
                                         +{{ unsavedChanges.changes.modsAdded.length - 5 }} more
@@ -570,11 +573,13 @@ watch(() => props.modpackId, () => {
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
-                                    <span v-for="mod in (expandedChangeSections.has('removed') ? unsavedChanges.changes.modsRemoved : unsavedChanges.changes.modsRemoved.slice(0, 5))" :key="mod.id"
-                                        class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('removed') ? unsavedChanges.changes.modsRemoved : unsavedChanges.changes.modsRemoved.slice(0, 5))"
+                                        :key="mod.id" class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
                                         {{ mod.name }}
                                     </span>
-                                    <button v-if="unsavedChanges.changes.modsRemoved.length > 5 && !expandedChangeSections.has('removed')"
+                                    <button
+                                        v-if="unsavedChanges.changes.modsRemoved.length > 5 && !expandedChangeSections.has('removed')"
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('removed')">
                                         +{{ unsavedChanges.changes.modsRemoved.length - 5 }} more
@@ -591,18 +596,21 @@ watch(() => props.modpackId, () => {
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 space-y-1">
-                                    <div v-for="mod in (expandedChangeSections.has('updated') ? unsavedChanges.changes.modsUpdated : unsavedChanges.changes.modsUpdated.slice(0, 5))" :key="mod.id"
-                                        class="flex items-center gap-2 text-xs">
-                                        <span class="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 truncate max-w-[120px]">
+                                    <div v-for="mod in (expandedChangeSections.has('updated') ? unsavedChanges.changes.modsUpdated : unsavedChanges.changes.modsUpdated.slice(0, 5))"
+                                        :key="mod.id" class="flex items-center gap-2 text-xs">
+                                        <span
+                                            class="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 truncate max-w-[120px]">
                                             {{ mod.name }}
                                         </span>
-                                        <span v-if="mod.oldVersion && mod.newVersion" class="text-muted-foreground font-mono text-[10px] flex items-center gap-1">
+                                        <span v-if="mod.oldVersion && mod.newVersion"
+                                            class="text-muted-foreground font-mono text-[10px] flex items-center gap-1">
                                             <span class="text-red-400/70">{{ mod.oldVersion }}</span>
                                             <span class="text-white/40">→</span>
                                             <span class="text-green-400">{{ mod.newVersion }}</span>
                                         </span>
                                     </div>
-                                    <button v-if="unsavedChanges.changes.modsUpdated.length > 5 && !expandedChangeSections.has('updated')"
+                                    <button
+                                        v-if="unsavedChanges.changes.modsUpdated.length > 5 && !expandedChangeSections.has('updated')"
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('updated')">
                                         +{{ unsavedChanges.changes.modsUpdated.length - 5 }} more
@@ -619,11 +627,14 @@ watch(() => props.modpackId, () => {
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
-                                    <span v-for="mod in (expandedChangeSections.has('enabled') ? unsavedChanges.changes.modsEnabled : unsavedChanges.changes.modsEnabled.slice(0, 5))" :key="mod.id"
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('enabled') ? unsavedChanges.changes.modsEnabled : unsavedChanges.changes.modsEnabled.slice(0, 5))"
+                                        :key="mod.id"
                                         class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
                                         {{ mod.name }}
                                     </span>
-                                    <button v-if="unsavedChanges.changes.modsEnabled.length > 5 && !expandedChangeSections.has('enabled')"
+                                    <button
+                                        v-if="unsavedChanges.changes.modsEnabled.length > 5 && !expandedChangeSections.has('enabled')"
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('enabled')">
                                         +{{ unsavedChanges.changes.modsEnabled.length - 5 }} more
@@ -640,11 +651,14 @@ watch(() => props.modpackId, () => {
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
-                                    <span v-for="mod in (expandedChangeSections.has('disabled') ? unsavedChanges.changes.modsDisabled : unsavedChanges.changes.modsDisabled.slice(0, 5))" :key="mod.id"
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('disabled') ? unsavedChanges.changes.modsDisabled : unsavedChanges.changes.modsDisabled.slice(0, 5))"
+                                        :key="mod.id"
                                         class="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">
                                         {{ mod.name }}
                                     </span>
-                                    <button v-if="unsavedChanges.changes.modsDisabled.length > 5 && !expandedChangeSections.has('disabled')"
+                                    <button
+                                        v-if="unsavedChanges.changes.modsDisabled.length > 5 && !expandedChangeSections.has('disabled')"
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('disabled')">
                                         +{{ unsavedChanges.changes.modsDisabled.length - 5 }} more
@@ -656,18 +670,19 @@ watch(() => props.modpackId, () => {
                                     @click="toggleChangeSection('configs')">
                                     <Settings class="w-3.5 h-3.5 text-purple-500" />
                                     <span>{{ configChangeCount }} config change{{ configChangeCount !== 1 ? 's' : ''
-                                    }}</span>
+                                        }}</span>
                                     <component :is="expandedChangeSections.has('configs') ? ChevronUp : ChevronDown"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <!-- Config change details -->
                                 <div v-if="unsavedChanges.changes.configDetails?.length"
-                                    class="ml-5 mt-1 space-y-1 text-xs" :class="{ 'max-h-24 overflow-y-auto': !expandedChangeSections.has('configs') }">
+                                    class="ml-5 mt-1 space-y-1 text-xs"
+                                    :class="{ 'max-h-24 overflow-y-auto': !expandedChangeSections.has('configs') }">
                                     <div v-for="(cfg, idx) in (expandedChangeSections.has('configs') ? unsavedChanges.changes.configDetails : unsavedChanges.changes.configDetails.slice(0, 5))"
                                         :key="idx"
                                         class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
                                         <span v-if="cfg.line" class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
-                                        }}</span>
+                                            }}</span>
                                         <span class="text-white/60 truncate max-w-[100px]" :title="cfg.filePath">{{
                                             getFileName(cfg.filePath) }}</span>
                                         <span class="text-white/80 font-medium truncate max-w-[80px]">{{
@@ -678,7 +693,8 @@ watch(() => props.modpackId, () => {
                                         <span class="text-green-400 truncate max-w-[50px]">{{
                                             formatConfigValue(cfg.newValue) }}</span>
                                     </div>
-                                    <button v-if="unsavedChanges.changes.configDetails.length > 5 && !expandedChangeSections.has('configs')"
+                                    <button
+                                        v-if="unsavedChanges.changes.configDetails.length > 5 && !expandedChangeSections.has('configs')"
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('configs')">
                                         +{{ unsavedChanges.changes.configDetails.length - 5 }} more
@@ -722,7 +738,7 @@ watch(() => props.modpackId, () => {
                         </div>
 
                         <!-- Version Card -->
-                        <div class="ml-10 rounded-xl border transition-all overflow-hidden" :class="version.id === currentVersionId
+                        <div class="ml-10 rounded-lg border transition-all overflow-hidden" :class="version.id === currentVersionId
                             ? 'border-primary/30 bg-primary/5'
                             : 'border-border/50 hover:border-border'">
 
@@ -782,9 +798,10 @@ watch(() => props.modpackId, () => {
                                         <div
                                             class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
                                             Changes</div>
-                                        <div class="space-y-1.5" :class="{ 'max-h-64 overflow-y-auto': expandedVersionChanges.has(version.id) && version.changes.length > 20 }">
-                                            <div v-for="(change, idx) in (expandedVersionChanges.has(version.id) ? version.changes : version.changes.slice(0, 10))" :key="idx"
-                                                class="flex items-center gap-2 text-sm">
+                                        <div class="space-y-1.5"
+                                            :class="{ 'max-h-64 overflow-y-auto': expandedVersionChanges.has(version.id) && version.changes.length > 20 }">
+                                            <div v-for="(change, idx) in (expandedVersionChanges.has(version.id) ? version.changes : version.changes.slice(0, 10))"
+                                                :key="idx" class="flex items-center gap-2 text-sm">
                                                 <div class="w-5 h-5 rounded flex items-center justify-center shrink-0"
                                                     :class="getChangeColor(change.type, change.modId)">
                                                     <component :is="getChangeIcon(change.type, change.modId)"
@@ -801,12 +818,14 @@ watch(() => props.modpackId, () => {
                                                     <span class="text-green-400">{{ change.newVersion }}</span>
                                                 </span>
                                             </div>
-                                            <button v-if="version.changes.length > 10 && !expandedVersionChanges.has(version.id)"
+                                            <button
+                                                v-if="version.changes.length > 10 && !expandedVersionChanges.has(version.id)"
                                                 class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer pl-7"
                                                 @click.stop="toggleVersionChanges(version.id)">
                                                 +{{ version.changes.length - 10 }} more changes
                                             </button>
-                                            <button v-else-if="version.changes.length > 10 && expandedVersionChanges.has(version.id)"
+                                            <button
+                                                v-else-if="version.changes.length > 10 && expandedVersionChanges.has(version.id)"
                                                 class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer pl-7"
                                                 @click.stop="toggleVersionChanges(version.id)">
                                                 Show less
@@ -821,11 +840,14 @@ watch(() => props.modpackId, () => {
                                                 <Settings class="w-3 h-3" />
                                                 <span>{{ version.config_changes.length }} config change{{
                                                     version.config_changes.length !== 1 ? 's' : '' }}</span>
-                                                <component :is="expandedChangeSections.has(`config-${version.id}`) ? ChevronUp : ChevronDown"
+                                                <component
+                                                    :is="expandedChangeSections.has(`config-${version.id}`) ? ChevronUp : ChevronDown"
                                                     class="w-3 h-3 ml-auto" />
                                             </div>
-                                            <div class="ml-5 space-y-1 text-xs" :class="{ 'max-h-24 overflow-y-auto': !expandedChangeSections.has(`config-${version.id}`) }">
-                                                <div v-for="(cfg, idx) in (expandedChangeSections.has(`config-${version.id}`) ? version.config_changes : version.config_changes.slice(0, 5))" :key="idx"
+                                            <div class="ml-5 space-y-1 text-xs"
+                                                :class="{ 'max-h-24 overflow-y-auto': !expandedChangeSections.has(`config-${version.id}`) }">
+                                                <div v-for="(cfg, idx) in (expandedChangeSections.has(`config-${version.id}`) ? version.config_changes : version.config_changes.slice(0, 5))"
+                                                    :key="idx"
                                                     class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
                                                     <span v-if="cfg.line"
                                                         class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
@@ -840,7 +862,8 @@ watch(() => props.modpackId, () => {
                                                     <span class="text-green-400 truncate max-w-[50px]">{{
                                                         formatConfigValue(cfg.newValue) }}</span>
                                                 </div>
-                                                <button v-if="version.config_changes.length > 5 && !expandedChangeSections.has(`config-${version.id}`)"
+                                                <button
+                                                    v-if="version.config_changes.length > 5 && !expandedChangeSections.has(`config-${version.id}`)"
                                                     class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                                     @click.stop="toggleChangeSection(`config-${version.id}`)">
                                                     +{{ version.config_changes.length - 5 }} more
@@ -911,14 +934,14 @@ watch(() => props.modpackId, () => {
             <Transition name="fade">
                 <div v-if="showProgressOverlay"
                     class="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-                    <div class="bg-card border border-border/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+                    <div class="bg-card border border-border/50 rounded-lg p-6 w-full max-w-md shadow-2xl">
                         <!-- Header -->
                         <div class="flex items-center gap-3 mb-6">
-                            <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                                <Loader2 class="w-5 h-5 text-primary animate-spin" />
+                            <div class="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+                                <Loader2 class="w-4 h-4 text-primary animate-spin" />
                             </div>
                             <div>
-                                <h3 class="font-semibold text-lg">{{ progressTitle }}</h3>
+                                <h3 class="font-semibold">{{ progressTitle }}</h3>
                                 <p class="text-sm text-muted-foreground">{{ progressMessage }}</p>
                             </div>
                         </div>

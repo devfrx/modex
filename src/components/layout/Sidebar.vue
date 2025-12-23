@@ -15,10 +15,14 @@ import {
   Search,
   PanelLeftClose,
   PanelLeft,
+  Zap,
 } from "lucide-vue-next";
 import { cn } from "@/lib/utils";
 import { ref, onMounted, computed } from "vue";
 import { useSidebar } from "@/composables/useSidebar";
+
+// Check if in dev mode (must be in script, not template)
+const isDev = import.meta.env.DEV;
 
 defineProps<{
   isOpen?: boolean;
@@ -127,84 +131,97 @@ window.addEventListener("storage", loadStats);
 </script>
 
 <template>
-  <div class="h-screen bg-card/40 backdrop-blur-md flex flex-col transition-all duration-300" :class="[
+  <div class="h-screen bg-card/60 backdrop-blur-xl flex flex-col transition-all duration-300" :class="[
     settings.collapsed ? 'w-16' : 'w-56 sm:w-64',
-    settings.position === 'right' ? 'border-l border-border/50' : 'border-r border-border/50'
+    settings.position === 'right' ? 'border-l border-border/30' : 'border-r border-border/30'
   ]">
     <!-- Header with close button on mobile -->
-    <div class="p-4 border-b border-border/50 flex items-center"
+    <div class="p-4 border-b border-border/30 flex items-center"
       :class="settings.collapsed ? 'justify-center' : 'justify-between'">
-      <div v-if="!settings.collapsed">
-        <h1
-          class="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent filter drop-shadow-sm">
-          ModEx
-        </h1>
-        <p class="text-xs text-muted-foreground mt-1 font-medium bg-primary/10 px-2 py-0.5 rounded-full inline-block">
-          Mod Manager
-        </p>
+      <div v-if="!settings.collapsed" class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <span class="text-primary font-bold text-sm">M</span>
+        </div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight text-foreground">
+            ModEx
+          </h1>
+          <p class="text-[10px] text-muted-foreground font-medium">
+            Mod Manager
+          </p>
+        </div>
       </div>
-      <div v-else class="text-xl font-bold text-primary">M</div>
+      <div v-else class="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+        <span class="text-primary font-bold text-sm">M</span>
+      </div>
       <button @click="emit('close')"
-        class="sm:hidden p-2 rounded-lg hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
+        class="sm:hidden p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Close menu" v-if="!settings.collapsed">
-        <X class="w-5 h-5" />
+        <X class="w-4 h-4" />
       </button>
     </div>
 
-    <nav class="flex-1 p-2 space-y-1 overflow-auto" :class="settings.collapsed ? 'px-2' : 'px-4'">
+    <nav class="flex-1 p-2 space-y-0.5 overflow-auto" :class="settings.collapsed ? 'px-2' : 'px-3'">
       <RouterLink v-for="item in enabledItems" :key="item.id" :to="item.route"
-        class="group flex items-center gap-3 rounded-xl transition-all duration-200 text-sm font-medium border border-transparent"
-        :class="[
-          settings.collapsed ? 'px-0 py-2.5 justify-center' : 'px-3 py-2.5',
-          'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-        ]" active-class="bg-primary/10 text-primary border-primary/20 shadow-sm" @click="handleNavClick"
+        class="group flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium" :class="[
+          settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2',
+          'text-muted-foreground hover:bg-muted hover:text-foreground',
+        ]" active-class="!bg-primary/10 !text-primary" @click="handleNavClick"
         :title="settings.collapsed ? item.name : undefined">
-        <component :is="getIcon(item.icon)"
-          class="w-5 h-5 transition-transform group-hover:scale-110 duration-200 shrink-0" />
+        <component :is="getIcon(item.icon)" class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed" class="flex-1">{{ item.name }}</span>
         <span v-if="!settings.collapsed && getItemCount(item.id)"
-          class="text-[10px] bg-background/50 border border-border/50 px-2 py-0.5 rounded-full font-mono transition-colors group-hover:border-primary/30">
+          class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
           {{ getItemCount(item.id) }}
         </span>
       </RouterLink>
     </nav>
 
     <!-- Search hint -->
-    <div class="px-2 py-3 border-t border-border/50" :class="settings.collapsed ? 'px-2' : 'px-4'">
+    <div class="px-2 py-2 border-t border-border/30" :class="settings.collapsed ? 'px-2' : 'px-3'">
       <button
-        class="w-full flex items-center rounded-lg bg-muted/50 border border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border transition-all text-sm"
-        :class="settings.collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'" @click="triggerSearch"
+        class="w-full flex items-center rounded-md bg-muted/50 border border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border/60 transition-all duration-150 text-sm"
+        :class="settings.collapsed ? 'justify-center p-2' : 'gap-2 px-3 py-1.5'" @click="triggerSearch"
         :title="settings.collapsed ? 'Search (Ctrl+K)' : undefined">
-        <Search class="w-4 h-4 shrink-0" />
+        <Search class="w-3.5 h-3.5 shrink-0" />
         <template v-if="!settings.collapsed">
-          <span class="flex-1 text-left">Search...</span>
-          <span class="flex items-center gap-0.5 text-[10px]">
-            <kbd class="px-1 py-0.5 bg-background rounded border border-border/70 font-mono">Ctrl</kbd>
-            <kbd class="px-1 py-0.5 bg-background rounded border border-border/70 font-mono">K</kbd>
+          <span class="flex-1 text-left text-xs">Search...</span>
+          <span class="flex items-center gap-0.5 text-[10px] text-muted-foreground/70">
+            <kbd class="px-1 py-0.5 bg-background/50 rounded text-[9px] border border-border/50 font-mono">⌘K</kbd>
           </span>
         </template>
       </button>
     </div>
 
     <!-- Collapse toggle & Settings -->
-    <div class="p-2 border-t border-border/50 space-y-1" :class="settings.collapsed ? 'px-2' : 'px-4'">
+    <div class="p-2 border-t border-border/30 space-y-0.5" :class="settings.collapsed ? 'px-2' : 'px-3'">
+      <!-- Dev Playground link (only in dev mode) -->
+      <RouterLink v-if="isDev" to="/dev"
+        class="group flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium" :class="[
+          settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2',
+          'text-amber-500 hover:bg-amber-500/10 hover:text-amber-400',
+        ]" active-class="!bg-amber-500/15 !text-amber-400" @click="handleNavClick"
+        :title="settings.collapsed ? 'Dev Playground' : undefined">
+        <Zap class="w-4 h-4 transition-colors duration-150 shrink-0" />
+        <span v-if="!settings.collapsed">Dev</span>
+      </RouterLink>
+
       <!-- Collapse toggle -->
       <button @click="toggleCollapsed"
-        class="w-full flex items-center gap-3 rounded-xl transition-all duration-200 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-        :class="settings.collapsed ? 'px-0 py-2.5 justify-center' : 'px-3 py-2'"
+        class="w-full flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        :class="settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2'"
         :title="settings.collapsed ? 'Expand sidebar' : 'Collapse sidebar'">
-        <component :is="settings.collapsed ? PanelLeft : PanelLeftClose" class="w-5 h-5 shrink-0" />
-        <span v-if="!settings.collapsed">Collapse</span>
+        <component :is="settings.collapsed ? PanelLeft : PanelLeftClose" class="w-4 h-4 shrink-0" />
+        <span v-if="!settings.collapsed" class="text-sm">Collapse</span>
       </button>
 
       <RouterLink to="/settings"
-        class="group flex items-center gap-3 rounded-xl transition-all duration-200 text-sm font-medium border border-transparent"
-        :class="[
-          settings.collapsed ? 'px-0 py-2.5 justify-center' : 'px-3 py-2.5',
-          'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-        ]" active-class="bg-primary/10 text-primary border-primary/20 shadow-sm" @click="handleNavClick"
+        class="group flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium" :class="[
+          settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2',
+          'text-muted-foreground hover:bg-muted hover:text-foreground',
+        ]" active-class="!bg-primary/10 !text-primary" @click="handleNavClick"
         :title="settings.collapsed ? 'Settings' : undefined">
-        <Settings class="w-5 h-5 transition-transform group-hover:scale-110 duration-200 shrink-0" />
+        <Settings class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed">Settings</span>
       </RouterLink>
     </div>

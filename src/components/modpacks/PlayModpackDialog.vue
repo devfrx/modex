@@ -1220,9 +1220,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                }}</span>
+                                                    }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                }}%</span>
+                                                    }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1255,7 +1255,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1265,7 +1265,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -1651,7 +1651,7 @@ function handleConfigReverted(event: Event) {
 }
 
 .log-line {
-    @apply flex gap-2 py-0.5 hover:bg-white/5 px-1 rounded;
+    @apply flex gap-2 py-0.5 hover:bg-muted/30 px-1 rounded;
 }
 
 .log-time {

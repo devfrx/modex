@@ -137,6 +137,22 @@ function handleSliderInput(event: Event, property: keyof typeof customization.va
   updateCustomization({ [property]: parseInt(target.value) });
 }
 
+// Helper function to calculate primary color preview
+function getPrimaryColorPreview(): string {
+  const hue = customization.value.primaryHue;
+  if (hue < 0) {
+    // Black range
+    const lightness = ((hue + 10) / 10) * 10;
+    return `hsl(0, 0%, ${lightness}%)`;
+  } else if (hue > 360) {
+    // White range
+    const lightness = 90 + ((hue - 360) / 10) * 10;
+    return `hsl(0, 0%, ${lightness}%)`;
+  }
+  // Normal color range
+  return `hsl(${hue}, ${customization.value.primarySaturation}%, 55%)`;
+}
+
 // Load settings
 async function loadSettings() {
   if (!window.api) {
@@ -358,7 +374,7 @@ onMounted(() => {
               <Key class="w-4 h-4 text-primary" />
               API Configuration
             </h3>
-            <div class="p-5 rounded-xl border border-border bg-card/50">
+            <div class="p-5 rounded-lg border border-border/50 bg-card/50">
               <div class="space-y-4">
                 <div class="space-y-2">
                   <label class="text-sm font-medium flex items-center gap-2">
@@ -384,7 +400,7 @@ onMounted(() => {
               <RefreshCw class="w-4 h-4 text-primary" />
               Updates
             </h3>
-            <div class="p-4 sm:p-5 rounded-xl border border-border bg-card/50">
+            <div class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50">
               <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
                 <div>
                   <div class="font-medium">Application Updates</div>
@@ -407,7 +423,7 @@ onMounted(() => {
               <RefreshCw class="w-4 h-4 text-primary" />
               Instance Sync
             </h3>
-            <div class="p-4 sm:p-5 rounded-xl border border-border bg-card/50 space-y-5">
+            <div class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50 space-y-5">
               <!-- Auto Sync Before Launch -->
               <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                 <div>
@@ -484,7 +500,7 @@ onMounted(() => {
               <Sun class="w-4 h-4 text-primary" />
               Theme
             </h3>
-            <div class="p-5 rounded-xl border border-border bg-card/50">
+            <div class="p-5 rounded-lg border border-border/50 bg-card/50">
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <button v-for="t in themes" :key="t.id"
                   class="flex flex-col items-center gap-3 p-4 rounded-lg border-2 transition-all hover:bg-muted/50 relative overflow-hidden group"
@@ -515,7 +531,7 @@ onMounted(() => {
                 Reset
               </Button>
             </div>
-            <div class="p-5 rounded-xl border border-border bg-card/50">
+            <div class="p-5 rounded-lg border border-border/50 bg-card/50">
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <button v-for="preset in stylePresets" :key="preset.id"
                   class="flex flex-col items-start gap-2 p-4 rounded-lg border-2 transition-all hover:bg-muted/50 text-left"
@@ -543,25 +559,26 @@ onMounted(() => {
               <Sliders class="w-4 h-4 text-primary" />
               Custom Adjustments
             </h3>
-            <div class="p-5 rounded-xl border border-border bg-card/50 space-y-6">
+            <div class="p-5 rounded-lg border border-border/50 bg-card/50 space-y-6">
               <!-- Primary Color Hue -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
                   <label class="text-sm font-medium">Primary Color</label>
                   <div class="w-6 h-6 rounded-full border border-border"
-                    :style="{ backgroundColor: `hsl(${customization.primaryHue}, ${customization.primarySaturation}%, 50%)` }" />
+                    :style="{ backgroundColor: getPrimaryColorPreview() }" />
                 </div>
-                <input type="range" min="0" max="360" :value="customization.primaryHue"
+                <input type="range" min="-10" max="370" :value="customization.primaryHue"
                   @input="handleSliderInput($event, 'primaryHue')"
                   class="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                  style="background: linear-gradient(to right, hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%), hsl(360,80%,50%))" />
+                  style="background: linear-gradient(to right, hsl(0,0%,0%), hsl(0,0%,10%), hsl(0,80%,50%), hsl(60,80%,50%), hsl(120,80%,50%), hsl(180,80%,50%), hsl(240,80%,50%), hsl(300,80%,50%), hsl(360,80%,50%), hsl(0,0%,90%), hsl(0,0%,100%))" />
                 <div class="flex justify-between text-xs text-muted-foreground">
+                  <span>Black</span>
                   <span>Red</span>
-                  <span>Yellow</span>
                   <span>Green</span>
                   <span>Cyan</span>
                   <span>Blue</span>
                   <span>Magenta</span>
+                  <span>White</span>
                 </div>
               </div>
 
@@ -651,14 +668,14 @@ onMounted(() => {
 
             <div class="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
               <div
-                class="p-4 sm:p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
+                class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50 flex flex-col items-center justify-center text-center">
                 <div class="text-2xl sm:text-3xl font-bold text-primary">
                   {{ modCount }}
                 </div>
                 <div class="text-sm text-muted-foreground mt-1">Total Mods</div>
               </div>
               <div
-                class="p-4 sm:p-5 rounded-xl border border-border bg-card/50 flex flex-col items-center justify-center text-center">
+                class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50 flex flex-col items-center justify-center text-center">
                 <div class="text-2xl sm:text-3xl font-bold text-primary">
                   {{ modpackCount }}
                 </div>
@@ -672,7 +689,7 @@ onMounted(() => {
               <Database class="w-4 h-4 text-primary" />
               Storage Information
             </h3>
-            <div class="p-5 rounded-xl border border-border bg-card/50">
+            <div class="p-5 rounded-lg border border-border/50 bg-card/50">
               <div class="flex items-start gap-3">
                 <div class="p-2 rounded-lg bg-primary/10">
                   <Info class="w-5 h-5 text-primary" />
@@ -809,7 +826,7 @@ onMounted(() => {
               <Keyboard class="w-4 h-4 text-primary" />
               Keyboard Shortcuts
             </h3>
-            <div class="rounded-xl border border-border bg-card/50 overflow-hidden">
+            <div class="rounded-lg border border-border/50 bg-card/50 overflow-hidden">
               <div class="divide-y divide-border">
                 <div v-for="shortcut in shortcuts" :key="shortcut.keys"
                   class="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">

@@ -2766,7 +2766,7 @@ watch(
                           </h3>
                           <p class="text-sm text-muted-foreground">
                             {{ instanceStats?.modCount || 0 }} mods • {{ modpack?.loader }} {{
-                            modpack?.minecraft_version }}
+                              modpack?.minecraft_version }}
                           </p>
                         </div>
                       </div>

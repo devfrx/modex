@@ -1502,40 +1502,53 @@ function clearSelection() {
 async function bulkEnableSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
+  let successCount = 0;
+  let failCount = 0;
   for (const modId of selectedModIds.value) {
     if (disabledModIds.value.has(modId)) {
       try {
         await window.api.modpacks.toggleMod(props.modpackId, modId);
         disabledModIds.value.delete(modId);
+        successCount++;
       } catch (err) {
         console.error(`Failed to enable mod ${modId}:`, err);
+        failCount++;
       }
     }
   }
   disabledModIds.value = new Set(disabledModIds.value);
   emit("update");
-  toast.success("Mods Enabled", `Enabled ${selectedModIds.value.size} mod(s)`);
+  if (failCount === 0) {
+    toast.success("Mods Enabled", `Enabled ${successCount} mod(s)`);
+  } else {
+    toast.warning("Mods Enabled", `Enabled ${successCount} mod(s), ${failCount} failed`);
+  }
 }
 
 async function bulkDisableSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
+  let successCount = 0;
+  let failCount = 0;
   for (const modId of selectedModIds.value) {
     if (!disabledModIds.value.has(modId)) {
       try {
         await window.api.modpacks.toggleMod(props.modpackId, modId);
         disabledModIds.value.add(modId);
+        successCount++;
       } catch (err) {
         console.error(`Failed to disable mod ${modId}:`, err);
+        failCount++;
       }
     }
   }
   disabledModIds.value = new Set(disabledModIds.value);
   emit("update");
-  toast.success(
-    "Mods Disabled",
-    `Disabled ${selectedModIds.value.size} mod(s)`
-  );
+  if (failCount === 0) {
+    toast.success("Mods Disabled", `Disabled ${successCount} mod(s)`);
+  } else {
+    toast.warning("Mods Disabled", `Disabled ${successCount} mod(s), ${failCount} failed`);
+  }
 }
 
 async function removeIncompatibleMods() {

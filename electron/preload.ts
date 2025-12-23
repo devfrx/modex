@@ -719,21 +719,15 @@ contextBridge.exposeInMainWorld("api", {
     }> => ipcRenderer.invoke("analyzer:analyzeModpack", modpackId),
 
     checkDependencies: (
-      modId: string
-    ): Promise<{
-      dependencies: Array<{
-        modId: number;
-        name: string;
-        type: "required" | "optional" | "embedded" | "incompatible";
-        slug?: string;
-      }>;
-      conflicts: Array<{
-        modId: number;
-        name: string;
-        reason: string;
-      }>;
-      performanceImpact: "positive" | "neutral" | "negative" | "unknown";
-    }> => ipcRenderer.invoke("analyzer:checkDependencies", modId),
+      curseforgeId: number,
+      loader: string,
+      gameVersion: string
+    ): Promise<Array<{
+      modId: number;
+      name: string;
+      type: "required" | "optional" | "embedded" | "incompatible";
+      slug?: string;
+    }>> => ipcRenderer.invoke("analyzer:checkDependencies", curseforgeId, loader, gameVersion),
 
     getPerformanceTips: (modpackId: string): Promise<string[]> =>
       ipcRenderer.invoke("analyzer:getPerformanceTips", modpackId),

@@ -524,7 +524,16 @@ export interface ElectronAPI {
   // ========== ANALYZER ==========
   analyzer: {
     analyzeModpack: (modpackId: string) => Promise<ModpackAnalysis>;
-    checkDependencies: (modId: string) => Promise<ModAnalysis>;
+    checkDependencies: (
+      curseforgeId: number,
+      loader: string,
+      gameVersion: string
+    ) => Promise<Array<{
+      modId: number;
+      name: string;
+      type: "required" | "optional" | "embedded" | "incompatible";
+      slug?: string;
+    }>>;
     getPerformanceTips: (modpackId: string) => Promise<string[]>;
   };
 

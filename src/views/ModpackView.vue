@@ -192,10 +192,11 @@ async function loadModpacks() {
   isLoading.value = true;
   error.value = null;
   try {
-    // Load instance mapping in parallel
-    loadInstanceMapping();
-
-    const packs = await window.api.modpacks.getAll();
+    // Load instance mapping in parallel with modpacks
+    const [, packs] = await Promise.all([
+      loadInstanceMapping(),
+      window.api.modpacks.getAll()
+    ]);
 
     const packsWithCounts = await Promise.all(
       packs.map(async (pack) => {

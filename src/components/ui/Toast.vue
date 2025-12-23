@@ -1,14 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { CheckCircle2, XCircle, AlertCircle, Info, X } from 'lucide-vue-next';
-
-export interface ToastMessage {
-    id: number;
-    type: 'success' | 'error' | 'warning' | 'info';
-    title: string;
-    message?: string;
-    duration?: number;
-}
+import type { ToastMessage } from '@/composables/useToast';
 
 const props = defineProps<{
     messages: ToastMessage[];

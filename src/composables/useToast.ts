@@ -1,5 +1,12 @@
 import { ref } from 'vue';
-import type { ToastMessage } from '@/components/ui/Toast.vue';
+
+export interface ToastMessage {
+  id: number;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message?: string;
+  duration?: number;
+}
 
 const messages = ref<ToastMessage[]>([]);
 let nextId = 1;

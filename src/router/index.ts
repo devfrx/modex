@@ -1,4 +1,5 @@
-import { createRouter, createWebHashHistory } from "vue-router";
+import { createRouter, createWebHashHistory, type RouteRecordRaw } from "vue-router";
+import { defineAsyncComponent } from "vue";
 import HomeView from "@/views/HomeView.vue";
 import LibraryView from "@/views/LibraryView.vue";
 import ModpackView from "@/views/ModpackView.vue";
@@ -8,7 +9,7 @@ import SandboxView from "@/views/SandboxView.vue";
 import GuideView from "@/views/GuideView.vue";
 import StatsView from "@/views/StatsView.vue";
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   { path: "/", redirect: "/home" },
   { path: "/home", component: HomeView },
   { path: "/library", component: LibraryView },
@@ -22,8 +23,10 @@ const routes = [
 
 // Add dev-only routes
 if (import.meta.env.DEV) {
-  const DevPlaygroundView = () => import("@/views/DevPlaygroundView.vue");
-  routes.push({ path: "/dev", component: DevPlaygroundView });
+  routes.push({ 
+    path: "/dev", 
+    component: defineAsyncComponent(() => import("@/views/DevPlaygroundView.vue"))
+  });
 }
 
 const router = createRouter({

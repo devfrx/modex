@@ -9,7 +9,7 @@
 
 ## Download
 
-1. Go to the [GitHub Releases](https://github.com/your-username/modex/releases) page
+1. Go to the [GitHub Releases](https://github.com/devfrx/modex/releases) page
 2. Download the latest `.exe` installer for Windows
 
 ## Windows Installation
@@ -35,22 +35,13 @@ When you launch ModEx for the first time:
 ModEx stores its data in:
 
 ```
-%APPDATA%\modex\
-├── database.json    # Your library and modpacks
-├── folders.json     # Folder organization
-├── settings.json    # App settings
-└── backups/         # Automatic backups
+%APPDATA%\modex\modex\
+├── library.json     # Your mod library
+├── config.json      # API keys and settings
+├── modpacks/        # Individual modpack files
+├── versions/        # Version history
+└── cache/           # Thumbnail cache
 ```
-
-## Updating
-
-ModEx includes an auto-update feature:
-
-1. When a new version is available, you'll see a notification
-2. Click **Update** to download and install
-3. The app will restart with the new version
-
-You can also manually check for updates in **Settings > General > Check for Updates**.
 
 ## Uninstallation
 

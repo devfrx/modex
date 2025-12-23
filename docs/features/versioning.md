@@ -14,7 +14,7 @@ Every significant change to a modpack creates a history entry:
 ## Viewing History
 
 1. Open a modpack in the editor
-2. Click the **History** tab
+2. Click the **Versions** tab
 3. See a chronological timeline of changes
 
 Each entry shows:
@@ -38,7 +38,7 @@ Each entry shows:
 
 To restore a previous state:
 
-1. Open the History tab
+1. Open the **Versions** tab
 2. Find the version you want
 3. Click **Restore**
 4. Confirm the action

@@ -29,9 +29,9 @@ Your central hub for all content:
 Create and manage sophisticated modpacks:
 - Version history with restore capability
 - Multiple profiles per modpack
-- Dependency analysis
+- Dependency impact warnings
 - Built-in config editor
-- Export to popular formats
+- Export to CurseForge format
 
 [Learn more →](/guide/modpacks)
 
@@ -41,7 +41,7 @@ Browse CurseForge without leaving the app:
 - Search mods, packs, and shaders
 - Filter by version, loader, category
 - Update checking
-- Dependency resolution
+- Add mods directly to library
 
 [Learn more →](/guide/curseforge)
 
@@ -90,8 +90,7 @@ Connect to your game installations:
 Share and backup easily:
 - MODEX format for full fidelity
 - CurseForge ZIP export
-- Prism/MultiMC compatibility
-- URL-based sharing
+- URL-based import
 
 [Learn more →](/guide/import-export)
 

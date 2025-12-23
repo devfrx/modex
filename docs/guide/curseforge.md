@@ -60,22 +60,13 @@ The update dialog lets you:
 - See changelogs when available
 - Update all or individually
 
-## Dependency Analysis
+## Dependency Awareness
 
-When adding mods, ModEx can analyze dependencies:
+ModEx tracks dependency relationships between mods:
 
-### In Modpacks
-
-1. Open a modpack
-2. Click **Check Dependencies**
-3. See:
-   - **Required** — Must-have dependencies
-   - **Optional** — Recommended additions
-   - **Incompatible** — Known conflicts
-
-### Quick Add Dependencies
-
-Click **Add Missing** to automatically add required dependencies to your modpack.
+- When removing a mod, you'll be warned if other mods depend on it
+- When disabling a mod, dependency impact is shown
+- The Health tab in the modpack editor identifies compatibility issues
 
 ## Rate Limits
 

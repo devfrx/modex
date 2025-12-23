@@ -53,7 +53,7 @@ Narrow your search to specific fields:
 Mark mods as favorites for quick access:
 
 1. Hover over a mod card
-2. Click the **heart icon** (or press `F` with mod selected)
+2. Click the **heart icon**
 3. Use the **Favorites** quick filter to show only favorites
 
 Favorites are stored locally and persist across sessions.

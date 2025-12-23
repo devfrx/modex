@@ -72,32 +72,38 @@ Configure the sidebar navigation:
 Show or hide sidebar items:
 - Home, Library, Modpacks, Organize
 - Stats, Sandbox, Guide, Settings
-- Drag to reorder
 
-## Data Tab
+## Minecraft Tab
+
+View detected Minecraft installations and launchers. ModEx auto-detects:
+- CurseForge App
+- Prism Launcher
+- MultiMC
+- Official Minecraft Launcher
+
+## Library Tab
+
+### Statistics
+
+View library stats:
+- Total mod count
+- Modpack count
 
 ### Storage Information
 
-View storage usage:
-- Library size (mod count)
-- Modpack count
-- Database file size
+ModEx uses metadata-only storage — mod files are not downloaded until you sync to an instance.
 
-### Clear Data
+### Danger Zone
 
 ::: danger
-These actions are destructive and cannot be undone.
+This action is destructive and cannot be undone.
 :::
 
-- **Clear Library** — Remove all mods
-- **Clear Modpacks** — Remove all modpacks
-- **Clear All Data** — Factory reset
+- **Clear All Data** — Permanently delete all mods and modpacks (factory reset)
 
-### Export/Import
+## Shortcuts Tab
 
-- **Export Library** — Backup everything
-- **Restore from Backup** — Load a backup file
-- **Open Data Folder** — Browse to `%APPDATA%\modex`
+View available keyboard shortcuts for quick navigation and actions.
 
 ## About Tab
 
@@ -108,9 +114,8 @@ View application information:
 
 ## Settings Storage
 
-Settings are saved to:
-```
-%APPDATA%\modex\settings.json
-```
+Settings are stored in two locations:
+- **API keys and sync settings**: `%APPDATA%\modex\modex\config.json`
+- **UI preferences** (theme, sidebar, etc.): Browser localStorage
 
 Changes apply immediately. Most settings don't require restart.

@@ -57,16 +57,15 @@ ModEx requires a CurseForge API key to browse and fetch mod information.
 2. Click **Create Modpack**
 3. Enter a name and select game version + loader
 4. Add mods from your library
-5. Use **Check Dependencies** to ensure compatibility
+5. Check the **Health** tab to identify any compatibility issues
 
 ### 5. Export and Play
 
 1. Open your modpack
-2. Click **Export**
+2. Click **Export** or **Share**
 3. Choose your export format:
-   - **CurseForge** (.zip) for CurseForge App
-   - **Prism/MultiMC** for Prism Launcher or MultiMC
-   - **MODEX** (.modex) for backup/sharing
+   - **CurseForge** (.zip) for any launcher (CurseForge App, Prism, MultiMC)
+   - **MODEX** (.modex) for backup/sharing with other ModEx users
 4. Import the exported file into your launcher
 5. Play!
 

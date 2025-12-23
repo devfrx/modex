@@ -116,6 +116,3 @@ The visualization is built with:
 - **D3-force** for physics simulation
 - **PixiJS** for WebGL rendering
 - **Vue 3** for reactive updates
-- Custom shaders for effects
-
-Frame rate and node count are displayed in the toolbar for monitoring performance.

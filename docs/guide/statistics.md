@@ -68,16 +68,11 @@ Customize the color palette:
 
 Hide charts you don't need:
 
-1. Click **Settings**
+1. Click **Settings** (gear icon)
 2. Toggle visibility for each chart
 3. Hidden charts don't render
 
-### Layout
-
-Charts can be reordered:
-- Drag charts by their header
-- Drop to reposition
-- Layout is saved automatically
+Your preferences are saved automatically.
 
 ## Refreshing Data
 
@@ -91,7 +86,7 @@ The dashboard loads data on view. To refresh:
 While there's no direct export, you can:
 - Screenshot the dashboard
 - Use browser dev tools to capture charts
-- Access raw data in `%APPDATA%\modex\database.json`
+- Access raw data in `%APPDATA%\modex\modex\library.json`
 
 ## Performance
 

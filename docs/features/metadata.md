@@ -93,13 +93,15 @@ Currently, only CurseForge mods are supported. Mods not on CurseForge can't be t
 
 ## Data Structure
 
-ModEx stores data in LowDB (a lightweight JSON database):
+ModEx stores data as JSON files:
 
 ```
-%APPDATA%\modex\
-├── database.json   # Mods, modpacks, metadata
-├── folders.json    # Folder organization
-└── settings.json   # User preferences
+%APPDATA%\modex\modex\
+├── library.json      # All mods (metadata references)
+├── config.json       # API keys and settings
+├── modpacks/         # Individual modpack files
+├── versions/         # Version history for modpacks
+└── cache/            # Thumbnail cache
 ```
 
 The entire data directory is typically under 5 MB even for large collections.

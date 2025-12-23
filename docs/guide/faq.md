@@ -12,7 +12,7 @@ ModEx is a **metadata-only mod library manager** for Minecraft. It stores refere
 
 ModEx stores only metadata — not actual mod files. The metadata is saved in:
 ```
-%APPDATA%\modex\database.json
+%APPDATA%\modex\modex\library.json
 ```
 
 When you export a modpack, the launcher you import into handles downloading the actual mod files.
@@ -74,20 +74,19 @@ Yes! Mods in your library can be added to any number of modpacks.
 
 ### How do I back up my library?
 
-1. Go to **Settings > Data**
-2. Click **Export Library**
-3. Save the `.modex` file
+Manually copy the modex data folder:
+```
+%APPDATA%\modex\modex\
+```
 
-Or manually copy `%APPDATA%\modex\database.json`.
+This includes `library.json` (your mods) and the `modpacks/` folder.
+You can also export individual modpacks as `.modex` files via the Share button.
 
 ### I lost my data. Can I recover it?
 
-Check the automatic backups folder:
-```
-%APPDATA%\modex\backups\
-```
+If you have a backup of the `modex` data folder, you can restore it by copying it back to `%APPDATA%\modex\`.
 
-ModEx creates backups before major operations.
+For modpack configs, backups are stored in the instance's `.config-backups` folder.
 
 ### Can I sync across computers?
 

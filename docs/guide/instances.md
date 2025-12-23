@@ -14,8 +14,8 @@ ModEx can detect instances from:
 ## Detecting Instances
 
 1. Go to **Settings**
-2. Navigate to the **Instances** tab
-3. Click **Scan for Instances**
+2. Navigate to the **Minecraft** tab
+3. Click **Rescan** to detect installations
 4. ModEx searches common installation paths
 5. Detected instances appear in the list
 
@@ -72,18 +72,18 @@ After linking, sync your modpack:
 
 Enable automatic syncing in Settings:
 
-1. Go to **Settings > Instances**
-2. Enable **Auto-sync before launch**
-3. When you launch from ModEx, it syncs first
+1. Go to **Settings > General**
+2. Find **Instance Sync** section
+3. Enable **Auto-sync before launch**
+4. When you launch from ModEx, it syncs first
 
-## Viewing Instance Contents
+## Viewing Installations
 
-See what's in a game instance:
+See detected Minecraft installations:
 
-1. Go to **Settings > Instances**
-2. Click an instance
-3. View its current mods
-4. Compare with your modpack
+1. Go to **Settings > Minecraft**
+2. Detected installations are listed by launcher type
+3. View paths and set default installation
 
 ## Troubleshooting
 

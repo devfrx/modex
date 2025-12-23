@@ -12,7 +12,6 @@ The native ModEx format preserves everything:
 - All mod references (CurseForge IDs)
 - Folder organization
 - Profiles and history
-- Configuration files
 
 **Use for:** Backups, sharing with other ModEx users
 
@@ -22,37 +21,17 @@ Standard CurseForge modpack format:
 
 - `manifest.json` with mod references
 - Overrides folder for configs
-- Compatible with CurseForge App
+- Compatible with CurseForge App, Prism Launcher, MultiMC
 
-**Use for:** CurseForge App import
-
-### Prism/MultiMC Format
-
-Folder structure compatible with:
-
-- Prism Launcher
-- MultiMC
-- Other MultiMC-based launchers
-
-**Use for:** These launchers' import features
+**Use for:** Importing into any launcher that supports CurseForge format
 
 ## Exporting a Modpack
 
-1. Open the modpack in the editor
-2. Click **Export** button
-3. Select format from dropdown
-4. Choose destination folder
-5. Click **Export**
-
-### Export Options
-
-Depending on format:
-
-| Option | Description |
-|--------|-------------|
-| **Include Configs** | Export configuration files |
-| **Include Overrides** | Export override folders |
-| **Compress** | Create ZIP archive |
+1. Open a modpack in the Modpacks view
+2. Click the **Export** button (or use Share dialog)
+3. Choose **CurseForge** (.zip) format
+4. Select save location
+5. Import the exported file into your launcher
 
 ## Importing
 
@@ -79,15 +58,28 @@ Depending on format:
 
 ## Sharing
 
-### Generate Share Link
+### Export as .modex
 
 1. Open a modpack
 2. Click **Share** button
-3. Choose **Create Gist**
-4. Authenticate with GitHub if needed
-5. Copy the generated URL
+3. Export as `.modex` file
+4. Share the file with others
 
-Recipients can import directly from this URL.
+### Import .modex
+
+1. Click **Share** in the Modpacks view
+2. Select **Import** tab
+3. Choose a `.modex` file
+4. The modpack is imported
+
+### Import from URL
+
+If someone shares a Gist URL with a modpack:
+
+1. Click **Share** button
+2. Go to **Import** tab
+3. Paste the URL in the **Import from URL** field
+4. Click **Import**
 
 ### Direct File Sharing
 
@@ -96,38 +88,18 @@ Export as `.modex` and share via:
 - Discord file upload
 - Email attachment
 
-## Backup & Restore
+## Backup
 
 ### Manual Backup
 
-Export important modpacks as `.modex` files regularly.
+For complete backup of your library, copy the data folder:
+```
+%APPDATA%\modex\modex\
+```
 
-### Automatic Backups
+This includes your library, modpacks, and version history.
+You can also export individual modpacks as `.modex` files for sharing or backup.
 
-ModEx creates automatic backups:
+### Configuration Backups
 
-- Location: `%APPDATA%\modex\backups\`
-- Created before major changes
-- Kept for 30 days
-
-### Restoring from Backup
-
-1. Go to **Settings > Data**
-2. Click **Restore from Backup**
-3. Select a backup file
-4. Confirm restoration
-
-::: warning
-Restoring replaces your current data. Export first if unsure.
-:::
-
-## Library Export
-
-Export your entire library (not just one modpack):
-
-1. Go to **Settings > Data**
-2. Click **Export Library**
-3. Choose format and location
-4. All mods and folders are exported
-
-Useful for migrating to a new computer or complete backup.
+When syncing to game instances, ModEx creates config backups in the instance's `.config-backups` folder.

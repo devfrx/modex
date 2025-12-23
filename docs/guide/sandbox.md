@@ -56,7 +56,7 @@ Use combinations to focus on specific aspects of your library.
 
 - **Pan** — Click and drag on empty space
 - **Zoom** — Mouse wheel or pinch gesture
-- **Reset View** — Click the home button or press `Home`
+- **Fit to View** — Click the fit button to center all nodes
 
 ### Node Interaction
 
@@ -92,7 +92,9 @@ Quick zoom buttons:
 
 ### Simulation
 
-The force simulation has parameters you can adjust:
+### Simulation
+
+The force simulation creates an organic layout:
 - Nodes naturally repel each other
 - Connected nodes attract
 - The system finds equilibrium
@@ -111,13 +113,8 @@ Mods without connections (no folder, no modpack) stand out as isolated nodes.
 
 Select a modpack to see all connected mods highlighted.
 
-### Explore Dependencies
-
-When dependency information is available, see which mods are commonly used together.
-
 ## Tips
 
 - Use **filters** to reduce clutter when exploring
 - **Performance mode** is recommended for 500+ nodes
 - **WebGL mode** handles animations more smoothly
-- Double-click empty space to reset the view

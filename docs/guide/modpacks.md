@@ -31,12 +31,12 @@ Two ways to add mods:
 1. **From Library** — Click **Add from Library**, select mods, confirm
 2. **From CurseForge** — Click **Browse CurseForge**, search and add directly
 
-### Dependency Checking
+### Dependency Awareness
 
-Click **Check Dependencies** to analyze mod compatibility:
-- Identifies missing required dependencies
-- Shows optional dependencies you might want
-- Lists incompatible mod combinations
+ModEx tracks dependencies automatically:
+- Warns when removing mods that others depend on
+- Shows dependency impact when disabling mods
+- The **Health** tab identifies compatibility issues
 
 ## Profiles
 
@@ -61,19 +61,19 @@ The active profile determines which mods are exported. Switch profiles in the ed
 ModEx automatically tracks changes to your modpacks:
 
 - Every add/remove creates a history entry
-- View the timeline in the **History** panel
+- View the timeline in the **Versions** panel
 - Restore previous versions if needed
 
 ### Viewing History
 
 1. Open modpack editor
-2. Click the **History** tab
+2. Click the **Versions** tab
 3. See chronological list of changes
 4. Click any entry to see details
 
 ### Restoring a Version
 
-1. Find the version you want in History
+1. Find the version you want in Versions tab
 2. Click **Restore**
 3. The modpack reverts to that state
 
@@ -94,14 +94,13 @@ This is useful for pre-configuring mods before export.
 Export your modpack for use with game launchers:
 
 1. Open the modpack
-2. Click **Export**
+2. Click **Export** or **Share**
 3. Choose format:
 
 | Format | Use With |
 |--------|----------|
-| **CurseForge** (.zip) | CurseForge App |
-| **Prism/MultiMC** | Prism Launcher, MultiMC |
-| **MODEX** (.modex) | Backup, sharing, import |
+| **CurseForge** (.zip) | CurseForge App, Prism Launcher, MultiMC |
+| **MODEX** (.modex) | Backup, sharing with other ModEx users |
 
 4. Choose save location
 5. Import the file into your launcher
@@ -132,11 +131,11 @@ The `.modex` format preserves:
 
 Share this file with others — they can import it into their ModEx.
 
-### Share Link
+### Import from URL
 
-1. Open the modpack
-2. Click **Share** button
-3. Choose **Generate Gist** (requires GitHub auth)
-4. Share the generated URL
+If someone shares a URL (e.g., a Gist with a modpack), you can import directly:
 
-Recipients can import directly from the link.
+1. Open the **Share** dialog
+2. Go to **Import** tab
+3. Paste the URL
+4. Click **Import**

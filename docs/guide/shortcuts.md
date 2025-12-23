@@ -7,8 +7,8 @@ Master these shortcuts to work faster in ModEx.
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl + F` | Open search / Focus search field |
-| `Ctrl + N` | Create new modpack |
-| `Ctrl + I` | Import mods from CurseForge |
+| `Ctrl + N` | Create new modpack from selection |
+| `Ctrl + A` | Select all visible items |
 | `Escape` | Clear selection / Close dialogs |
 
 ## Selection
@@ -19,6 +19,7 @@ Master these shortcuts to work faster in ModEx.
 | `Ctrl + Click` | Add/remove item from selection |
 | `Shift + Click` | Select range of items |
 | `Escape` | Clear current selection |
+| `Delete` | Delete selected items |
 
 ## Library View
 
@@ -26,15 +27,6 @@ Master these shortcuts to work faster in ModEx.
 |----------|--------|
 | `Ctrl + F` | Focus search bar |
 | `Delete` | Delete selected mods |
-| `F` | Toggle favorite on selected mod |
-
-## Modpack Editor
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl + S` | Save changes |
-| `Ctrl + E` | Export modpack |
-| `Delete` | Remove selected mods from modpack |
 
 ## Dialogs
 

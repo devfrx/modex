@@ -1,7 +1,7 @@
 {
   "name": "modex",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "Modern mod manager with CurseForge integration",
   "author": "devfrx",
   "type": "module",

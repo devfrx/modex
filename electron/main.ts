@@ -3260,8 +3260,13 @@ async function initializeBackend() {
     showSyncConfirmation?: boolean;
     defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
   }) => {
-    await metadataManager.setInstanceSyncSettings(settings);
-    return { success: true };
+    try {
+      await metadataManager.setInstanceSyncSettings(settings);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to save instance sync settings:", error);
+      throw error;
+    }
   });
 
   // Smart launch with auto-sync

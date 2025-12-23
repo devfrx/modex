@@ -273,6 +273,10 @@ export class MetadataManager {
     const releaseLock = await this.acquireFileLock(filePath);
     
     try {
+      // Ensure the directory exists before writing
+      const dir = path.dirname(filePath);
+      await fs.ensureDir(dir);
+      
       // Use unique temp file to avoid conflicts
       const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
       await fs.writeJson(tempPath, data, { spaces: 2 });
@@ -325,12 +329,17 @@ export class MetadataManager {
   }
 
   async setInstanceSyncSettings(settings: Partial<NonNullable<AppConfig["instanceSync"]>>): Promise<void> {
-    const config = await this.getConfig();
-    config.instanceSync = {
-      ...config.instanceSync,
-      ...settings,
-    };
-    await this.saveConfig(config);
+    try {
+      const config = await this.getConfig();
+      config.instanceSync = {
+        ...config.instanceSync,
+        ...settings,
+      };
+      await this.saveConfig(config);
+    } catch (error) {
+      console.error("[MetadataManager] Failed to set instance sync settings:", error);
+      throw error;
+    }
   }
 
   // ==================== PENDING CF CONFLICTS ====================

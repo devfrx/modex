@@ -246,9 +246,16 @@ async function loadSyncSettings() {
 // Save instance sync settings
 async function saveSyncSettings() {
   try {
-    await window.api.settings.setInstanceSync(syncSettings.value);
+    // Create a plain object copy to avoid IPC serialization issues with Vue proxies
+    const settingsToSave = {
+      autoSyncBeforeLaunch: syncSettings.value.autoSyncBeforeLaunch,
+      showSyncConfirmation: syncSettings.value.showSyncConfirmation,
+      defaultConfigSyncMode: syncSettings.value.defaultConfigSyncMode
+    };
+    await window.api.settings.setInstanceSync(settingsToSave);
     toast.success("Saved", "Instance sync settings updated");
   } catch (err) {
+    console.error("Failed to save sync settings:", err);
     toast.error("Error", "Failed to save sync settings");
   }
 }

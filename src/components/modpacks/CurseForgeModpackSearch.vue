@@ -301,7 +301,7 @@ async function quickImport(modpack: any) {
         // Reset the temp state before calling importModpack which sets its own state
         importingModpackId.value = null;
         importingFileId.value = null;
-        
+
         await importModpack(modpack, releaseFile);
     } catch (err) {
         console.error("Quick import failed:", err);
@@ -600,15 +600,17 @@ onMounted(async () => {
                                             <h3 class="font-medium text-foreground truncate">{{ modpack.name }}</h3>
                                             <p class="text-xs text-muted-foreground line-clamp-2 mt-0.5">{{
                                                 modpack.summary
-                                            }}
+                                                }}
                                             </p>
                                         </div>
 
                                         <div class="flex items-center gap-1.5 shrink-0">
                                             <!-- Quick Import -->
                                             <Button @click.stop="quickImport(modpack)"
-                                                :disabled="importingModpackId === modpack.id" size="sm" class="gap-1.5 h-8">
-                                                <Loader2 v-if="importingModpackId === modpack.id && importingFileId === -1"
+                                                :disabled="importingModpackId === modpack.id" size="sm"
+                                                class="gap-1.5 h-8">
+                                                <Loader2
+                                                    v-if="importingModpackId === modpack.id && importingFileId === -1"
                                                     class="w-3.5 h-3.5 animate-spin" />
                                                 <Download v-else class="w-3.5 h-3.5" />
                                                 Import
@@ -668,7 +670,8 @@ onMounted(async () => {
                                                 {{ file.displayName }}
                                             </div>
                                             <div class="col-span-2">
-                                                <span class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded"
+                                                <span
+                                                    class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded"
                                                     :title="getMinecraftVersions(file)">
                                                     {{ getMinecraftVersions(file) }}
                                                 </span>
@@ -677,19 +680,22 @@ onMounted(async () => {
                                                 {{ formatDate(file.fileDate) }}
                                             </div>
                                             <div class="col-span-2">
-                                                <span class="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border"
+                                                <span
+                                                    class="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border"
                                                     :class="getReleaseClass(file.releaseType)">
                                                     {{ getReleaseLabel(file.releaseType) }}
                                                 </span>
                                             </div>
                                             <div class="col-span-1 text-xs text-muted-foreground text-right">
-                                                {{ file.fileLength ? (file.fileLength / 1024 / 1024).toFixed(1) + ' MB' : '' }}
+                                                {{ file.fileLength ? (file.fileLength / 1024 / 1024).toFixed(1) + ' MB'
+                                                : '' }}
                                             </div>
                                         </div>
 
                                         <div class="flex items-center">
-                                            <Button variant="ghost" size="icon" class="h-8 w-8 text-muted-foreground mr-1"
-                                                title="View Changelog" @click.stop="viewChangelog(modpack, file)">
+                                            <Button variant="ghost" size="icon"
+                                                class="h-8 w-8 text-muted-foreground mr-1" title="View Changelog"
+                                                @click.stop="viewChangelog(modpack, file)">
                                                 <FileText class="w-4 h-4" />
                                             </Button>
                                             <Button @click="importModpack(modpack, file)"

@@ -95,11 +95,9 @@ watch(
       </div>
 
       <!-- Changelog Content -->
-      <div
-        v-else
+      <div v-else
         class="prose prose-sm prose-invert max-w-none p-4 prose-headings:text-foreground prose-headings:font-semibold prose-p:text-muted-foreground prose-p:leading-relaxed prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-ul:text-muted-foreground prose-ol:text-muted-foreground prose-li:marker:text-muted-foreground prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:border prose-pre:border-border"
-        v-html="changelog"
-      />
+        v-html="changelog" />
     </div>
 
     <template #footer>

@@ -59,7 +59,8 @@ watch(
       changelog.value = "";
       error.value = null;
     }
-  }
+  },
+  { immediate: true }
 );
 </script>
 

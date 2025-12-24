@@ -14,7 +14,6 @@ import {
     Calendar,
     FileText,
     RefreshCw,
-    History,
     Filter,
     ArrowDownToLine,
 } from "lucide-vue-next";
@@ -60,8 +59,9 @@ const selectedChangelogModpack = ref<{
     slug: string;
 } | null>(null);
 
-// Import State
-const isImporting = ref<number | null>(null);
+// Import State - track both modpack ID and file ID to avoid duplicate loading indicators
+const importingModpackId = ref<number | null>(null);
+const importingFileId = ref<number | null>(null);
 const importProgress = ref({
     show: false,
     phase: "" as "download" | "extract" | "import" | "",
@@ -209,9 +209,10 @@ function viewChangelog(modpack: any, file: any) {
 
 // Import modpack
 async function importModpack(modpack: any, file: any) {
-    if (isImporting.value) return;
+    if (importingModpackId.value || importingFileId.value) return;
 
-    isImporting.value = modpack.id;
+    importingModpackId.value = modpack.id;
+    importingFileId.value = file.id;
     importProgress.value = {
         show: true,
         phase: "download",
@@ -267,16 +268,19 @@ async function importModpack(modpack: any, file: any) {
         console.error("Import failed:", err);
         toast.error("Import Failed", (err as Error).message);
     } finally {
-        isImporting.value = null;
+        importingModpackId.value = null;
+        importingFileId.value = null;
         importProgress.value = { show: false, phase: "", message: "", current: 0, total: 0 };
     }
 }
 
 // Quick import (latest release)
 async function quickImport(modpack: any) {
-    if (isImporting.value) return;
+    if (importingModpackId.value) return;
 
-    isImporting.value = modpack.id;
+    // Set a temporary state to show loading on the header button
+    importingModpackId.value = modpack.id;
+    importingFileId.value = -1; // Use -1 to indicate "quick import" loading state
 
     try {
         // Find latest release file
@@ -289,14 +293,21 @@ async function quickImport(modpack: any) {
 
         if (!releaseFile) {
             toast.error("No Files", "No compatible files found for this modpack");
+            importingModpackId.value = null;
+            importingFileId.value = null;
             return;
         }
 
+        // Reset the temp state before calling importModpack which sets its own state
+        importingModpackId.value = null;
+        importingFileId.value = null;
+        
         await importModpack(modpack, releaseFile);
     } catch (err) {
         console.error("Quick import failed:", err);
         toast.error("Import Failed", (err as Error).message);
-        isImporting.value = null;
+        importingModpackId.value = null;
+        importingFileId.value = null;
     }
 }
 
@@ -345,9 +356,9 @@ function getReleaseLabel(type: number): string {
 
 function getReleaseClass(type: number): string {
     const classes: Record<number, string> = {
-        1: "bg-primary/15 text-primary",
-        2: "bg-yellow-500/15 text-yellow-400",
-        3: "bg-red-500/15 text-red-400",
+        1: "bg-primary/10 text-primary border-primary/20",
+        2: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+        3: "bg-orange-500/10 text-orange-500 border-orange-500/20",
     };
     return classes[type] || "bg-muted/30 text-muted-foreground";
 }
@@ -596,8 +607,8 @@ onMounted(async () => {
                                         <div class="flex items-center gap-1.5 shrink-0">
                                             <!-- Quick Import -->
                                             <Button @click.stop="quickImport(modpack)"
-                                                :disabled="isImporting === modpack.id" size="sm" class="gap-1.5 h-8">
-                                                <Loader2 v-if="isImporting === modpack.id"
+                                                :disabled="importingModpackId === modpack.id" size="sm" class="gap-1.5 h-8">
+                                                <Loader2 v-if="importingModpackId === modpack.id && importingFileId === -1"
                                                     class="w-3.5 h-3.5 animate-spin" />
                                                 <Download v-else class="w-3.5 h-3.5" />
                                                 Import
@@ -649,34 +660,44 @@ onMounted(async () => {
                                     No files match your filters
                                 </div>
 
-                                <div v-else class="max-h-56 overflow-y-auto custom-scrollbar">
+                                <div v-else class="p-2 space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar">
                                     <div v-for="file in filteredFiles.slice(0, 10)" :key="file.id"
-                                        class="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-muted/30 border-b border-border/20 last:border-0 transition-colors">
-                                        <div class="flex-1 min-w-0">
-                                            <div class="flex items-center gap-2">
-                                                <span class="font-medium text-sm truncate">{{ file.displayName }}</span>
-                                                <span
-                                                    :class="[getReleaseClass(file.releaseType), 'px-1.5 py-0.5 rounded text-xs font-medium']">
+                                        class="flex items-center gap-3 p-2 rounded-lg hover:bg-background border border-transparent hover:border-border transition-all group/file">
+                                        <div class="flex-1 grid grid-cols-12 gap-4 items-center text-sm">
+                                            <div class="col-span-5 font-medium truncate" :title="file.displayName">
+                                                {{ file.displayName }}
+                                            </div>
+                                            <div class="col-span-2">
+                                                <span class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded"
+                                                    :title="getMinecraftVersions(file)">
+                                                    {{ getMinecraftVersions(file) }}
+                                                </span>
+                                            </div>
+                                            <div class="col-span-2 text-xs text-muted-foreground">
+                                                {{ formatDate(file.fileDate) }}
+                                            </div>
+                                            <div class="col-span-2">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border"
+                                                    :class="getReleaseClass(file.releaseType)">
                                                     {{ getReleaseLabel(file.releaseType) }}
                                                 </span>
                                             </div>
-                                            <div class="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                                                <span>{{ getMinecraftVersions(file) }}</span>
-                                                <span>{{ formatDate(file.fileDate) }}</span>
+                                            <div class="col-span-1 text-xs text-muted-foreground text-right">
+                                                {{ file.fileLength ? (file.fileLength / 1024 / 1024).toFixed(1) + ' MB' : '' }}
                                             </div>
                                         </div>
 
-                                        <div class="flex items-center gap-1.5">
-                                            <Button variant="ghost" size="icon" class="h-7 w-7"
-                                                @click="viewChangelog(modpack, file)" title="View Changelog">
-                                                <History class="w-3.5 h-3.5" />
+                                        <div class="flex items-center">
+                                            <Button variant="ghost" size="icon" class="h-8 w-8 text-muted-foreground mr-1"
+                                                title="View Changelog" @click.stop="viewChangelog(modpack, file)">
+                                                <FileText class="w-4 h-4" />
                                             </Button>
                                             <Button @click="importModpack(modpack, file)"
-                                                :disabled="isImporting === modpack.id" size="sm" variant="secondary"
-                                                class="gap-1.5 h-7 text-xs">
-                                                <Loader2 v-if="isImporting === modpack.id"
-                                                    class="w-3 h-3 animate-spin" />
-                                                <ArrowDownToLine v-else class="w-3 h-3" />
+                                                :disabled="importingModpackId === modpack.id" size="sm" variant="ghost"
+                                                class="h-8 w-24 ml-2 text-xs">
+                                                <Loader2 v-if="importingFileId === file.id"
+                                                    class="w-3 h-3 animate-spin mr-1.5" />
+                                                <ArrowDownToLine v-else class="w-3 h-3 mr-1.5" />
                                                 Import
                                             </Button>
                                         </div>

@@ -112,11 +112,11 @@ const filteredFiles = computed(() => {
 function getReleaseTypeClass(type: number) {
     switch (type) {
         case 1:
-            return "bg-primary/10 text-primary border-primary/20";
+            return "bg-primary/15 text-primary ring-1 ring-primary/30";
         case 2:
-            return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+            return "bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30";
         case 3:
-            return "bg-orange-500/10 text-orange-500 border-orange-500/20";
+            return "bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/30";
         default:
             return "bg-muted text-muted-foreground";
     }
@@ -210,28 +210,25 @@ watch(
 
         <div class="space-y-4">
             <!-- Filters -->
-            <div class="flex items-center gap-4 p-3 bg-muted/30 rounded-lg">
-                <span class="text-sm text-muted-foreground">Channels:</span>
-                <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <input type="checkbox" v-model="filterRelease" class="rounded border-input text-primary" />
-                    <span class="flex items-center gap-1">
-                        <div class="w-2 h-2 rounded-full bg-primary"></div>
-                        Release
-                    </span>
+            <div class="flex items-center gap-3 p-3 bg-muted/30 rounded-xl border border-border/30">
+                <span class="text-sm text-muted-foreground font-medium">Channels:</span>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                    :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-muted/50'">
+                    <input type="checkbox" v-model="filterRelease" class="sr-only" />
+                    <div class="w-3 h-3 rounded-full bg-primary ring-2 ring-primary/30" />
+                    <span class="text-sm font-medium" :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
                 </label>
-                <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <input type="checkbox" v-model="filterBeta" class="rounded border-input text-primary" />
-                    <span class="flex items-center gap-1">
-                        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
-                        Beta
-                    </span>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                    :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'hover:bg-muted/50'">
+                    <input type="checkbox" v-model="filterBeta" class="sr-only" />
+                    <div class="w-3 h-3 rounded-full bg-blue-500 ring-2 ring-blue-500/30" />
+                    <span class="text-sm font-medium" :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
                 </label>
-                <label class="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <input type="checkbox" v-model="filterAlpha" class="rounded border-input text-primary" />
-                    <span class="flex items-center gap-1">
-                        <div class="w-2 h-2 rounded-full bg-orange-500"></div>
-                        Alpha
-                    </span>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                    :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'hover:bg-muted/50'">
+                    <input type="checkbox" v-model="filterAlpha" class="sr-only" />
+                    <div class="w-3 h-3 rounded-full bg-orange-500 ring-2 ring-orange-500/30" />
+                    <span class="text-sm font-medium" :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
                 </label>
 
                 <div class="ml-auto text-xs text-muted-foreground">

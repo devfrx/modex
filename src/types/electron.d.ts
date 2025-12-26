@@ -118,6 +118,8 @@ export interface ElectronAPI {
     ) => Promise<Mod | null>;
     /** Get changelog HTML for a specific file */
     getChangelog: (modId: number, fileId: number) => Promise<string>;
+    /** Get full description HTML for a mod */
+    getModDescription: (modId: number) => Promise<string>;
     /** Get smart mod recommendations based on installed mod categories */
     getRecommendations: (
       installedCategoryIds: number[],
@@ -201,7 +203,7 @@ export interface ElectronAPI {
     ) => Promise<ModpackProfile | null>;
     deleteProfile: (modpackId: string, profileId: string) => Promise<boolean>;
     applyProfile: (modpackId: string, profileId: string) => Promise<boolean>;
-    
+
     // Profile config management
     /** Save current configs as profile-specific configs */
     saveProfileConfigs: (modpackId: string, profileId: string) => Promise<string | null>;
@@ -238,7 +240,7 @@ export interface ElectronAPI {
       skippedMods: number;
       missingMods: Array<{ id: string; name: string }>;
     }>;
-    
+
     // CurseForge update checking
     /** Check for CurseForge modpack updates */
     checkCFUpdate: (modpackId: string) => Promise<{
@@ -677,8 +679,8 @@ export interface ElectronAPI {
     syncModpack: (
       instanceId: string,
       modpackId: string,
-      options?: { 
-        clearExisting?: boolean; 
+      options?: {
+        clearExisting?: boolean;
         configSyncMode?: "overwrite" | "new_only" | "skip";
         overridesZipPath?: string;
       }
@@ -713,7 +715,7 @@ export interface ElectronAPI {
       options?: { overridesZipPath?: string }
     ) => Promise<{ instance: ModexInstance; syncResult: InstanceSyncResult } | null>;
     onSyncProgress: (callback: (data: { stage: string; current: number; total: number; item?: string }) => void) => () => void;
-    
+
     // Game tracking
     getRunningGame: (instanceId: string) => Promise<{
       instanceId: string;
@@ -738,7 +740,7 @@ export interface ElectronAPI {
       currentMod?: string;
       gameProcessRunning: boolean;
     }) => void) => () => void;
-    
+
     // Bidirectional config sync
     getModifiedConfigs: (instanceId: string, modpackId: string) => Promise<{
       modifiedConfigs: Array<{
@@ -758,7 +760,7 @@ export interface ElectronAPI {
       skipped: number;
       errors: string[];
     }>;
-    
+
     /** Subscribe to real-time game log lines */
     onLogLine: (callback: (data: {
       instanceId: string;
@@ -880,9 +882,19 @@ export interface ElectronAPI {
 
 // ==================== CURSEFORGE TYPES ====================
 
+export interface CFModAsset {
+  id: number;
+  modId: number;
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  url: string;
+}
+
 export interface CFMod {
   id: number;
   gameId: number;
+  classId?: number;
   name: string;
   slug: string;
   summary: string;
@@ -891,6 +903,7 @@ export interface CFMod {
     thumbnailUrl: string;
     url: string;
   };
+  screenshots?: CFModAsset[];
   categories: CFCategory[];
   authors: CFAuthor[];
   latestFiles: CFFile[];
@@ -898,6 +911,12 @@ export interface CFMod {
   dateCreated: string;
   dateModified: string;
   dateReleased: string;
+  links?: {
+    websiteUrl?: string;
+    wikiUrl?: string;
+    issuesUrl?: string;
+    sourceUrl?: string;
+  };
 }
 
 export interface CFCategory {
@@ -980,9 +999,13 @@ export interface DependencyInfo {
 }
 
 export interface ConflictInfo {
-  mod1: { id: string; name: string };
-  mod2: { id: string; name: string };
-  reason: string;
+  mod1: { id: string; name: string; curseforge_id?: number };
+  mod2: { id: string; name: string; curseforge_id?: number };
+  type: 'incompatible' | 'duplicate' | 'version_mismatch' | 'loader_mismatch';
+  severity: 'error' | 'warning' | 'info';
+  description: string;
+  suggestion?: string;
+  reason?: string; // legacy field for backwards compatibility
 }
 
 export interface PerformanceStats {
@@ -1008,4 +1031,4 @@ declare global {
   }
 }
 
-export {};
+export { };

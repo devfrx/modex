@@ -948,28 +948,28 @@ function getReleaseColor(type: number) {
             </label>
             <div class="flex flex-wrap gap-1">
               <button
-                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
+                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
                 :class="selectedContentType === 'mods'
-                  ? 'bg-primary/15 text-primary border border-primary/30'
-                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                  ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                  : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
                   " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'mods')">
                 <Layers class="w-3 h-3" />
                 Mods
               </button>
               <button
-                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
+                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
                 :class="selectedContentType === 'resourcepacks'
-                  ? 'bg-blue-500/15 text-blue-500 border border-blue-500/30'
-                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                  ? 'bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30'
+                  : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
                   " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'resourcepacks')">
                 <Image class="w-3 h-3" />
                 Packs
               </button>
               <button
-                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1"
+                class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
                 :class="selectedContentType === 'shaders'
-                  ? 'bg-pink-500/15 text-pink-500 border border-pink-500/30'
-                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                  ? 'bg-pink-500/15 text-pink-500 ring-1 ring-pink-500/30'
+                  : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
                   " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'shaders')">
                 <Sparkles class="w-3 h-3" />
                 Shaders
@@ -1053,30 +1053,24 @@ function getReleaseColor(type: number) {
           <!-- Release Types -->
           <div class="space-y-2">
             <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Release Channels</label>
-            <div class="space-y-1.5">
-              <label class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none">
-                <input type="checkbox" v-model="filterRelease"
-                  class="rounded border-input text-primary focus:ring-primary/50" />
-                <span class="inline-flex items-center gap-1.5">
-                  <div class="w-2 h-2 rounded-full bg-primary"></div>
-                  Release
-                </span>
+            <div class="flex flex-wrap gap-1.5">
+              <label class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
+                :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-muted/30 hover:bg-muted/50'">
+                <input type="checkbox" v-model="filterRelease" class="sr-only" />
+                <div class="w-3 h-3 rounded-full bg-primary ring-2 ring-primary/30" />
+                <span class="text-xs font-medium" :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
               </label>
-              <label class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none">
-                <input type="checkbox" v-model="filterBeta"
-                  class="rounded border-input text-primary focus:ring-primary/50" />
-                <span class="inline-flex items-center gap-1.5">
-                  <div class="w-2 h-2 rounded-full bg-blue-500"></div>
-                  Beta
-                </span>
+              <label class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
+                :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'bg-muted/30 hover:bg-muted/50'">
+                <input type="checkbox" v-model="filterBeta" class="sr-only" />
+                <div class="w-3 h-3 rounded-full bg-blue-500 ring-2 ring-blue-500/30" />
+                <span class="text-xs font-medium" :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
               </label>
-              <label class="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none">
-                <input type="checkbox" v-model="filterAlpha"
-                  class="rounded border-input text-primary focus:ring-primary/50" />
-                <span class="inline-flex items-center gap-1.5">
-                  <div class="w-2 h-2 rounded-full bg-orange-500"></div>
-                  Alpha
-                </span>
+              <label class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
+                :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'bg-muted/30 hover:bg-muted/50'">
+                <input type="checkbox" v-model="filterAlpha" class="sr-only" />
+                <div class="w-3 h-3 rounded-full bg-orange-500 ring-2 ring-orange-500/30" />
+                <span class="text-xs font-medium" :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
               </label>
             </div>
           </div>

@@ -10,6 +10,15 @@ import * as path from "path";
 
 // ==================== TYPES ====================
 
+export interface CFModAsset {
+  id: number;
+  modId: number;
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  url: string;
+}
+
 export interface CFMod {
   id: number;
   gameId: number;
@@ -22,6 +31,7 @@ export interface CFMod {
     thumbnailUrl: string;
     url: string;
   };
+  screenshots?: CFModAsset[];
   categories: CFCategory[];
   authors: CFAuthor[];
   latestFiles: CFFile[];
@@ -29,6 +39,12 @@ export interface CFMod {
   dateCreated: string;
   dateModified: string;
   dateReleased: string;
+  links?: {
+    websiteUrl?: string;
+    wikiUrl?: string;
+    issuesUrl?: string;
+    sourceUrl?: string;
+  };
 }
 
 export interface CFCategory {
@@ -358,9 +374,8 @@ export class CurseForgeService {
     const params = new URLSearchParams();
     if (options?.stripped) params.append("stripped", "true");
 
-    const url = `${this.apiUrl}/mods/${modId}/description${
-      params.toString() ? "?" + params : ""
-    }`;
+    const url = `${this.apiUrl}/mods/${modId}/description${params.toString() ? "?" + params : ""
+      }`;
     const response = await fetch(url, {
       headers: {
         "x-api-key": this.apiKey,
@@ -623,9 +638,9 @@ export class CurseForgeService {
     // First try exact match with version and loader (for mods only)
     let files = isModContent
       ? await this.getModFiles(modId, {
-          gameVersion,
-          modLoader,
-        })
+        gameVersion,
+        modLoader,
+      })
       : await this.getModFiles(modId, { gameVersion }); // No loader filter for non-mods
 
     if (files.length === 0) {
@@ -651,7 +666,7 @@ export class CurseForgeService {
 
     // Filter only release files first
     const releaseFiles = files.filter((f) => f.releaseType === 1);
-    
+
     // Return the newest release file, or if no releases exist, the newest file overall
     return releaseFiles.length > 0 ? releaseFiles[0] : files[0];
   }
@@ -787,13 +802,13 @@ export class CurseForgeService {
       resourcepacks: "resourcepack",
       shaders: "shader",
     };
-    
+
     // Auto-detect content type from mod.classId if not provided
     let detectedContentType = contentType;
     if (!detectedContentType && mod.classId) {
       detectedContentType = getContentTypeFromClassId(mod.classId);
     }
-    
+
     const mappedContentType = detectedContentType ? contentTypeMap[detectedContentType] : "mod";
 
     // Website URL path based on content type
@@ -1008,13 +1023,12 @@ export class CurseForgeService {
         mod,
         reason: randomize
           ? this.getDiscoveryReason(mod)
-          : `${selectedSort.name} ${
-              contentType === "mod"
-                ? "Mod"
-                : contentType === "resourcepack"
-                ? "Resource Pack"
-                : "Shader"
-            }`,
+          : `${selectedSort.name} ${contentType === "mod"
+            ? "Mod"
+            : contentType === "resourcepack"
+              ? "Resource Pack"
+              : "Shader"
+          }`,
       }));
     }
 

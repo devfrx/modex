@@ -118,203 +118,203 @@ const KNOWN_CONFLICTS: Array<{
   suggestion: string;
   severity?: 'error' | 'warning';
 }> = [
-  // ==================== RENDERING CONFLICTS ====================
-  {
-    mod1Ids: [394468], // Sodium
-    mod2Ids: [32274], // OptiFine
-    description: 'Sodium and OptiFine are incompatible rendering mods',
-    suggestion: 'Remove OptiFine and use Sodium with Iris for shaders support',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [250398], // Embeddium
-    mod2Ids: [32274], // OptiFine
-    description: 'Embeddium and OptiFine are incompatible rendering mods',
-    suggestion: 'Remove OptiFine and use Embeddium with Oculus for shaders support',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [594406], // Rubidium
-    mod2Ids: [32274], // OptiFine
-    description: 'Rubidium and OptiFine are incompatible rendering mods',
-    suggestion: 'Use only one rendering optimization mod',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [394468, 250398], // Sodium, Embeddium
-    mod2Ids: [250398, 394468], // Embeddium, Sodium
-    description: 'Sodium and Embeddium are the same mod for different loaders',
-    suggestion: 'Use only one based on your mod loader (Sodium for Fabric, Embeddium for Forge)',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [394468], // Sodium
-    mod2Ids: [594406], // Rubidium
-    description: 'Sodium and Rubidium are incompatible (Rubidium is an older Sodium port)',
-    suggestion: 'Use Embeddium instead of Rubidium for Forge',
-    severity: 'error',
-  },
-  
-  // ==================== LIGHTING ENGINE CONFLICTS ====================
-  {
-    mod1Ids: [372124], // Phosphor
-    mod2Ids: [459857], // Starlight
-    description: 'Phosphor and Starlight both modify the lighting engine',
-    suggestion: 'Use Starlight instead of Phosphor for better performance on newer versions',
-    severity: 'warning',
-  },
-  {
-    mod1Ids: [372124], // Phosphor
-    mod2Ids: [445079], // Starlight Forge
-    description: 'Phosphor and Starlight both modify the lighting engine',
-    suggestion: 'Use only Starlight for modern versions',
-    severity: 'warning',
-  },
-  
-  // ==================== OPTIMIZATION MOD CONFLICTS ====================
-  {
-    mod1Ids: [360438], // Lithium
-    mod2Ids: [661958], // Canary
-    description: 'Canary is a Lithium port, they conflict with each other',
-    suggestion: 'Use only one: Lithium for Fabric or Canary for Forge',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [360438], // Lithium
-    mod2Ids: [412953], // Lithium (Forge)
-    description: 'Duplicate Lithium installations detected',
-    suggestion: 'Remove duplicate Lithium mod',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [394012], // LazyDFU
-    mod2Ids: [521772], // ModernFix (includes LazyDFU)
-    description: 'ModernFix already includes LazyDFU functionality',
-    suggestion: 'Remove LazyDFU when using ModernFix',
-    severity: 'warning',
-  },
-  
-  // ==================== SHADER CONFLICTS ====================
-  {
-    mod1Ids: [455508], // Iris
-    mod2Ids: [459496], // Oculus
-    description: 'Iris and Oculus are the same shader mod for different loaders',
-    suggestion: 'Use Iris for Fabric/Quilt or Oculus for Forge',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [455508], // Iris
-    mod2Ids: [32274], // OptiFine
-    description: 'Iris and OptiFine both provide shader support',
-    suggestion: 'Use either Iris or OptiFine for shaders, not both',
-    severity: 'error',
-  },
-  
-  // ==================== TECH MOD CONFLICTS ====================
-  {
-    mod1Ids: [223794], // Applied Energistics 2
-    mod2Ids: [243076], // Refined Storage
-    description: 'AE2 and Refined Storage both provide digital storage - may have recipe conflicts',
-    suggestion: 'Both can work together but check for recipe overlaps',
-    severity: 'warning',
-  },
-  {
-    mod1Ids: [69163], // Thermal Expansion
-    mod2Ids: [222880], // Thermal Foundation (dependency, not conflict)
-    description: 'Thermal Expansion requires Thermal Foundation',
-    suggestion: 'Install Thermal Foundation as it is required by Thermal Expansion',
-    severity: 'warning',
-  },
-  
-  // ==================== WORLD GEN CONFLICTS ====================
-  {
-    mod1Ids: [220318, 238222], // Biomes O' Plenty
-    mod2Ids: [291982, 306737], // Oh The Biomes You'll Go
-    description: 'Multiple biome mods can cause world generation conflicts',
-    suggestion: 'Use only one major biome mod or check compatibility documentation',
-    severity: 'warning',
-  },
-  {
-    mod1Ids: [311377], // Better Nether
-    mod2Ids: [552164], // Amplified Nether
-    description: 'Both mods heavily modify the Nether dimension',
-    suggestion: 'These may conflict - check mod compatibility',
-    severity: 'warning',
-  },
-  
-  // ==================== MOB MOD CONFLICTS ====================
-  {
-    mod1Ids: [426558, 261725], // Alex's Mobs
-    mod2Ids: [264231, 248787], // Ice and Fire
-    description: 'Both mods add many entities which can cause lag when combined',
-    suggestion: 'Allocate extra RAM when using multiple mob mods together',
-    severity: 'warning',
-  },
-  
-  // ==================== MAGIC MOD OVERLAPS ====================
-  {
-    mod1Ids: [225643], // Botania
-    mod2Ids: [223628, 237286], // Thaumcraft
-    description: 'Both are major magic mods - ensure you have enough RAM',
-    suggestion: 'Allocate 6GB+ RAM when running multiple magic mods',
-    severity: 'warning',
-  },
-  
-  // ==================== INVENTORY/RECIPE VIEWER CONFLICTS ====================
-  {
-    mod1Ids: [238222, 59751], // JEI
-    mod2Ids: [308702], // REI (Roughly Enough Items)
-    description: 'JEI and REI are alternative recipe viewers',
-    suggestion: 'Use only one recipe viewer mod',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [238222, 59751], // JEI
-    mod2Ids: [281490], // EMI
-    description: 'JEI and EMI are alternative recipe viewers',
-    suggestion: 'Use only one recipe viewer mod',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [308702], // REI
-    mod2Ids: [281490], // EMI
-    description: 'REI and EMI are alternative recipe viewers',
-    suggestion: 'Use only one recipe viewer mod',
-    severity: 'error',
-  },
-  
-  // ==================== MAP MOD CONFLICTS ====================
-  {
-    mod1Ids: [32274, 278174], // JourneyMap
-    mod2Ids: [317780], // Xaero's Minimap
-    description: 'Multiple minimap mods can cause UI conflicts',
-    suggestion: 'Use only one minimap mod for best experience',
-    severity: 'warning',
-  },
-  {
-    mod1Ids: [32274, 278174], // JourneyMap
-    mod2Ids: [317727], // Xaero's World Map
-    description: 'Multiple world map mods may conflict',
-    suggestion: 'Choose one map solution for consistency',
-    severity: 'warning',
-  },
-  
-  // ==================== LIBRARY DUPLICATES ====================
-  {
-    mod1Ids: [306770], // Architectury API
-    mod2Ids: [391366], // Architectury (old ID)
-    description: 'Duplicate Architectury API detected',
-    suggestion: 'Remove the older version of Architectury',
-    severity: 'error',
-  },
-  {
-    mod1Ids: [238856], // Cloth Config
-    mod2Ids: [348521], // Cloth Config (Forge)
-    description: 'Multiple Cloth Config versions',
-    suggestion: 'Keep only the version for your mod loader',
-    severity: 'warning',
-  },
-];
+    // ==================== RENDERING CONFLICTS ====================
+    {
+      mod1Ids: [394468], // Sodium
+      mod2Ids: [32274], // OptiFine
+      description: 'Sodium and OptiFine are incompatible rendering mods',
+      suggestion: 'Remove OptiFine and use Sodium with Iris for shaders support',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [250398], // Embeddium
+      mod2Ids: [32274], // OptiFine
+      description: 'Embeddium and OptiFine are incompatible rendering mods',
+      suggestion: 'Remove OptiFine and use Embeddium with Oculus for shaders support',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [594406], // Rubidium
+      mod2Ids: [32274], // OptiFine
+      description: 'Rubidium and OptiFine are incompatible rendering mods',
+      suggestion: 'Use only one rendering optimization mod',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [394468, 250398], // Sodium, Embeddium
+      mod2Ids: [250398, 394468], // Embeddium, Sodium
+      description: 'Sodium and Embeddium are the same mod for different loaders',
+      suggestion: 'Use only one based on your mod loader (Sodium for Fabric, Embeddium for Forge)',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [394468], // Sodium
+      mod2Ids: [594406], // Rubidium
+      description: 'Sodium and Rubidium are incompatible (Rubidium is an older Sodium port)',
+      suggestion: 'Use Embeddium instead of Rubidium for Forge',
+      severity: 'error',
+    },
+
+    // ==================== LIGHTING ENGINE CONFLICTS ====================
+    {
+      mod1Ids: [372124], // Phosphor
+      mod2Ids: [459857], // Starlight
+      description: 'Phosphor and Starlight both modify the lighting engine',
+      suggestion: 'Use Starlight instead of Phosphor for better performance on newer versions',
+      severity: 'warning',
+    },
+    {
+      mod1Ids: [372124], // Phosphor
+      mod2Ids: [445079], // Starlight Forge
+      description: 'Phosphor and Starlight both modify the lighting engine',
+      suggestion: 'Use only Starlight for modern versions',
+      severity: 'warning',
+    },
+
+    // ==================== OPTIMIZATION MOD CONFLICTS ====================
+    {
+      mod1Ids: [360438], // Lithium
+      mod2Ids: [661958], // Canary
+      description: 'Canary is a Lithium port, they conflict with each other',
+      suggestion: 'Use only one: Lithium for Fabric or Canary for Forge',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [360438], // Lithium
+      mod2Ids: [412953], // Lithium (Forge)
+      description: 'Duplicate Lithium installations detected',
+      suggestion: 'Remove duplicate Lithium mod',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [394012], // LazyDFU
+      mod2Ids: [521772], // ModernFix (includes LazyDFU)
+      description: 'ModernFix already includes LazyDFU functionality',
+      suggestion: 'Remove LazyDFU when using ModernFix',
+      severity: 'warning',
+    },
+
+    // ==================== SHADER CONFLICTS ====================
+    {
+      mod1Ids: [455508], // Iris
+      mod2Ids: [459496], // Oculus
+      description: 'Iris and Oculus are the same shader mod for different loaders',
+      suggestion: 'Use Iris for Fabric/Quilt or Oculus for Forge',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [455508], // Iris
+      mod2Ids: [32274], // OptiFine
+      description: 'Iris and OptiFine both provide shader support',
+      suggestion: 'Use either Iris or OptiFine for shaders, not both',
+      severity: 'error',
+    },
+
+    // ==================== TECH MOD CONFLICTS ====================
+    {
+      mod1Ids: [223794], // Applied Energistics 2
+      mod2Ids: [243076], // Refined Storage
+      description: 'AE2 and Refined Storage both provide digital storage - may have recipe conflicts',
+      suggestion: 'Both can work together but check for recipe overlaps',
+      severity: 'warning',
+    },
+    {
+      mod1Ids: [69163], // Thermal Expansion
+      mod2Ids: [222880], // Thermal Foundation (dependency, not conflict)
+      description: 'Thermal Expansion requires Thermal Foundation',
+      suggestion: 'Install Thermal Foundation as it is required by Thermal Expansion',
+      severity: 'warning',
+    },
+
+    // ==================== WORLD GEN CONFLICTS ====================
+    {
+      mod1Ids: [220318, 238222], // Biomes O' Plenty
+      mod2Ids: [291982, 306737], // Oh The Biomes You'll Go
+      description: 'Multiple biome mods can cause world generation conflicts',
+      suggestion: 'Use only one major biome mod or check compatibility documentation',
+      severity: 'warning',
+    },
+    {
+      mod1Ids: [311377], // Better Nether
+      mod2Ids: [552164], // Amplified Nether
+      description: 'Both mods heavily modify the Nether dimension',
+      suggestion: 'These may conflict - check mod compatibility',
+      severity: 'warning',
+    },
+
+    // ==================== MOB MOD CONFLICTS ====================
+    {
+      mod1Ids: [426558, 261725], // Alex's Mobs
+      mod2Ids: [264231, 248787], // Ice and Fire
+      description: 'Both mods add many entities which can cause lag when combined',
+      suggestion: 'Allocate extra RAM when using multiple mob mods together',
+      severity: 'warning',
+    },
+
+    // ==================== MAGIC MOD OVERLAPS ====================
+    {
+      mod1Ids: [225643], // Botania
+      mod2Ids: [223628, 237286], // Thaumcraft
+      description: 'Both are major magic mods - ensure you have enough RAM',
+      suggestion: 'Allocate 6GB+ RAM when running multiple magic mods',
+      severity: 'warning',
+    },
+
+    // ==================== INVENTORY/RECIPE VIEWER CONFLICTS ====================
+    {
+      mod1Ids: [238222, 59751], // JEI
+      mod2Ids: [308702], // REI (Roughly Enough Items)
+      description: 'JEI and REI are alternative recipe viewers',
+      suggestion: 'Use only one recipe viewer mod',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [238222, 59751], // JEI
+      mod2Ids: [281490], // EMI
+      description: 'JEI and EMI are alternative recipe viewers',
+      suggestion: 'Use only one recipe viewer mod',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [308702], // REI
+      mod2Ids: [281490], // EMI
+      description: 'REI and EMI are alternative recipe viewers',
+      suggestion: 'Use only one recipe viewer mod',
+      severity: 'error',
+    },
+
+    // ==================== MAP MOD CONFLICTS ====================
+    {
+      mod1Ids: [32274, 278174], // JourneyMap
+      mod2Ids: [317780], // Xaero's Minimap
+      description: 'Multiple minimap mods can cause UI conflicts',
+      suggestion: 'Use only one minimap mod for best experience',
+      severity: 'warning',
+    },
+    {
+      mod1Ids: [32274, 278174], // JourneyMap
+      mod2Ids: [317727], // Xaero's World Map
+      description: 'Multiple world map mods may conflict',
+      suggestion: 'Choose one map solution for consistency',
+      severity: 'warning',
+    },
+
+    // ==================== LIBRARY DUPLICATES ====================
+    {
+      mod1Ids: [306770], // Architectury API
+      mod2Ids: [391366], // Architectury (old ID)
+      description: 'Duplicate Architectury API detected',
+      suggestion: 'Remove the older version of Architectury',
+      severity: 'error',
+    },
+    {
+      mod1Ids: [238856], // Cloth Config
+      mod2Ids: [348521], // Cloth Config (Forge)
+      description: 'Multiple Cloth Config versions',
+      suggestion: 'Keep only the version for your mod loader',
+      severity: 'warning',
+    },
+  ];
 
 // Mods that can cause performance issues - Comprehensive database
 const PERFORMANCE_IMPACT_MODS: Array<{
@@ -325,193 +325,193 @@ const PERFORMANCE_IMPACT_MODS: Array<{
   suggestion: string;
   category: string;
 }> = [
-  // ==================== HIGH IMPACT ====================
-  {
-    modIds: [32274],
-    name: 'OptiFine',
-    impact: 'high',
-    description: 'OptiFine can cause compatibility issues with many mods and is often slower than alternatives',
-    suggestion: 'Consider using Sodium/Embeddium + Iris/Oculus for better mod compatibility and performance',
-    category: 'rendering',
-  },
-  {
-    modIds: [231095],
-    name: 'Chisels & Bits',
-    impact: 'high',
-    description: 'Custom microblocks are extremely memory-intensive and can cause significant lag',
-    suggestion: 'Limit the number of chiseled blocks in your world, allocate extra RAM',
-    category: 'building',
-  },
-  {
-    modIds: [293327, 563928],
-    name: 'GregTech',
-    impact: 'high',
-    description: 'GregTech is extremely complex and requires significant resources',
-    suggestion: 'Allocate 8GB+ RAM and expect longer load times',
-    category: 'technology',
-  },
-  {
-    modIds: [264231, 248787],
-    name: 'Ice and Fire',
-    impact: 'high',
-    description: 'Dragons and complex mob AI can cause significant TPS drops',
-    suggestion: 'Limit dragon spawns in config if experiencing lag',
-    category: 'mobs',
-  },
-  {
-    modIds: [442394],
-    name: 'When Dungeons Arise',
-    impact: 'high',
-    description: 'Large structures can cause chunk loading lag spikes',
-    suggestion: 'Reduce structure frequency in config if world generation is slow',
-    category: 'worldgen',
-  },
-  
-  // ==================== MEDIUM IMPACT ====================
-  {
-    modIds: [238891],
-    name: 'Dynamic Surroundings',
-    impact: 'medium',
-    description: 'Adds many visual and audio effects that can impact performance',
-    suggestion: 'Disable some features in config if experiencing lag',
-    category: 'graphics',
-  },
-  {
-    modIds: [223852],
-    name: 'Storage Drawers',
-    impact: 'medium',
-    description: 'Large numbers of drawers can cause rendering lag',
-    suggestion: 'Use drawer controllers and limit visible drawers',
-    category: 'storage',
-  },
-  {
-    modIds: [223794],
-    name: 'Applied Energistics 2',
-    impact: 'medium',
-    description: 'Large ME networks can cause TPS drops',
-    suggestion: 'Use channels efficiently and avoid over-expanding networks',
-    category: 'technology',
-  },
-  {
-    modIds: [243076],
-    name: 'Refined Storage',
-    impact: 'medium',
-    description: 'Large storage networks impact server TPS',
-    suggestion: 'Split networks and use external storage wisely',
-    category: 'technology',
-  },
-  {
-    modIds: [245211, 268560],
-    name: 'Mekanism',
-    impact: 'medium',
-    description: 'Digital Miner and large factories can cause significant TPS drops',
-    suggestion: 'Limit Digital Miner radius and avoid excessive machine chains',
-    category: 'technology',
-  },
-  {
-    modIds: [328085],
-    name: 'Create',
-    impact: 'medium',
-    description: 'Large contraptions with many moving parts can cause lag',
-    suggestion: 'Split large contraptions and limit moving parts per structure',
-    category: 'technology',
-  },
-  {
-    modIds: [426558, 261725],
-    name: "Alex's Mobs",
-    impact: 'medium',
-    description: 'Many additional mob types increase entity processing',
-    suggestion: 'Reduce spawn rates in config if experiencing lag',
-    category: 'mobs',
-  },
-  {
-    modIds: [250498],
-    name: "Mowzie's Mobs",
-    impact: 'medium',
-    description: 'Complex mob animations and AI can impact performance',
-    suggestion: 'Monitor mob populations in heavy biomes',
-    category: 'mobs',
-  },
-  {
-    modIds: [220318, 238222],
-    name: 'Biomes O\' Plenty',
-    impact: 'medium',
-    description: 'Extensive biome generation increases world generation time',
-    suggestion: 'Pre-generate chunks for servers, expect longer initial world creation',
-    category: 'worldgen',
-  },
-  {
-    modIds: [291982, 306737],
-    name: 'Oh The Biomes You\'ll Go',
-    impact: 'medium',
-    description: 'Complex biome generation can slow world creation',
-    suggestion: 'Pre-generate world chunks for better performance',
-    category: 'worldgen',
-  },
-  {
-    modIds: [513575, 352522],
-    name: 'Terralith',
-    impact: 'medium',
-    description: 'Large-scale terrain modifications impact chunk generation',
-    suggestion: 'Use with world pre-generation for best experience',
-    category: 'worldgen',
-  },
-  {
-    modIds: [32274, 278174],
-    name: 'JourneyMap',
-    impact: 'medium',
-    description: 'Real-time mapping can impact performance during exploration',
-    suggestion: 'Increase map update interval in settings',
-    category: 'utility',
-  },
-  {
-    modIds: [227639, 235279],
-    name: 'The Twilight Forest',
-    impact: 'medium',
-    description: 'Full dimension with complex structures and bosses',
-    suggestion: 'Allocate extra RAM when visiting the Twilight Forest',
-    category: 'dimension',
-  },
-  
-  // ==================== LOW IMPACT (but notable) ====================
-  {
-    modIds: [317780],
-    name: "Xaero's Minimap",
-    impact: 'low',
-    description: 'Minimap rendering has minor performance overhead',
-    suggestion: 'Reduce minimap size or entity radar if needed',
-    category: 'utility',
-  },
-  {
-    modIds: [254284],
-    name: 'Ambient Sounds',
-    impact: 'low',
-    description: 'Audio processing adds minor overhead',
-    suggestion: 'Reduce sound sources in config if experiencing audio lag',
-    category: 'audio',
-  },
-  {
-    modIds: [627946],
-    name: 'Presence Footsteps',
-    impact: 'low',
-    description: 'Additional sound calculations for footsteps',
-    suggestion: 'Can be disabled if audio processing is a concern',
-    category: 'audio',
-  },
-  {
-    modIds: [398521],
-    name: 'Farmer\'s Delight',
-    impact: 'low',
-    description: 'Cooking stations with particle effects can add minor overhead',
-    suggestion: 'Limit number of active cooking stations in one area',
-    category: 'farming',
-  },
-];
+    // ==================== HIGH IMPACT ====================
+    {
+      modIds: [32274],
+      name: 'OptiFine',
+      impact: 'high',
+      description: 'OptiFine can cause compatibility issues with many mods and is often slower than alternatives',
+      suggestion: 'Consider using Sodium/Embeddium + Iris/Oculus for better mod compatibility and performance',
+      category: 'rendering',
+    },
+    {
+      modIds: [231095],
+      name: 'Chisels & Bits',
+      impact: 'high',
+      description: 'Custom microblocks are extremely memory-intensive and can cause significant lag',
+      suggestion: 'Limit the number of chiseled blocks in your world, allocate extra RAM',
+      category: 'building',
+    },
+    {
+      modIds: [293327, 563928],
+      name: 'GregTech',
+      impact: 'high',
+      description: 'GregTech is extremely complex and requires significant resources',
+      suggestion: 'Allocate 8GB+ RAM and expect longer load times',
+      category: 'technology',
+    },
+    {
+      modIds: [264231, 248787],
+      name: 'Ice and Fire',
+      impact: 'high',
+      description: 'Dragons and complex mob AI can cause significant TPS drops',
+      suggestion: 'Limit dragon spawns in config if experiencing lag',
+      category: 'mobs',
+    },
+    {
+      modIds: [442394],
+      name: 'When Dungeons Arise',
+      impact: 'high',
+      description: 'Large structures can cause chunk loading lag spikes',
+      suggestion: 'Reduce structure frequency in config if world generation is slow',
+      category: 'worldgen',
+    },
+
+    // ==================== MEDIUM IMPACT ====================
+    {
+      modIds: [238891],
+      name: 'Dynamic Surroundings',
+      impact: 'medium',
+      description: 'Adds many visual and audio effects that can impact performance',
+      suggestion: 'Disable some features in config if experiencing lag',
+      category: 'graphics',
+    },
+    {
+      modIds: [223852],
+      name: 'Storage Drawers',
+      impact: 'medium',
+      description: 'Large numbers of drawers can cause rendering lag',
+      suggestion: 'Use drawer controllers and limit visible drawers',
+      category: 'storage',
+    },
+    {
+      modIds: [223794],
+      name: 'Applied Energistics 2',
+      impact: 'medium',
+      description: 'Large ME networks can cause TPS drops',
+      suggestion: 'Use channels efficiently and avoid over-expanding networks',
+      category: 'technology',
+    },
+    {
+      modIds: [243076],
+      name: 'Refined Storage',
+      impact: 'medium',
+      description: 'Large storage networks impact server TPS',
+      suggestion: 'Split networks and use external storage wisely',
+      category: 'technology',
+    },
+    {
+      modIds: [245211, 268560],
+      name: 'Mekanism',
+      impact: 'medium',
+      description: 'Digital Miner and large factories can cause significant TPS drops',
+      suggestion: 'Limit Digital Miner radius and avoid excessive machine chains',
+      category: 'technology',
+    },
+    {
+      modIds: [328085],
+      name: 'Create',
+      impact: 'medium',
+      description: 'Large contraptions with many moving parts can cause lag',
+      suggestion: 'Split large contraptions and limit moving parts per structure',
+      category: 'technology',
+    },
+    {
+      modIds: [426558, 261725],
+      name: "Alex's Mobs",
+      impact: 'medium',
+      description: 'Many additional mob types increase entity processing',
+      suggestion: 'Reduce spawn rates in config if experiencing lag',
+      category: 'mobs',
+    },
+    {
+      modIds: [250498],
+      name: "Mowzie's Mobs",
+      impact: 'medium',
+      description: 'Complex mob animations and AI can impact performance',
+      suggestion: 'Monitor mob populations in heavy biomes',
+      category: 'mobs',
+    },
+    {
+      modIds: [220318, 238222],
+      name: 'Biomes O\' Plenty',
+      impact: 'medium',
+      description: 'Extensive biome generation increases world generation time',
+      suggestion: 'Pre-generate chunks for servers, expect longer initial world creation',
+      category: 'worldgen',
+    },
+    {
+      modIds: [291982, 306737],
+      name: 'Oh The Biomes You\'ll Go',
+      impact: 'medium',
+      description: 'Complex biome generation can slow world creation',
+      suggestion: 'Pre-generate world chunks for better performance',
+      category: 'worldgen',
+    },
+    {
+      modIds: [513575, 352522],
+      name: 'Terralith',
+      impact: 'medium',
+      description: 'Large-scale terrain modifications impact chunk generation',
+      suggestion: 'Use with world pre-generation for best experience',
+      category: 'worldgen',
+    },
+    {
+      modIds: [32274, 278174],
+      name: 'JourneyMap',
+      impact: 'medium',
+      description: 'Real-time mapping can impact performance during exploration',
+      suggestion: 'Increase map update interval in settings',
+      category: 'utility',
+    },
+    {
+      modIds: [227639, 235279],
+      name: 'The Twilight Forest',
+      impact: 'medium',
+      description: 'Full dimension with complex structures and bosses',
+      suggestion: 'Allocate extra RAM when visiting the Twilight Forest',
+      category: 'dimension',
+    },
+
+    // ==================== LOW IMPACT (but notable) ====================
+    {
+      modIds: [317780],
+      name: "Xaero's Minimap",
+      impact: 'low',
+      description: 'Minimap rendering has minor performance overhead',
+      suggestion: 'Reduce minimap size or entity radar if needed',
+      category: 'utility',
+    },
+    {
+      modIds: [254284],
+      name: 'Ambient Sounds',
+      impact: 'low',
+      description: 'Audio processing adds minor overhead',
+      suggestion: 'Reduce sound sources in config if experiencing audio lag',
+      category: 'audio',
+    },
+    {
+      modIds: [627946],
+      name: 'Presence Footsteps',
+      impact: 'low',
+      description: 'Additional sound calculations for footsteps',
+      suggestion: 'Can be disabled if audio processing is a concern',
+      category: 'audio',
+    },
+    {
+      modIds: [398521],
+      name: 'Farmer\'s Delight',
+      impact: 'low',
+      description: 'Cooking stations with particle effects can add minor overhead',
+      suggestion: 'Limit number of active cooking stations in one area',
+      category: 'farming',
+    },
+  ];
 
 // ==================== SERVICE ====================
 
 export class ModAnalyzerService {
-  constructor(private curseForgeService: CurseForgeService) {}
+  constructor(private curseForgeService: CurseForgeService) { }
 
   /**
    * Analyze a modpack or list of mods for dependencies, conflicts, and performance
@@ -525,7 +525,7 @@ export class ModAnalyzerService {
     version?: string;
   }>): Promise<AnalysisResult> {
     console.log(`[ModAnalyzer] Analyzing ${mods.length} mods...`);
-    
+
     const result: AnalysisResult = {
       dependencies: {
         missing: [],
@@ -551,11 +551,11 @@ export class ModAnalyzerService {
     try {
       // Fetch mod details from CurseForge
       const cfMods = await this.curseForgeService.getModsByIds(cfModIds);
-      
+
       // Determine dominant loader and version
       const loaderCounts: Record<string, number> = {};
       const versionCounts: Record<string, number> = {};
-      
+
       for (const mod of mods) {
         if (mod.loader) {
           loaderCounts[mod.loader.toLowerCase()] = (loaderCounts[mod.loader.toLowerCase()] || 0) + 1;
@@ -564,7 +564,7 @@ export class ModAnalyzerService {
           versionCounts[mod.game_version] = (versionCounts[mod.game_version] || 0) + 1;
         }
       }
-      
+
       const dominantLoader = Object.entries(loaderCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'fabric';
       const dominantVersion = Object.entries(versionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '1.20.1';
 
@@ -657,7 +657,7 @@ export class ModAnalyzerService {
     if (missingIds.length > 0) {
       try {
         const depMods = await this.curseForgeService.getModsByIds(missingIds);
-        
+
         for (const depMod of depMods) {
           const depInfo = dependencyMap.get(depMod.id);
           if (depInfo) {
@@ -690,7 +690,7 @@ export class ModAnalyzerService {
         console.log(`[ModAnalyzer] Skipping ${dep.modName} - no compatible file for ${loader}/${gameVersion}`);
         continue;
       }
-      
+
       if (dep.relationType === 'required') {
         result.missing.push(dep);
       } else if (dep.relationType === 'optional') {
@@ -710,7 +710,7 @@ export class ModAnalyzerService {
    */
   private findBestFile(mod: CFMod, loader: string, gameVersion: string): CFFile | null {
     const loaderVariants = [loader, loader.charAt(0).toUpperCase() + loader.slice(1)];
-    
+
     // First, try to find exact match
     for (const file of mod.latestFiles) {
       const hasLoader = loaderVariants.some(l => file.gameVersions.includes(l));
@@ -738,15 +738,15 @@ export class ModAnalyzerService {
     for (const knownConflict of KNOWN_CONFLICTS) {
       const hasMod1 = knownConflict.mod1Ids.some(id => installedCfIds.has(id));
       const hasMod2 = knownConflict.mod2Ids.some(id => installedCfIds.has(id));
-      
+
       if (hasMod1 && hasMod2) {
         const mod1Id = knownConflict.mod1Ids.find(id => installedCfIds.has(id))!;
         const mod2Id = knownConflict.mod2Ids.find(id => installedCfIds.has(id))!;
-        
+
         if (mod1Id !== mod2Id) {
           const mod1 = mods.find(m => m.curseforge_id === mod1Id);
           const mod2 = mods.find(m => m.curseforge_id === mod2Id);
-          
+
           if (mod1 && mod2) {
             conflicts.push({
               mod1: { id: mod1.id, name: mod1.name, curseforge_id: mod1Id },
@@ -771,14 +771,14 @@ export class ModAnalyzerService {
           // Incompatible mod is installed
           const incompatibleMod = mods.find(m => m.curseforge_id === dep.modId);
           const thisMod = mods.find(m => m.curseforge_id === cfMod.id);
-          
+
           if (incompatibleMod && thisMod) {
             // Check if we already reported this conflict
-            const alreadyReported = conflicts.some(c => 
+            const alreadyReported = conflicts.some(c =>
               (c.mod1.curseforge_id === cfMod.id && c.mod2.curseforge_id === dep.modId) ||
               (c.mod1.curseforge_id === dep.modId && c.mod2.curseforge_id === cfMod.id)
             );
-            
+
             if (!alreadyReported) {
               conflicts.push({
                 mod1: { id: thisMod.id, name: thisMod.name, curseforge_id: cfMod.id },
@@ -807,10 +807,10 @@ export class ModAnalyzerService {
     if (loaderGroups.size > 1) {
       const loaders = Array.from(loaderGroups.keys()).filter(l => l !== 'unknown');
       if (loaders.length > 1) {
-        const [dominant, ...others] = loaders.sort((a, b) => 
+        const [dominant, ...others] = loaders.sort((a, b) =>
           (loaderGroups.get(b)?.length || 0) - (loaderGroups.get(a)?.length || 0)
         );
-        
+
         for (const other of others) {
           const wrongLoaderMods = loaderGroups.get(other) || [];
           for (const mod of wrongLoaderMods) {
@@ -818,9 +818,9 @@ export class ModAnalyzerService {
               mod1: { id: mod.id, name: mod.name, curseforge_id: mod.curseforge_id },
               mod2: { id: '', name: `${dominant} modpack`, curseforge_id: undefined },
               type: 'loader_mismatch',
-              severity: 'error',
+              severity: 'warning',
               description: `${mod.name} is for ${other} but this modpack uses ${dominant}`,
-              suggestion: `Find a ${dominant} version of this mod or remove it`,
+              suggestion: `May work with compatibility layers (e.g., Sinytra Connector) or find a ${dominant} version`,
             });
           }
         }
@@ -874,7 +874,7 @@ export class ModAnalyzerService {
 
     // Essential performance mods
     const essentialMods = ['Sodium', 'Embeddium', 'Lithium', 'FerriteCore'];
-    const hasRenderingOptimizer = installedPerfMods.some(m => 
+    const hasRenderingOptimizer = installedPerfMods.some(m =>
       m.name === 'Sodium' || m.name === 'Embeddium' || m.name === 'OptiFine'
     );
 
@@ -882,7 +882,7 @@ export class ModAnalyzerService {
       const renderMod = loader === 'fabric' || loader === 'quilt'
         ? perfMods.find(m => m.name === 'Sodium')
         : perfMods.find(m => m.name === 'Embeddium');
-      
+
       if (renderMod) {
         suggestions.push({
           type: 'add_mod',
@@ -899,9 +899,9 @@ export class ModAnalyzerService {
 
     // Suggest other missing performance mods
     for (const perfMod of missingPerfMods) {
-      if (essentialMods.includes(perfMod.name) && 
-          perfMod.name !== 'Sodium' && 
-          perfMod.name !== 'Embeddium') {
+      if (essentialMods.includes(perfMod.name) &&
+        perfMod.name !== 'Sodium' &&
+        perfMod.name !== 'Embeddium') {
         suggestions.push({
           type: 'add_mod',
           severity: 'recommended',
@@ -973,7 +973,7 @@ export class ModAnalyzerService {
       if (requiredDeps.length === 0) return [];
 
       const depMods = await this.curseForgeService.getModsByIds(requiredDeps.map(d => d.modId));
-      
+
       return depMods.map(dm => ({
         modId: dm.id,
         modName: dm.name,

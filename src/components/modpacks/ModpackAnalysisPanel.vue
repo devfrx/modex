@@ -93,6 +93,17 @@ const hasIssues = computed(() => {
   );
 });
 
+// Separate conflicts by severity
+const errorConflicts = computed(() => {
+  if (!analysis.value) return [];
+  return analysis.value.conflicts.filter(c => c.severity === 'error' || !c.severity);
+});
+
+const warningConflicts = computed(() => {
+  if (!analysis.value) return [];
+  return analysis.value.conflicts.filter(c => c.severity === 'warning');
+});
+
 const overallScore = computed(() => {
   if (!analysis.value) return 100;
   let score = 100;
@@ -369,9 +380,13 @@ watch(
                 <span>{{ analysis.missingDependencies.length }} missing</span>
               </div>
               <div class="flex items-center gap-1 text-xs"
-                :class="analysis.conflicts.length > 0 ? 'text-red-400' : 'text-emerald-400'">
+                :class="errorConflicts.length > 0 ? 'text-red-400' : 'text-emerald-400'">
                 <XCircle class="w-3.5 h-3.5" />
-                <span>{{ analysis.conflicts.length }} conflicts</span>
+                <span>{{ errorConflicts.length }} conflicts</span>
+              </div>
+              <div v-if="warningConflicts.length > 0" class="flex items-center gap-1 text-xs text-amber-400">
+                <AlertTriangle class="w-3.5 h-3.5" />
+                <span>{{ warningConflicts.length }} warnings</span>
               </div>
               <div v-if="ramAnalysis" class="flex items-center gap-1 text-xs text-blue-400">
                 <Cpu class="w-3.5 h-3.5" />
@@ -392,7 +407,7 @@ watch(
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
 
         <!-- Quick Overview Cards -->
-        <div class="grid grid-cols-4 gap-2">
+        <div class="grid grid-cols-5 gap-2">
           <div class="p-3 rounded-lg bg-muted/30 border border-border/30 text-center">
             <div class="text-xl font-bold text-foreground">{{ analysis.performanceStats.totalMods }}</div>
             <div class="text-xs text-muted-foreground">Total Mods</div>
@@ -405,10 +420,16 @@ watch(
             <div class="text-xs text-muted-foreground">Missing Deps</div>
           </div>
           <div class="p-3 rounded-lg bg-muted/30 border border-border/30 text-center">
-            <div class="text-xl font-bold" :class="analysis.conflicts.length > 0 ? 'text-red-400' : 'text-primary'">
-              {{ analysis.conflicts.length }}
+            <div class="text-xl font-bold" :class="errorConflicts.length > 0 ? 'text-red-400' : 'text-primary'">
+              {{ errorConflicts.length }}
             </div>
             <div class="text-xs text-muted-foreground">Conflicts</div>
+          </div>
+          <div class="p-3 rounded-lg bg-muted/30 border border-border/30 text-center">
+            <div class="text-xl font-bold" :class="warningConflicts.length > 0 ? 'text-amber-400' : 'text-primary'">
+              {{ warningConflicts.length }}
+            </div>
+            <div class="text-xs text-muted-foreground">Warnings</div>
           </div>
           <div class="p-3 rounded-lg bg-muted/30 border border-border/30 text-center">
             <div class="text-xl font-bold text-primary">{{ analysis.performanceStats.optimizationMods }}</div>
@@ -481,27 +502,35 @@ watch(
 
         <!-- Conflicts Section -->
         <div class="rounded-lg border overflow-hidden"
-          :class="analysis.conflicts.length > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-border/30 bg-muted/20'">
+          :class="errorConflicts.length > 0 ? 'border-red-500/30 bg-red-500/5' : warningConflicts.length > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-border/30 bg-muted/20'">
           <button class="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/20 transition-colors"
             @click="toggleSection('conflicts')">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center"
-                :class="analysis.conflicts.length > 0 ? 'bg-red-500/20' : 'bg-emerald-500/20'">
-                <XCircle class="w-5 h-5" :class="analysis.conflicts.length > 0 ? 'text-red-400' : 'text-emerald-400'" />
+                :class="errorConflicts.length > 0 ? 'bg-red-500/20' : warningConflicts.length > 0 ? 'bg-amber-500/20' : 'bg-emerald-500/20'">
+                <XCircle v-if="errorConflicts.length > 0" class="w-5 h-5 text-red-400" />
+                <AlertTriangle v-else-if="warningConflicts.length > 0" class="w-5 h-5 text-amber-400" />
+                <CheckCircle v-else class="w-5 h-5 text-emerald-400" />
               </div>
               <div class="text-left">
-                <span class="font-medium text-sm">Mod Conflicts</span>
+                <span class="font-medium text-sm">Mod Conflicts & Warnings</span>
                 <div class="text-xs text-muted-foreground">
-                  {{ analysis.conflicts.length > 0 ? 'Incompatible mods detected' : 'No conflicts detected' }}
+                  {{ errorConflicts.length > 0 ? `${errorConflicts.length} conflict(s)` : '' }}
+                  {{ errorConflicts.length > 0 && warningConflicts.length > 0 ? ', ' : '' }}
+                  {{ warningConflicts.length > 0 ? `${warningConflicts.length} warning(s)` : '' }}
+                  {{ analysis.conflicts.length === 0 ? 'No issues detected' : '' }}
                 </div>
               </div>
             </div>
             <div class="flex items-center gap-2">
-              <span class="px-2.5 py-1 rounded-lg text-xs font-bold" :class="analysis.conflicts.length > 0
-                ? 'bg-red-500/20 text-red-400'
-                : 'bg-emerald-500/20 text-emerald-400'
-                ">
-                {{ analysis.conflicts.length }}
+              <span v-if="errorConflicts.length > 0" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-500/20 text-red-400">
+                {{ errorConflicts.length }}
+              </span>
+              <span v-if="warningConflicts.length > 0" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-400">
+                {{ warningConflicts.length }}
+              </span>
+              <span v-if="analysis.conflicts.length === 0" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-400">
+                0
               </span>
               <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
                 :class="{ '-rotate-180': expandedSections.conflicts }" />
@@ -510,7 +539,8 @@ watch(
 
           <div v-if="expandedSections.conflicts && analysis.conflicts.length > 0" class="border-t border-border/30">
             <div class="divide-y divide-border/20">
-              <div v-for="(conflict, idx) in analysis.conflicts" :key="idx" class="p-4">
+              <!-- Error Conflicts -->
+              <div v-for="(conflict, idx) in errorConflicts" :key="'error-' + idx" class="p-4">
                 <div class="flex items-center gap-3 mb-2">
                   <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 text-sm">
                     <span class="font-medium text-red-400">{{ conflict.mod1.name }}</span>
@@ -519,7 +549,27 @@ watch(
                   </div>
                 </div>
                 <p class="text-sm text-muted-foreground pl-1">
-                  {{ conflict.reason }}
+                  {{ conflict.description || conflict.reason }}
+                </p>
+                <p v-if="conflict.suggestion" class="text-xs text-muted-foreground/70 pl-1 mt-1 italic">
+                  💡 {{ conflict.suggestion }}
+                </p>
+              </div>
+              
+              <!-- Warning Conflicts (loader mismatch, etc.) -->
+              <div v-for="(conflict, idx) in warningConflicts" :key="'warning-' + idx" class="p-4 bg-amber-500/5">
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 text-sm">
+                    <AlertTriangle class="w-4 h-4 text-amber-500" />
+                    <span class="font-medium text-amber-400">{{ conflict.mod1.name }}</span>
+                    <span class="text-amber-400/70 text-xs">({{ conflict.type === 'loader_mismatch' ? 'different loader' : conflict.type }})</span>
+                  </div>
+                </div>
+                <p class="text-sm text-muted-foreground pl-1">
+                  {{ conflict.description || conflict.reason }}
+                </p>
+                <p v-if="conflict.suggestion" class="text-xs text-amber-400/70 pl-1 mt-1 italic">
+                  💡 {{ conflict.suggestion }}
                 </p>
               </div>
             </div>

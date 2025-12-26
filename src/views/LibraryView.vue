@@ -14,6 +14,7 @@ import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import ModUpdateDialog from "@/components/mods/ModUpdateDialog.vue";
 import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
+import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
@@ -840,7 +841,7 @@ function selectNone() {
   selectedModIds.value.clear();
 }
 
-// Details Panel
+// Details Panel - now uses modal
 function showModDetails(mod: Mod) {
   detailsMod.value = mod;
   showDetails.value = true;
@@ -849,6 +850,24 @@ function showModDetails(mod: Mod) {
 function closeDetails() {
   showDetails.value = false;
   detailsMod.value = null;
+}
+
+// Handle version change from ModDetailsModal (for library, this updates the mod)
+async function handleLibraryVersionChange(fileId: number) {
+  if (!detailsMod.value) return;
+  
+  try {
+    const result = await window.api.updates.applyUpdate(detailsMod.value.id, fileId);
+    if (result.success) {
+      toast.success("Version Updated", `${detailsMod.value.name} has been updated`);
+      await loadMods();
+      closeDetails();
+    } else {
+      toast.error("Update Failed", result.error || "Failed to update mod version");
+    }
+  } catch (err: any) {
+    toast.error("Update Failed", err?.message || "Unknown error");
+  }
 }
 
 // Bulk Actions
@@ -1293,10 +1312,10 @@ onMounted(() => {
           <div class="hidden sm:block h-8 w-px bg-border shrink-0" />
 
           <!-- Quick Filters -->
-          <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+          <div class="flex items-center gap-1 p-1 bg-muted/30 rounded-lg shrink-0">
+            <button class="px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
+              ? 'bg-background text-foreground ring-1 ring-border/50'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               " @click="
                 quickFilter = 'all';
               router.push('/library');
@@ -1306,8 +1325,8 @@ onMounted(() => {
             <button
               class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
               :class="quickFilter === 'favorites'
-                ? 'bg-rose-500/20 text-rose-400 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                ? 'bg-rose-500/15 text-rose-400 ring-1 ring-rose-500/30'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 " @click="
                   quickFilter = 'favorites';
                 router.push('/library?filter=favorites');
@@ -1315,8 +1334,8 @@ onMounted(() => {
               <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
             </button>
             <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'recent'
-              ? 'bg-blue-500/20 text-blue-400 shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               " @click="
                 quickFilter = 'recent';
               router.push('/library?filter=recent');
@@ -1348,24 +1367,24 @@ onMounted(() => {
             </button>
 
             <!-- View Mode Toggle -->
-            <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-              <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+            <div class="flex items-center gap-1 p-1 bg-muted/30 rounded-lg">
+              <button @click="viewMode = 'grid'" class="p-1.5 rounded-md transition-all"
+                :class="viewMode === 'grid' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                 title="Grid View">
                 <LayoutGrid class="w-3.5 h-3.5" />
               </button>
-              <button @click="viewMode = 'gallery'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'gallery' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              <button @click="viewMode = 'gallery'" class="p-1.5 rounded-md transition-all"
+                :class="viewMode === 'gallery' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                 title="Gallery View">
                 <GalleryVertical class="w-3.5 h-3.5" />
               </button>
-              <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              <button @click="viewMode = 'list'" class="p-1.5 rounded-md transition-all"
+                :class="viewMode === 'list' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                 title="List View">
                 <List class="w-3.5 h-3.5" />
               </button>
-              <button @click="viewMode = 'compact'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              <button @click="viewMode = 'compact'" class="p-1.5 rounded-md transition-all"
+                :class="viewMode === 'compact' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                 title="Compact View">
                 <LayoutList class="w-3.5 h-3.5" />
               </button>
@@ -1453,14 +1472,14 @@ onMounted(() => {
               {{ activeFilterCount }}
             </span>
           </button>
-          <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-            <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
-              :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
+          <div class="flex items-center gap-1 p-1 bg-muted/30 rounded-lg">
+            <button @click="viewMode = 'grid'" class="p-1.5 rounded-md transition-all"
+              :class="viewMode === 'grid' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:bg-muted/50'"
               title="Grid View">
               <LayoutGrid class="w-3.5 h-3.5" />
             </button>
-            <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
-              :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
+            <button @click="viewMode = 'list'" class="p-1.5 rounded-md transition-all"
+              :class="viewMode === 'list' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:bg-muted/50'"
               title="List View">
               <List class="w-3.5 h-3.5" />
             </button>
@@ -1527,24 +1546,24 @@ onMounted(() => {
               <!-- Content Type -->
               <div class="space-y-2">
                 <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Content Type</label>
-                <div class="grid grid-cols-2 gap-2">
+                <div class="grid grid-cols-2 gap-1.5">
                   <button v-for="type in ['all', 'mod', 'resourcepack', 'shader']" :key="type"
-                    class="px-3 py-2 rounded-md text-sm border transition-all text-left flex items-center gap-2 capitalize"
+                    class="px-3 py-2 rounded-lg text-sm transition-all text-left flex items-center gap-2 capitalize"
                     :class="type === 'all'
                       ? selectedContentType === 'all'
-                        ? 'bg-primary/10 border-primary text-primary'
-                        : 'bg-card border-border hover:border-primary/50'
+                        ? 'bg-primary/15 ring-1 ring-primary/30 text-primary'
+                        : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
                       : type === 'mod'
                         ? selectedContentType === 'mod'
-                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-                          : 'bg-card border-border hover:border-emerald-500/30 text-muted-foreground'
+                          ? 'bg-emerald-500/15 ring-1 ring-emerald-500/30 text-emerald-500'
+                          : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
                         : type === 'resourcepack'
                           ? selectedContentType === 'resourcepack'
-                            ? 'bg-blue-500/10 border-blue-500 text-blue-400'
-                            : 'bg-card border-border hover:border-blue-500/30 text-muted-foreground'
+                            ? 'bg-blue-500/15 ring-1 ring-blue-500/30 text-blue-400'
+                            : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
                           : selectedContentType === 'shader'
-                            ? 'bg-pink-500/10 border-pink-500 text-pink-400'
-                            : 'bg-card border-border hover:border-pink-500/30 text-muted-foreground'
+                            ? 'bg-pink-500/15 ring-1 ring-pink-500/30 text-pink-400'
+                            : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
                       " @click="setContentType(type)">
                     <span class="w-4 h-4 flex items-center justify-center text-sm">
                       <template v-if="type === 'mod'">
@@ -2008,83 +2027,15 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Details Sidebar -->
-    <Transition enter-active-class="transition-transform duration-200 ease-out" enter-from-class="translate-x-full"
-      enter-to-class="translate-x-0" leave-active-class="transition-transform duration-150 ease-in"
-      leave-from-class="translate-x-0" leave-to-class="translate-x-full">
-      <div v-if="showDetails && detailsMod"
-        class="fixed top-0 right-0 h-full w-80 bg-background border-l border-border shadow-2xl z-40 flex flex-col">
-        <div class="p-4 border-b border-border flex items-center justify-between">
-          <h3 class="font-semibold">Mod Details</h3>
-          <Button variant="ghost" size="icon" class="h-7 w-7 text-muted-foreground hover:text-foreground"
-            @click="closeDetails">
-            <X class="w-4 h-4" />
-          </Button>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
-          <div>
-            <h4 class="text-lg font-bold">{{ detailsMod.name }}</h4>
-            <p class="text-sm text-muted-foreground">
-              {{ detailsMod.version }}
-            </p>
-          </div>
-          <div class="space-y-2 text-sm">
-            <div class="flex justify-between items-center">
-              <span class="text-muted-foreground">Loader</span>
-              <span class="px-2 py-0.5 rounded-md text-xs bg-muted">{{
-                detailsMod.loader
-              }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-muted-foreground">Author</span>
-              <span>{{ detailsMod.author || "-" }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-muted-foreground">Game Version</span>
-              <span class="px-2 py-0.5 rounded-md text-xs bg-emerald-500/20 text-emerald-400">{{ detailsMod.game_version
-              }}</span>
-            </div>
-          </div>
-          <div>
-            <span class="text-xs text-muted-foreground">Description</span>
-            <p class="text-sm mt-1 text-muted-foreground">
-              {{ detailsMod.description || "No description" }}
-            </p>
-          </div>
-
-          <!-- Modpack Usage -->
-          <div v-if="modUsageMap.get(detailsMod.id)?.size">
-            <span class="text-xs text-muted-foreground">Used in Modpacks</span>
-            <div class="mt-1 space-y-1">
-              <div v-for="packId in modUsageMap.get(detailsMod.id)" :key="packId"
-                class="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 text-sm">
-                <Package class="w-3.5 h-3.5 text-primary" />
-                <span>{{
-                  modpacks.find((p) => p.id === packId)?.name ||
-                  "Unknown Modpack"
-                }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <span class="text-xs text-muted-foreground">Source</span>
-            <p class="text-xs mt-1 font-mono break-all bg-muted/30 p-2 rounded-md border border-border/30">
-              {{ detailsMod.source }} (ID: {{ detailsMod.cf_project_id }})
-            </p>
-          </div>
-          <div>
-            <span class="text-xs text-muted-foreground">Filename</span>
-            <p class="text-xs mt-1 font-mono break-all bg-muted/30 p-2 rounded-md border border-border/30">
-              {{ detailsMod.filename }}
-            </p>
-          </div>
-        </div>
-        <div class="p-4 border-t border-border/30 flex gap-2">
-          <Button variant="destructive" class="flex-1" @click="confirmDelete(detailsMod.id)">Delete</Button>
-        </div>
-      </div>
-    </Transition>
+    <!-- Mod Details Modal -->
+    <ModDetailsModal
+      :open="showDetails"
+      :mod="detailsMod"
+      :context="{ type: 'library' }"
+      :current-file-id="detailsMod?.cf_file_id"
+      @close="closeDetails"
+      @version-changed="handleLibraryVersionChange"
+    />
 
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModIds.size > 0" :count="selectedModIds.size" label="mods" @clear="clearSelection">

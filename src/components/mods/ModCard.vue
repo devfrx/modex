@@ -201,11 +201,8 @@ function handleImageError(e: Event) {
             {{ mod.loader }}
           </span>
           <!-- Game version -->
-          <span v-if="
-            contentType !== 'mod' &&
-            mod.game_versions &&
-            mod.game_versions.length >= 1
-          " class="text-[9px] font-medium text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded"
+          <span v-if="mod.game_versions && mod.game_versions.length >= 1"
+            class="text-[9px] font-medium text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded"
             :title="mod.game_versions.join(', ')">
             {{ mod.game_versions.slice(0, 1).join(", ")
             }}{{

@@ -95,7 +95,7 @@ async function initializeBackend() {
   modpackAnalyzerService = new ModpackAnalyzerService();
   instanceService = new InstanceService(metadataManager.getBasePath());
   configService = new ConfigService(metadataManager.getBasePath());
-  
+
   // Connect instanceService to metadataManager for version control integration
   metadataManager.setInstanceService(instanceService);
 
@@ -379,7 +379,7 @@ async function initializeBackend() {
       console.log(`[Delete Modpack] Also deleting linked instance: ${linkedInstance.id}`);
       await instanceService.deleteInstance(linkedInstance.id);
     }
-    
+
     // Then delete the modpack
     return metadataManager.deleteModpack(id);
   });
@@ -456,14 +456,14 @@ async function initializeBackend() {
     async (_, modpackId: string, newName: string) => {
       // Clone the modpack (includes configs, version history)
       const newModpackId = await metadataManager.cloneModpack(modpackId, newName);
-      
+
       if (newModpackId) {
         // Also clone the instance if one exists
         try {
           const existingInstance = await instanceService.getInstanceByModpack(modpackId);
           if (existingInstance) {
             const newInstance = await instanceService.duplicateInstance(
-              existingInstance.id, 
+              existingInstance.id,
               newName
             );
             if (newInstance) {
@@ -478,7 +478,7 @@ async function initializeBackend() {
           // Don't fail the whole operation
         }
       }
-      
+
       return newModpackId;
     }
   );
@@ -687,7 +687,7 @@ async function initializeBackend() {
         }
 
         // Get download URL
-        const downloadUrl = cfFile.downloadUrl || 
+        const downloadUrl = cfFile.downloadUrl ||
           `https://edge.forgecdn.net/files/${Math.floor(newFileId / 1000)}/${newFileId % 1000}/${cfFile.fileName}`;
 
         // Download the modpack using optimized DownloadService
@@ -760,7 +760,7 @@ async function initializeBackend() {
             modsSkipped: number;
             errors: string[];
           };
-          
+
           try {
             importResult = await metadataManager.importFromCurseForge(
               manifest,
@@ -818,7 +818,7 @@ async function initializeBackend() {
           const newModIds: string[] = [];
           const disabledModIds: string[] = [];
           const incompatibleMods: Array<{ cf_project_id: number; name: string; reason: string }> = [];
-          
+
           // Get loader and MC version from manifest
           let loader = "unknown";
           const primaryLoader = manifest.minecraft?.modLoaders?.find((l: any) => l.primary);
@@ -967,7 +967,7 @@ async function initializeBackend() {
             win.webContents.send("import:progress", { current, total, modName });
           }
         };
-        
+
         return await metadataManager.reSearchIncompatibleMods(
           modpackId,
           curseforgeService,
@@ -1009,10 +1009,10 @@ async function initializeBackend() {
         const overridesPath = metadataManager.getOverridesPath(modpackId);
         await instanceService.syncConfigsToModpack(syncFromInstanceId, overridesPath);
       }
-      
+
       // Check if configs have actually changed compared to last snapshot
       const hasConfigChanges = await metadataManager.hasConfigChanges(modpackId);
-      
+
       return metadataManager.createVersion(modpackId, message, tag, hasConfigChanges);
     }
   );
@@ -1190,7 +1190,7 @@ async function initializeBackend() {
         if (linkedInstance) {
           console.log(`[Rollback] Syncing configs to instance ${linkedInstance.id}`);
           const overridesPath = metadataManager.getOverridesPath(modpackId);
-          
+
           // Copy restored configs from overrides to instance
           const configFolders = ["config", "kubejs", "defaultconfigs", "scripts"];
           for (const folder of configFolders) {
@@ -1376,14 +1376,14 @@ async function initializeBackend() {
         Buffer.from(JSON.stringify(manifest, null, 2))
       );
       zip.addFile("modlist.html", Buffer.from(modlist));
-      
+
       // Add overrides (config files, resourcepacks, shaderpacks, etc.) if they exist
       const overridesPath = metadataManager.getOverridesPath(modpackId);
       if (await fs.pathExists(overridesPath)) {
         const entries = await fs.readdir(overridesPath, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.name === "snapshots") continue; // Don't include version snapshots
-          
+
           const srcPath = path.join(overridesPath, entry.name);
           if (entry.isDirectory()) {
             zip.addLocalFolder(srcPath, `overrides/${entry.name}`);
@@ -1393,7 +1393,7 @@ async function initializeBackend() {
         }
         console.log(`[Export CF] Added overrides from ${overridesPath}`);
       }
-      
+
       zip.writeZip(result.filePath);
 
       return { success: true, path: result.filePath };
@@ -1423,14 +1423,14 @@ async function initializeBackend() {
       const AdmZip = (await import("adm-zip")).default;
       const zip = new AdmZip();
       zip.addFile("modex.json", Buffer.from(JSON.stringify(manifest, null, 2)));
-      
+
       // Add overrides (config files) if they exist
       const overridesPath = metadataManager.getOverridesPath(modpackId);
       if (await fs.pathExists(overridesPath)) {
         const entries = await fs.readdir(overridesPath, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.name === "snapshots") continue; // Don't include version snapshots
-          
+
           const srcPath = path.join(overridesPath, entry.name);
           if (entry.isDirectory()) {
             zip.addLocalFolder(srcPath, `overrides/${entry.name}`);
@@ -1440,7 +1440,7 @@ async function initializeBackend() {
         }
         console.log(`[Export MODEX] Added overrides from ${overridesPath}`);
       }
-      
+
       zip.writeZip(result.filePath);
 
       return { success: true, code, path: result.filePath };
@@ -1541,13 +1541,13 @@ async function initializeBackend() {
             modName: "Extracting configurations...",
           });
         }
-        
+
         const overridesResult = await metadataManager.saveOverridesFromZip(
           zipFilePath,
           importResult.modpackId,
           manifest
         );
-        
+
         if (overridesResult.fileCount > 0) {
           console.log(`[CF Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
         }
@@ -1795,7 +1795,7 @@ async function initializeBackend() {
           const existingModpack = allModpacks.find(
             (mp: any) => mp.cf_project_id === cfProjectId && mp.cf_file_id === cfFileId
           );
-          
+
           if (existingModpack) {
             return {
               success: false,
@@ -1873,7 +1873,7 @@ async function initializeBackend() {
           modsSkipped: number;
           errors: string[];
         };
-        
+
         try {
           importResult = await metadataManager.importFromCurseForge(
             manifest,
@@ -1902,13 +1902,13 @@ async function initializeBackend() {
           const sameProjectModpacks = allModpacks.filter(
             (mp: any) => mp.cf_project_id === cfProjectId && mp.id !== importResult.modpackId
           );
-          
+
           const updateData: any = {
             cf_project_id: cfProjectId,
             cf_file_id: cfFileId,
             cf_slug: cfSlug,
           };
-          
+
           // If there are other versions of this modpack, append version to name
           if (sameProjectModpacks.length > 0) {
             const currentModpack = await metadataManager.getModpackById(importResult.modpackId);
@@ -1916,7 +1916,7 @@ async function initializeBackend() {
               updateData.name = `${manifest.name || modpackName} (${manifest.version || 'v' + cfFileId})`;
             }
           }
-          
+
           await metadataManager.updateModpack(importResult.modpackId, updateData);
         }
 
@@ -1927,13 +1927,13 @@ async function initializeBackend() {
             total: 100,
             modName: "Extracting configurations...",
           });
-          
+
           const overridesResult = await metadataManager.saveOverridesFromZip(
             tempFile,
             importResult.modpackId,
             manifest
           );
-          
+
           if (overridesResult.fileCount > 0) {
             console.log(`[CF Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
           }
@@ -2123,7 +2123,7 @@ async function initializeBackend() {
           importResult.modpackId,
           { overrides: "overrides" } // Standard overrides folder name
         );
-        
+
         if (overridesResult.fileCount > 0) {
           console.log(`[MODEX Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
         }
@@ -2259,7 +2259,7 @@ async function initializeBackend() {
         if (importResult.success && importResult.modpackId) {
           try {
             const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
-            
+
             if (!importResult.isUpdate) {
               // New import: initialize version control
               if (!existingHistory || existingHistory.versions.length === 0) {
@@ -2268,10 +2268,10 @@ async function initializeBackend() {
               }
             } else {
               // Update: create a new version to record the changes
-              const changesSummary = importResult.changes 
+              const changesSummary = importResult.changes
                 ? `Added: ${importResult.changes.added}, Removed: ${importResult.changes.removed}, Updated: ${importResult.changes.updated}`
                 : "Remote update applied";
-              
+
               await metadataManager.createVersion(
                 importResult.modpackId,
                 `Remote update: ${changesSummary}`,
@@ -2377,7 +2377,7 @@ async function initializeBackend() {
     const cfMods = mods.filter(
       (m) => m.source === "curseforge" && m.cf_project_id
     );
-    
+
     const results: Array<{
       modId: string;
       projectId: string | null;
@@ -2389,14 +2389,14 @@ async function initializeBackend() {
       updateUrl: string | null;
       newFileId?: number;
     }> = [];
-    
+
     // Process in parallel batches for better performance
     const BATCH_SIZE = 10;
     let completed = 0;
-    
+
     for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
       const batch = cfMods.slice(i, i + BATCH_SIZE);
-      
+
       const batchResults = await Promise.all(
         batch.map(async (mod) => {
           try {
@@ -2435,10 +2435,10 @@ async function initializeBackend() {
           }
         })
       );
-      
+
       results.push(...batchResults);
       completed += batch.length;
-      
+
       // Send progress update after each batch
       event.sender.send("updates:progress", {
         current: completed,
@@ -2485,7 +2485,7 @@ async function initializeBackend() {
     const cfMods = mods.filter(
       (m) => m.source === "curseforge" && m.cf_project_id
     );
-    
+
     const results: Array<{
       modId: string;
       projectId: string | null;
@@ -2497,14 +2497,14 @@ async function initializeBackend() {
       updateUrl: string | null;
       newFileId?: number;
     }> = [];
-    
+
     // Process in parallel batches for better performance
     const BATCH_SIZE = 10;
     let completed = 0;
-    
+
     for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
       const batch = cfMods.slice(i, i + BATCH_SIZE);
-      
+
       const batchResults = await Promise.all(
         batch.map(async (mod) => {
           try {
@@ -2543,10 +2543,10 @@ async function initializeBackend() {
           }
         })
       );
-      
+
       results.push(...batchResults);
       completed += batch.length;
-      
+
       // Send progress update after each batch
       event.sender.send("updates:progress", {
         current: completed,
@@ -2669,9 +2669,13 @@ async function initializeBackend() {
           slug: dep.modSlug,
         })),
         conflicts: result.conflicts.map((c) => ({
-          mod1: { id: c.mod1.id, name: c.mod1.name },
-          mod2: { id: c.mod2.id, name: c.mod2.name },
-          reason: c.description,
+          mod1: { id: c.mod1.id, name: c.mod1.name, curseforge_id: c.mod1.curseforge_id },
+          mod2: { id: c.mod2.id, name: c.mod2.name, curseforge_id: c.mod2.curseforge_id },
+          type: c.type,
+          severity: c.severity,
+          description: c.description,
+          suggestion: c.suggestion,
+          reason: c.description, // legacy field for backwards compatibility
         })),
         performanceStats: {
           totalMods: result.modCount,
@@ -2842,7 +2846,7 @@ async function initializeBackend() {
 
     const mods = await metadataManager.getModsInModpack(modpackId);
     const disabledMods = modpack.disabled_mod_ids || [];
-    
+
     // Filter out disabled mods and prepare for sync
     const modsToSync = mods
       .filter(m => !disabledMods.includes(m.id))
@@ -2850,7 +2854,7 @@ async function initializeBackend() {
         id: m.id,
         name: m.name,
         filename: m.filename,
-        downloadUrl: m.cf_project_id && m.cf_file_id 
+        downloadUrl: m.cf_project_id && m.cf_file_id
           ? `https://edge.forgecdn.net/files/${Math.floor(m.cf_file_id / 1000)}/${m.cf_file_id % 1000}/${m.filename}`
           : undefined
       }));
@@ -3002,7 +3006,7 @@ async function initializeBackend() {
     if (!modpack) {
       return { filesSynced: 0, warnings: ["Modpack not found"] };
     }
-    
+
     const overridesPath = metadataManager.getOverridesPath(modpackId);
     return instanceService.syncConfigsToModpack(instanceId, overridesPath);
   });
@@ -3083,17 +3087,17 @@ async function initializeBackend() {
     if (!modpack) {
       return { needsSync: false, missingInInstance: [], extraInInstance: [], disabledMismatch: [], configDifferences: 0, totalDifferences: 0 };
     }
-    
+
     const mods = await metadataManager.getModsInModpack(modpackId);
     const modData = mods.map(m => ({
       id: m.id,
       filename: m.filename,
       content_type: m.content_type
     }));
-    
+
     // Get overrides path for config comparison - use camelCase field name
     const overridesPath = modpack.overridesPath;
-    
+
     return instanceService.checkSyncStatus(instanceId, modData, modpack.disabled_mod_ids || [], overridesPath);
   });
 
@@ -3115,10 +3119,10 @@ async function initializeBackend() {
       const modpackBasePath = path.join(metadataManager.getBasePath(), 'modpacks', modpackId);
       const overridesPath = path.join(modpackBasePath, 'overrides');
       await fs.ensureDir(overridesPath);
-      
+
       // Update modpack with overrides path
       await metadataManager.updateModpack(modpackId, { overridesPath });
-      
+
       return instanceService.importConfigsToModpack(instanceId, overridesPath, configPaths);
     }
     return instanceService.importConfigsToModpack(instanceId, modpack.overridesPath, configPaths);
@@ -3126,7 +3130,7 @@ async function initializeBackend() {
 
   ipcMain.handle("instance:export", async (_, instanceId: string) => {
     if (!win) return false;
-    
+
     const instance = await instanceService.getInstance(instanceId);
     if (!instance) return false;
 
@@ -3210,7 +3214,7 @@ async function initializeBackend() {
         // Sync instance configs back to modpack (captures any default configs)
         const overridesPath = metadataManager.getOverridesPath(modpackId);
         await instanceService.syncConfigsToModpack(instance.id, overridesPath);
-        
+
         // Initialize version control for the modpack (if not already initialized)
         const existingHistory = await metadataManager.getVersionHistory(modpackId);
         if (!existingHistory || existingHistory.versions.length === 0) {
@@ -3276,21 +3280,21 @@ async function initializeBackend() {
     configSyncMode?: "overwrite" | "new_only" | "skip";
   }) => {
     const syncSettings = await metadataManager.getInstanceSyncSettings();
-    
+
     // Get instance and modpack
     const instance = await instanceService.getInstance(instanceId);
     if (!instance) {
       return { success: false, error: "Instance not found", syncPerformed: false };
     }
-    
+
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) {
       return { success: false, error: "Modpack not found", syncPerformed: false };
     }
-    
+
     let syncPerformed = false;
     let syncResult = null;
-    
+
     // Check if sync is needed (unless skipped)
     if (!options?.skipSync) {
       const mods = await metadataManager.getModsInModpack(modpackId);
@@ -3299,32 +3303,32 @@ async function initializeBackend() {
         filename: m.filename,
         content_type: m.content_type
       }));
-      
+
       const overridesPath = modpack.overridesPath;
       const syncStatus = await instanceService.checkSyncStatus(
-        instanceId, 
-        modData, 
-        modpack.disabled_mod_ids || [], 
+        instanceId,
+        modData,
+        modpack.disabled_mod_ids || [],
         overridesPath
       );
-      
+
       // If needs sync and auto-sync is enabled (or forced)
       if (syncStatus.needsSync && (syncSettings.autoSyncBeforeLaunch || options?.forceSync)) {
         // Return sync needed info if confirmation is required and not forced
         if (syncSettings.showSyncConfirmation && !options?.forceSync) {
-          return { 
-            success: false, 
+          return {
+            success: false,
             requiresConfirmation: true,
-            needsSync: true, 
+            needsSync: true,
             syncStatus: {
               ...syncStatus,
               differences: syncStatus.totalDifferences,
               lastSynced: instance.lastSynced
             },
-            syncPerformed: false 
+            syncPerformed: false
           };
         }
-        
+
         // Perform sync
         try {
           const library = await metadataManager.getAllMods();
@@ -3332,14 +3336,14 @@ async function initializeBackend() {
             id: m.id,
             name: m.name,
             filename: m.filename,
-            downloadUrl: m.cf_project_id && m.cf_file_id 
+            downloadUrl: m.cf_project_id && m.cf_file_id
               ? `https://edge.forgecdn.net/files/${Math.floor(m.cf_file_id / 1000)}/${m.cf_file_id % 1000}/${encodeURIComponent(m.filename)}`
               : undefined,
             cf_project_id: m.cf_project_id,
             cf_file_id: m.cf_file_id,
             content_type: m.content_type as "mod" | "resourcepack" | "shader"
           }));
-          
+
           const disabledMods = (modpack.disabled_mod_ids || [])
             .map(id => library.find(m => m.id === id))
             .filter((m): m is typeof library[0] => !!m)
@@ -3348,7 +3352,7 @@ async function initializeBackend() {
               filename: m.filename,
               content_type: m.content_type as "mod" | "resourcepack" | "shader"
             }));
-          
+
           syncResult = await instanceService.syncModpackToInstance(instanceId, {
             mods: modsInPack,
             disabledMods,
@@ -3358,36 +3362,36 @@ async function initializeBackend() {
             // Manual sync from UI can use other modes if user explicitly chooses
             configSyncMode: "new_only"
           });
-          
+
           syncPerformed = true;
-          
+
           if (!syncResult.success) {
-            return { 
-              success: false, 
+            return {
+              success: false,
               error: `Sync failed: ${syncResult.errors.join(", ")}`,
               syncPerformed: true,
               syncResult
             };
           }
         } catch (err: any) {
-          return { 
-            success: false, 
+          return {
+            success: false,
             error: `Sync error: ${err.message}`,
             syncPerformed: false
           };
         }
       }
     }
-    
+
     // Launch the instance
     const onProgress = (stage: string, current: number, total: number, detail?: string) => {
       if (win) {
         win.webContents.send("loader:installProgress", { stage, current, total, detail });
       }
     };
-    
+
     const launchResult = await instanceService.launchInstance(instanceId, onProgress);
-    
+
     return {
       ...launchResult,
       syncPerformed,
@@ -3410,16 +3414,16 @@ async function initializeBackend() {
     if (!modpack) return null;
 
     const mods = await metadataManager.getModsInModpack(modpackId);
-    
+
     return modpackAnalyzerService.analyzeExistingModpack(
-      mods.map(m => ({ 
-        cf_project_id: m.cf_project_id, 
-        name: m.name, 
-        file_size: m.file_size 
+      mods.map(m => ({
+        cf_project_id: m.cf_project_id,
+        name: m.name,
+        file_size: m.file_size
       })),
-      { 
-        minecraftVersion: modpack.minecraft_version || "", 
-        modLoader: modpack.loader || "forge" 
+      {
+        minecraftVersion: modpack.minecraft_version || "",
+        modLoader: modpack.loader || "forge"
       }
     );
   });
@@ -3433,13 +3437,13 @@ async function initializeBackend() {
       ],
       title: "Select Modpack to Preview"
     });
-    
+
     if (result.canceled || !result.filePaths[0]) return null;
-    
+
     // Return both path and preview
     const zipPath = result.filePaths[0];
     const preview = await modpackAnalyzerService.previewFromZip(zipPath);
-    
+
     return { path: zipPath, preview };
   });
 
@@ -3463,7 +3467,7 @@ async function initializeBackend() {
     // Apply filters
     if (options.search) {
       const query = options.search.toLowerCase();
-      filtered = filtered.filter(m => 
+      filtered = filtered.filter(m =>
         m.name.toLowerCase().includes(query) ||
         m.author?.toLowerCase().includes(query) ||
         m.description?.toLowerCase().includes(query)
@@ -3489,7 +3493,7 @@ async function initializeBackend() {
     // Sort
     const sortBy = options.sortBy || "name";
     const sortDir = options.sortDir || "asc";
-    
+
     filtered.sort((a, b) => {
       let comparison = 0;
       switch (sortBy) {
@@ -3587,7 +3591,7 @@ async function initializeBackend() {
   // Export configs to zip
   ipcMain.handle("config:export", async (_, instanceId: string, folders?: string[]) => {
     if (!win) return null;
-    
+
     const instance = await instanceService.getInstance(instanceId);
     if (!instance) throw new Error("Instance not found");
 
@@ -3613,7 +3617,7 @@ async function initializeBackend() {
   // Import configs from zip
   ipcMain.handle("config:import", async (_, instanceId: string, overwrite?: boolean) => {
     if (!win) return null;
-    
+
     const instance = await instanceService.getInstance(instanceId);
     if (!instance) throw new Error("Instance not found");
 
@@ -3725,7 +3729,7 @@ async function initializeBackend() {
   }>) => {
     const instance = await instanceService.getInstance(instanceId);
     if (!instance) throw new Error("Instance not found");
-    
+
     // Convert modifications to ConfigEntry format expected by saveConfigStructured
     const entries = modifications.map(mod => ({
       keyPath: mod.key,
@@ -3738,7 +3742,7 @@ async function initializeBackend() {
       modified: true,
       line: mod.line,
     }));
-    
+
     // Pass the modpackId from the instance for version control tracking
     const modpackId = instance.modpackId;
     console.log("[config:saveStructured] Instance:", instance.id, "ModpackId:", modpackId);

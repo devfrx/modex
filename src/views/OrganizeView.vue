@@ -622,16 +622,16 @@ const moveDialogDescription = computed(() => {
           </div>
 
           <!-- Content Type Filter Pills -->
-          <div class="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border">
+          <div class="flex items-center gap-1 p-1 rounded-lg bg-muted/30">
             <button class="px-3 py-1.5 text-xs font-medium rounded-md transition-all" :class="selectedContentType === 'all'
-              ? 'bg-background shadow-sm text-foreground'
-              : 'text-muted-foreground hover:text-foreground'" @click="selectedContentType = 'all'">
+              ? 'bg-background ring-1 ring-border/50 text-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="selectedContentType = 'all'">
               All
             </button>
             <button class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
               :class="selectedContentType === 'mod'
-                ? 'bg-emerald-500/15 text-emerald-500 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'" @click="selectedContentType = 'mod'"
+                ? 'bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="selectedContentType = 'mod'"
               :title="`${contentTypeCounts.mod} mods`">
               <Layers class="w-3.5 h-3.5" />
               <span class="hidden md:inline">Mods</span>
@@ -639,8 +639,8 @@ const moveDialogDescription = computed(() => {
             </button>
             <button class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
               :class="selectedContentType === 'resourcepack'
-                ? 'bg-blue-500/15 text-blue-500 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'" @click="selectedContentType = 'resourcepack'"
+                ? 'bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="selectedContentType = 'resourcepack'"
               :title="`${contentTypeCounts.resourcepack} resource packs`">
               <Image class="w-3.5 h-3.5" />
               <span class="hidden md:inline">Packs</span>
@@ -648,8 +648,8 @@ const moveDialogDescription = computed(() => {
             </button>
             <button class="px-2.5 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
               :class="selectedContentType === 'shader'
-                ? 'bg-pink-500/15 text-pink-500 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'" @click="selectedContentType = 'shader'"
+                ? 'bg-pink-500/15 text-pink-500 ring-1 ring-pink-500/30'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="selectedContentType = 'shader'"
               :title="`${contentTypeCounts.shader} shaders`">
               <Sparkles class="w-3.5 h-3.5" />
               <span class="hidden md:inline">Shaders</span>
@@ -687,14 +687,14 @@ const moveDialogDescription = computed(() => {
           </Button>
 
           <!-- View Toggle -->
-          <div class="flex items-center bg-muted/50 rounded-lg p-1 border border-border">
+          <div class="flex items-center gap-1 p-1 bg-muted/30 rounded-lg">
             <button class="p-2 rounded-md transition-all"
-              :class="viewMode === 'tree' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :class="viewMode === 'tree' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
               @click="viewMode = 'tree'" title="Tree View">
               <FolderTree class="w-4 h-4" />
             </button>
             <button class="p-2 rounded-md transition-all"
-              :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              :class="viewMode === 'grid' ? 'bg-background text-foreground ring-1 ring-border/50' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
               @click="viewMode = 'grid'" title="Grid View">
               <LayoutGrid class="w-4 h-4" />
             </button>
@@ -959,16 +959,27 @@ const moveDialogDescription = computed(() => {
               </div>
 
               <div class="flex items-start gap-4" :class="isSelectionMode ? 'pl-8' : ''">
-                <div
-                  class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-all group-hover:scale-105"
-                  :class="mod.content_type === 'resourcepack'
-                    ? 'bg-blue-500/10 text-blue-500'
-                    : mod.content_type === 'shader'
-                      ? 'bg-pink-500/10 text-pink-500'
-                      : 'bg-emerald-500/10 text-emerald-500'">
-                  <Image v-if="mod.content_type === 'resourcepack'" class="w-6 h-6" />
-                  <Sparkles v-else-if="mod.content_type === 'shader'" class="w-6 h-6" />
-                  <Package v-else class="w-6 h-6" />
+                <!-- Mod Thumbnail/Logo or Icon fallback -->
+                <div class="w-12 h-12 rounded-xl overflow-hidden shrink-0 transition-all group-hover:scale-105 ring-1 ring-border/50">
+                  <img 
+                    v-if="mod.logo_url || mod.thumbnail_url" 
+                    :src="mod.logo_url || mod.thumbnail_url" 
+                    :alt="mod.name"
+                    class="w-full h-full object-cover"
+                  />
+                  <div 
+                    v-else 
+                    class="w-full h-full flex items-center justify-center"
+                    :class="mod.content_type === 'resourcepack'
+                      ? 'bg-blue-500/10 text-blue-500'
+                      : mod.content_type === 'shader'
+                        ? 'bg-pink-500/10 text-pink-500'
+                        : 'bg-emerald-500/10 text-emerald-500'"
+                  >
+                    <Image v-if="mod.content_type === 'resourcepack'" class="w-6 h-6" />
+                    <Sparkles v-else-if="mod.content_type === 'shader'" class="w-6 h-6" />
+                    <Package v-else class="w-6 h-6" />
+                  </div>
                 </div>
                 <div class="flex-1 min-w-0">
                   <h4 class="text-sm font-semibold text-foreground group-hover:text-foreground truncate">

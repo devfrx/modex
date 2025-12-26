@@ -70,6 +70,7 @@ import ConfigBrowser from "@/components/configs/ConfigBrowser.vue";
 import ConfigStructuredEditor from "@/components/configs/ConfigStructuredEditor.vue";
 import UpdateAvailableBanner from "@/components/modpacks/UpdateAvailableBanner.vue";
 import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
+import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
 import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
 
 const props = defineProps<{
@@ -119,7 +120,11 @@ const selectedUpdateMod = ref<any>(null);
 const showVersionPickerDialog = ref(false);
 const versionPickerMod = ref<any>(null);
 const isSaving = ref(false);
-const modsFilter = ref<"all" | "incompatible" | "disabled" | "updates" | "recent-updated" | "recent-added">("all");
+
+// Mod Details Modal state
+const showModDetailsModal = ref(false);
+const modDetailsTarget = ref<Mod | null>(null);
+const modsFilter = ref<"all" | "incompatible" | "warning" | "disabled" | "updates" | "recent-updated" | "recent-added">("all");
 const activeTab = ref<
   | "play"
   | "mods"
@@ -340,41 +345,39 @@ const isLinked = computed(() => {
 });
 
 // Check mod compatibility with modpack
-function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
+// Returns: compatible (green), warning (amber - loader mismatch but might work), incompatible (red - version mismatch)
+function isModCompatible(mod: Mod): { compatible: boolean; warning?: boolean; reason?: string } {
   if (!modpack.value) return { compatible: true };
 
   const modContentType = mod.content_type || "mod";
   const packVersion = modpack.value.minecraft_version;
   const modVersion = mod.game_version;
 
-  // Only check loader for mods (resourcepacks and shaders don't have loaders)
+  // Track loader mismatch separately - it's a warning, not a hard incompatibility
+  // Modpack creators sometimes include mods from other loaders that work via compatibility layers
+  // (e.g., Sinytra Connector for Fabric mods on Forge, or mods that genuinely work across loaders)
+  let loaderWarning: string | undefined;
+  
   if (modContentType === "mod") {
     const packLoader = modpack.value.loader?.toLowerCase();
     const modLoader = mod.loader?.toLowerCase();
 
-    // Check loader compatibility
     if (packLoader && modLoader && modLoader !== "unknown") {
       const isNeoForgeForgeCompat =
         (packLoader === "neoforge" && modLoader === "forge") ||
         (packLoader === "forge" && modLoader === "neoforge");
 
       if (modLoader !== packLoader && !isNeoForgeForgeCompat) {
-        return {
-          compatible: false,
-          reason: `Requires ${modLoader}, modpack uses ${packLoader}`,
-        };
+        loaderWarning = `${modLoader} mod in ${packLoader} pack`;
       }
     }
   }
 
   // Check MC version compatibility
   if (packVersion && modVersion && modVersion !== "unknown") {
-    // For shaders/resourcepacks, check if packVersion is in the game_versions array
-    if (
-      modContentType !== "mod" &&
-      mod.game_versions &&
-      mod.game_versions.length > 0
-    ) {
+    // Check game_versions array first (works for ALL content types including mods)
+    // Many mods support multiple MC versions in a single file
+    if (mod.game_versions && mod.game_versions.length > 0) {
       const isVersionCompatible = mod.game_versions.some(
         (gv) =>
           gv === packVersion ||
@@ -382,6 +385,7 @@ function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
           packVersion.startsWith(gv)
       );
       if (!isVersionCompatible) {
+        // Version mismatch is a hard incompatibility
         return {
           compatible: false,
           reason: `Supports MC ${mod.game_versions.slice(0, 3).join(", ")}${mod.game_versions.length > 3 ? "..." : ""
@@ -389,7 +393,7 @@ function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
         };
       }
     } else {
-      // Standard single version check for mods or items without game_versions array
+      // Fallback: Standard single version check for items without game_versions array
       const versionsMatch =
         modVersion === packVersion ||
         modVersion.startsWith(packVersion) ||
@@ -403,6 +407,11 @@ function isModCompatible(mod: Mod): { compatible: boolean; reason?: string } {
         };
       }
     }
+  }
+
+  // If we get here, version is compatible - but we might have a loader warning
+  if (loaderWarning) {
+    return { compatible: true, warning: true, reason: loaderWarning };
   }
 
   return { compatible: true };
@@ -432,6 +441,10 @@ const filteredInstalledMods = computed(() => {
     // Quick filter
     if (modsFilter.value === "incompatible") {
       return !isModCompatible(m).compatible;
+    }
+    if (modsFilter.value === "warning") {
+      const compat = isModCompatible(m);
+      return compat.compatible && compat.warning;
     }
     if (modsFilter.value === "disabled") {
       return disabledModIds.value.has(m.id);
@@ -475,6 +488,7 @@ const installedModsWithCompatibility = computed(() => {
     return {
       ...mod,
       isCompatible: compatibility.compatible,
+      hasWarning: compatibility.warning,
       incompatibilityReason: compatibility.reason,
     };
   });
@@ -494,6 +508,24 @@ const incompatibleModCount = computed(() => {
     if (contentTypeTab.value === "shaders" && modContentType !== "shader")
       return false;
     return !isModCompatible(m).compatible;
+  }).length;
+});
+
+// Count of warning mods (different loader but version compatible)
+const warningModCount = computed(() => {
+  return currentMods.value.filter((m) => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod")
+      return false;
+    if (
+      contentTypeTab.value === "resourcepacks" &&
+      modContentType !== "resourcepack"
+    )
+      return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
+      return false;
+    const compat = isModCompatible(m);
+    return compat.compatible && compat.warning;
   }).length;
 });
 
@@ -654,6 +686,53 @@ async function handleVersionSelected(fileId: number) {
 
   showVersionPickerDialog.value = false;
   versionPickerMod.value = null;
+}
+
+// Mod Details Modal - open with full mod details
+function openModDetails(mod: Mod) {
+  if (!mod.cf_project_id) return;
+  modDetailsTarget.value = mod;
+  showModDetailsModal.value = true;
+}
+
+function closeModDetails() {
+  showModDetailsModal.value = false;
+  modDetailsTarget.value = null;
+}
+
+// Handle version change from ModDetailsModal
+async function handleModDetailsVersionChange(fileId: number) {
+  if (!modDetailsTarget.value) return;
+
+  try {
+    const result = await window.api.updates.applyUpdate(
+      modDetailsTarget.value.id,
+      fileId
+    );
+    if (result.success) {
+      // Mark as recently updated
+      recentlyUpdatedMods.value.add(modDetailsTarget.value.id);
+      setTimeout(() => {
+        if (modDetailsTarget.value) {
+          recentlyUpdatedMods.value.delete(modDetailsTarget.value.id);
+        }
+      }, RECENT_THRESHOLD_MS);
+
+      // Clear any cached update status
+      if (updateAvailable.value[modDetailsTarget.value.id]) {
+        delete updateAvailable.value[modDetailsTarget.value.id];
+      }
+      await loadData();
+      emit("update");
+      toast.success(`${modDetailsTarget.value.name} version changed`);
+      closeModDetails();
+    } else {
+      toast.error(`Failed to change version: ${result.error || 'Unknown error'}`);
+    }
+  } catch (err: any) {
+    console.error("Version change failed:", err);
+    toast.error(`Failed to change mod version: ${err?.message || 'Unknown error'}`);
+  }
 }
 
 // Check all mods for updates (auto-triggered on load)
@@ -831,6 +910,7 @@ const filteredAvailableMods = computed(() => {
       return {
         ...mod,
         isCompatible: compatibility.compatible,
+        hasWarning: compatibility.warning,
         incompatibilityReason: compatibility.reason,
       };
     })
@@ -843,9 +923,12 @@ const filteredAvailableMods = computed(() => {
 
 // Compatibility stats
 const compatibleCount = computed(
-  () => filteredAvailableMods.value.filter((m) => m.isCompatible).length
+  () => filteredAvailableMods.value.filter((m) => m.isCompatible && !m.hasWarning).length
 );
-const incompatibleCount = computed(
+const warningAvailableCount = computed(
+  () => filteredAvailableMods.value.filter((m) => m.isCompatible && m.hasWarning).length
+);
+const incompatibleAvailableCount = computed(
   () => filteredAvailableMods.value.filter((m) => !m.isCompatible).length
 );
 
@@ -3175,10 +3258,10 @@ watch(
               <!-- Left: Content Type Tabs -->
               <div class="flex items-center gap-1">
                 <button
-                  class="px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 flex items-center gap-1.5"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1.5"
                   :class="contentTypeTab === 'mods'
-                    ? 'bg-primary/15 text-primary border border-primary/30'
-                    : 'hover:bg-muted text-muted-foreground'
+                    ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                    : 'hover:bg-muted/50 text-muted-foreground'
                     " @click="contentTypeTab = 'mods'">
                   <Layers class="w-3.5 h-3.5" />
                   Mods
@@ -3187,10 +3270,10 @@ watch(
                   }}</span>
                 </button>
                 <button
-                  class="px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 flex items-center gap-1.5"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1.5"
                   :class="contentTypeTab === 'resourcepacks'
-                    ? 'bg-primary/15 text-primary border border-primary/30'
-                    : 'hover:bg-muted text-muted-foreground'
+                    ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
+                    : 'hover:bg-muted/50 text-muted-foreground'
                     " @click="contentTypeTab = 'resourcepacks'">
                   <Image class="w-3.5 h-3.5" />
                   Packs
@@ -3199,10 +3282,10 @@ watch(
                   }}</span>
                 </button>
                 <button
-                  class="px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 flex items-center gap-1.5"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1.5"
                   :class="contentTypeTab === 'shaders'
-                    ? 'bg-primary/15 text-primary border border-primary/30'
-                    : 'hover:bg-muted text-muted-foreground'
+                    ? 'bg-pink-500/15 text-pink-400 ring-1 ring-pink-500/30'
+                    : 'hover:bg-muted/50 text-muted-foreground'
                     " @click="contentTypeTab = 'shaders'">
                   <Sparkles class="w-3.5 h-3.5" />
                   Shaders
@@ -3224,44 +3307,52 @@ watch(
               <!-- Right: Actions -->
               <div class="flex items-center gap-2">
                 <!-- Quick Filters -->
-                <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-                  <button class="px-2 py-1 text-[10px] rounded transition-all" :class="modsFilter === 'all'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'all'">
+                <div class="flex items-center gap-1 p-1 bg-muted/30 rounded-lg">
+                  <button class="px-2.5 py-1 text-[10px] rounded-md transition-all" :class="modsFilter === 'all'
+                    ? 'bg-background text-foreground ring-1 ring-border/50'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'all'">
                     All
                   </button>
                   <button v-if="incompatibleModCount > 0"
-                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'incompatible'
-                      ? 'bg-red-500/20 text-red-400 shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'incompatible'">
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'incompatible'
+                      ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'incompatible'">
                     <AlertCircle class="w-3 h-3" />
                     {{ incompatibleModCount }}
                   </button>
+                  <button v-if="warningModCount > 0"
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'warning'
+                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'warning'"
+                    title="Mods with different loader (may work with compatibility mods)">
+                    <AlertTriangle class="w-3 h-3" />
+                    {{ warningModCount }}
+                  </button>
                   <button v-if="disabledModCount > 0"
-                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'disabled'
-                      ? 'bg-amber-500/20 text-amber-400 shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'disabled'">
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'disabled'
+                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'disabled'">
                     <ToggleLeft class="w-3 h-3" />
                     {{ disabledModCount }}
                   </button>
                   <button v-if="updatesAvailableCount > 0"
-                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
-                      ? 'bg-primary/20 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'updates'">
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
+                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'updates'">
                     <ArrowUpCircle class="w-3 h-3" />
                     {{ updatesAvailableCount }}
                   </button>
                   <button v-if="recentlyUpdatedCount > 0"
-                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-updated'
-                      ? 'bg-primary/20 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'recent-updated'">
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-updated'
+                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'recent-updated'">
                     <Check class="w-3 h-3" />
                     {{ recentlyUpdatedCount }}
                   </button>
                   <button v-if="recentlyAddedCount > 0"
-                    class="px-2 py-1 text-[10px] rounded transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-added'
-                      ? 'bg-primary/20 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'" @click="modsFilter = 'recent-added'">
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-added'
+                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'recent-added'">
                     <Plus class="w-3 h-3" />
                     {{ recentlyAddedCount }}
                   </button>
@@ -3378,15 +3469,32 @@ watch(
               <!-- Mod List -->
               <div class="flex-1 overflow-y-auto p-2 space-y-1">
                 <div v-for="mod in installedModsWithCompatibility" :key="mod.id"
-                  class="flex items-center gap-3 p-2.5 rounded-lg border transition-all group cursor-pointer" :class="[
+                  class="flex items-center gap-2.5 p-2.5 rounded-lg border transition-all group cursor-pointer" :class="[
                     selectedModIds.has(mod.id)
                       ? 'bg-primary/10 border-primary/50 shadow-sm'
                       : !mod.isCompatible
                         ? 'bg-red-500/10 border-red-500/30 hover:bg-red-500/15'
-                        : 'border-transparent hover:bg-accent/50 hover:border-border/50',
+                        : mod.hasWarning
+                          ? 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10'
+                          : 'border-transparent hover:bg-accent/50 hover:border-border/50',
                     disabledModIds.has(mod.id) ? 'opacity-50' : '',
                     isLinked ? 'cursor-default' : 'cursor-pointer',
-                  ]" @click="!isLinked && toggleSelect(mod.id)">
+                  ]" @click="!isLinked && toggleSelect(mod.id)" @dblclick.stop="openModDetails(mod)">
+                  <!-- Mod Thumbnail -->
+                  <div class="w-8 h-8 rounded-md bg-muted/50 overflow-hidden shrink-0 border border-border/30">
+                    <img v-if="mod.thumbnail_url || mod.logo_url" 
+                      :src="mod.thumbnail_url || mod.logo_url" 
+                      class="w-full h-full object-cover"
+                      alt=""
+                      loading="lazy"
+                      @error="($event.target as HTMLImageElement).style.display = 'none'" />
+                    <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/50">
+                      <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-4 h-4" />
+                      <Image v-else-if="mod.content_type === 'resourcepack'" class="w-4 h-4" />
+                      <Sparkles v-else class="w-4 h-4" />
+                    </div>
+                  </div>
+
                   <!-- Checkbox -->
                   <div v-if="!isLinked"
                     class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors" :class="selectedModIds.has(mod.id)
@@ -3438,17 +3546,21 @@ watch(
                         class="text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium">
                         incompatible
                       </span>
+                      <span v-else-if="mod.hasWarning"
+                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-medium"
+                        title="This mod uses a different loader but may work via compatibility layers">
+                        different loader
+                      </span>
                     </div>
                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <!-- Game versions (show list for shaders/resourcepacks if available) -->
-                      <span v-if="
-                        mod.content_type !== 'mod' &&
-                        mod.game_versions &&
-                        mod.game_versions.length >= 1
-                      " class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
-                        ? 'bg-primary/15 text-primary'
-                        : 'bg-red-500/15 text-red-500'
-                        " :title="mod.game_versions.join(', ')">
+                      <!-- Game versions (show list for ALL content types if available) -->
+                      <span v-if="mod.game_versions && mod.game_versions.length >= 1"
+                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" 
+                        :class="mod.isCompatible
+                          ? 'bg-primary/15 text-primary'
+                          : 'bg-red-500/15 text-red-500'
+                        " 
+                        :title="mod.game_versions.join(', ')">
                         {{ mod.game_versions.slice(0, 2).join(", ")
                         }}{{
                           mod.game_versions.length > 2
@@ -3456,19 +3568,22 @@ watch(
                             : ""
                         }}
                       </span>
-                      <span v-else-if="
-                        mod.game_version && mod.game_version !== 'unknown'
-                      " class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
-                        ? 'bg-primary/15 text-primary'
-                        : 'bg-red-500/15 text-red-500'
+                      <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
+                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" 
+                        :class="mod.isCompatible
+                          ? 'bg-primary/15 text-primary'
+                          : 'bg-red-500/15 text-red-500'
                         ">
                         {{ mod.game_version }}
                       </span>
                       <span v-if="mod.loader && mod.loader !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize" :class="mod.isCompatible
-                          ? 'bg-muted text-muted-foreground'
-                          : 'bg-red-500/15 text-red-500'
-                          ">
+                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize" 
+                        :class="!mod.isCompatible
+                          ? 'bg-red-500/15 text-red-500'
+                          : mod.hasWarning
+                            ? 'bg-amber-500/15 text-amber-500'
+                            : 'bg-muted text-muted-foreground'
+                        ">
                         {{ mod.loader }}
                       </span>
                       <span v-if="mod.version"
@@ -3478,6 +3593,10 @@ watch(
                     </div>
                     <div v-if="!mod.isCompatible && mod.incompatibilityReason"
                       class="text-[10px] text-red-500 mt-0.5 truncate" :title="mod.incompatibilityReason">
+                      {{ mod.incompatibilityReason }}
+                    </div>
+                    <div v-else-if="mod.hasWarning && mod.incompatibilityReason"
+                      class="text-[10px] text-amber-500 mt-0.5 truncate" :title="mod.incompatibilityReason">
                       {{ mod.incompatibilityReason }}
                     </div>
                   </div>
@@ -3556,7 +3675,10 @@ watch(
                   <div class="flex items-center gap-2">
                     <Package class="w-3.5 h-3.5 text-muted-foreground" />
                     <span class="text-xs font-medium">Library</span>
-                    <span class="text-[10px] text-primary">{{ compatibleCount }} compatible</span>
+                    <span class="text-[10px] text-primary">{{ compatibleCount }}</span>
+                    <span v-if="warningAvailableCount > 0" class="text-[10px] text-amber-500" title="Mods with different loader">
+                      +{{ warningAvailableCount }} other loader
+                    </span>
                   </div>
                   <button @click="isLibraryCollapsed = true"
                     class="p-1 rounded hover:bg-muted transition-colors duration-150 text-muted-foreground hover:text-foreground"
@@ -3575,24 +3697,24 @@ watch(
               <div class="flex-1 overflow-y-auto p-2 space-y-1">
                 <div v-for="mod in filteredAvailableMods" :key="mod.id"
                   class="flex items-center justify-between p-2 rounded-lg transition-all duration-150 relative" :class="mod.isCompatible
-                    ? 'hover:bg-accent/50 cursor-pointer group'
+                    ? mod.hasWarning 
+                      ? 'hover:bg-amber-500/10 cursor-pointer group border border-amber-500/20'
+                      : 'hover:bg-accent/50 cursor-pointer group'
                     : 'opacity-40'
-                    ">
+                    " @dblclick.stop="openModDetails(mod)">
                   <!-- Mod Info -->
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
                       <span class="font-medium text-sm truncate">{{
                         mod.name
                       }}</span>
-                      <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-red-500 shrink-0" title="Incompatible" />
+                      <AlertTriangle v-else-if="mod.hasWarning" class="w-3.5 h-3.5 text-amber-500 shrink-0" title="Different loader" />
                     </div>
                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <!-- Game versions (show list for shaders/resourcepacks if available) -->
-                      <span v-if="
-                        mod.content_type !== 'mod' &&
-                        mod.game_versions &&
-                        mod.game_versions.length >= 1
-                      " class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium"
+                      <!-- Game versions (show list for ALL content types if available) -->
+                      <span v-if="mod.game_versions && mod.game_versions.length >= 1"
+                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium"
                         :title="mod.game_versions.join(', ')">
                         {{ mod.game_versions.slice(0, 2).join(", ")
                         }}{{
@@ -3601,29 +3723,34 @@ watch(
                             : ""
                         }}
                       </span>
-                      <span v-else-if="
-                        mod.game_version && mod.game_version !== 'unknown'
-                      " class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium">
+                      <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
+                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium">
                         {{ mod.game_version }}
                       </span>
                       <span v-if="mod.loader && mod.loader !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium capitalize">
+                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize"
+                        :class="mod.hasWarning ? 'bg-amber-500/15 text-amber-500' : 'bg-muted text-muted-foreground'">
                         {{ mod.loader }}
                       </span>
                       <span v-if="mod.version" class="text-[10px] text-muted-foreground truncate max-w-[80px] font-mono"
                         :title="mod.version">
                         {{ mod.version }}
                       </span>
-                      <span v-if="!mod.isCompatible" class="text-[10px] text-amber-500 italic">
+                      <span v-if="!mod.isCompatible" class="text-[10px] text-red-500 italic">
+                        {{ mod.incompatibilityReason }}
+                      </span>
+                      <span v-else-if="mod.hasWarning" class="text-[10px] text-amber-500 italic">
                         {{ mod.incompatibilityReason }}
                       </span>
                     </div>
                   </div>
 
-                  <!-- Add Button -->
+                  <!-- Add Button - Now also enabled for warning mods -->
                   <Button v-if="mod.isCompatible && !isLinked" variant="ghost" size="icon"
-                    class="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0 hover:bg-primary/10"
-                    @click.stop="addMod(mod.id)">
+                    class="h-8 w-8 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                    :class="mod.hasWarning ? 'text-amber-500 hover:bg-amber-500/10' : 'text-primary hover:bg-primary/10'"
+                    @click.stop="addMod(mod.id)"
+                    :title="mod.hasWarning ? 'Add (different loader - may need compatibility mod)' : 'Add to modpack'">
                     <Plus class="w-4 h-4" />
                   </Button>
                   <Lock v-else class="w-4 h-4 text-muted-foreground/50 shrink-0 mr-2" :title="isLinked ? 'Managed by remote source' : 'Incompatible'
@@ -4045,6 +4172,21 @@ watch(
     <FilePickerDialog :open="showVersionPickerDialog" :mod="versionPickerMod" :game-version="modpack?.minecraft_version"
       :mod-loader="modpack?.loader" :content-type="versionPickerMod?.content_type || 'mod'"
       @close="showVersionPickerDialog = false" @select="handleVersionSelected" />
+
+    <!-- Mod Details Modal -->
+    <ModDetailsModal
+      :open="showModDetailsModal"
+      :mod="modDetailsTarget"
+      :context="{
+        type: 'modpack',
+        modpackId: modpackId,
+        gameVersion: modpack?.minecraft_version,
+        loader: modpack?.loader
+      }"
+      :current-file-id="modDetailsTarget?.cf_file_id"
+      @close="closeModDetails"
+      @version-changed="handleModDetailsVersionChange"
+    />
 
     <!-- CurseForge Changelog Dialog -->
     <Dialog :open="showCFChangelog" @close="showCFChangelog = false" title="Modpack Changelog" size="lg">

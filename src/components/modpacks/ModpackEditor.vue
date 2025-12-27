@@ -4070,10 +4070,9 @@ watch(
                           {{ isLoadingLoaderVersions ? 'Loading...' : 'Click to load versions' }}
                         </option>
                         <option v-for="lv in filteredLoaderVersions" :key="lv.name"
-                          :value="extractLoaderVersion(lv.name)">
-                          {{ extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? '
-                          (Latest)' : ''
-                          }}
+                          :value="extractLoaderVersion(lv.name)">{{
+                          extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? ' (Latest)'
+                          : '' }}
                         </option>
                       </select>
                       <Button variant="outline" size="sm" @click="fetchLoaderVersions"

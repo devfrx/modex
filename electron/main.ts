@@ -250,6 +250,13 @@ async function initializeBackend() {
   );
 
   ipcMain.handle(
+    "curseforge:getModLoaders",
+    async (_, gameVersion?: string) => {
+      return curseforgeService.getModLoaders(gameVersion);
+    }
+  );
+
+  ipcMain.handle(
     "curseforge:getRecommendations",
     async (
       _,
@@ -1020,178 +1027,198 @@ async function initializeBackend() {
   ipcMain.handle(
     "versions:rollback",
     async (_, modpackId: string, versionId: string) => {
-      // Get the target version to check for missing mods
+      // Get the target version
       const version = await metadataManager.getVersion(modpackId, versionId);
       if (!version) {
         throw new Error("Version not found");
       }
 
-      // Check if all mods in the version still exist in library
-      const missingMods: Array<{
-        modId: string;
-        modName: string;
-        cfProjectId?: number;
-        cfFileId?: number;
-      }> = [];
+      // Get modpack for context
+      const modpack = await metadataManager.getModpackById(modpackId);
+      if (!modpack) {
+        throw new Error("Modpack not found");
+      }
+
+      // Build a map of snapshots by mod ID for quick lookup
+      const snapshotMap = new Map<string, { id: string; name: string; cf_project_id: number; cf_file_id: number; version?: string }>();
+      for (const snapshot of version.mod_snapshots || []) {
+        snapshotMap.set(snapshot.id, snapshot);
+      }
+
+      // Categorize mods: existing in library, need download (missing or different version)
       const existingModIds: string[] = [];
-      const unrestorableMods: Array<{ modId: string; reason: string }> = [];
+      const modsToDownload: Array<{
+        targetModId: string;
+        modName: string;
+        cfProjectId: number;
+        cfFileId: number;
+        reason: "missing" | "version_mismatch";
+      }> = [];
+      const unrestorableMods: Array<{ modId: string; modName: string; reason: string }> = [];
 
       for (const modId of version.mod_ids) {
         const mod = await metadataManager.getModById(modId);
+        const snapshot = snapshotMap.get(modId);
+
         if (mod) {
-          existingModIds.push(modId);
-        } else {
-          // Mod is missing - check if we have CF info in the version snapshot
-          const snapshot = version.mod_snapshots?.find(
-            (s: any) => s.id === modId
-          );
-          if (snapshot?.cf_project_id && snapshot?.cf_file_id) {
-            missingMods.push({
-              modId,
-              modName: snapshot.name || `Mod ${snapshot.cf_project_id}`,
+          // Mod exists in library with exact ID - check if version matches
+          if (snapshot && mod.cf_file_id !== snapshot.cf_file_id) {
+            // Same ID but file_id changed - this shouldn't happen with current ID scheme
+            // but handle it anyway - we need to download the correct version
+            console.log(`[Rollback] Mod ${modId} exists but file_id differs: lib=${mod.cf_file_id} vs snapshot=${snapshot.cf_file_id}`);
+            modsToDownload.push({
+              targetModId: modId,
+              modName: snapshot.name || mod.name,
               cfProjectId: snapshot.cf_project_id,
               cfFileId: snapshot.cf_file_id,
+              reason: "version_mismatch"
             });
           } else {
-            // Fallback: try to parse CF info from mod ID (format: cf-{projectId}-{fileId})
+            existingModIds.push(modId);
+          }
+        } else {
+          // Mod not in library - check snapshot for CF info
+          if (snapshot?.cf_project_id && snapshot?.cf_file_id) {
+            modsToDownload.push({
+              targetModId: modId,
+              modName: snapshot.name || modId,
+              cfProjectId: snapshot.cf_project_id,
+              cfFileId: snapshot.cf_file_id,
+              reason: "missing"
+            });
+          } else {
+            // Try parsing CF info from mod ID
             const cfIdMatch = modId.match(/^cf-(\d+)-(\d+)$/);
             if (cfIdMatch) {
               const projectId = parseInt(cfIdMatch[1], 10);
               const fileId = parseInt(cfIdMatch[2], 10);
-              console.log(
-                `[Rollback] Parsed CF info from mod ID: ${modId} -> project ${projectId}, file ${fileId}`
-              );
-              missingMods.push({
-                modId,
+              modsToDownload.push({
+                targetModId: modId,
                 modName: `CurseForge Mod ${projectId}`,
                 cfProjectId: projectId,
                 cfFileId: fileId,
+                reason: "missing"
               });
             } else {
-              // Mod is missing and has no CF info - cannot restore
-              console.warn(
-                `[Rollback] Mod ${modId} is missing and cannot be restored (no CF info)`
-              );
-              unrestorableMods.push({ modId, reason: "Not a CurseForge mod" });
+              unrestorableMods.push({ 
+                modId, 
+                modName: snapshot?.name || modId, 
+                reason: "No CurseForge info available" 
+              });
             }
           }
         }
       }
 
-      // Track successfully restored mods
+      // Track results
       const restoredModIds: string[] = [];
-      const failedMods: Array<{
-        modId: string;
-        modName: string;
-        reason: string;
-      }> = [];
+      const failedMods: Array<{ modId: string; modName: string; reason: string }> = [];
 
-      // Download missing mods from CurseForge
-      if (missingMods.length > 0 && win) {
+      // Download missing/different version mods from CurseForge
+      if (modsToDownload.length > 0 && win) {
         let downloadedCount = 0;
 
-        for (const missing of missingMods) {
-          if (!missing.cfProjectId || !missing.cfFileId) {
-            failedMods.push({
-              modId: missing.modId,
-              modName: missing.modName,
-              reason: "No CurseForge info",
-            });
-            continue;
-          }
-
+        for (const toDownload of modsToDownload) {
           try {
             win.webContents.send("rollback:progress", {
               current: ++downloadedCount,
-              total: missingMods.length,
-              modName: missing.modName,
+              total: modsToDownload.length,
+              modName: toDownload.modName,
             });
 
             // Get mod info from CF
-            const cfMod = await curseforgeService.getMod(missing.cfProjectId);
+            const cfMod = await curseforgeService.getMod(toDownload.cfProjectId);
             if (!cfMod) {
               failedMods.push({
-                modId: missing.modId,
-                modName: missing.modName,
+                modId: toDownload.targetModId,
+                modName: toDownload.modName,
                 reason: "Mod not found on CurseForge",
               });
               continue;
             }
 
-            const cfFile = await curseforgeService.getFile(
-              missing.cfProjectId,
-              missing.cfFileId
-            );
+            const cfFile = await curseforgeService.getFile(toDownload.cfProjectId, toDownload.cfFileId);
             if (!cfFile) {
               failedMods.push({
-                modId: missing.modId,
-                modName: missing.modName,
+                modId: toDownload.targetModId,
+                modName: toDownload.modName,
                 reason: "File version not found on CurseForge",
               });
               continue;
             }
 
-            // Add to library
-            const modpack = await metadataManager.getModpackById(modpackId);
-            // Detect content type from classId
-            const { getContentTypeFromClassId } = await import(
-              "./services/CurseForgeService"
-            );
+            // Add to library - this will create an entry with ID cf-{projectId}-{fileId}
+            const { getContentTypeFromClassId } = await import("./services/CurseForgeService");
             const contentType = getContentTypeFromClassId(cfMod.classId);
             const formattedMod = curseforgeService.modToLibraryFormat(
               cfMod,
               cfFile,
-              modpack?.loader || "forge",
-              modpack?.minecraft_version || "1.20.1",
+              modpack.loader || "forge",
+              modpack.minecraft_version || "1.20.1",
               contentType
             );
 
-            // addMod will generate the same ID based on cf_project_id and cf_file_id
             const addedMod = await metadataManager.addMod(formattedMod);
             restoredModIds.push(addedMod.id);
-
-            console.log(`[Rollback] Downloaded missing mod: ${cfMod.name}`);
+            console.log(`[Rollback] Downloaded mod: ${cfMod.name} (${toDownload.reason})`);
           } catch (err) {
-            console.error(
-              `[Rollback] Failed to download mod ${missing.cfProjectId}:`,
-              err
-            );
+            console.error(`[Rollback] Failed to download mod ${toDownload.cfProjectId}:`, err);
             failedMods.push({
-              modId: missing.modId,
-              modName: missing.modName,
+              modId: toDownload.targetModId,
+              modName: toDownload.modName,
               reason: (err as Error).message,
             });
           }
         }
       }
 
-      // Combine existing mods with successfully restored mods
-      const finalModIds = [...existingModIds, ...restoredModIds];
-
       // Add unrestorable mods to failedMods
       for (const unrestorable of unrestorableMods) {
         failedMods.push({
           modId: unrestorable.modId,
-          modName: unrestorable.modId,
+          modName: unrestorable.modName,
           reason: unrestorable.reason,
         });
       }
 
-      // Perform rollback with only the mods that exist
+      // Combine existing mods with successfully restored mods
+      const finalModIds = [...existingModIds, ...restoredModIds];
+
+      // Perform rollback with the final mod list
       const result = await metadataManager.rollbackToVersionWithMods(
         modpackId,
         versionId,
-        finalModIds
+        finalModIds,
+        { restoreConfigs: true }
       );
 
-      // After rollback, sync configs to the linked instance if exists
+      // Restore loader version from the target version
+      if (result && (version.loader || version.loader_version)) {
+        const loaderUpdate: { loader?: string; loader_version?: string } = {};
+        if (version.loader) loaderUpdate.loader = version.loader;
+        if (version.loader_version) loaderUpdate.loader_version = version.loader_version;
+        
+        await metadataManager.updateModpack(modpackId, loaderUpdate);
+        console.log(`[Rollback] Restored loader: ${version.loader} ${version.loader_version}`);
+
+        // Update linked instance loader version
+        const linkedInstance = await instanceService.getInstanceByModpack(modpackId);
+        if (linkedInstance) {
+          await instanceService.updateInstance(linkedInstance.id, {
+            loader: version.loader,
+            loaderVersion: version.loader_version
+          });
+          console.log(`[Rollback] Updated instance loader: ${version.loader} ${version.loader_version}`);
+        }
+      }
+
+      // Sync configs to the linked instance if exists
       if (result) {
         const linkedInstance = await instanceService.getInstanceByModpack(modpackId);
         if (linkedInstance) {
           console.log(`[Rollback] Syncing configs to instance ${linkedInstance.id}`);
           const overridesPath = metadataManager.getOverridesPath(modpackId);
 
-          // Copy restored configs from overrides to instance
           const configFolders = ["config", "kubejs", "defaultconfigs", "scripts"];
           for (const folder of configFolders) {
             const srcPath = path.join(overridesPath, folder);
@@ -1204,7 +1231,6 @@ async function initializeBackend() {
         }
       }
 
-      // Return detailed result
       return {
         success: result,
         restoredCount: restoredModIds.length,
@@ -1212,6 +1238,7 @@ async function initializeBackend() {
         failedMods: failedMods,
         totalMods: finalModIds.length,
         originalModCount: version.mod_ids.length,
+        loaderRestored: !!(version.loader || version.loader_version)
       };
     }
   );
@@ -2558,70 +2585,85 @@ async function initializeBackend() {
     return results;
   });
 
-  // Apply update = update the file ID in metadata
+  // Apply update = create a new mod entry with the new file and replace in modpacks
+  // This maintains proper version history since each mod version has a unique ID
   ipcMain.handle(
     "updates:applyUpdate",
-    async (_, modId: string, newFileId: number) => {
-      const mod = await metadataManager.getModById(modId);
-      if (!mod) return { success: false, error: "Mod not found" };
+    async (_, modId: string, newFileId: number, modpackId?: string) => {
+      const oldMod = await metadataManager.getModById(modId);
+      if (!oldMod) return { success: false, error: "Mod not found" };
 
-      if (!mod.cf_project_id) {
+      if (!oldMod.cf_project_id) {
         return { success: false, error: "Not a CurseForge mod" };
       }
 
+      // Check if new version already exists in library
+      const existingNewMod = await metadataManager.findModByCFIds(
+        oldMod.cf_project_id,
+        newFileId
+      );
+
       try {
-        const cfFile = await curseforgeService.getFile(
-          mod.cf_project_id,
-          newFileId
-        );
-        if (!cfFile)
-          return { success: false, error: "File not found on CurseForge" };
+        let newMod: Awaited<ReturnType<typeof metadataManager.getModById>>;
 
-        const cfMod = await curseforgeService.getMod(mod.cf_project_id);
-        if (!cfMod)
-          return { success: false, error: "Mod not found on CurseForge" };
+        if (existingNewMod) {
+          // New version already exists in library, just use it
+          newMod = existingNewMod;
+          console.log(`[Update] New version already exists: ${newMod.id}`);
+        } else {
+          // Download new version info and add to library
+          const cfFile = await curseforgeService.getFile(
+            oldMod.cf_project_id,
+            newFileId
+          );
+          if (!cfFile)
+            return { success: false, error: "File not found on CurseForge" };
 
-        // Detect content type from classId or preserve existing
-        const { getContentTypeFromClassId } = await import(
-          "./services/CurseForgeService"
-        );
-        const contentType = getContentTypeFromClassId(cfMod.classId);
+          const cfMod = await curseforgeService.getMod(oldMod.cf_project_id);
+          if (!cfMod)
+            return { success: false, error: "Mod not found on CurseForge" };
 
-        // Preserve the original loader preference when converting
-        const modData = curseforgeService.modToLibraryFormat(
-          cfMod,
-          cfFile,
-          mod.loader,
-          mod.game_version,
-          contentType
-        );
+          // Detect content type from classId or preserve existing
+          const { getContentTypeFromClassId } = await import(
+            "./services/CurseForgeService"
+          );
+          const contentType = getContentTypeFromClassId(cfMod.classId) || oldMod.content_type;
 
-        // Update mod in library with all new metadata
-        await metadataManager.updateMod(modId, {
-          cf_file_id: newFileId,
-          version: modData.version,
-          filename: modData.filename,
-          date_released: modData.date_released,
-          release_type: modData.release_type,
-          game_version: modData.game_version,
-          game_versions: modData.game_versions,
-          loader: modData.loader,
-          content_type: modData.content_type,
-          description: modData.description,
-          thumbnail_url: modData.thumbnail_url || undefined,
-          logo_url: modData.logo_url || undefined,
-          download_count: modData.download_count,
-          categories: modData.categories,
-          file_size: modData.file_size,
-          date_modified: modData.date_modified,
-          website_url: modData.website_url,
-        });
+          // Create new mod entry with same properties but new file
+          const modData = curseforgeService.modToLibraryFormat(
+            cfMod,
+            cfFile,
+            oldMod.loader,
+            oldMod.game_version,
+            contentType
+          );
 
-        // Note: The mod is updated in the library, and since modpacks reference
-        // mods by ID, all modpacks automatically see the updated version
-        // No need to update modpack files individually
+          // Add as NEW mod (will get ID: cf-{projectId}-{newFileId})
+          newMod = await metadataManager.addMod(modData);
+          console.log(`[Update] Created new mod version: ${newMod.id}`);
+        }
 
-        return { success: true };
+        if (!newMod) {
+          return { success: false, error: "Failed to create new mod version" };
+        }
+
+        // Replace old mod ID with new mod ID in the specified modpack or all modpacks
+        if (modpackId) {
+          // Update only the specified modpack
+          await metadataManager.replaceModInModpack(modpackId, modId, newMod.id);
+          console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${modpackId}`);
+        } else {
+          // Update all modpacks that contain this mod
+          const modpacks = await metadataManager.getAllModpacks();
+          for (const mp of modpacks) {
+            if (mp.mod_ids.includes(modId)) {
+              await metadataManager.replaceModInModpack(mp.id, modId, newMod.id);
+              console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${mp.id}`);
+            }
+          }
+        }
+
+        return { success: true, newModId: newMod.id, oldModId: modId };
       } catch (error: any) {
         return { success: false, error: error.message };
       }
@@ -2954,6 +2996,22 @@ async function initializeBackend() {
       return { success: false, modsDownloaded: 0, modsSkipped: 0, configsCopied: 0, configsSkipped: 0, errors: ["Modpack not found"], warnings: [] };
     }
 
+    // Update instance loader and loaderVersion to match modpack (so next launch installs correct loader)
+    const instance = await instanceService.getInstance(instanceId);
+    if (instance) {
+      const needsLoaderUpdate = 
+        instance.loader !== modpack.loader || 
+        instance.loaderVersion !== modpack.loader_version;
+      
+      if (needsLoaderUpdate) {
+        console.log(`[instance:syncModpack] Updating instance loader: ${instance.loader}/${instance.loaderVersion} -> ${modpack.loader}/${modpack.loader_version}`);
+        await instanceService.updateInstance(instanceId, {
+          loader: modpack.loader,
+          loaderVersion: modpack.loader_version
+        });
+      }
+    }
+
     const mods = await metadataManager.getModsInModpack(modpackId);
     const disabledModIds = new Set(modpack.disabled_mod_ids || []);
 
@@ -3085,7 +3143,7 @@ async function initializeBackend() {
   ipcMain.handle("instance:checkSyncStatus", async (_, instanceId: string, modpackId: string) => {
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) {
-      return { needsSync: false, missingInInstance: [], extraInInstance: [], disabledMismatch: [], configDifferences: 0, totalDifferences: 0 };
+      return { needsSync: false, missingInInstance: [], extraInInstance: [], disabledMismatch: [], configDifferences: 0, totalDifferences: 0, loaderVersionMismatch: false };
     }
 
     const mods = await metadataManager.getModsInModpack(modpackId);
@@ -3098,7 +3156,20 @@ async function initializeBackend() {
     // Get overrides path for config comparison - use camelCase field name
     const overridesPath = modpack.overridesPath;
 
-    return instanceService.checkSyncStatus(instanceId, modData, modpack.disabled_mod_ids || [], overridesPath);
+    const syncStatus = await instanceService.checkSyncStatus(instanceId, modData, modpack.disabled_mod_ids || [], overridesPath);
+    
+    // Check loader version mismatch
+    const instance = await instanceService.getInstance(instanceId);
+    const loaderVersionMismatch = instance 
+      ? (instance.loader !== modpack.loader || instance.loaderVersion !== modpack.loader_version)
+      : false;
+    
+    return {
+      ...syncStatus,
+      loaderVersionMismatch,
+      needsSync: syncStatus.needsSync || loaderVersionMismatch,
+      totalDifferences: syncStatus.totalDifferences + (loaderVersionMismatch ? 1 : 0)
+    };
   });
 
   // Get modified configs in instance compared to modpack
@@ -3312,8 +3383,16 @@ async function initializeBackend() {
         overridesPath
       );
 
+      // Check loader version mismatch (not checked by instanceService.checkSyncStatus)
+      const loaderVersionMismatch = 
+        instance.loader !== modpack.loader || 
+        instance.loaderVersion !== modpack.loader_version;
+      
+      const effectiveNeedsSync = syncStatus.needsSync || loaderVersionMismatch;
+      const effectiveTotalDifferences = syncStatus.totalDifferences + (loaderVersionMismatch ? 1 : 0);
+
       // If needs sync and auto-sync is enabled (or forced)
-      if (syncStatus.needsSync && (syncSettings.autoSyncBeforeLaunch || options?.forceSync)) {
+      if (effectiveNeedsSync && (syncSettings.autoSyncBeforeLaunch || options?.forceSync)) {
         // Return sync needed info if confirmation is required and not forced
         if (syncSettings.showSyncConfirmation && !options?.forceSync) {
           return {
@@ -3322,11 +3401,23 @@ async function initializeBackend() {
             needsSync: true,
             syncStatus: {
               ...syncStatus,
-              differences: syncStatus.totalDifferences,
+              loaderVersionMismatch,
+              needsSync: effectiveNeedsSync,
+              totalDifferences: effectiveTotalDifferences,
+              differences: effectiveTotalDifferences,
               lastSynced: instance.lastSynced
             },
             syncPerformed: false
           };
+        }
+
+        // Update loader version on instance before sync if needed
+        if (loaderVersionMismatch) {
+          console.log(`[smartLaunch] Updating instance loader: ${instance.loader}/${instance.loaderVersion} -> ${modpack.loader}/${modpack.loader_version}`);
+          await instanceService.updateInstance(instanceId, {
+            loader: modpack.loader,
+            loaderVersion: modpack.loader_version
+          });
         }
 
         // Perform sync

@@ -331,7 +331,7 @@ export interface RemoteUpdateResult {
 
 /** A single change in a modpack version */
 export interface ModpackChange {
-  type: "add" | "remove" | "update" | "enable" | "disable" | "version_control";
+  type: "add" | "remove" | "update" | "enable" | "disable" | "version_control" | "loader_change";
   modId: string;
   modName: string;
   /** For updates: previous version string */
@@ -362,6 +362,10 @@ export interface ModpackVersion {
   mod_ids: string[];
   /** Snapshot of disabled mod IDs at this version */
   disabled_mod_ids?: string[];
+  /** Loader type at this version (forge, fabric, etc.) */
+  loader?: string;
+  /** Loader version at this version */
+  loader_version?: string;
   /** Parent version ID (for branching support in the future) */
   parent_id?: string;
   /** Snapshots of CF mods for rollback restoration */

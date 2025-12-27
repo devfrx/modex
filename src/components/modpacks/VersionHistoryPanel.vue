@@ -27,6 +27,7 @@ import {
     Undo2,
     Lock,
     Globe,
+    Box,
 } from "lucide-vue-next";
 
 const props = defineProps<{
@@ -65,6 +66,7 @@ const unsavedChanges = ref<{
         modsEnabled: Array<{ id: string; name: string }>;
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{
             filePath: string;
@@ -102,7 +104,8 @@ const configChangeCount = computed(() => {
 const unsavedChangeCount = computed(() => {
     if (!unsavedChanges.value?.changes) return 0;
     const c = unsavedChanges.value.changes;
-    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + configChangeCount.value;
+    const loaderChange = c.loaderChanged ? 1 : 0;
+    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + loaderChange + configChangeCount.value;
 });
 
 // Helper functions for config display
@@ -425,6 +428,8 @@ function formatDate(dateString: string): string {
 function getChangeIcon(type: ModpackChange["type"], modId?: string) {
     // Config changes have special icon
     if (modId === "_configs_") return FileCode;
+    // Loader changes have special icon
+    if (modId === "_loader_") return Box;
 
     switch (type) {
         case "add": return Plus;
@@ -433,6 +438,7 @@ function getChangeIcon(type: ModpackChange["type"], modId?: string) {
         case "enable": return ToggleRight;
         case "disable": return ToggleLeft;
         case "version_control": return GitBranch;
+        case "loader_change": return Box;
     }
 }
 
@@ -440,6 +446,8 @@ function getChangeIcon(type: ModpackChange["type"], modId?: string) {
 function getChangeColor(type: ModpackChange["type"], modId?: string): string {
     // Config changes have special color
     if (modId === "_configs_") return "text-purple-500 bg-purple-500/10";
+    // Loader changes have special color
+    if (modId === "_loader_") return "text-orange-500 bg-orange-500/10";
 
     switch (type) {
         case "add": return "text-emerald-500 bg-emerald-500/10";
@@ -448,6 +456,7 @@ function getChangeColor(type: ModpackChange["type"], modId?: string): string {
         case "enable": return "text-emerald-500 bg-emerald-500/10";
         case "disable": return "text-amber-500 bg-amber-500/10";
         case "version_control": return "text-violet-500 bg-violet-500/10";
+        case "loader_change": return "text-orange-500 bg-orange-500/10";
         default: return "text-muted-foreground bg-muted";
     }
 }
@@ -455,6 +464,11 @@ function getChangeColor(type: ModpackChange["type"], modId?: string): string {
 // Check if change is config-related
 function isConfigChange(change: ModpackChange): boolean {
     return change.modId === "_configs_";
+}
+
+// Check if change is loader-related
+function isLoaderChange(change: ModpackChange): boolean {
+    return change.modId === "_loader_" || change.type === "loader_change";
 }
 
 // Watch for modpack changes
@@ -617,6 +631,22 @@ watch(() => props.modpackId, () => {
                                     </button>
                                 </div>
                             </div>
+                            <!-- Loader Changed -->
+                            <div v-if="unsavedChanges.changes.loaderChanged" class="space-y-1">
+                                <div class="flex items-center gap-1.5">
+                                    <Box class="w-3.5 h-3.5 text-orange-500" />
+                                    <span>Loader changed</span>
+                                </div>
+                                <div class="ml-5 flex items-center gap-2 text-xs">
+                                    <span class="text-muted-foreground font-mono flex items-center gap-1">
+                                        <span class="text-red-400/70">{{ unsavedChanges.changes.loaderChanged.oldVersion
+                                            || unsavedChanges.changes.loaderChanged.oldLoader || 'None' }}</span>
+                                        <span class="text-white/40">→</span>
+                                        <span class="text-green-400">{{ unsavedChanges.changes.loaderChanged.newVersion
+                                            || unsavedChanges.changes.loaderChanged.newLoader || 'None' }}</span>
+                                    </span>
+                                </div>
+                            </div>
                             <!-- Mods Enabled -->
                             <div v-if="unsavedChanges.changes.modsEnabled.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
@@ -670,7 +700,7 @@ watch(() => props.modpackId, () => {
                                     @click="toggleChangeSection('configs')">
                                     <Settings class="w-3.5 h-3.5 text-purple-500" />
                                     <span>{{ configChangeCount }} config change{{ configChangeCount !== 1 ? 's' : ''
-                                        }}</span>
+                                    }}</span>
                                     <component :is="expandedChangeSections.has('configs') ? ChevronUp : ChevronDown"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
@@ -682,7 +712,7 @@ watch(() => props.modpackId, () => {
                                         :key="idx"
                                         class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
                                         <span v-if="cfg.line" class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
-                                            }}</span>
+                                        }}</span>
                                         <span class="text-white/60 truncate max-w-[100px]" :title="cfg.filePath">{{
                                             getFileName(cfg.filePath) }}</span>
                                         <span class="text-white/80 font-medium truncate max-w-[80px]">{{
@@ -811,7 +841,8 @@ watch(() => props.modpackId, () => {
                                                     {{ isConfigChange(change) ? 'Configuration files modified' :
                                                         change.modName }}
                                                 </span>
-                                                <span v-if="change.type === 'update' && !isConfigChange(change)"
+                                                <span
+                                                    v-if="(change.type === 'update' || change.type === 'loader_change') && !isConfigChange(change)"
                                                     class="text-xs text-muted-foreground font-mono flex items-center gap-1 shrink-0">
                                                     <span class="text-red-400/70">{{ change.previousVersion }}</span>
                                                     <span class="text-white/40">→</span>

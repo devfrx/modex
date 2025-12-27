@@ -1060,120 +1060,126 @@ function nodeRadius(node: GraphNode) {
 
 async function loadData() {
   isLoading.value = true;
-  checkSavedPositions();
-
-  const mods: Mod[] = (await window.api.mods.getAll()) || [];
-  const modpacks: Modpack[] = (await window.api.modpacks.getAll()) || [];
-  const savedPositions = loadSavedPositions();
-
-  const nodeList: GraphNode[] = [];
-  const linkList: { source: string; target: string }[] = [];
-  const nodeById = new Map<string, GraphNode>();
-
-  const centerX = width.value / 2;
-  const centerY = height.value / 2;
-
-  // Folders - spread in a circle
-  folders.value.forEach((f: any, i: number) => {
-    const angle = (i / Math.max(folders.value.length, 1)) * Math.PI * 2;
-    const radius = 150;
-    const saved = savedPositions[f.id];
-    const n: GraphNode = {
-      id: f.id,
-      type: "folder",
-      label: f.name.slice(0, 12),
-      color: f.color || "#6366f1",
-      data: f,
-      x: saved?.x ?? centerX + Math.cos(angle) * radius,
-      y: saved?.y ?? centerY + Math.sin(angle) * radius,
-    };
-    nodeList.push(n);
-    nodeById.set(n.id, n);
-    if (f.parentId) {
-      linkList.push({ source: f.parentId, target: f.id });
-    }
-  });
-
-  // Mods - spread in outer ring
-  mods.forEach((m, i) => {
-    const angle = (i / Math.max(mods.length, 1)) * Math.PI * 2;
-    const radius = 300;
-    const saved = savedPositions[m.id];
-
-    // Determine node type based on content_type
-    const contentType = m.content_type || "mod";
-    const nodeType: "mod" | "resourcepack" | "shader" = contentType === "resourcepack" ? "resourcepack" : contentType === "shader" ? "shader" : "mod";
-    const nodeColor = contentType === "resourcepack" ? "#3b82f6" : contentType === "shader" ? "#ec4899" : "#10b981";
-
-    const n: GraphNode = {
-      id: m.id,
-      type: nodeType,
-      label: (m.name || "mod").slice(0, 10),
-      color: nodeColor,
-      data: m,
-      x:
-        saved?.x ??
-        centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 50,
-      y:
-        saved?.y ??
-        centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
-    };
-    nodeList.push(n);
-    nodeById.set(n.id, n);
-
-    const folderId = getModFolder(m.id);
-    if (folderId) {
-      linkList.push({ source: folderId, target: m.id });
-    }
-  });
-
-  // Batch load all modpack mods in a single call for performance
-  const modpackIds = modpacks.map((p) => p.id);
-  let modpackModsMap: Record<string, Mod[]> = {};
+  
   try {
-    modpackModsMap = await window.api.modpacks.getModsMultiple(modpackIds);
-  } catch (e) {
-    console.warn("Failed to batch load modpack mods:", e);
-  }
+    checkSavedPositions();
 
-  // Modpacks - place on right side
-  for (let i = 0; i < modpacks.length; i++) {
-    const pack = modpacks[i];
-    const nodeId = `pack_${pack.id}`;
-    const saved = savedPositions[nodeId];
-    const n: GraphNode = {
-      id: nodeId,
-      type: "modpack",
-      label: (pack.name || "pack").slice(0, 10),
-      color: "#f59e0b",
-      data: pack,
-      x: saved?.x ?? centerX + 400 + (Math.random() - 0.5) * 100,
-      y: saved?.y ?? centerY - 150 + i * 80,
-    };
-    nodeList.push(n);
-    nodeById.set(n.id, n);
+    const mods: Mod[] = (await window.api.mods.getAll()) || [];
+    const modpacks: Modpack[] = (await window.api.modpacks.getAll()) || [];
+    const savedPositions = loadSavedPositions();
 
-    // Use batch-loaded mods
-    const modsInPack = modpackModsMap[pack.id] || [];
-    modsInPack.forEach((m) => {
-      linkList.push({ source: m.id, target: n.id });
+    const nodeList: GraphNode[] = [];
+    const linkList: { source: string; target: string }[] = [];
+    const nodeById = new Map<string, GraphNode>();
+
+    const centerX = width.value / 2;
+    const centerY = height.value / 2;
+
+    // Folders - spread in a circle
+    folders.value.forEach((f: any, i: number) => {
+      const angle = (i / Math.max(folders.value.length, 1)) * Math.PI * 2;
+      const radius = 150;
+      const saved = savedPositions[f.id];
+      const n: GraphNode = {
+        id: f.id,
+        type: "folder",
+        label: f.name.slice(0, 12),
+        color: f.color || "#6366f1",
+        data: f,
+        x: saved?.x ?? centerX + Math.cos(angle) * radius,
+        y: saved?.y ?? centerY + Math.sin(angle) * radius,
+      };
+      nodeList.push(n);
+      nodeById.set(n.id, n);
+      if (f.parentId) {
+        linkList.push({ source: f.parentId, target: f.id });
+      }
     });
-  }
 
-  const graphLinks: GraphLink[] = [];
-  linkList.forEach((l) => {
-    const src = nodeById.get(l.source);
-    const tgt = nodeById.get(l.target);
-    if (src && tgt) {
-      graphLinks.push({ source: src, target: tgt });
+    // Mods - spread in outer ring
+    mods.forEach((m, i) => {
+      const angle = (i / Math.max(mods.length, 1)) * Math.PI * 2;
+      const radius = 300;
+      const saved = savedPositions[m.id];
+
+      // Determine node type based on content_type
+      const contentType = m.content_type || "mod";
+      const nodeType: "mod" | "resourcepack" | "shader" = contentType === "resourcepack" ? "resourcepack" : contentType === "shader" ? "shader" : "mod";
+      const nodeColor = contentType === "resourcepack" ? "#3b82f6" : contentType === "shader" ? "#ec4899" : "#10b981";
+
+      const n: GraphNode = {
+        id: m.id,
+        type: nodeType,
+        label: (m.name || "mod").slice(0, 10),
+        color: nodeColor,
+        data: m,
+        x:
+          saved?.x ??
+          centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 50,
+        y:
+          saved?.y ??
+          centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
+      };
+      nodeList.push(n);
+      nodeById.set(n.id, n);
+
+      const folderId = getModFolder(m.id);
+      if (folderId) {
+        linkList.push({ source: folderId, target: m.id });
+      }
+    });
+
+    // Batch load all modpack mods in a single call for performance
+    const modpackIds = modpacks.map((p) => p.id);
+    let modpackModsMap: Record<string, Mod[]> = {};
+    try {
+      modpackModsMap = await window.api.modpacks.getModsMultiple(modpackIds);
+    } catch (e) {
+      console.warn("Failed to batch load modpack mods:", e);
     }
-  });
 
-  nodes.value = nodeList;
-  links.value = graphLinks;
+    // Modpacks - place on right side
+    for (let i = 0; i < modpacks.length; i++) {
+      const pack = modpacks[i];
+      const nodeId = `pack_${pack.id}`;
+      const saved = savedPositions[nodeId];
+      const n: GraphNode = {
+        id: nodeId,
+        type: "modpack",
+        label: (pack.name || "pack").slice(0, 10),
+        color: "#f59e0b",
+        data: pack,
+        x: saved?.x ?? centerX + 400 + (Math.random() - 0.5) * 100,
+        y: saved?.y ?? centerY - 150 + i * 80,
+      };
+      nodeList.push(n);
+      nodeById.set(n.id, n);
 
-  initSimulation();
-  isLoading.value = false;
+      // Use batch-loaded mods
+      const modsInPack = modpackModsMap[pack.id] || [];
+      modsInPack.forEach((m) => {
+        linkList.push({ source: m.id, target: n.id });
+      });
+    }
+
+    const graphLinks: GraphLink[] = [];
+    linkList.forEach((l) => {
+      const src = nodeById.get(l.source);
+      const tgt = nodeById.get(l.target);
+      if (src && tgt) {
+        graphLinks.push({ source: src, target: tgt });
+      }
+    });
+
+    nodes.value = nodeList;
+    links.value = graphLinks;
+
+    initSimulation();
+  } catch (err) {
+    console.error("Failed to load sandbox data:", err);
+  } finally {
+    isLoading.value = false;
+  }
 }
 
 function initSimulation() {

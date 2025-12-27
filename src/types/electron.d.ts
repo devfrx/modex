@@ -63,6 +63,7 @@ export interface RollbackResult {
   failedMods: Array<{ modId: string; modName: string; reason: string }>;
   totalMods: number;
   originalModCount: number;
+  loaderRestored?: boolean;
 }
 
 // ==================== ELECTRON API ====================
@@ -109,6 +110,8 @@ export interface ElectronAPI {
       contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks"
     ) => Promise<CFCategory[]>;
     getPopular: (gameVersion?: string, modLoader?: string) => Promise<CFMod[]>;
+    /** Get available mod loader versions for a Minecraft version */
+    getModLoaders: (gameVersion?: string) => Promise<CFModLoader[]>;
     /** Add a mod from CurseForge to library (metadata only, no download) */
     addToLibrary: (
       projectId: number,
@@ -222,6 +225,7 @@ export interface ElectronAPI {
         modsEnabled: Array<{ id: string; name: string }>;
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{
           filePath: string;
@@ -510,11 +514,17 @@ export interface ElectronAPI {
     ) => Promise<CFFile | null>;
     checkAll: () => Promise<ModUpdateInfo[]>;
     checkModpack: (modpackId: string) => Promise<ModUpdateInfo[]>;
-    /** Apply update by storing new file ID in metadata */
+    /** Apply update by creating new mod entry with new file ID */
     applyUpdate: (
       modId: string,
-      newFileId: number
-    ) => Promise<{ success: boolean; error?: string }>;
+      newFileId: number,
+      modpackId?: string
+    ) => Promise<{
+      success: boolean;
+      error?: string;
+      newModId?: string;
+      oldModId?: string;
+    }>;
   };
 
   // ========== DIALOGS ==========
@@ -697,6 +707,7 @@ export interface ElectronAPI {
       disabledMismatch: Array<{ filename: string; issue: string }>;
       configDifferences: number;
       totalDifferences: number;
+      loaderVersionMismatch?: boolean;
     }>;
     export: (instanceId: string) => Promise<boolean>;
     duplicate: (instanceId: string, newName: string) => Promise<ModexInstance | null>;
@@ -965,6 +976,15 @@ export interface CFPagination {
   pageSize: number;
   resultCount: number;
   totalCount: number;
+}
+
+export interface CFModLoader {
+  name: string;
+  gameVersion: string;
+  latest: boolean;
+  recommended: boolean;
+  dateModified: string;
+  type: number;
 }
 
 // ==================== ANALYZER TYPES ====================

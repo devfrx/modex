@@ -139,7 +139,7 @@ interface AppConfig {
 // ==================== VERSION CONTROL TYPES ====================
 
 export interface ModpackChange {
-  type: "add" | "remove" | "update" | "enable" | "disable" | "version_control";
+  type: "add" | "remove" | "update" | "enable" | "disable" | "version_control" | "loader_change";
   modId: string;
   modName: string;
   previousVersion?: string;
@@ -157,6 +157,10 @@ export interface ModpackVersion {
   changes: ModpackChange[];
   mod_ids: string[];
   disabled_mod_ids?: string[];
+  /** Loader type at this version (forge, fabric, etc.) */
+  loader?: string;
+  /** Loader version at this version */
+  loader_version?: string;
   parent_id?: string;
   /** Snapshots of CF mods for rollback restoration */
   mod_snapshots?: Array<{
@@ -782,6 +786,7 @@ export class MetadataManager {
       version: original.version,
       minecraft_version: original.minecraft_version,
       loader: original.loader,
+      loader_version: original.loader_version,
       description: original.description,
     });
 
@@ -1009,6 +1014,7 @@ export class MetadataManager {
       modsEnabled: Array<{ id: string; name: string }>;
       modsDisabled: Array<{ id: string; name: string }>;
       modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+      loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
       configsChanged: boolean;
       configDetails: Array<{ 
         filePath: string; 
@@ -1029,6 +1035,7 @@ export class MetadataManager {
         modsEnabled: [] as Array<{ id: string; name: string }>,
         modsDisabled: [] as Array<{ id: string; name: string }>,
         modsUpdated: [] as Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>,
+        loaderChanged: null as { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null,
         configsChanged: false,
         configDetails: [] as Array<{ filePath: string; keyPath: string; line?: number; oldValue: any; newValue: any; timestamp: string }>,
       },
@@ -1064,6 +1071,21 @@ export class MetadataManager {
       || history.versions[history.versions.length - 1];
     result.lastVersion = currentVersion;
 
+    // Check for loader changes
+    const savedLoader = currentVersion.loader || modpack.loader; // Fallback to current if not saved in version
+    const savedLoaderVersion = currentVersion.loader_version;
+    const currentLoader = modpack.loader;
+    const currentLoaderVersion = modpack.loader_version;
+
+    if (savedLoader !== currentLoader || savedLoaderVersion !== currentLoaderVersion) {
+      result.changes.loaderChanged = {
+        oldLoader: savedLoader,
+        newLoader: currentLoader,
+        oldVersion: savedLoaderVersion,
+        newVersion: currentLoaderVersion
+      };
+    }
+
     // Compare current mod list with saved version
     const savedModIds = new Set(currentVersion.mod_ids || []);
     const currentModIds = new Set(modpack.mod_ids || []);
@@ -1071,20 +1093,61 @@ export class MetadataManager {
     const currentDisabledIds = new Set(modpack.disabled_mod_ids || []);
     const savedSnapshots = currentVersion.mod_snapshots || [];
     const snapshotMap = new Map(savedSnapshots.map(s => [s.id, s]));
+    // Map by cf_project_id to detect updates (same project, different file)
+    const snapshotByProjectId = new Map(savedSnapshots.filter(s => s.cf_project_id).map(s => [s.cf_project_id, s]));
 
     const library = await this.loadLibrary();
+    
+    // Build maps of current mods by project ID
+    const currentModsByProjectId = new Map<number, typeof library.mods[0]>();
+    for (const modId of currentModIds) {
+      const mod = library.mods.find(m => m.id === modId);
+      if (mod?.cf_project_id) {
+        currentModsByProjectId.set(mod.cf_project_id, mod);
+      }
+    }
+    
+    // Track which mods are updates (to exclude from add/remove)
+    const updatedProjectIds = new Set<number>();
 
-    // Find added mods
+    // First pass: detect updates (same cf_project_id, different file)
+    for (const modId of currentModIds) {
+      const mod = library.mods.find(m => m.id === modId);
+      if (!mod?.cf_project_id) continue;
+      
+      // Check if same project existed in saved version with different file
+      const savedSnapshot = snapshotByProjectId.get(mod.cf_project_id);
+      if (savedSnapshot && savedSnapshot.id !== modId) {
+        // Same project, different ID = update
+        updatedProjectIds.add(mod.cf_project_id);
+        const oldVersion = savedSnapshot.version || `file:${savedSnapshot.cf_file_id}`;
+        const newVersion = mod.version || `file:${mod.cf_file_id}`;
+        result.changes.modsUpdated.push({ 
+          id: modId, 
+          name: mod.name || modId,
+          oldVersion,
+          newVersion
+        });
+      }
+    }
+
+    // Find added mods (excluding updates)
     for (const modId of currentModIds) {
       if (!savedModIds.has(modId)) {
         const mod = library.mods.find(m => m.id === modId);
+        // Skip if this is an update
+        if (mod?.cf_project_id && updatedProjectIds.has(mod.cf_project_id)) continue;
         result.changes.modsAdded.push({ id: modId, name: mod?.name || modId });
       }
     }
 
-    // Find removed mods - use snapshots to get names for deleted mods
+    // Find removed mods (excluding updates)
     for (const modId of savedModIds) {
       if (!currentModIds.has(modId)) {
+        // Check if this was replaced by an update
+        const savedSnapshot = snapshotMap.get(modId);
+        if (savedSnapshot?.cf_project_id && updatedProjectIds.has(savedSnapshot.cf_project_id)) continue;
+        
         // First try to find in library
         let modName = library.mods.find(m => m.id === modId)?.name;
         // If not in library, try to get from saved version snapshots
@@ -1096,9 +1159,8 @@ export class MetadataManager {
       }
     }
 
-    // Find updated mods (same project, different file/version)
+    // Find updated mods with same ID but different cf_file_id (edge case: in-place update)
     for (const modId of currentModIds) {
-      // Only check mods that exist in both saved and current
       if (!savedModIds.has(modId)) continue;
       
       const mod = library.mods.find(m => m.id === modId);
@@ -1110,14 +1172,17 @@ export class MetadataManager {
       // Compare file IDs - if different, the mod has been updated
       if (mod.cf_file_id !== savedSnapshot.cf_file_id) {
         // Use real versions if available, fall back to file IDs
-        const oldVersion = (savedSnapshot as any).version || `file:${savedSnapshot.cf_file_id}`;
+        const oldVersion = savedSnapshot.version || `file:${savedSnapshot.cf_file_id}`;
         const newVersion = mod.version || `file:${mod.cf_file_id}`;
-        result.changes.modsUpdated.push({ 
-          id: modId, 
-          name: mod.name || modId,
-          oldVersion,
-          newVersion
-        });
+        // Avoid duplicates
+        if (!result.changes.modsUpdated.find(u => u.id === modId)) {
+          result.changes.modsUpdated.push({ 
+            id: modId, 
+            name: mod.name || modId,
+            oldVersion,
+            newVersion
+          });
+        }
       }
     }
 
@@ -1195,6 +1260,7 @@ export class MetadataManager {
       result.changes.modsUpdated.length > 0 ||
       result.changes.modsEnabled.length > 0 ||
       result.changes.modsDisabled.length > 0 ||
+      result.changes.loaderChanged !== null ||
       result.changes.configsChanged;
 
     return result;
@@ -1260,6 +1326,15 @@ export class MetadataManager {
     // Restore mod list (only existing mods)
     modpack.mod_ids = validModIds;
     modpack.disabled_mod_ids = validDisabledIds;
+    
+    // Restore loader from the saved version
+    if (currentVersion.loader) {
+      modpack.loader = currentVersion.loader;
+    }
+    if (currentVersion.loader_version) {
+      modpack.loader_version = currentVersion.loader_version;
+    }
+    
     modpack.updated_at = new Date().toISOString();
 
     await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
@@ -1267,29 +1342,9 @@ export class MetadataManager {
     result.restoredMods = validModIds.length;
     result.skippedMods = missingModIds.length;
 
-    // Restore mod versions from snapshots (only for mods that exist)
-    const savedSnapshots = currentVersion.mod_snapshots || [];
-    if (savedSnapshots.length > 0) {
-      let libraryChanged = false;
-      
-      for (const snapshot of savedSnapshots) {
-        // Only restore versions for mods that still exist
-        if (!libraryModIds.has(snapshot.id)) continue;
-        
-        const mod = library.mods.find(m => m.id === snapshot.id);
-        if (mod && mod.cf_file_id !== snapshot.cf_file_id) {
-          // Restore the saved file ID
-          mod.cf_file_id = snapshot.cf_file_id;
-          mod.cf_project_id = snapshot.cf_project_id;
-          libraryChanged = true;
-        }
-      }
-      
-      if (libraryChanged) {
-        await this.safeWriteJson(this.libraryPath, library);
-        console.log(`[Version Control] Restored mod versions for modpack ${modpackId}`);
-      }
-    }
+    // Note: We don't modify library mods here - each mod version has its own unique ID
+    // (cf-{projectId}-{fileId}). If a mod was updated, the old version ID would be different.
+    // The validModIds already contains the correct IDs from the saved version.
 
     // Restore config snapshot if available (overrides folder)
     if (currentVersion.config_snapshot_id) {
@@ -1302,6 +1357,9 @@ export class MetadataManager {
     console.log(`[Version Control] Reverted modpack ${modpackId} to version ${currentVersion.id}`);
     console.log(`  - Restored: ${result.restoredMods} mods`);
     console.log(`  - Skipped (deleted from library): ${result.skippedMods} mods`);
+    if (currentVersion.loader || currentVersion.loader_version) {
+      console.log(`  - Restored loader: ${currentVersion.loader} ${currentVersion.loader_version}`);
+    }
 
     result.success = true;
     return result;
@@ -2061,6 +2119,44 @@ export class MetadataManager {
   }
 
   /**
+   * Replace one mod with another in a modpack
+   * Used for updating mods (old version -> new version)
+   */
+  async replaceModInModpack(
+    modpackId: string,
+    oldModId: string,
+    newModId: string
+  ): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return false;
+
+    // Check if old mod is in the pack
+    const oldIndex = modpack.mod_ids.indexOf(oldModId);
+    if (oldIndex < 0) return false;
+
+    // Check if new mod is already in the pack (avoid duplicates)
+    if (modpack.mod_ids.includes(newModId)) {
+      // Just remove the old one
+      modpack.mod_ids = modpack.mod_ids.filter(id => id !== oldModId);
+    } else {
+      // Replace old with new at the same position
+      modpack.mod_ids[oldIndex] = newModId;
+    }
+
+    // If old mod was disabled, make new mod disabled too
+    if (modpack.disabled_mod_ids?.includes(oldModId)) {
+      modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(id => id !== oldModId);
+      if (!modpack.disabled_mod_ids.includes(newModId)) {
+        modpack.disabled_mod_ids.push(newModId);
+      }
+    }
+
+    modpack.updated_at = new Date().toISOString();
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return true;
+  }
+
+  /**
    * Toggle a mod's enabled/disabled state in a modpack
    * Disabled mods remain in the pack but won't be included in exports
    */
@@ -2468,6 +2564,8 @@ export class MetadataManager {
       changes: [],
       mod_ids: [...modpack.mod_ids],
       disabled_mod_ids: [...(modpack.disabled_mod_ids || [])],
+      loader: modpack.loader,
+      loader_version: modpack.loader_version,
       mod_snapshots: modSnapshots,
       config_snapshot_id: configSnapshotId || undefined,
     };
@@ -2532,6 +2630,24 @@ export class MetadataManager {
       library
     );
     const changes = [...modChanges, ...disabledChanges];
+
+    // Check for loader changes
+    const savedLoader = currentVersion.loader || modpack.loader;
+    const savedLoaderVersion = currentVersion.loader_version;
+    const currentLoader = modpack.loader;
+    const currentLoaderVersion = modpack.loader_version;
+    
+    if (savedLoader !== currentLoader || savedLoaderVersion !== currentLoaderVersion) {
+      const oldLoaderStr = savedLoaderVersion ? `${savedLoader} ${savedLoaderVersion}` : savedLoader;
+      const newLoaderStr = currentLoaderVersion ? `${currentLoader} ${currentLoaderVersion}` : currentLoader;
+      changes.push({
+        type: "loader_change" as const,
+        modId: "_loader_",
+        modName: "Mod Loader",
+        previousVersion: oldLoaderStr,
+        newVersion: newLoaderStr
+      });
+    }
 
     // If no mod changes and no config changes flag and not forced, don't create a new version
     if (changes.length === 0 && !hasConfigChanges && !forceCreate) {
@@ -2600,6 +2716,8 @@ export class MetadataManager {
       changes,
       mod_ids: [...modpack.mod_ids],
       disabled_mod_ids: [...(modpack.disabled_mod_ids || [])],
+      loader: modpack.loader,
+      loader_version: modpack.loader_version,
       parent_id: currentVersion.id,
       mod_snapshots: modSnapshots,
       config_snapshot_id: configSnapshotId || undefined,
@@ -2717,12 +2835,53 @@ export class MetadataManager {
     const newSet = new Set(newModIds);
     const modMap = new Map(library.mods.map((m) => [m.id, m]));
     const snapshotMap = new Map(oldSnapshots?.map(s => [s.id, s]) || []);
+    
+    // Build maps by cf_project_id for detecting updates (same project, different file)
+    const snapshotByProjectId = new Map(
+      oldSnapshots?.filter(s => s.cf_project_id).map(s => [s.cf_project_id, s]) || []
+    );
+    const currentModsByProjectId = new Map<number, typeof library.mods[0]>();
+    for (const modId of newModIds) {
+      const mod = modMap.get(modId);
+      if (mod?.cf_project_id) {
+        currentModsByProjectId.set(mod.cf_project_id, mod);
+      }
+    }
+    
+    // Track which project IDs are updates (to exclude from add/remove)
+    const updatedProjectIds = new Set<number>();
+    
+    // First pass: detect updates (same cf_project_id, different ID/file)
+    for (const modId of newModIds) {
+      const mod = modMap.get(modId);
+      if (!mod?.cf_project_id) continue;
+      
+      const oldSnapshot = snapshotByProjectId.get(mod.cf_project_id);
+      if (oldSnapshot && oldSnapshot.id !== modId) {
+        // Same project, different ID = update
+        updatedProjectIds.add(mod.cf_project_id);
+        const prevVersion = oldSnapshot.version || `file:${oldSnapshot.cf_file_id}`;
+        const newVersion = mod.version || `file:${mod.cf_file_id}`;
+        changes.push({
+          type: "update",
+          modId,
+          modName: mod.name || modId,
+          previousVersion: prevVersion,
+          newVersion: newVersion,
+          previousFileId: oldSnapshot.cf_file_id,
+          newFileId: mod.cf_file_id,
+        });
+      }
+    }
 
-    // Find removed mods
+    // Find removed mods (excluding updates)
     for (const modId of oldModIds) {
       if (!newSet.has(modId)) {
-        const mod = modMap.get(modId);
         const snapshot = snapshotMap.get(modId);
+        // Skip if this was replaced by an update
+        if (snapshot?.cf_project_id && updatedProjectIds.has(snapshot.cf_project_id)) continue;
+        
+        const mod = modMap.get(modId);
         changes.push({
           type: "remove",
           modId,
@@ -2732,10 +2891,13 @@ export class MetadataManager {
       }
     }
 
-    // Find added mods
+    // Find added mods (excluding updates)
     for (const modId of newModIds) {
       if (!oldSet.has(modId)) {
         const mod = modMap.get(modId);
+        // Skip if this is an update
+        if (mod?.cf_project_id && updatedProjectIds.has(mod.cf_project_id)) continue;
+        
         changes.push({
           type: "add",
           modId,
@@ -2745,8 +2907,7 @@ export class MetadataManager {
       }
     }
 
-    // Find updated mods (same ID, but cf_file_id changed)
-    // This happens when a mod is updated via the update system
+    // Find updated mods with same ID but different cf_file_id (edge case: in-place update)
     for (const modId of newModIds) {
       if (oldSet.has(modId)) {
         const mod = modMap.get(modId);
@@ -2754,18 +2915,20 @@ export class MetadataManager {
         
         if (mod && snapshot && mod.cf_file_id && snapshot.cf_file_id) {
           if (mod.cf_file_id !== snapshot.cf_file_id) {
-            // Use real versions if available, fall back to file IDs
-            const prevVersion = snapshot.version || `file:${snapshot.cf_file_id}`;
-            const newVersion = mod.version || `file:${mod.cf_file_id}`;
-            changes.push({
-              type: "update",
-              modId,
-              modName: mod.name || modId,
-              previousVersion: prevVersion,
-              newVersion: newVersion,
-              previousFileId: snapshot.cf_file_id,
-              newFileId: mod.cf_file_id,
-            });
+            // Check if already tracked
+            if (!changes.find(c => c.modId === modId && c.type === "update")) {
+              const prevVersion = snapshot.version || `file:${snapshot.cf_file_id}`;
+              const newVersion = mod.version || `file:${mod.cf_file_id}`;
+              changes.push({
+                type: "update",
+                modId,
+                modName: mod.name || modId,
+                previousVersion: prevVersion,
+                newVersion: newVersion,
+                previousFileId: snapshot.cf_file_id,
+                newFileId: mod.cf_file_id,
+              });
+            }
           }
         }
       }
@@ -2943,27 +3106,9 @@ export class MetadataManager {
 
     await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
 
-    // Restore mod versions from the target version's snapshots
-    const savedSnapshots = targetVersion.mod_snapshots || [];
-    if (savedSnapshots.length > 0) {
-      const library = await this.loadLibrary();
-      let libraryChanged = false;
-      
-      for (const snapshot of savedSnapshots) {
-        const mod = library.mods.find(m => m.id === snapshot.id);
-        if (mod && mod.cf_file_id !== snapshot.cf_file_id) {
-          // Restore the saved file ID
-          mod.cf_file_id = snapshot.cf_file_id;
-          mod.cf_project_id = snapshot.cf_project_id;
-          libraryChanged = true;
-        }
-      }
-      
-      if (libraryChanged) {
-        await this.safeWriteJson(this.libraryPath, library);
-        console.log(`[Version Control] Restored mod versions for rollback in ${modpackId}`);
-      }
-    }
+    // Note: We don't modify library mods here - the caller (main.ts) handles
+    // downloading the correct mod versions. Each mod version has a unique ID
+    // (cf-{projectId}-{fileId}), so we just need the correct IDs in mod_ids.
 
     // Restore config snapshot if available and requested
     if (options?.restoreConfigs !== false && targetVersion.config_snapshot_id) {
@@ -3016,30 +3161,9 @@ export class MetadataManager {
 
     await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
 
-    // Restore mod versions from the target version's snapshots (only for restored mods)
-    const savedSnapshots = targetVersion.mod_snapshots || [];
-    if (savedSnapshots.length > 0) {
-      const library = await this.loadLibrary();
-      let libraryChanged = false;
-      
-      for (const snapshot of savedSnapshots) {
-        // Only restore versions for mods that are being restored
-        if (!modIdSet.has(snapshot.id)) continue;
-        
-        const mod = library.mods.find(m => m.id === snapshot.id);
-        if (mod && mod.cf_file_id !== snapshot.cf_file_id) {
-          // Restore the saved file ID
-          mod.cf_file_id = snapshot.cf_file_id;
-          mod.cf_project_id = snapshot.cf_project_id;
-          libraryChanged = true;
-        }
-      }
-      
-      if (libraryChanged) {
-        await this.safeWriteJson(this.libraryPath, library);
-        console.log(`[Version Control] Restored mod versions for partial rollback in ${modpackId}`);
-      }
-    }
+    // Note: We don't modify library mods here - the caller (main.ts) handles
+    // downloading the correct mod versions. Each mod version has a unique ID
+    // (cf-{projectId}-{fileId}), so we just need the correct IDs in mod_ids.
 
     // Restore config snapshot if available and requested
     if (options?.restoreConfigs !== false && targetVersion.config_snapshot_id) {
@@ -3426,6 +3550,7 @@ ${modLinks}
         version: modpack.version,
         minecraft_version: modpack.minecraft_version,
         loader: modpack.loader,
+        loader_version: modpack.loader_version,
         description: modpack.description,
       },
       mods: mods.map((m) => ({
@@ -4416,6 +4541,7 @@ ${modLinks}
         version: manifest.modpack.version,
         minecraft_version: manifest.modpack.minecraft_version,
         loader: manifest.modpack.loader,
+        loader_version: manifest.modpack.loader_version,
         // description: manifest.modpack.description, // Don't overwrite description
         last_sync: new Date().toISOString(),
       });
@@ -4425,6 +4551,7 @@ ${modLinks}
         version: manifest.modpack.version,
         minecraft_version: manifest.modpack.minecraft_version,
         loader: manifest.modpack.loader,
+        loader_version: manifest.modpack.loader_version,
         description: manifest.modpack.description,
       });
 
@@ -5014,6 +5141,7 @@ ${modLinks}
       version: manifest.modpack.version,
       minecraft_version: manifest.modpack.minecraft_version,
       loader: manifest.modpack.loader,
+      loader_version: manifest.modpack.loader_version,
       description: manifest.modpack.description,
     });
 

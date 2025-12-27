@@ -130,17 +130,11 @@ export const MODLOADER_REVERSE_MAP: Record<string, number> = {
 
 export interface CFModLoader {
   name: string;
-  gameVersionId: number;
-  minecraftGameVersionId: number;
-  forgeVersion: string;
-  type: number;
-  downloadUrl: string;
-  filename: string;
-  installProfileJson: string;
+  gameVersion: string;
   latest: boolean;
   recommended: boolean;
   dateModified: string;
-  mavenVersionString: string;
+  type: number;
 }
 
 // ==================== SERVICE ====================
@@ -914,15 +908,13 @@ export class CurseForgeService {
       throw new Error("CurseForge API key not set");
     }
 
-    let url = `${this.apiUrl}/minecraft/modloader`;
-
-    // Note: CF API doesn't support filtering by gameVersion directly in this endpoint
-    // We fetch all and filter client-side if needed, though usually we filter by name/type
-    // However, if we need to filter, we can pass it as a query param if supported in future
-    // For now, we fetch all and let the caller filter
+    // Build URL with includeAll to get all loaders, then filter by gameVersion if provided
+    let url = `${this.apiUrl}/minecraft/modloader?includeAll=true`;
     if (gameVersion) {
-      url += `?version=${gameVersion}`;
+      url += `&version=${gameVersion}`;
     }
+
+    console.log(`[CurseForge] Fetching modloaders from: ${url}`);
 
     const response = await fetch(url, {
       headers: {
@@ -932,7 +924,6 @@ export class CurseForgeService {
     });
 
     if (!response.ok) {
-      // Fallback or empty if not supported/found
       console.warn(
         `[CurseForge] Failed to fetch modloaders: ${response.status}`
       );
@@ -940,7 +931,10 @@ export class CurseForgeService {
     }
 
     const data = await response.json();
-    return data.data || [];
+    const loaders = data.data || [];
+    console.log(`[CurseForge] Received ${loaders.length} modloaders`);
+    
+    return loaders;
   }
 
   /**

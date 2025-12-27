@@ -72,6 +72,7 @@ import UpdateAvailableBanner from "@/components/modpacks/UpdateAvailableBanner.v
 import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
 import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
+import type { CFModLoader } from "@/types/electron";
 
 const props = defineProps<{
   modpackId: string;
@@ -112,6 +113,9 @@ const disabledModIds = ref<Set<string>>(new Set());
 const searchQueryInstalled = ref("");
 const searchQueryAvailable = ref("");
 const isLoading = ref(true);
+// Race condition protection: track current load requests
+let loadRequestId = 0;
+let instanceRequestId = 0;
 const sortBy = ref<"name" | "version">("name");
 const sortDir = ref<"asc" | "desc">("asc");
 const selectedModIds = ref<Set<string>>(new Set());
@@ -161,6 +165,7 @@ const instanceSyncStatus = ref<{
   disabledMismatch: Array<{ filename: string; issue: string }>;
   configDifferences: number;
   totalDifferences: number;
+  loaderVersionMismatch?: boolean;
 } | null>(null);
 
 // Sync UI State
@@ -309,6 +314,7 @@ const editForm = ref({
   version: "",
   minecraft_version: "",
   loader: "",
+  loader_version: "",
   // Remote source fields
   remote_url: "",
   auto_check_remote: false,
@@ -334,6 +340,110 @@ const gameVersions = [
 
 const loaders = ["forge", "fabric", "neoforge", "quilt"];
 
+// Loader version selection state
+const availableLoaderVersions = ref<CFModLoader[]>([]);
+const isLoadingLoaderVersions = ref(false);
+
+// ModLoaderType enum from CurseForge API:
+// 0 = Any, 1 = Forge, 2 = Cauldron, 3 = LiteLoader, 4 = Fabric, 5 = Quilt, 6 = NeoForge
+const loaderTypeMap: Record<string, number> = {
+  forge: 1,
+  fabric: 4,
+  quilt: 5,
+  neoforge: 6,
+};
+
+// Filter loader versions by selected loader type using the numeric type field
+// Fallback to name matching if type field is not reliable
+const filteredLoaderVersions = computed(() => {
+  const loaderType = editForm.value.loader?.toLowerCase() || "";
+  const expectedType = loaderTypeMap[loaderType];
+
+  if (expectedType === undefined) {
+    return [];
+  }
+
+  // First try filtering by type field
+  let filtered = availableLoaderVersions.value.filter((l) => l.type === expectedType);
+
+  // Fallback: if no results with type, try matching by name pattern
+  if (filtered.length === 0 && availableLoaderVersions.value.length > 0) {
+    console.log(`[ModpackEditor] Type filter returned 0, falling back to name matching for "${loaderType}"`);
+    filtered = availableLoaderVersions.value.filter((l) => {
+      const name = l.name.toLowerCase();
+      if (loaderType === "forge") {
+        // Forge names: "forge-47.2.0" or "1.20.1-forge-47.2.0" (but NOT neoforge)
+        return (name.startsWith("forge-") || name.includes("-forge-")) && !name.includes("neoforge");
+      } else if (loaderType === "neoforge") {
+        return name.startsWith("neoforge-") || name.includes("-neoforge-");
+      } else if (loaderType === "fabric") {
+        return name.startsWith("fabric-") || name.includes("-fabric-");
+      } else if (loaderType === "quilt") {
+        return name.startsWith("quilt-") || name.includes("-quilt-");
+      }
+      return false;
+    });
+  }
+
+  return filtered;
+});
+
+// Extract clean version from loader name
+function extractLoaderVersion(loaderName: string): string {
+  // Try common patterns
+  // Pattern: loader-X.X.X (e.g., "forge-47.2.0", "neoforge-20.4.167")
+  let match = loaderName.match(/^(?:forge|neoforge|fabric|quilt)-(?:loader-)?(.+)$/i);
+  if (match) return match[1];
+
+  // Pattern: version-loader-version (e.g., "1.20.1-forge-47.2.0")
+  match = loaderName.match(/^\d+\.\d+(?:\.\d+)?-(?:forge|neoforge|fabric|quilt)-(.+)$/i);
+  if (match) return match[1];
+
+  // Fallback: return as-is
+  return loaderName;
+}
+
+// Fetch loader versions when needed
+async function fetchLoaderVersions() {
+  if (!window.api || !editForm.value.minecraft_version) return;
+
+  // Prevent duplicate fetches
+  if (isLoadingLoaderVersions.value) return;
+
+  isLoadingLoaderVersions.value = true;
+  try {
+    const versions = await window.api.curseforge.getModLoaders(editForm.value.minecraft_version);
+    console.log(`[ModpackEditor] Received ${versions.length} loader versions for MC ${editForm.value.minecraft_version}`);
+    if (versions.length > 0) {
+      console.log(`[ModpackEditor] Sample loader:`, versions[0]);
+    }
+    availableLoaderVersions.value = versions;
+
+    const loaderType = editForm.value.loader?.toLowerCase() || "";
+    const expectedType = loaderTypeMap[loaderType];
+    const filtered = filteredLoaderVersions.value;
+    console.log(`[ModpackEditor] Loader: ${loaderType}, expectedType: ${expectedType}, filtered count: ${filtered.length}`);
+
+    // If no version is selected, auto-select recommended or latest
+    if (!editForm.value.loader_version && editForm.value.loader) {
+      const recommended = filtered.find((l) => l.recommended);
+      if (recommended) {
+        editForm.value.loader_version = extractLoaderVersion(recommended.name);
+      } else if (filtered.length > 0) {
+        const sorted = [...filtered].sort(
+          (a, b) => new Date(b.dateModified).getTime() - new Date(a.dateModified).getTime()
+        );
+        editForm.value.loader_version = extractLoaderVersion(sorted[0].name);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch loader versions:", err);
+    availableLoaderVersions.value = [];
+  } finally {
+    isLoadingLoaderVersions.value = false;
+  }
+}
+
 // Check if modpack exists (not a new one being created)
 const isExistingModpack = computed(() => {
   return modpack.value !== null && modpack.value.id !== undefined;
@@ -357,7 +467,7 @@ function isModCompatible(mod: Mod): { compatible: boolean; warning?: boolean; re
   // Modpack creators sometimes include mods from other loaders that work via compatibility layers
   // (e.g., Sinytra Connector for Fabric mods on Forge, or mods that genuinely work across loaders)
   let loaderWarning: string | undefined;
-  
+
   if (modContentType === "mod") {
     const packLoader = modpack.value.loader?.toLowerCase();
     const modLoader = mod.loader?.toLowerCase();
@@ -625,7 +735,7 @@ async function updateMod(mod: any) {
   if (!latest) return;
 
   try {
-    const result = await window.api.updates.applyUpdate(mod.id, latest.id);
+    const result = await window.api.updates.applyUpdate(mod.id, latest.id, props.modpackId);
     if (result.success) {
       delete updateAvailable.value[mod.id];
       emit("update");
@@ -660,7 +770,8 @@ async function handleVersionSelected(fileId: number) {
   try {
     const result = await window.api.updates.applyUpdate(
       versionPickerMod.value.libraryModId,
-      fileId
+      fileId,
+      props.modpackId
     );
     if (result.success) {
       // Mark as recently updated
@@ -707,7 +818,8 @@ async function handleModDetailsVersionChange(fileId: number) {
   try {
     const result = await window.api.updates.applyUpdate(
       modDetailsTarget.value.id,
-      fileId
+      fileId,
+      props.modpackId
     );
     if (result.success) {
       // Mark as recently updated
@@ -761,7 +873,7 @@ async function quickUpdateMod(mod: any) {
 
   checkingUpdates.value[mod.id] = true;
   try {
-    const result = await window.api.updates.applyUpdate(mod.id, latest.id);
+    const result = await window.api.updates.applyUpdate(mod.id, latest.id, props.modpackId);
     if (result.success) {
       // Mark as recently updated
       recentlyUpdatedMods.value.add(mod.id);
@@ -795,7 +907,7 @@ async function updateAllMods() {
   for (const mod of modsToUpdate) {
     try {
       const latest = updateAvailable.value[mod.id];
-      const result = await window.api.updates.applyUpdate(mod.id, latest.id);
+      const result = await window.api.updates.applyUpdate(mod.id, latest.id, props.modpackId);
       if (result.success) {
         recentlyUpdatedMods.value.add(mod.id);
         setTimeout(() => {
@@ -941,11 +1053,23 @@ const enabledModCount = computed(() => {
 // Refresh data and notify parent to update modpack list (e.g., for unsaved changes icon)
 async function refreshAndNotify() {
   await loadData();
+  // Also refresh instance sync status if linked
+  if (instance.value) {
+    try {
+      instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
+    } catch (err) {
+      console.error("Failed to refresh sync status:", err);
+    }
+  }
   emit("update");
 }
 
 async function loadData() {
   if (!props.modpackId) return;
+  
+  // Race condition protection: increment request ID and capture current ID
+  const currentRequestId = ++loadRequestId;
+  
   isLoading.value = true;
   // Reset update result when loading new data to prevent "Update Available" banner from persisting
   updateResult.value = null;
@@ -958,6 +1082,13 @@ async function loadData() {
       window.api.modpacks.getDisabledMods(props.modpackId),
       window.api.instances.getByModpack(props.modpackId),
     ]);
+    
+    // Race condition check: if a newer request was made, discard this result
+    if (currentRequestId !== loadRequestId) {
+      console.log(`[loadData] Discarding stale result (request ${currentRequestId}, current ${loadRequestId})`);
+      return;
+    }
+    
     modpack.value = pack || null;
     currentMods.value = cMods;
     availableMods.value = allMods;
@@ -973,6 +1104,7 @@ async function loadData() {
         version: pack.version || "",
         minecraft_version: pack.minecraft_version || "",
         loader: pack.loader || "",
+        loader_version: pack.loader_version || "",
         remote_url: pack.remote_source?.url || "",
         auto_check_remote: pack.remote_source?.auto_check || false,
       };
@@ -995,8 +1127,15 @@ async function loadData() {
     }
   } catch (err) {
     console.error("Failed to load modpack data:", err);
+    // Only show error toast if this is still the current request
+    if (currentRequestId === loadRequestId) {
+      toast.error("Failed to load modpack", "Please try again or reload the page");
+    }
   } finally {
-    isLoading.value = false;
+    // Only clear loading state if this is still the current request
+    if (currentRequestId === loadRequestId) {
+      isLoading.value = false;
+    }
   }
 }
 
@@ -1014,6 +1153,10 @@ async function loadSystemInfo() {
 // Load instance for this modpack
 async function loadInstance() {
   if (!props.modpackId) return;
+  
+  // Race condition protection
+  const currentInstanceRequestId = ++instanceRequestId;
+  
   isInstanceLoading.value = true;
 
   // Load system info in parallel
@@ -1021,6 +1164,13 @@ async function loadInstance() {
 
   try {
     instance.value = await getInstanceByModpack(props.modpackId);
+    
+    // Check for stale request
+    if (currentInstanceRequestId !== instanceRequestId) {
+      console.log(`[loadInstance] Discarding stale result`);
+      return;
+    }
+    
     if (instance.value) {
       const stats = await getInstanceStats(instance.value.id);
       if (stats) {
@@ -1044,7 +1194,9 @@ async function loadInstance() {
       }
     }
   } finally {
-    isInstanceLoading.value = false;
+    if (currentInstanceRequestId === instanceRequestId) {
+      isInstanceLoading.value = false;
+    }
   }
 }
 
@@ -1138,16 +1290,22 @@ async function handleSyncInstance() {
     if (result.success) {
       toast.success("Sync Complete", `${result.modsDownloaded} mods updated`);
 
-      const stats = await getInstanceStats(instance.value!.id);
-      if (stats) {
-        instanceStats.value = {
-          modCount: stats.modCount,
-          configCount: stats.configCount,
-          totalSize: stats.totalSize,
-        };
-      }
+      // Refresh instance data (loader version may have been updated)
+      await loadInstance();
 
-      instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value!.id, props.modpackId);
+      // Instance may have been updated by loadInstance - re-check
+      if (instance.value) {
+        const stats = await getInstanceStats(instance.value.id);
+        if (stats) {
+          instanceStats.value = {
+            modCount: stats.modCount,
+            configCount: stats.configCount,
+            totalSize: stats.totalSize,
+          };
+        }
+
+        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
+      }
       showSyncDetails.value = false; // Collapse details after sync
     } else {
       toast.error("Sync had errors", result.errors.join(", "));
@@ -1201,9 +1359,9 @@ async function handleLaunch(options?: { forceSync?: boolean; skipSync?: boolean 
       gameLaunched.value = true;
       gameLoadingMessage.value = "Launching Minecraft...";
 
-      if (result.syncPerformed) {
+      if (result.syncPerformed && instance.value) {
         toast.success("Synced & Launched", "Instance synced, Minecraft loading...");
-        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value!.id, props.modpackId);
+        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
       } else {
         toast.success("Minecraft Launcher Started", "Game is loading...");
       }
@@ -1403,6 +1561,7 @@ async function saveModpackInfo() {
       version: editForm.value.version,
       minecraft_version: editForm.value.minecraft_version,
       loader: editForm.value.loader,
+      loader_version: editForm.value.loader_version || undefined,
       // Save remote source config
       remote_source: editForm.value.remote_url
         ? {
@@ -1414,6 +1573,12 @@ async function saveModpackInfo() {
     });
 
     await loadData();
+
+    // Re-check sync status (loader version may have changed)
+    if (instance.value) {
+      instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
+    }
+
     emit("update");
     toast.success("Saved", "Modpack settings updated");
   } catch (err) {
@@ -2174,6 +2339,11 @@ watch(
       await loadInstance();
       await loadSyncSettings();
       await loadModifiedConfigs();
+
+      // Pre-fetch loader versions for settings tab
+      if (editForm.value.minecraft_version && editForm.value.loader) {
+        fetchLoaderVersions();
+      }
 
       // Set up game log listener
       removeLogListener = onGameLogLine((instanceId, logLine) => {
@@ -3001,6 +3171,23 @@ watch(
                     </div>
                   </div>
 
+                  <!-- Loader Version Mismatch -->
+                  <div v-if="instanceSyncStatus.loaderVersionMismatch"
+                    class="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div class="flex items-center gap-2 text-blue-400 font-medium text-sm mb-2">
+                      <RefreshCw class="w-3.5 h-3.5" />
+                      Loader version update
+                    </div>
+                    <div class="text-xs text-muted-foreground">
+                      <p>The modpack loader version has changed.</p>
+                      <p class="mt-1">Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion ||
+                        'unknown' }}</span></p>
+                      <p>Modpack: <span class="text-blue-400 font-medium">{{ modpack?.loader_version || 'unknown'
+                      }}</span></p>
+                      <p class="mt-2 text-blue-400/80">The new loader will be installed on next launch.</p>
+                    </div>
+                  </div>
+
                   <!-- Disabled State Mismatch -->
                   <div v-if="instanceSyncStatus.disabledMismatch.length > 0"
                     class="p-3 rounded-lg bg-muted/30 border border-border/30">
@@ -3316,14 +3503,16 @@ watch(
                   <button v-if="incompatibleModCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'incompatible'
                       ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'incompatible'">
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+                    @click="modsFilter = 'incompatible'">
                     <AlertCircle class="w-3 h-3" />
                     {{ incompatibleModCount }}
                   </button>
                   <button v-if="warningModCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'warning'
                       ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'warning'"
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+                    @click="modsFilter = 'warning'"
                     title="Mods with different loader (may work with compatibility mods)">
                     <AlertTriangle class="w-3 h-3" />
                     {{ warningModCount }}
@@ -3331,28 +3520,32 @@ watch(
                   <button v-if="disabledModCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'disabled'
                       ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'disabled'">
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+                    @click="modsFilter = 'disabled'">
                     <ToggleLeft class="w-3 h-3" />
                     {{ disabledModCount }}
                   </button>
                   <button v-if="updatesAvailableCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
                       ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'updates'">
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+                    @click="modsFilter = 'updates'">
                     <ArrowUpCircle class="w-3 h-3" />
                     {{ updatesAvailableCount }}
                   </button>
                   <button v-if="recentlyUpdatedCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-updated'
                       ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'recent-updated'">
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+                    @click="modsFilter = 'recent-updated'">
                     <Check class="w-3 h-3" />
                     {{ recentlyUpdatedCount }}
                   </button>
                   <button v-if="recentlyAddedCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-added'
                       ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'recent-added'">
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+                    @click="modsFilter = 'recent-added'">
                     <Plus class="w-3 h-3" />
                     {{ recentlyAddedCount }}
                   </button>
@@ -3482,11 +3675,8 @@ watch(
                   ]" @click="!isLinked && toggleSelect(mod.id)" @dblclick.stop="openModDetails(mod)">
                   <!-- Mod Thumbnail -->
                   <div class="w-8 h-8 rounded-md bg-muted/50 overflow-hidden shrink-0 border border-border/30">
-                    <img v-if="mod.thumbnail_url || mod.logo_url" 
-                      :src="mod.thumbnail_url || mod.logo_url" 
-                      class="w-full h-full object-cover"
-                      alt=""
-                      loading="lazy"
+                    <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
+                      class="w-full h-full object-cover" alt="" loading="lazy"
                       @error="($event.target as HTMLImageElement).style.display = 'none'" />
                     <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/50">
                       <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-4 h-4" />
@@ -3555,12 +3745,10 @@ watch(
                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <!-- Game versions (show list for ALL content types if available) -->
                       <span v-if="mod.game_versions && mod.game_versions.length >= 1"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" 
-                        :class="mod.isCompatible
+                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
                           ? 'bg-primary/15 text-primary'
                           : 'bg-red-500/15 text-red-500'
-                        " 
-                        :title="mod.game_versions.join(', ')">
+                          " :title="mod.game_versions.join(', ')">
                         {{ mod.game_versions.slice(0, 2).join(", ")
                         }}{{
                           mod.game_versions.length > 2
@@ -3569,21 +3757,19 @@ watch(
                         }}
                       </span>
                       <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" 
-                        :class="mod.isCompatible
+                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
                           ? 'bg-primary/15 text-primary'
                           : 'bg-red-500/15 text-red-500'
-                        ">
+                          ">
                         {{ mod.game_version }}
                       </span>
                       <span v-if="mod.loader && mod.loader !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize" 
-                        :class="!mod.isCompatible
+                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize" :class="!mod.isCompatible
                           ? 'bg-red-500/15 text-red-500'
                           : mod.hasWarning
                             ? 'bg-amber-500/15 text-amber-500'
                             : 'bg-muted text-muted-foreground'
-                        ">
+                          ">
                         {{ mod.loader }}
                       </span>
                       <span v-if="mod.version"
@@ -3676,7 +3862,8 @@ watch(
                     <Package class="w-3.5 h-3.5 text-muted-foreground" />
                     <span class="text-xs font-medium">Library</span>
                     <span class="text-[10px] text-primary">{{ compatibleCount }}</span>
-                    <span v-if="warningAvailableCount > 0" class="text-[10px] text-amber-500" title="Mods with different loader">
+                    <span v-if="warningAvailableCount > 0" class="text-[10px] text-amber-500"
+                      title="Mods with different loader">
                       +{{ warningAvailableCount }} other loader
                     </span>
                   </div>
@@ -3697,7 +3884,7 @@ watch(
               <div class="flex-1 overflow-y-auto p-2 space-y-1">
                 <div v-for="mod in filteredAvailableMods" :key="mod.id"
                   class="flex items-center justify-between p-2 rounded-lg transition-all duration-150 relative" :class="mod.isCompatible
-                    ? mod.hasWarning 
+                    ? mod.hasWarning
                       ? 'hover:bg-amber-500/10 cursor-pointer group border border-amber-500/20'
                       : 'hover:bg-accent/50 cursor-pointer group'
                     : 'opacity-40'
@@ -3708,8 +3895,10 @@ watch(
                       <span class="font-medium text-sm truncate">{{
                         mod.name
                       }}</span>
-                      <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-red-500 shrink-0" title="Incompatible" />
-                      <AlertTriangle v-else-if="mod.hasWarning" class="w-3.5 h-3.5 text-amber-500 shrink-0" title="Different loader" />
+                      <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-red-500 shrink-0"
+                        title="Incompatible" />
+                      <AlertTriangle v-else-if="mod.hasWarning" class="w-3.5 h-3.5 text-amber-500 shrink-0"
+                        title="Different loader" />
                     </div>
                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <!-- Game versions (show list for ALL content types if available) -->
@@ -3855,6 +4044,45 @@ watch(
                         {{ l }}
                       </option>
                     </select>
+                  </div>
+
+                  <!-- Loader Version -->
+                  <div class="space-y-2 col-span-2">
+                    <label class="text-sm font-medium flex items-center gap-1.5">
+                      {{ editForm.loader ? editForm.loader.charAt(0).toUpperCase() + editForm.loader.slice(1) : 'Loader'
+                      }}
+                      Version
+                      <Loader2 v-if="isLoadingLoaderVersions" class="w-3 h-3 animate-spin text-muted-foreground" />
+                      <!-- Show current version badge when set -->
+                      <span v-if="editForm.loader_version && !isLoadingLoaderVersions"
+                        class="ml-auto text-xs font-normal px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                        Current: {{ editForm.loader_version }}
+                      </span>
+                    </label>
+                    <div class="flex gap-2">
+                      <select v-model="editForm.loader_version" :disabled="isLoadingLoaderVersions || isLinked"
+                        class="flex-1 h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <option v-if="editForm.loader_version && filteredLoaderVersions.length === 0"
+                          :value="editForm.loader_version">
+                          {{ editForm.loader_version }} (current)
+                        </option>
+                        <option v-if="!editForm.loader_version && filteredLoaderVersions.length === 0" value="">
+                          {{ isLoadingLoaderVersions ? 'Loading...' : 'Click to load versions' }}
+                        </option>
+                        <option v-for="lv in filteredLoaderVersions" :key="lv.name"
+                          :value="extractLoaderVersion(lv.name)">
+                          {{ extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? ' (Latest)' : '' }}
+                        </option>
+                      </select>
+                      <Button variant="outline" size="sm" @click="fetchLoaderVersions"
+                        :disabled="isLoadingLoaderVersions || !editForm.minecraft_version || !editForm.loader"
+                        title="Refresh available versions">
+                        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoadingLoaderVersions }" />
+                      </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                      The specific version of the mod loader (used for instance creation and exports)
+                    </p>
                   </div>
                 </div>
 
@@ -4174,19 +4402,13 @@ watch(
       @close="showVersionPickerDialog = false" @select="handleVersionSelected" />
 
     <!-- Mod Details Modal -->
-    <ModDetailsModal
-      :open="showModDetailsModal"
-      :mod="modDetailsTarget"
-      :context="{
-        type: 'modpack',
-        modpackId: modpackId,
-        gameVersion: modpack?.minecraft_version,
-        loader: modpack?.loader
-      }"
-      :current-file-id="modDetailsTarget?.cf_file_id"
-      @close="closeModDetails"
-      @version-changed="handleModDetailsVersionChange"
-    />
+    <ModDetailsModal :open="showModDetailsModal" :mod="modDetailsTarget" :context="{
+      type: 'modpack',
+      modpackId: modpackId,
+      gameVersion: modpack?.minecraft_version,
+      loader: modpack?.loader
+    }" :current-file-id="modDetailsTarget?.cf_file_id" @close="closeModDetails"
+      @version-changed="handleModDetailsVersionChange" />
 
     <!-- CurseForge Changelog Dialog -->
     <Dialog :open="showCFChangelog" @close="showCFChangelog = false" title="Modpack Changelog" size="lg">

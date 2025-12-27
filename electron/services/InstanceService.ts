@@ -1911,7 +1911,9 @@ export class InstanceService {
       // Check mods that should be in instance
       const expectedFilenames = new Set<string>();
       for (const mod of modpackMods) {
-        if (!mod.filename || mod.content_type !== "mod") continue;
+        // content_type defaults to "mod" if undefined
+        const modContentType = mod.content_type || "mod";
+        if (!mod.filename || modContentType !== "mod") continue;
         
         const filename = mod.filename;
         expectedFilenames.add(filename);

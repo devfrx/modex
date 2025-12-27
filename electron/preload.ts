@@ -140,6 +140,8 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("curseforge:getCategories", contentType),
     getPopular: (gameVersion?: string, modLoader?: string): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getPopular", gameVersion, modLoader),
+    getModLoaders: (gameVersion?: string): Promise<any[]> =>
+      ipcRenderer.invoke("curseforge:getModLoaders", gameVersion),
     addToLibrary: (
       projectId: number,
       fileId: number,
@@ -308,6 +310,7 @@ contextBridge.exposeInMainWorld("api", {
         modsEnabled: Array<{ id: string; name: string }>;
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{
           filePath: string;
@@ -426,6 +429,7 @@ contextBridge.exposeInMainWorld("api", {
       failedMods: Array<{ modId: string; modName: string; reason: string }>;
       totalMods: number;
       originalModCount: number;
+      loaderRestored?: boolean;
     }> =>
       ipcRenderer.invoke("versions:rollback", modpackId, versionId),
     compare: (
@@ -676,11 +680,14 @@ contextBridge.exposeInMainWorld("api", {
     > => ipcRenderer.invoke("updates:checkModpack", modpackId),
     applyUpdate: (
       modId: string,
-      newFileId: number
+      newFileId: number,
+      modpackId?: string
     ): Promise<{
       success: boolean;
       error?: string;
-    }> => ipcRenderer.invoke("updates:applyUpdate", modId, newFileId),
+      newModId?: string;
+      oldModId?: string;
+    }> => ipcRenderer.invoke("updates:applyUpdate", modId, newFileId, modpackId),
   },
 
   // ========== DIALOGS ==========
@@ -916,6 +923,7 @@ contextBridge.exposeInMainWorld("api", {
       disabledMismatch: Array<{ filename: string; issue: string }>;
       configDifferences: number;
       totalDifferences: number;
+      loaderVersionMismatch?: boolean;
     }> => ipcRenderer.invoke("instance:checkSyncStatus", instanceId, modpackId),
 
     getModifiedConfigs: (instanceId: string, modpackId: string): Promise<{

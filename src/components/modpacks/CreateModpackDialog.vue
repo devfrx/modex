@@ -3,7 +3,8 @@ import { ref, watch, computed } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
-import { ImagePlus, X, Lock } from "lucide-vue-next";
+import { ImagePlus, X, Lock, Loader2 } from "lucide-vue-next";
+import type { CFModLoader } from "@/types/electron";
 
 const props = defineProps<{
   open: boolean;
@@ -23,6 +24,7 @@ const emit = defineEmits<{
       version: string;
       minecraft_version: string;
       loader: string;
+      loader_version?: string;
       description: string;
       image_path?: string;
     }
@@ -73,11 +75,78 @@ const form = ref({
   version: "1.0.0",
   minecraft_version: "1.20.1",
   loader: "forge",
+  loader_version: "" as string | undefined,
   description: "",
   image_path: "" as string | undefined,
 });
 
 const nameError = ref("");
+const availableLoaderVersions = ref<CFModLoader[]>([]);
+const isLoadingLoaderVersions = ref(false);
+
+// ModLoaderType enum from CurseForge API:
+// 0 = Any, 1 = Forge, 2 = Cauldron, 3 = LiteLoader, 4 = Fabric, 5 = Quilt, 6 = NeoForge
+const loaderTypeMap: Record<string, number> = {
+  forge: 1,
+  fabric: 4,
+  quilt: 5,
+  neoforge: 6,
+};
+
+// Filter loader versions by selected loader type using the numeric type field
+// Fallback to name matching if type field is not reliable
+const filteredLoaderVersions = computed(() => {
+  const loaderType = form.value.loader.toLowerCase();
+  const expectedType = loaderTypeMap[loaderType];
+
+  if (expectedType === undefined) {
+    return [];
+  }
+
+  // First try filtering by type field
+  let filtered = availableLoaderVersions.value.filter((l) => l.type === expectedType);
+
+  // Fallback: if no results with type, try matching by name pattern
+  if (filtered.length === 0 && availableLoaderVersions.value.length > 0) {
+    console.log(`[CreateModpackDialog] Type filter returned 0, falling back to name matching for "${loaderType}"`);
+    filtered = availableLoaderVersions.value.filter((l) => {
+      const name = l.name.toLowerCase();
+      if (loaderType === "forge") {
+        // Forge names: "forge-47.2.0" or "1.20.1-forge-47.2.0" (but NOT neoforge)
+        return (name.startsWith("forge-") || name.includes("-forge-")) && !name.includes("neoforge");
+      } else if (loaderType === "neoforge") {
+        return name.startsWith("neoforge-") || name.includes("-neoforge-");
+      } else if (loaderType === "fabric") {
+        return name.startsWith("fabric-") || name.includes("-fabric-");
+      } else if (loaderType === "quilt") {
+        return name.startsWith("quilt-") || name.includes("-quilt-");
+      }
+      return false;
+    });
+  }
+
+  return filtered;
+});
+
+// Extract clean version from loader name
+// CurseForge naming patterns:
+// - Forge: "forge-47.2.0" or "1.20.1-forge-47.2.0"
+// - Fabric: "fabric-loader-0.16.9" or "fabric-0.16.9"
+// - NeoForge: "neoforge-20.4.167"
+// - Quilt: "quilt-loader-0.19.0" or "quilt-0.19.0"
+function extractLoaderVersion(loaderName: string): string {
+  // Try common patterns
+  // Pattern: loader-X.X.X (e.g., "forge-47.2.0", "neoforge-20.4.167")
+  let match = loaderName.match(/^(?:forge|neoforge|fabric|quilt)-(?:loader-)?(.+)$/i);
+  if (match) return match[1];
+
+  // Pattern: version-loader-version (e.g., "1.20.1-forge-47.2.0")
+  match = loaderName.match(/^\d+\.\d+(?:\.\d+)?-(?:forge|neoforge|fabric|quilt)-(.+)$/i);
+  if (match) return match[1];
+
+  // Fallback: return as-is
+  return loaderName;
+}
 
 // Computed props for locked fields
 const isVersionLocked = computed(() => !!props.forcedMinecraftVersion);
@@ -103,17 +172,94 @@ function validateName(): boolean {
   return true;
 }
 
+// Fetch loader versions when MC version or loader changes
+async function fetchLoaderVersions() {
+  if (!window.api) return;
+
+  isLoadingLoaderVersions.value = true;
+  try {
+    const versions = await window.api.curseforge.getModLoaders(form.value.minecraft_version);
+    console.log(`[CreateModpackDialog] Received ${versions.length} loader versions for MC ${form.value.minecraft_version}`);
+    if (versions.length > 0) {
+      console.log(`[CreateModpackDialog] Sample loader:`, versions[0]);
+    }
+    availableLoaderVersions.value = versions;
+
+    // Auto-select recommended version if available
+    const loaderType = form.value.loader.toLowerCase();
+    const expectedType = loaderTypeMap[loaderType];
+    const filtered = filteredLoaderVersions.value;
+    console.log(`[CreateModpackDialog] Loader: ${loaderType}, expectedType: ${expectedType}, filtered count: ${filtered.length}`);
+
+    // Find recommended or latest
+    const recommended = filtered.find((l) => l.recommended);
+    if (recommended) {
+      form.value.loader_version = extractLoaderVersion(recommended.name);
+    } else if (filtered.length > 0) {
+      // Sort by date and pick latest
+      const sorted = [...filtered].sort(
+        (a, b) => new Date(b.dateModified).getTime() - new Date(a.dateModified).getTime()
+      );
+      form.value.loader_version = extractLoaderVersion(sorted[0].name);
+    } else {
+      form.value.loader_version = undefined;
+    }
+  } catch (err) {
+    console.error("Failed to fetch loader versions:", err);
+    availableLoaderVersions.value = [];
+    form.value.loader_version = undefined;
+  } finally {
+    isLoadingLoaderVersions.value = false;
+  }
+}
+
 watch(
   () => props.open,
-  (isOpen) => {
+  async (isOpen) => {
     if (isOpen) {
       form.value.name = props.initialName || "";
       form.value.version = "1.0.0";
       form.value.minecraft_version = props.forcedMinecraftVersion || "1.20.1";
       form.value.loader = props.forcedLoader || "forge";
+      form.value.loader_version = undefined;
       form.value.description = "";
       form.value.image_path = undefined;
       nameError.value = "";
+
+      // Fetch loader versions
+      await fetchLoaderVersions();
+    }
+  }
+);
+
+// Re-fetch when MC version changes
+watch(
+  () => form.value.minecraft_version,
+  () => {
+    if (props.open) {
+      fetchLoaderVersions();
+    }
+  }
+);
+
+// Re-filter when loader changes
+watch(
+  () => form.value.loader,
+  () => {
+    if (props.open && availableLoaderVersions.value.length > 0) {
+      // Auto-select recommended version for new loader
+      const filtered = filteredLoaderVersions.value;
+      const recommended = filtered.find((l) => l.recommended);
+      if (recommended) {
+        form.value.loader_version = extractLoaderVersion(recommended.name);
+      } else if (filtered.length > 0) {
+        const sorted = [...filtered].sort(
+          (a, b) => new Date(b.dateModified).getTime() - new Date(a.dateModified).getTime()
+        );
+        form.value.loader_version = extractLoaderVersion(sorted[0].name);
+      } else {
+        form.value.loader_version = undefined;
+      }
     }
   }
 );
@@ -135,6 +281,7 @@ function create() {
   emit("create", {
     ...form.value,
     name: form.value.name.trim(),
+    loader_version: form.value.loader_version || undefined,
   });
 }
 </script>
@@ -210,6 +357,26 @@ function create() {
         </select>
         <p v-if="isLoaderLocked" class="text-xs text-muted-foreground">
           Locked to match selected mods
+        </p>
+      </div>
+
+      <!-- Loader Version -->
+      <div class="space-y-2">
+        <label class="text-sm font-medium flex items-center gap-2">
+          {{loaders.find(l => l.value === form.loader)?.label || 'Loader'}} Version
+          <Loader2 v-if="isLoadingLoaderVersions" class="w-3 h-3 animate-spin text-muted-foreground" />
+        </label>
+        <select v-model="form.loader_version" :disabled="isLoadingLoaderVersions || filteredLoaderVersions.length === 0"
+          class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+          <option v-if="filteredLoaderVersions.length === 0" value="">
+            {{ isLoadingLoaderVersions ? 'Loading...' : 'No versions available' }}
+          </option>
+          <option v-for="lv in filteredLoaderVersions" :key="lv.name" :value="extractLoaderVersion(lv.name)">
+            {{ extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? ' (Latest)' : '' }}
+          </option>
+        </select>
+        <p class="text-xs text-muted-foreground">
+          Select the version of {{loaders.find(l => l.value === form.loader)?.label || 'the loader'}} to use
         </p>
       </div>
 

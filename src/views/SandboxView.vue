@@ -1060,7 +1060,7 @@ function nodeRadius(node: GraphNode) {
 
 async function loadData() {
   isLoading.value = true;
-  
+
   try {
     checkSavedPositions();
 

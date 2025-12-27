@@ -1066,10 +1066,10 @@ async function refreshAndNotify() {
 
 async function loadData() {
   if (!props.modpackId) return;
-  
+
   // Race condition protection: increment request ID and capture current ID
   const currentRequestId = ++loadRequestId;
-  
+
   isLoading.value = true;
   // Reset update result when loading new data to prevent "Update Available" banner from persisting
   updateResult.value = null;
@@ -1082,13 +1082,13 @@ async function loadData() {
       window.api.modpacks.getDisabledMods(props.modpackId),
       window.api.instances.getByModpack(props.modpackId),
     ]);
-    
+
     // Race condition check: if a newer request was made, discard this result
     if (currentRequestId !== loadRequestId) {
       console.log(`[loadData] Discarding stale result (request ${currentRequestId}, current ${loadRequestId})`);
       return;
     }
-    
+
     modpack.value = pack || null;
     currentMods.value = cMods;
     availableMods.value = allMods;
@@ -1153,10 +1153,10 @@ async function loadSystemInfo() {
 // Load instance for this modpack
 async function loadInstance() {
   if (!props.modpackId) return;
-  
+
   // Race condition protection
   const currentInstanceRequestId = ++instanceRequestId;
-  
+
   isInstanceLoading.value = true;
 
   // Load system info in parallel
@@ -1164,13 +1164,13 @@ async function loadInstance() {
 
   try {
     instance.value = await getInstanceByModpack(props.modpackId);
-    
+
     // Check for stale request
     if (currentInstanceRequestId !== instanceRequestId) {
       console.log(`[loadInstance] Discarding stale result`);
       return;
     }
-    
+
     if (instance.value) {
       const stats = await getInstanceStats(instance.value.id);
       if (stats) {
@@ -4071,7 +4071,9 @@ watch(
                         </option>
                         <option v-for="lv in filteredLoaderVersions" :key="lv.name"
                           :value="extractLoaderVersion(lv.name)">
-                          {{ extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? ' (Latest)' : '' }}
+                          {{ extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? '
+                          (Latest)' : ''
+                          }}
                         </option>
                       </select>
                       <Button variant="outline" size="sm" @click="fetchLoaderVersions"

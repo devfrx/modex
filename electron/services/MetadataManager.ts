@@ -3329,6 +3329,15 @@ export class MetadataManager {
         cleanVersion = cleanVersion.replace("loader-", "");
       }
       
+      // Remove game version suffix if present (e.g., "0.18.4-1.21.1" -> "0.18.4")
+      // Game versions are like "1.20.1", "1.21", "1.21.1", etc.
+      // Pattern: anything followed by -1.XX or -1.XX.X
+      const gameVersionSuffixMatch = cleanVersion.match(/^([\d.]+)-1\.\d+(?:\.\d+)?$/);
+      if (gameVersionSuffixMatch) {
+        cleanVersion = gameVersionSuffixMatch[1];
+        console.log(`[Export] Removed game version suffix: ${loaderVersion} -> ${cleanVersion}`);
+      }
+      
       // For Fabric, CurseForge uses "fabric-X.X.X" format (not "fabric-loader-X.X.X")
       if (targetLoaderType === "fabric") {
         loaderId = `fabric-${cleanVersion}`;
@@ -3347,7 +3356,7 @@ export class MetadataManager {
           // Filter by type - handle different naming conventions
           const typeLoaders = loaders.filter((l: any) => {
             const name = l.name.toLowerCase();
-            // Fabric loaders are named "fabric-loader-X.X.X"
+            // Fabric loaders are named "fabric-loader-X.X.X" or "fabric-loader-X.X.X-Y.Y.Y"
             if (targetLoaderType === "fabric") {
               return name.startsWith("fabric-loader-") || name.startsWith("fabric-");
             }
@@ -3358,8 +3367,9 @@ export class MetadataManager {
           if (typeLoaders.length > 0) {
             // Find recommended or latest
             const recommended = typeLoaders.find((l: any) => l.recommended);
+            let selectedLoader: any;
             if (recommended) {
-              loaderId = recommended.name;
+              selectedLoader = recommended;
             } else {
               // Sort by date to get latest
               typeLoaders.sort(
@@ -3367,10 +3377,40 @@ export class MetadataManager {
                   new Date(b.dateModified).getTime() -
                   new Date(a.dateModified).getTime()
               );
-              loaderId = typeLoaders[0].name;
+              selectedLoader = typeLoaders[0];
             }
+            
+            // Convert API loader name to manifest format
+            // API returns: "fabric-loader-0.18.4-1.21.1" (with game version)
+            // Manifest needs: "fabric-0.18.4" (without game version)
+            const apiName = selectedLoader.name;
+            if (targetLoaderType === "fabric") {
+              // fabric-loader-X.X.X or fabric-loader-X.X.X-Y.Y.Y
+              const match = apiName.match(/^fabric-loader-([\d.]+)/i);
+              if (match) {
+                loaderId = `fabric-${match[1]}`;
+              } else {
+                // Fallback: try fabric-X.X.X format
+                const simpleMatch = apiName.match(/^fabric-([\d.]+)/i);
+                if (simpleMatch) {
+                  loaderId = `fabric-${simpleMatch[1]}`;
+                } else {
+                  loaderId = apiName; // Use as-is if no match
+                }
+              }
+            } else {
+              // For forge/neoforge/quilt, extract just the version part
+              // API might return: "forge-47.2.0" or "forge-47.2.0-1.20.1"
+              const match = apiName.match(new RegExp(`^${targetLoaderType}-([\\d.]+)`, "i"));
+              if (match) {
+                loaderId = `${targetLoaderType}-${match[1]}`;
+              } else {
+                loaderId = apiName; // Use as-is if no match
+              }
+            }
+            
             console.log(
-              `[Export] Selected modloader from API: ${loaderId} for ${targetLoaderType} ${mcVersion}`
+              `[Export] Selected modloader from API: ${apiName} -> ${loaderId} for ${targetLoaderType} ${mcVersion}`
             );
           } else {
             console.warn(

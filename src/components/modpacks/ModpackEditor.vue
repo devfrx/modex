@@ -11,6 +11,7 @@ import {
   Check,
   ImagePlus,
   ArrowUpCircle,
+  ArrowLeft,
   Lock,
   Save,
   GitBranch,
@@ -78,6 +79,8 @@ const props = defineProps<{
   modpackId: string;
   isOpen: boolean;
   initialTab?: "play" | "mods" | "discover" | "health" | "versions" | "profiles" | "settings" | "remote" | "configs";
+  /** When true, renders as a full-screen view instead of a modal dialog */
+  fullScreen?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -390,14 +393,24 @@ const filteredLoaderVersions = computed(() => {
 
 // Extract clean version from loader name
 function extractLoaderVersion(loaderName: string): string {
-  // Try common patterns
+  2  // Fabric/Quilt format from CurseForge: "fabric-0.18.4-1.21.10" (loader-loaderVersion-mcVersion)
+  // We want just the loader version part (0.18.4)
+  let match = loaderName.match(/^(?:fabric|quilt)-(\d+\.\d+\.\d+)-\d+\.\d+/i);
+  if (match) return match[1];
+
   // Pattern: loader-X.X.X (e.g., "forge-47.2.0", "neoforge-20.4.167")
-  let match = loaderName.match(/^(?:forge|neoforge|fabric|quilt)-(?:loader-)?(.+)$/i);
+  match = loaderName.match(/^(?:forge|neoforge)-(?:loader-)?(.+)$/i);
   if (match) return match[1];
 
   // Pattern: version-loader-version (e.g., "1.20.1-forge-47.2.0")
   match = loaderName.match(/^\d+\.\d+(?:\.\d+)?-(?:forge|neoforge|fabric|quilt)-(.+)$/i);
   if (match) return match[1];
+
+  // Generic format: "X.X.X-Y.Y.Y" (loader version - MC version)
+  // Simple split: take first part before hyphen if it looks like a version
+  if (/^\d+\.\d+\.\d+-\d+\.\d+/.test(loaderName)) {
+    return loaderName.split('-')[0];
+  }
 
   // Fallback: return as-is
   return loaderName;
@@ -645,6 +658,20 @@ const updateAvailable = ref<Record<string, any>>({});
 const isCheckingAllUpdates = ref(false);
 const recentlyUpdatedMods = ref<Set<string>>(new Set()); // Mod IDs updated in last 5 min
 const recentlyAddedMods = ref<Set<string>>(new Set()); // Mod IDs added in last 5 min
+
+// Installed project files map for CurseForge browse (prevents re-installing same versions)
+const installedProjectFiles = computed(() => {
+  const map = new Map<number, Set<number>>();
+  for (const mod of currentMods.value) {
+    if (mod.cf_project_id && mod.cf_file_id) {
+      if (!map.has(mod.cf_project_id)) {
+        map.set(mod.cf_project_id, new Set());
+      }
+      map.get(mod.cf_project_id)!.add(mod.cf_file_id);
+    }
+  }
+  return map;
+});
 const RECENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const isLibraryCollapsed = ref(false); // Collapsible library panel
 
@@ -2400,13 +2427,18 @@ watch(
 </script>
 
 <template>
+  <!-- Wrapper: changes based on fullScreen mode -->
   <div v-if="isOpen"
-    class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6 animate-in fade-in duration-150">
+    :class="fullScreen
+      ? 'h-full flex flex-col bg-background overflow-hidden'
+      : 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6 animate-in fade-in duration-150'">
     <div
-      class="bg-background border border-border/50 rounded-lg sm:rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+      :class="fullScreen
+        ? 'flex-1 flex flex-col overflow-hidden'
+        : 'bg-background border border-border/50 rounded-lg sm:rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150'">
 
       <!-- Modern Header with Hero Style -->
-      <div class="shrink-0 relative overflow-hidden">
+      <div class="shrink-0 relative overflow-hidden" :class="fullScreen && 'border-b border-border/50'">
         <!-- Background gradient -->
         <div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-card to-card/80"></div>
         <div
@@ -2417,6 +2449,12 @@ watch(
         <div class="relative">
           <!-- Top Bar -->
           <div class="px-3 sm:px-5 py-3 sm:py-4 flex items-start gap-3 sm:gap-4">
+            <!-- Back Button (full-screen mode only) -->
+            <Button v-if="fullScreen" variant="ghost" size="sm" class="h-10 w-10 p-0 rounded-lg shrink-0"
+              @click="$emit('close')">
+              <ArrowLeft class="w-5 h-5" />
+            </Button>
+
             <!-- Pack Info with larger thumbnail -->
             <div class="flex items-start gap-3 min-w-0 flex-1">
               <!-- Thumbnail - Responsive size -->
@@ -2491,7 +2529,8 @@ watch(
                 <Download class="w-4 h-4" />
                 <span>Export</span>
               </Button>
-              <Button variant="ghost" size="sm"
+              <!-- Close button (modal mode only) -->
+              <Button v-if="!fullScreen" variant="ghost" size="sm"
                 class="h-8 w-8 sm:h-9 sm:w-9 p-0 rounded-lg hover:bg-red-500/10 hover:text-red-400"
                 @click="$emit('close')">
                 <X class="w-4 h-4 sm:w-5 sm:h-5" />
@@ -3182,7 +3221,8 @@ watch(
                       <p>The modpack loader version has changed.</p>
                       <p class="mt-1">Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion ||
                         'unknown' }}</span></p>
-                      <p>Modpack: <span class="text-blue-400 font-medium">{{ modpack?.loader_version || 'unknown'
+                      <p>Modpack: <span class="text-blue-400 font-medium">{{
+                        extractLoaderVersion(modpack?.loader_version || 'unknown')
                       }}</span></p>
                       <p class="mt-2 text-blue-400/80">The new loader will be installed on next launch.</p>
                     </div>
@@ -3717,7 +3757,8 @@ watch(
                   <!-- Mod Info -->
                   <div class="min-w-0 flex-1">
                     <div class="font-medium text-sm truncate flex items-center gap-1.5">
-                      {{ mod.name }}
+                      <span class="hover:text-primary cursor-pointer transition-colors"
+                        @click.stop="openModDetails(mod)" title="Click to view details">{{ mod.name }}</span>
                       <!-- Recently Updated Badge -->
                       <span v-if="recentlyUpdatedMods.has(mod.id)"
                         class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium animate-pulse">
@@ -3892,9 +3933,10 @@ watch(
                   <!-- Mod Info -->
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                      <span class="font-medium text-sm truncate">{{
-                        mod.name
-                      }}</span>
+                      <span class="font-medium text-sm truncate hover:text-primary cursor-pointer transition-colors"
+                        @click.stop="openModDetails(mod)" title="Click to view details">{{
+                          mod.name
+                        }}</span>
                       <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-red-500 shrink-0"
                         title="Incompatible" />
                       <AlertTriangle v-else-if="mod.hasWarning" class="w-3.5 h-3.5 text-amber-500 shrink-0"
@@ -3968,7 +4010,8 @@ watch(
 
         <!-- Discover Tab -->
         <div v-else-if="activeTab === 'discover'" class="flex-1 overflow-hidden">
-          <RecommendationsPanel :modpack-id="modpackId" :is-linked="isLinked" @add-mod="handleAddModFromAnalysis" />
+          <RecommendationsPanel :modpack-id="modpackId" :is-linked="isLinked"
+            :installed-project-files="installedProjectFiles" @add-mod="handleAddModFromAnalysis" />
         </div>
 
         <!-- Health Tab (Analysis) -->
@@ -4071,8 +4114,8 @@ watch(
                         </option>
                         <option v-for="lv in filteredLoaderVersions" :key="lv.name"
                           :value="extractLoaderVersion(lv.name)">{{
-                          extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? ' (Latest)'
-                          : '' }}
+                            extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? ' (Latest)'
+                            : '' }}
                         </option>
                       </select>
                       <Button variant="outline" size="sm" @click="fetchLoaderVersions"
@@ -4394,8 +4437,8 @@ watch(
 
     <!-- CurseForge Browse Dialog -->
     <CurseForgeSearch :open="showCFSearch" :game-version="modpack?.minecraft_version" :mod-loader="modpack?.loader"
-      :initial-content-type="contentTypeTab" :locked-modpack-id="modpackId" :lock-filters="true"
-      @close="handleCFSearchClose" @added="handleCFModAdded" />
+      :initial-content-type="contentTypeTab" :locked-modpack-id="modpackId" :lock-filters="true" :full-screen="true"
+      :installed-project-files="installedProjectFiles" @close="handleCFSearchClose" @added="handleCFModAdded" />
 
     <!-- Version Picker Dialog -->
     <FilePickerDialog :open="showVersionPickerDialog" :mod="versionPickerMod" :game-version="modpack?.minecraft_version"
@@ -4408,7 +4451,7 @@ watch(
       modpackId: modpackId,
       gameVersion: modpack?.minecraft_version,
       loader: modpack?.loader
-    }" :current-file-id="modDetailsTarget?.cf_file_id" @close="closeModDetails"
+    }" :current-file-id="modDetailsTarget?.cf_file_id" :full-screen="true" @close="closeModDetails"
       @version-changed="handleModDetailsVersionChange" />
 
     <!-- CurseForge Changelog Dialog -->

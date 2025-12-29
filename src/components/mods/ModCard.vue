@@ -157,7 +157,8 @@ function handleImageError(e: Event) {
 
         <div class="min-w-0 flex-1 pt-0.5">
           <h3
-            class="font-semibold text-sm leading-tight truncate pr-2 text-foreground/90 group-hover:text-primary transition-colors">
+            class="font-semibold text-sm leading-tight truncate pr-2 text-foreground/90 hover:text-primary transition-colors cursor-pointer"
+            @click.stop="$emit('show-details', mod)" title="Click to view details">
             {{ mod.name }}
           </h3>
           <p class="text-xs text-muted-foreground truncate mt-0.5">

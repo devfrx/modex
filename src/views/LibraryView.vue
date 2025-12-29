@@ -12,7 +12,6 @@ import AddToModpackDialog from "@/components/modpacks/AddToModpackDialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
 import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import ModUpdateDialog from "@/components/mods/ModUpdateDialog.vue";
-import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
@@ -84,9 +83,6 @@ const searchField = ref<"all" | "name" | "author" | "version" | "description">(
 // UI State
 const showFilters = ref(false);
 const showColumnSelector = ref(false);
-
-// CurseForge search dialog
-const showCurseForgeSearch = ref(false);
 
 // Folder filter
 const selectedFolderId = ref<string | null>(null);
@@ -855,7 +851,7 @@ function closeDetails() {
 // Handle version change from ModDetailsModal (for library, this updates the mod)
 async function handleLibraryVersionChange(fileId: number) {
   if (!detailsMod.value) return;
-  
+
   try {
     const result = await window.api.updates.applyUpdate(detailsMod.value.id, fileId);
     if (result.success) {
@@ -1139,8 +1135,7 @@ watch(
   () => route.query.action,
   (action) => {
     if (action === 'browse') {
-      showCurseForgeSearch.value = true;
-      router.replace({ query: { ...route.query, action: undefined } });
+      router.push('/library/search');
     }
   },
   { immediate: true }
@@ -1448,7 +1443,7 @@ onMounted(() => {
               <ArrowUpCircle class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" />
               <span class="hidden lg:inline text-xs font-medium">Check Updates</span>
             </Button>
-            <Button @click="showCurseForgeSearch = true" variant="default" size="sm"
+            <Button @click="router.push('/library/search')" variant="default" size="sm"
               class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
               <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </Button>
@@ -1512,7 +1507,7 @@ onMounted(() => {
           mods on CurseForge.
         </p>
 
-        <Button @click="showCurseForgeSearch = true" size="lg"
+        <Button @click="router.push('/library/search')" size="lg"
           class="gap-2.5 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
           <Globe class="w-5 h-5" />
           <span class="font-semibold">Browse CurseForge</span>
@@ -1994,8 +1989,10 @@ onMounted(() => {
                 class="relative p-2 rounded-lg border border-border cursor-pointer transition-all hover:bg-muted/50 hover:border-border group"
                 :class="{
                   'ring-1 ring-primary bg-primary/5': selectedModIds.has(group.primary.id),
-                }" @click="toggleSelection(group.primary.id)" @dblclick="showModDetails(group.primary)">
-                <div class="font-medium text-xs truncate pr-6">{{ group.primary.name }}</div>
+                }" @click="toggleSelection(group.primary.id)">
+                <div class="font-medium text-xs truncate pr-6 hover:text-primary transition-colors"
+                  @click.stop="showModDetails(group.primary)" title="Click to view details">{{ group.primary.name }}
+                </div>
                 <div class="text-[10px] text-muted-foreground truncate">
                   {{ group.primary.loader }} • {{ group.primary.version }}
                 </div>
@@ -2012,8 +2009,9 @@ onMounted(() => {
                   class="p-2 rounded-lg border border-border/50 cursor-pointer transition-all hover:bg-muted/50 bg-muted/20"
                   :class="{
                     'ring-1 ring-primary bg-primary/5': selectedModIds.has(variant.id),
-                  }" @click="toggleSelection(variant.id)" @dblclick="showModDetails(variant)">
-                  <div class="font-medium text-xs truncate text-muted-foreground">
+                  }" @click="toggleSelection(variant.id)">
+                  <div class="font-medium text-xs truncate text-muted-foreground hover:text-primary transition-colors"
+                    @click.stop="showModDetails(variant)" title="Click to view details">
                     <ChevronRight class="w-2.5 h-2.5 inline -ml-0.5" /> {{ variant.game_version }}
                   </div>
                   <div class="text-[10px] text-muted-foreground truncate">
@@ -2028,14 +2026,8 @@ onMounted(() => {
     </div>
 
     <!-- Mod Details Modal -->
-    <ModDetailsModal
-      :open="showDetails"
-      :mod="detailsMod"
-      :context="{ type: 'library' }"
-      :current-file-id="detailsMod?.cf_file_id"
-      @close="closeDetails"
-      @version-changed="handleLibraryVersionChange"
-    />
+    <ModDetailsModal :open="showDetails" :mod="detailsMod" :context="{ type: 'library' }"
+      :current-file-id="detailsMod?.cf_file_id" @close="closeDetails" @version-changed="handleLibraryVersionChange" />
 
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModIds.size > 0" :count="selectedModIds.size" label="mods" @clear="clearSelection">
@@ -2160,10 +2152,6 @@ onMounted(() => {
     <ModUpdateDialog :open="showSingleModUpdateDialog" :mod="selectedUpdateMod"
       :minecraft-version="selectedUpdateMod?.game_version || '1.20.1'" :loader="selectedUpdateMod?.loader || 'forge'"
       @close="showSingleModUpdateDialog = false" @updated="handleModUpdated" />
-
-    <!-- CurseForge Search Dialog -->
-    <CurseForgeSearch :open="showCurseForgeSearch" :installed-project-files="installedProjectFiles"
-      @close="showCurseForgeSearch = false" @added="loadMods" />
   </div>
 </template>
 

@@ -23,6 +23,7 @@ const props = defineProps<{
     gameVersion?: string;
     modLoader?: string;
     contentType?: "mod" | "resourcepack" | "shader";
+    installedProjectFiles?: Map<number, Set<number>>;
 }>();
 
 const emit = defineEmits<{
@@ -108,6 +109,12 @@ const filteredFiles = computed(() => {
         return true;
     });
 });
+
+// Check if a specific file is already installed
+function isFileInstalled(fileId: number): boolean {
+    if (!props.mod || !props.installedProjectFiles) return false;
+    return props.installedProjectFiles.get(props.mod.id)?.has(fileId) || false;
+}
 
 function getReleaseTypeClass(type: number) {
     switch (type) {
@@ -216,19 +223,22 @@ watch(
                     :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-muted/50'">
                     <input type="checkbox" v-model="filterRelease" class="sr-only" />
                     <div class="w-3 h-3 rounded-full bg-primary ring-2 ring-primary/30" />
-                    <span class="text-sm font-medium" :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
+                    <span class="text-sm font-medium"
+                        :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
                 </label>
                 <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
                     :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'hover:bg-muted/50'">
                     <input type="checkbox" v-model="filterBeta" class="sr-only" />
                     <div class="w-3 h-3 rounded-full bg-blue-500 ring-2 ring-blue-500/30" />
-                    <span class="text-sm font-medium" :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
+                    <span class="text-sm font-medium"
+                        :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
                 </label>
                 <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
                     :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'hover:bg-muted/50'">
                     <input type="checkbox" v-model="filterAlpha" class="sr-only" />
                     <div class="w-3 h-3 rounded-full bg-orange-500 ring-2 ring-orange-500/30" />
-                    <span class="text-sm font-medium" :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
+                    <span class="text-sm font-medium"
+                        :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
                 </label>
 
                 <div class="ml-auto text-xs text-muted-foreground">
@@ -252,17 +262,24 @@ watch(
             <!-- Files List -->
             <div v-else class="max-h-[400px] overflow-y-auto space-y-2">
                 <button v-for="file in filteredFiles" :key="file.id"
-                    class="w-full text-left p-3 rounded-lg border transition-all" :class="selectedFileId === file.id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50 hover:bg-muted/30'
-                        " @click="selectedFileId = file.id">
+                    class="w-full text-left p-3 rounded-lg border transition-all" :class="[
+                        isFileInstalled(file.id)
+                            ? 'border-border/50 bg-muted/20 opacity-60 cursor-not-allowed'
+                            : selectedFileId === file.id
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                    ]" :disabled="isFileInstalled(file.id)"
+                    @click="!isFileInstalled(file.id) && (selectedFileId = file.id)">
                     <div class="flex items-start gap-3">
                         <div class="w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 mt-0.5"
-                            :class="selectedFileId === file.id
-                                ? 'bg-primary border-primary'
-                                : 'border-muted-foreground/30'
+                            :class="isFileInstalled(file.id)
+                                ? 'bg-muted border-muted-foreground/30'
+                                : selectedFileId === file.id
+                                    ? 'bg-primary border-primary'
+                                    : 'border-muted-foreground/30'
                                 ">
-                            <Check v-if="selectedFileId === file.id" class="w-3 h-3 text-primary-foreground" />
+                            <Check v-if="isFileInstalled(file.id) || selectedFileId === file.id" class="w-3 h-3"
+                                :class="isFileInstalled(file.id) ? 'text-muted-foreground' : 'text-primary-foreground'" />
                         </div>
 
                         <div class="flex-1 min-w-0">
@@ -271,6 +288,10 @@ watch(
                                 <span class="px-1.5 py-0.5 text-[10px] font-medium rounded border"
                                     :class="getReleaseTypeClass(file.releaseType)">
                                     {{ getReleaseTypeName(file.releaseType) }}
+                                </span>
+                                <span v-if="isFileInstalled(file.id)"
+                                    class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-primary/10 text-primary border border-primary/20 flex items-center gap-0.5">
+                                    <Check class="w-3 h-3" /> INSTALLED
                                 </span>
                             </div>
 

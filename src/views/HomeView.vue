@@ -62,7 +62,7 @@ function navigate(route: string) {
 }
 
 function goToModpack(id: string) {
-    router.push(`/modpacks?id=${id}`);
+    router.push(`/modpacks/${id}`);
 }
 
 function getPackColor(pack: Modpack): string {

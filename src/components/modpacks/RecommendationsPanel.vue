@@ -19,6 +19,7 @@ import type { Mod } from "@/types/electron";
 const props = defineProps<{
   modpackId: string;
   isLinked: boolean;
+  installedProjectFiles?: Map<number, Set<number>>;
 }>();
 
 const emit = defineEmits<{
@@ -248,7 +249,7 @@ onMounted(() => {
 
     <!-- File Picker Dialog -->
     <FilePickerDialog :open="showFilePicker" :mod="selectedMod" :gameVersion="modpackInfo.version"
-      :modLoader="modpackInfo.loader" :contentType="activeTab" @close="showFilePicker = false"
-      @select="handleFileSelect" />
+      :modLoader="modpackInfo.loader" :contentType="activeTab" :installed-project-files="installedProjectFiles"
+      @close="showFilePicker = false" @select="handleFileSelect" />
   </div>
 </template>

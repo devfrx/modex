@@ -6,12 +6,10 @@ import { useInstances } from "@/composables/useInstances";
 import ModpackCard from "@/components/modpacks/ModpackCard.vue";
 import ModpackListItem from "@/components/modpacks/ModpackListItem.vue";
 import ModpackCompactCard from "@/components/modpacks/ModpackCompactCard.vue";
-import ModpackEditor from "@/components/modpacks/ModpackEditor.vue";
 import ModpackCompareDialog from "@/components/modpacks/ModpackCompareDialog.vue";
 import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import ShareDialog from "@/components/modpacks/ShareDialog.vue";
 import ConvertModpackDialog from "@/components/modpacks/ConvertModpackDialog.vue";
-import CurseForgeModpackSearch from "@/components/modpacks/CurseForgeModpackSearch.vue";
 import SyncModpackDialog from "@/components/modpacks/SyncModpackDialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -83,10 +81,6 @@ const sourceFilter = ref<"all" | "curseforge" | "local">("all");
 // Settings persistence key
 const SETTINGS_KEY = "modex:modpacks:settings";
 
-// Editor State
-const showEditor = ref(false);
-const selectedModpackId = ref<string | null>(null);
-
 // Compare State
 const showCompare = ref(false);
 const comparePackA = ref<string | null>(null);
@@ -108,12 +102,6 @@ const shareModpackName = ref<string>("");
 // Convert State
 const showConvertDialog = ref(false);
 const convertModpack = ref<Modpack | null>(null);
-
-// CurseForge Browse State
-const showCFBrowse = ref(false);
-
-// Sync State (now unified with Editor)
-const editorInitialTab = ref<"play" | "mods" | "discover" | "health" | "versions" | "profiles" | "settings" | "remote" | "configs">("mods");
 
 // Import State
 const showProgress = ref(false);
@@ -679,17 +667,14 @@ async function resolveCFConflicts() {
   }
 }
 
-// Editor
+// Editor - Navigate to full-screen view
 function openEditor(id: string) {
-  selectedModpackId.value = id;
-  showEditor.value = true;
+  router.push(`/modpacks/${id}`);
 }
 
 // Open editor with play tab
 function openPlayTab(id: string) {
-  selectedModpackId.value = id;
-  editorInitialTab.value = "play";
-  showEditor.value = true;
+  router.push(`/modpacks/${id}?tab=play`);
 }
 
 // Share
@@ -942,7 +927,7 @@ watch(
   { immediate: true }
 );
 
-// Handle URL id parameter (open specific modpack editor)
+// Handle URL id parameter (navigate to modpack editor)
 watch(
   () => route.query.id,
   async (id) => {
@@ -951,11 +936,11 @@ watch(
       if (modpacks.value.length === 0) {
         await loadModpacks();
       }
-      // Check if modpack exists
+      // Check if modpack exists and navigate to editor
       if (modpacks.value.some((m) => m.id === id)) {
-        openEditor(id);
+        router.push(`/modpacks/${id}`);
       }
-      // Clear the query param after opening
+      // Clear the query param
       router.replace({ query: { ...route.query, id: undefined } });
     }
   },
@@ -967,8 +952,7 @@ watch(
   () => route.query.action,
   (action) => {
     if (action === 'browse') {
-      showCFBrowse.value = true;
-      router.replace({ query: { ...route.query, action: undefined } });
+      router.push('/modpacks/browse');
     }
   },
   { immediate: true }
@@ -988,7 +972,6 @@ watch(
 );
 
 function handleSyncComplete() {
-  showEditor.value = false;
   toast.success("Ready to Play", "Instance is ready!");
 }
 
@@ -1153,7 +1136,7 @@ onMounted(() => {
               <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span class="hidden lg:inline text-xs">.modex</span>
             </Button>
-            <Button @click="showCFBrowse = true" :disabled="!isElectron()" variant="outline" size="sm"
+            <Button @click="router.push('/modpacks/browse')" :disabled="!isElectron()" variant="outline" size="sm"
               class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
               <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span class="hidden xs:inline">Browse CF</span>
@@ -1231,7 +1214,7 @@ onMounted(() => {
         </p>
 
         <div class="flex justify-center gap-3">
-          <Button @click="showCFBrowse = true" variant="outline" size="lg" class="gap-2 h-11 px-5">
+          <Button @click="router.push('/modpacks/browse')" variant="outline" size="lg" class="gap-2 h-11 px-5">
             <Globe class="w-5 h-5" />
             Browse CF
           </Button>
@@ -1430,12 +1413,6 @@ onMounted(() => {
       </Button>
     </BulkActionBar>
 
-    <!-- Modpack Editor Modal (unified with play functionality) -->
-    <ModpackEditor v-if="selectedModpackId" :modpack-id="selectedModpackId" :is-open="showEditor"
-      :initial-tab="editorInitialTab" @close="showEditor = false; editorInitialTab = 'mods'" @update="loadModpacks"
-      @export="exportModpack(selectedModpackId || '')" @exportToGame="exportModpackToGame(selectedModpackId || '')"
-      @launched="handleSyncComplete" />
-
     <!-- Compare Dialog -->
     <ModpackCompareDialog :open="showCompare" :pre-selected-pack-a="comparePackA || undefined"
       :pre-selected-pack-b="comparePackB || undefined" @close="
@@ -1469,9 +1446,6 @@ onMounted(() => {
     <!-- Convert Dialog -->
     <ConvertModpackDialog :open="showConvertDialog" :modpack="convertModpack" @close="closeConvertDialog"
       @success="handleConvertSuccess" />
-
-    <!-- CurseForge Modpack Browse Dialog -->
-    <CurseForgeModpackSearch :open="showCFBrowse" @close="showCFBrowse = false" @imported="loadModpacks" />
 
     <!-- CF Import Conflict Resolution Dialog -->
     <Dialog :open="showCFConflictDialog" @close="showCFConflictDialog = false">

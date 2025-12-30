@@ -38,6 +38,9 @@ const exportSuccess = ref(false);
 const exportPath = ref<string | null>(null);
 const copied = ref(false);
 
+// Export options
+const versionHistoryMode = ref<'full' | 'current'>('full');
+
 // Import state
 const isImporting = ref(false);
 const importProgress = ref<{ current: number; total: number; modName: string } | null>(null);
@@ -110,7 +113,9 @@ async function exportModex() {
   exportSuccess.value = false;
 
   try {
-    const result = await window.api.export.modex(props.modpackId);
+    const result = await window.api.export.modex(props.modpackId, {
+      versionHistoryMode: versionHistoryMode.value
+    });
     if (result) {
       exportSuccess.value = true;
       exportPath.value = result.path;
@@ -228,7 +233,7 @@ async function importFromUrl() {
 
   try {
     const result = await window.api.remote.importFromUrl(importUrl.value.trim());
-    
+
     if (result.success) {
       if (result.alreadyExists) {
         toast.info(
@@ -386,6 +391,27 @@ function formatBytes(bytes: number): string {
           <span class="ml-1">{{ formatDate(existingShareInfo.lastSync) }}</span>
         </div>
 
+        <!-- Version History Options -->
+        <div class="space-y-2">
+          <label class="text-xs text-muted-foreground uppercase tracking-wide">Version History</label>
+          <div class="flex gap-2">
+            <button @click="versionHistoryMode = 'full'"
+              class="flex-1 px-3 py-2 text-sm rounded-lg border transition-all" :class="versionHistoryMode === 'full'
+                ? 'bg-primary/10 border-primary text-primary'
+                : 'bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/50'">
+              <div class="font-medium">Full History</div>
+              <div class="text-xs opacity-70">Export all versions</div>
+            </button>
+            <button @click="versionHistoryMode = 'current'"
+              class="flex-1 px-3 py-2 text-sm rounded-lg border transition-all" :class="versionHistoryMode === 'current'
+                ? 'bg-primary/10 border-primary text-primary'
+                : 'bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/50'">
+              <div class="font-medium">Current Only</div>
+              <div class="text-xs opacity-70">Export current version</div>
+            </button>
+          </div>
+        </div>
+
         <!-- Export Button -->
         <Button class="w-full" @click="exportModex" :disabled="isExporting">
           <RefreshCw v-if="isExporting" class="w-4 h-4 mr-2 animate-spin" />
@@ -409,21 +435,13 @@ function formatBytes(bytes: number): string {
       <div v-if="activeTab === 'import'" class="space-y-4">
         <!-- Toggle between file import and URL import -->
         <div class="flex gap-2">
-          <Button 
-            variant="outline" 
-            class="flex-1" 
-            :class="!urlImportMode ? 'ring-2 ring-primary' : ''"
-            @click="urlImportMode = false"
-          >
+          <Button variant="outline" class="flex-1" :class="!urlImportMode ? 'ring-2 ring-primary' : ''"
+            @click="urlImportMode = false">
             <Download class="w-4 h-4 mr-2" />
             From File
           </Button>
-          <Button 
-            variant="outline" 
-            class="flex-1" 
-            :class="urlImportMode ? 'ring-2 ring-primary' : ''"
-            @click="urlImportMode = true"
-          >
+          <Button variant="outline" class="flex-1" :class="urlImportMode ? 'ring-2 ring-primary' : ''"
+            @click="urlImportMode = true">
             <Link class="w-4 h-4 mr-2" />
             From URL
           </Button>
@@ -456,12 +474,8 @@ function formatBytes(bytes: number): string {
           </div>
 
           <div class="space-y-2">
-            <Input 
-              v-model="importUrl" 
-              placeholder="https://gist.githubusercontent.com/..." 
-              :disabled="isImportingUrl"
-              @keyup.enter="importFromUrl"
-            />
+            <Input v-model="importUrl" placeholder="https://gist.githubusercontent.com/..." :disabled="isImportingUrl"
+              @keyup.enter="importFromUrl" />
             <p v-if="urlImportError" class="text-xs text-red-500">{{ urlImportError }}</p>
           </div>
 

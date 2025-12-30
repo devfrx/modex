@@ -944,8 +944,7 @@ function handleConfigReverted(event: Event) {
                                         <div ref="logScrollRef" class="log-console-content">
                                             <div v-if="filteredGameLogs.length === 0" class="log-empty">
                                                 <span class="text-muted-foreground text-sm">{{ gameLogs.length === 0 ?
-                                                    'Waiting for logs...' : 'No logs
-                                                    match the current filter' }}</span>
+                                                    'Waiting for logs...' : 'No logs match the current filter' }}</span>
                                             </div>
                                             <div v-for="(log, index) in filteredGameLogs" :key="index" class="log-line"
                                                 :class="`log-${log.level.toLowerCase()}`">

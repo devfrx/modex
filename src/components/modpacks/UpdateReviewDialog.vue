@@ -56,8 +56,8 @@ async function handleConfirm() {
 </script>
 
 <template>
-  <Dialog :open="open" title="Update Available" @close="$emit('close')">
-    <div class="w-full max-w-lg mx-auto">
+  <Dialog :open="open" title="Update Available" size="2xl" @close="$emit('close')">
+    <div class="w-full max-w-2xl mx-auto">
       <div class="p-4 bg-muted/30 rounded-lg border border-border/50 mb-4">
         <div class="flex items-center justify-between">
           <div>

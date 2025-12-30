@@ -231,6 +231,31 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:getDisabledMods", modpackId),
     getLockedMods: (modpackId: string): Promise<string[]> =>
       ipcRenderer.invoke("modpacks:getLockedMods", modpackId),
+    generateResourceList: (modpackId: string, options?: {
+      format?: 'simple' | 'detailed' | 'markdown';
+      sortBy?: 'name' | 'type' | 'source';
+      includeDisabled?: boolean;
+    }): Promise<{
+      list: Array<{
+        name: string;
+        version: string;
+        type: string;
+        source: string;
+        enabled: boolean;
+        locked: boolean;
+        url?: string;
+      }>;
+      formatted: string;
+      stats: {
+        total: number;
+        mods: number;
+        resourcepacks: number;
+        shaders: number;
+        enabled: number;
+        disabled: number;
+        locked: number;
+      };
+    }> => ipcRenderer.invoke("modpacks:generateResourceList", modpackId, options),
     setModLocked: (
       modpackId: string,
       modId: string,
@@ -441,18 +466,24 @@ contextBridge.exposeInMainWorld("api", {
     ): Promise<{ success: boolean; path: string } | null> =>
       ipcRenderer.invoke("export:curseforge", modpackId),
     modex: (
-      modpackId: string
+      modpackId: string,
+      options?: {
+        versionHistoryMode?: 'full' | 'current';
+      }
     ): Promise<{ success: boolean; code: string; path: string } | null> =>
-      ipcRenderer.invoke("export:modex", modpackId),
+      ipcRenderer.invoke("export:modex", modpackId, options),
     selectPath: (
       defaultName: string,
       extension: string
     ): Promise<string | null> =>
       ipcRenderer.invoke("export:selectPath", defaultName, extension),
     manifest: (
-      modpackId: string
+      modpackId: string,
+      options?: {
+        versionHistoryMode?: 'full' | 'current';
+      }
     ): Promise<{ success: boolean; path: string } | null> =>
-      ipcRenderer.invoke("export:manifest", modpackId),
+      ipcRenderer.invoke("export:manifest", modpackId, options),
   },
 
   // ========== IMPORT ==========
@@ -582,8 +613,10 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== REMOTE UPDATES ==========
   remote: {
-    exportManifest: (modpackId: string): Promise<string> =>
-      ipcRenderer.invoke("remote:exportManifest", modpackId),
+    exportManifest: (modpackId: string, options?: {
+      versionHistoryMode?: 'full' | 'current';
+    }): Promise<string> =>
+      ipcRenderer.invoke("remote:exportManifest", modpackId, options),
     checkUpdate: (
       modpackId: string
     ): Promise<{

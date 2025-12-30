@@ -462,6 +462,15 @@ async function initializeBackend() {
     return metadataManager.getLockedMods(modpackId);
   });
 
+  // Generate resource list for a modpack
+  ipcMain.handle("modpacks:generateResourceList", async (_, modpackId: string, options?: {
+    format?: 'simple' | 'detailed' | 'markdown';
+    sortBy?: 'name' | 'type' | 'source';
+    includeDisabled?: boolean;
+  }) => {
+    return metadataManager.generateResourceList(modpackId, options);
+  });
+
   ipcMain.handle(
     "modpacks:setModLocked",
     async (_, modpackId: string, modId: string, locked: boolean) => {
@@ -1248,8 +1257,10 @@ async function initializeBackend() {
 
   // ========== REMOTE UPDATES IPC HANDLERS ==========
 
-  ipcMain.handle("remote:exportManifest", async (_, modpackId: string) => {
-    return metadataManager.exportRemoteManifest(modpackId);
+  ipcMain.handle("remote:exportManifest", async (_, modpackId: string, options?: {
+    versionHistoryMode?: 'full' | 'current';
+  }) => {
+    return metadataManager.exportRemoteManifest(modpackId, options);
   });
 
   ipcMain.handle("remote:checkUpdate", async (_, modpackId: string) => {
@@ -1410,7 +1421,9 @@ async function initializeBackend() {
     }
   });
 
-  ipcMain.handle("export:modex", async (_, modpackId: string) => {
+  ipcMain.handle("export:modex", async (_, modpackId: string, options?: {
+    versionHistoryMode?: 'full' | 'current';
+  }) => {
     if (!win) return null;
 
     try {
@@ -1424,7 +1437,7 @@ async function initializeBackend() {
 
       if (result.canceled || !result.filePath) return null;
 
-      const { manifest, code } = await metadataManager.exportToModex(modpackId);
+      const { manifest, code } = await metadataManager.exportToModex(modpackId, options);
 
       // Create ZIP with modex.json and overrides
       const AdmZip = (await import("adm-zip")).default;
@@ -1457,7 +1470,9 @@ async function initializeBackend() {
     }
   });
 
-  ipcMain.handle("export:manifest", async (_, modpackId: string) => {
+  ipcMain.handle("export:manifest", async (_, modpackId: string, options?: {
+    versionHistoryMode?: 'full' | 'current';
+  }) => {
     if (!win) return null;
 
     try {
@@ -1471,7 +1486,7 @@ async function initializeBackend() {
 
       if (result.canceled || !result.filePath) return null;
 
-      const { manifest } = await metadataManager.exportToModex(modpackId);
+      const { manifest } = await metadataManager.exportToModex(modpackId, options);
 
       await fs.writeJson(result.filePath, manifest, { spaces: 2 });
 
@@ -1596,23 +1611,29 @@ async function initializeBackend() {
               });
             }
 
-            // Get mods and sync to instance
+            // Get mods and sync to instance (include ALL mods, disabled ones will be renamed)
             const mods = await metadataManager.getModsInModpack(importResult.modpackId);
-            const disabledMods = modpack.disabled_mod_ids || [];
-            const modsToSync = mods
-              .filter(m => !disabledMods.includes(m.id))
+            const disabledModIds = new Set(modpack.disabled_mod_ids || []);
+            const modsToSync = mods.map(m => ({
+              id: m.id,
+              name: m.name,
+              filename: m.filename,
+              cf_project_id: m.cf_project_id,
+              cf_file_id: m.cf_file_id,
+              content_type: m.content_type || "mod"
+            }));
+            const disabledModsToSync = mods
+              .filter(m => disabledModIds.has(m.id))
               .map(m => ({
                 id: m.id,
-                name: m.name,
                 filename: m.filename,
-                cf_project_id: m.cf_project_id,
-                cf_file_id: m.cf_file_id,
-                content_type: m.content_type || "mod"
+                content_type: m.content_type || "mod" as "mod" | "resourcepack" | "shader"
               }));
 
             const overridesPath = metadataManager.getOverridesPath(importResult.modpackId);
             await instanceService.syncModpackToInstance(instance.id, {
               mods: modsToSync,
+              disabledMods: disabledModsToSync,
               overridesZipPath: overridesPath
             }, {
               onProgress: (stage, current, total, item) => {
@@ -1978,23 +1999,29 @@ async function initializeBackend() {
                 modName: "Syncing mods to instance...",
               });
 
-              // Get mods and sync to instance
+              // Get mods and sync to instance (include ALL mods, disabled ones will be renamed)
               const mods = await metadataManager.getModsInModpack(importResult.modpackId);
-              const disabledMods = modpack.disabled_mod_ids || [];
-              const modsToSync = mods
-                .filter(m => !disabledMods.includes(m.id))
+              const disabledModIds = new Set(modpack.disabled_mod_ids || []);
+              const modsToSync = mods.map(m => ({
+                id: m.id,
+                name: m.name,
+                filename: m.filename,
+                cf_project_id: m.cf_project_id,
+                cf_file_id: m.cf_file_id,
+                content_type: m.content_type || "mod"
+              }));
+              const disabledModsToSync = mods
+                .filter(m => disabledModIds.has(m.id))
                 .map(m => ({
                   id: m.id,
-                  name: m.name,
                   filename: m.filename,
-                  cf_project_id: m.cf_project_id,
-                  cf_file_id: m.cf_file_id,
-                  content_type: m.content_type || "mod"
+                  content_type: m.content_type || "mod" as "mod" | "resourcepack" | "shader"
                 }));
 
               const overridesPath = metadataManager.getOverridesPath(importResult.modpackId);
               await instanceService.syncModpackToInstance(instance.id, {
                 mods: modsToSync,
+                disabledMods: disabledModsToSync,
                 overridesZipPath: overridesPath
               }, {
                 onProgress: (stage, current, total, item) => {
@@ -2166,23 +2193,29 @@ async function initializeBackend() {
                 });
               }
 
-              // Get mods and sync to instance
+              // Get mods and sync to instance (include ALL mods, disabled ones will be renamed)
               const mods = await metadataManager.getModsInModpack(importResult.modpackId);
-              const disabledMods = modpack.disabled_mod_ids || [];
-              const modsToSync = mods
-                .filter(m => !disabledMods.includes(m.id))
+              const disabledModIds = new Set(modpack.disabled_mod_ids || []);
+              const modsToSync = mods.map(m => ({
+                id: m.id,
+                name: m.name,
+                filename: m.filename,
+                cf_project_id: m.cf_project_id,
+                cf_file_id: m.cf_file_id,
+                content_type: m.content_type || "mod"
+              }));
+              const disabledModsToSync = mods
+                .filter(m => disabledModIds.has(m.id))
                 .map(m => ({
                   id: m.id,
-                  name: m.name,
                   filename: m.filename,
-                  cf_project_id: m.cf_project_id,
-                  cf_file_id: m.cf_file_id,
-                  content_type: m.content_type || "mod"
+                  content_type: m.content_type || "mod" as "mod" | "resourcepack" | "shader"
                 }));
 
               const overridesPath = metadataManager.getOverridesPath(importResult.modpackId);
               await instanceService.syncModpackToInstance(instance.id, {
                 mods: modsToSync,
+                disabledMods: disabledModsToSync,
                 overridesZipPath: overridesPath
               }, {
                 onProgress: (stage, current, total, item) => {
@@ -2265,28 +2298,42 @@ async function initializeBackend() {
 
         if (importResult.success && importResult.modpackId) {
           try {
-            const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
+            // Get history AFTER import (the existingHistory was captured BEFORE import happened)
+            const historyAfterImport = await metadataManager.getVersionHistory(importResult.modpackId);
+            const versionCountAfterImport = historyAfterImport?.versions.length || 0;
 
             if (!importResult.isUpdate) {
-              // New import: initialize version control
-              if (!existingHistory || existingHistory.versions.length === 0) {
+              // New import: initialize version control if empty
+              if (versionCountAfterImport === 0) {
                 await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from remote manifest");
                 console.log(`[MODEX Manifest Import] Version control initialized for modpack ${importResult.modpackId}`);
               }
             } else {
-              // Update: create a new version to record the changes
+              // Update: check if version history was imported from manifest
+              // We need to check if the manifest HAD version history that was imported
+              // If the manifest included version_history, those versions are now in the local history
+              const manifestHadVersionHistory = !!(manifest.version_history && 
+                (Array.isArray(manifest.version_history) ? manifest.version_history.length > 0 : 
+                 manifest.version_history.versions?.length > 0));
+              
+              // Always create a version after update to mark current state as "synced"
+              // This ensures no "unsaved changes" appear after downloading an update
               const changesSummary = importResult.changes
                 ? `Added: ${importResult.changes.added}, Removed: ${importResult.changes.removed}, Updated: ${importResult.changes.updated}`
                 : "Remote update applied";
 
+              const versionMessage = manifestHadVersionHistory
+                ? `Synced with remote: ${changesSummary}`
+                : `Remote update: ${changesSummary}`;
+
               await metadataManager.createVersion(
                 importResult.modpackId,
-                `Remote update: ${changesSummary}`,
+                versionMessage,
                 undefined,
                 true, // hasConfigChanges (manifest may include config updates)
-                false // forceCreate
+                true // forceCreate - always create to mark current state
               );
-              console.log(`[MODEX Manifest Update] Created new version for modpack ${importResult.modpackId}`);
+              console.log(`[MODEX Manifest Update] Created sync version for modpack ${importResult.modpackId}`);
             }
           } catch (vcError) {
             console.error(`[MODEX Manifest Import] Failed to handle version control:`, vcError);
@@ -2860,6 +2907,10 @@ async function initializeBackend() {
     return minecraftService.getDefaultInstallation();
   });
 
+  // LEGACY: Direct folder sync (MinecraftService) - syncs to existing Minecraft installation
+  // NOTE: This differs from InstanceService - disabled mods are simply NOT synced (excluded),
+  // rather than being synced and renamed to .disabled. This is intentional because legacy sync
+  // operates on user's existing Minecraft folder where they may have their own mod management.
   ipcMain.handle("minecraft:syncModpack", async (_, installationId: string, modpackId: string, options?: { clearExisting?: boolean; createBackup?: boolean }) => {
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) return { success: false, synced: 0, skipped: 0, errors: ["Modpack not found"], syncedMods: [] };
@@ -2867,7 +2918,7 @@ async function initializeBackend() {
     const mods = await metadataManager.getModsInModpack(modpackId);
     const disabledMods = modpack.disabled_mod_ids || [];
 
-    // Filter out disabled mods and prepare for sync
+    // Filter out disabled mods (they are excluded, not renamed like in InstanceService)
     const modsToSync = mods
       .filter(m => !disabledMods.includes(m.id))
       .map(m => ({
@@ -2968,11 +3019,16 @@ async function initializeBackend() {
     configSyncMode?: "overwrite" | "new_only" | "skip";
     overridesZipPath?: string;
   }) => {
+    console.log(`[instance:syncModpack] Called with instanceId: ${instanceId}, modpackId: ${modpackId}`);
+    
     // Get modpack and mods
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) {
+      console.log(`[instance:syncModpack] Modpack not found: ${modpackId}`);
       return { success: false, modsDownloaded: 0, modsSkipped: 0, configsCopied: 0, configsSkipped: 0, errors: ["Modpack not found"], warnings: [] };
     }
+    
+    console.log(`[instance:syncModpack] Found modpack: ${modpack.name}, mod_ids count: ${modpack.mod_ids?.length}, disabled_mod_ids: ${JSON.stringify(modpack.disabled_mod_ids)}`);
 
     // Update instance loader and loaderVersion to match modpack (so next launch installs correct loader)
     const instance = await instanceService.getInstance(instanceId);
@@ -2993,9 +3049,17 @@ async function initializeBackend() {
     const mods = await metadataManager.getModsInModpack(modpackId);
     const disabledModIds = new Set(modpack.disabled_mod_ids || []);
 
-    // Prepare enabled mods data with content_type for proper folder placement
+    console.log(`[instance:syncModpack] Modpack has ${mods.length} mods, ${disabledModIds.size} disabled`);
+    
+    // Log mods without CF IDs (potential problems)
+    const modsWithoutCFIds = mods.filter(m => !m.cf_project_id || !m.cf_file_id);
+    if (modsWithoutCFIds.length > 0) {
+      console.log(`[instance:syncModpack] WARNING: ${modsWithoutCFIds.length} mods without CF IDs:`);
+      modsWithoutCFIds.forEach(m => console.log(`  - ${m.name} (id: ${m.id})`));
+    }
+
+    // Prepare ALL mods data (including disabled) - they'll be renamed to .disabled after download
     const modsToSync = mods
-      .filter(m => !disabledModIds.has(m.id))
       .map(m => ({
         id: m.id,
         name: m.name,
@@ -3261,24 +3325,31 @@ async function initializeBackend() {
       } : undefined
     });
 
-    // Get mods
+    // Get mods (include ALL mods, disabled ones will be renamed to .disabled)
     const mods = await metadataManager.getModsInModpack(modpackId);
-    const disabledMods = modpack.disabled_mod_ids || [];
+    const disabledModIds = new Set(modpack.disabled_mod_ids || []);
 
-    const modsToSync = mods
-      .filter(m => !disabledMods.includes(m.id))
+    const modsToSync = mods.map(m => ({
+      id: m.id,
+      name: m.name,
+      filename: m.filename,
+      cf_project_id: m.cf_project_id,
+      cf_file_id: m.cf_file_id,
+      content_type: m.content_type || "mod"
+    }));
+
+    const disabledModsToSync = mods
+      .filter(m => disabledModIds.has(m.id))
       .map(m => ({
         id: m.id,
-        name: m.name,
         filename: m.filename,
-        cf_project_id: m.cf_project_id,
-        cf_file_id: m.cf_file_id,
-        content_type: m.content_type || "mod"
+        content_type: m.content_type || "mod" as "mod" | "resourcepack" | "shader"
       }));
 
     // Sync mods and configs to instance
     const syncResult = await instanceService.syncModpackToInstance(instance.id, {
       mods: modsToSync,
+      disabledMods: disabledModsToSync,
       overridesZipPath: options?.overridesZipPath
     }, {
       onProgress: (stage, current, total, item) => {

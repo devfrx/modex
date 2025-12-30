@@ -566,7 +566,8 @@ export class InstanceService {
 
       const existingModFiles = await fs.readdir(modsPath);
       for (const file of existingModFiles) {
-        if (file.endsWith(".jar.disabled")) {
+        // Handle both .jar.disabled and .zip.disabled (for datapacks/compat packs)
+        if (file.endsWith(".jar.disabled") || file.endsWith(".zip.disabled")) {
           const originalFilename = file.replace(".disabled", "");
           // If this mod is in the enabled list (not in disabled list)
           if (allModFilenames.has(originalFilename) && !disabledFilenames.has(originalFilename)) {
@@ -671,9 +672,11 @@ export class InstanceService {
           }
           
           const destPath = path.join(destFolder, mod.filename);
+          const disabledDestPath = path.join(destFolder, mod.filename + ".disabled");
 
-          // Skip if already exists
-          if (await fs.pathExists(destPath)) {
+          // Skip if already exists (either enabled or disabled version)
+          if (await fs.pathExists(destPath) || await fs.pathExists(disabledDestPath)) {
+            console.log(`[Sync] Skipping ${mod.name} - already exists`);
             completed++;
             options.onProgress?.("Downloading content", completed, totalMods, mod.name);
             return { status: "skipped" as const, mod };
@@ -687,9 +690,13 @@ export class InstanceService {
             const part1 = fileIdStr.substring(0, 4);
             const part2 = fileIdStr.substring(4);
             downloadUrl = `https://edge.forgecdn.net/files/${part1}/${part2}/${encodeURIComponent(mod.filename)}`;
+            console.log(`[Sync] Built CF URL for ${mod.name}: ${downloadUrl}`);
+          } else {
+            console.log(`[Sync] No CF IDs for ${mod.name}: cf_project_id=${mod.cf_project_id}, cf_file_id=${mod.cf_file_id}`);
           }
 
           if (!downloadUrl) {
+            console.log(`[Sync] NO URL for ${mod.name} - skipping`);
             completed++;
             options.onProgress?.("Downloading content", completed, totalMods, mod.name);
             return { status: "no_url" as const, mod };
@@ -739,6 +746,35 @@ export class InstanceService {
             result.warnings.push(`Failed to download ${downloadResult.mod.name}: ${downloadResult.error}`);
             result.modsSkipped++;
             break;
+        }
+      }
+
+      // ==================== RENAME NEWLY DOWNLOADED DISABLED MODS ====================
+      // After download, rename any files that should be disabled
+      if (modpackData.disabledMods && modpackData.disabledMods.length > 0) {
+        options.onProgress?.("Renaming disabled mods...", 0, modpackData.disabledMods.length);
+        
+        for (const disabledMod of modpackData.disabledMods) {
+          let targetFolder: string;
+          switch (disabledMod.content_type) {
+            case "resourcepack":
+              targetFolder = resourcepacksPath;
+              break;
+            case "shader":
+              targetFolder = shaderpacksPath;
+              break;
+            default:
+              targetFolder = modsPath;
+          }
+
+          const enabledPath = path.join(targetFolder, disabledMod.filename);
+          const disabledPath = path.join(targetFolder, disabledMod.filename + ".disabled");
+
+          // If enabled file exists (just downloaded), rename to disabled
+          if (await fs.pathExists(enabledPath)) {
+            await fs.rename(enabledPath, disabledPath);
+            console.log(`[Sync] Disabled newly downloaded mod: ${disabledMod.filename}`);
+          }
         }
       }
 
@@ -1897,12 +1933,17 @@ export class InstanceService {
       const modsPath = path.join(instance.path, "mods");
       const disabledSet = new Set(disabledModIds);
       
+      console.log(`[checkSyncStatus] Checking instance ${instance.id} at ${instance.path}`);
+      console.log(`[checkSyncStatus] Disabled mod IDs: ${[...disabledSet].join(', ')}`);
+      console.log(`[checkSyncStatus] Expected mods count: ${modpackMods.length}`);
+      
       // Get all mod files in instance (both enabled and disabled)
       // Mods can be .jar or .zip (datapacks, compat packs)
       const instanceFiles: Map<string, boolean> = new Map(); // filename -> isEnabled
       
       if (await fs.pathExists(modsPath)) {
         const files = await fs.readdir(modsPath);
+        console.log(`[checkSyncStatus] Files in mods folder: ${files.length}`);
         for (const file of files) {
           if (file.endsWith(".jar") || file.endsWith(".zip")) {
             instanceFiles.set(file, true);
@@ -1911,6 +1952,9 @@ export class InstanceService {
             instanceFiles.set(enabledName, false);
           }
         }
+        console.log(`[checkSyncStatus] Tracked instance files: ${[...instanceFiles.keys()].join(', ')}`);
+      } else {
+        console.log(`[checkSyncStatus] Mods folder does not exist: ${modsPath}`);
       }
 
       // Check mods that should be in instance
@@ -1926,6 +1970,7 @@ export class InstanceService {
         
         if (!instanceFiles.has(filename)) {
           // Mod is missing entirely
+          console.log(`[checkSyncStatus] MISSING: ${filename} (id: ${mod.id}, disabled: ${shouldBeDisabled})`);
           result.missingInInstance.push({ filename, type: "mod" });
         } else {
           const isEnabled = instanceFiles.get(filename)!;
@@ -1936,6 +1981,8 @@ export class InstanceService {
           }
         }
       }
+      
+      console.log(`[checkSyncStatus] Missing in instance: ${result.missingInInstance.length}`);
 
       // Check for extra mods in instance
       for (const [filename] of instanceFiles) {

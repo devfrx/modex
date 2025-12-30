@@ -383,7 +383,9 @@ export class MetadataManager {
   ): Promise<Mod | undefined> {
     const library = await this.loadLibrary();
     const id = `cf-${projectId}-${fileId}`;
-    return library.mods.find((m) => m.id === id);
+    const found = library.mods.find((m) => m.id === id);
+    console.log(`[findModByCFIds] Looking for ${id} - found: ${found ? found.name : 'NOT FOUND'}`);
+    return found;
   }
 
   async findModByMRIds(
@@ -1748,10 +1750,24 @@ export class MetadataManager {
 
     const library = await this.loadLibrary();
     const modIds = new Set(modpack.mod_ids);
+    
+    console.log(`[getModsInModpack] Modpack ${modpackId} has ${modpack.mod_ids.length} mod_ids`);
+    console.log(`[getModsInModpack] disabled_mod_ids: ${JSON.stringify(modpack.disabled_mod_ids)}`);
 
-    return library.mods
+    const result = library.mods
       .filter((m) => modIds.has(m.id))
       .sort((a, b) => a.name.localeCompare(b.name));
+    
+    console.log(`[getModsInModpack] Found ${result.length} mods in library matching mod_ids`);
+    
+    // Log any missing mods
+    const foundIds = new Set(result.map(m => m.id));
+    const missingIds = modpack.mod_ids.filter(id => !foundIds.has(id));
+    if (missingIds.length > 0) {
+      console.log(`[getModsInModpack] WARNING: ${missingIds.length} mod_ids not found in library: ${missingIds.join(', ')}`);
+    }
+    
+    return result;
   }
 
   /**
@@ -1852,6 +1868,7 @@ export class MetadataManager {
     }
 
     modpack.mod_ids.push(modId);
+    console.log(`[addModToModpack] Added ${modId} to modpack ${modpackId}, now has ${modpack.mod_ids.length} mods`);
     
     // Handle disabled state
     if (disabled) {
@@ -1860,6 +1877,7 @@ export class MetadataManager {
       }
       if (!modpack.disabled_mod_ids.includes(modId)) {
         modpack.disabled_mod_ids.push(modId);
+        console.log(`[addModToModpack] Marked ${modId} as disabled`);
       }
     }
     
@@ -3417,12 +3435,19 @@ ${modLinks}
 
   /**
    * Generate MODEX manifest for a modpack
+   * @param modpackId - The modpack ID
+   * @param options - Export options
+   * @param options.versionHistoryMode - 'full' exports all history, 'current' exports only current version snapshot
    */
-  async exportToModex(modpackId: string): Promise<{
+  async exportToModex(modpackId: string, options?: {
+    versionHistoryMode?: 'full' | 'current';
+  }): Promise<{
     manifest: any;
     code: string;
     checksum: string;
   }> {
+    const versionHistoryMode = options?.versionHistoryMode || 'full';
+    
     const modpack = await this.getModpackById(modpackId);
     if (!modpack) throw new Error("Modpack not found");
 
@@ -3442,7 +3467,7 @@ ${modLinks}
       await this.updateModpack(modpackId, { share_code: code });
     }
 
-    // Generate checksum from mod IDs (only enabled mods)
+    // Generate checksum from ALL mod IDs (includes disabled mods to detect any change)
     const modIds = mods
       .map((m) => m.id)
       .sort()
@@ -3521,21 +3546,24 @@ ${modLinks}
         loader: modpack.loader,
         loader_version: modpack.loader_version,
         description: modpack.description,
+        // Include CF source for config download during import (only if present)
+        ...(modpack.cf_project_id && modpack.cf_file_id ? {
+          cf_project_id: modpack.cf_project_id,
+          cf_file_id: modpack.cf_file_id,
+        } : {}),
       },
       mods: mods.map((m) => ({
-        id: m.id,
+        // Include name and version for update dialog display
         name: m.name,
         version: m.version,
-        filename: m.filename,
-        source: m.source,
-        content_type: m.content_type,
+        // IDs for lookup
         cf_project_id: m.cf_project_id,
         cf_file_id: m.cf_file_id,
         mr_project_id: m.mr_project_id,
         mr_version_id: m.mr_version_id,
-        description: m.description,
-        author: m.author,
-        thumbnail_url: m.thumbnail_url,
+        source: m.source,
+        content_type: m.content_type,
+        filename: m.filename,
       })),
       // Include disabled mods using stable identifiers (cf_project_id/mr_project_id) for cross-import compatibility
       // Also include internal IDs for backwards compatibility
@@ -3561,12 +3589,22 @@ ${modLinks}
         disabled_count: disabledIds.size,
         locked_count: (modpack.locked_mod_ids || []).length,
       },
-      // Include version history if available (always as object format for consistency)
-      version_history: versionHistory ? {
-        modpack_id: versionHistory.modpack_id,
-        current_version_id: versionHistory.current_version_id,
-        versions: versionHistory.versions
-      } : undefined,
+      // Include version history based on export mode
+      version_history: versionHistory ? (
+        versionHistoryMode === 'current' && versionHistory.versions.length > 0
+          ? {
+              // Export only current version as single-entry history
+              modpack_id: versionHistory.modpack_id,
+              current_version_id: versionHistory.current_version_id,
+              versions: [versionHistory.versions.find(v => v.id === versionHistory.current_version_id) || versionHistory.versions[versionHistory.versions.length - 1]]
+            }
+          : {
+              // Export full history
+              modpack_id: versionHistory.modpack_id,
+              current_version_id: versionHistory.current_version_id,
+              versions: versionHistory.versions
+            }
+      ) : undefined,
       // Include incompatible mods for preservation across imports
       incompatible_mods: modpack.incompatible_mods || [],
     };
@@ -3575,10 +3613,143 @@ ${modLinks}
   }
 
   /**
-   * Export modpack manifest for remote hosting (JSON string)
+   * Generate a sorted resource list for a modpack
+   * Returns a simple list of all resources (mods, resourcepacks, shaders) with key info
+   * Useful for quick reference, sharing, or documentation
    */
-  async exportRemoteManifest(modpackId: string): Promise<string> {
-    const { manifest } = await this.exportToModex(modpackId);
+  async generateResourceList(modpackId: string, options?: {
+    format?: 'simple' | 'detailed' | 'markdown';
+    sortBy?: 'name' | 'type' | 'source';
+    includeDisabled?: boolean;
+  }): Promise<{
+    list: Array<{
+      name: string;
+      version: string;
+      type: string;
+      source: string;
+      enabled: boolean;
+      locked: boolean;
+      url?: string;
+    }>;
+    formatted: string;
+    stats: {
+      total: number;
+      mods: number;
+      resourcepacks: number;
+      shaders: number;
+      enabled: number;
+      disabled: number;
+      locked: number;
+    };
+  }> {
+    const format = options?.format || 'simple';
+    const sortBy = options?.sortBy || 'name';
+    const includeDisabled = options?.includeDisabled !== false;
+
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) throw new Error("Modpack not found");
+
+    const allMods = await this.getModsInModpack(modpackId);
+    const disabledIds = new Set(modpack.disabled_mod_ids || []);
+    const lockedIds = new Set(modpack.locked_mod_ids || []);
+
+    // Filter and map resources
+    let resources = allMods
+      .filter(m => includeDisabled || !disabledIds.has(m.id))
+      .map(m => ({
+        name: m.name,
+        version: m.version || 'Unknown',
+        type: m.content_type || 'mod',
+        source: m.source || 'unknown',
+        enabled: !disabledIds.has(m.id),
+        locked: lockedIds.has(m.id),
+        url: m.cf_project_id 
+          ? `https://www.curseforge.com/minecraft/mc-mods/${m.cf_project_id}`
+          : m.mr_project_id 
+            ? `https://modrinth.com/mod/${m.mr_project_id}`
+            : undefined
+      }));
+
+    // Sort resources
+    resources.sort((a, b) => {
+      if (sortBy === 'type') {
+        const typeCompare = a.type.localeCompare(b.type);
+        return typeCompare !== 0 ? typeCompare : a.name.localeCompare(b.name);
+      } else if (sortBy === 'source') {
+        const sourceCompare = a.source.localeCompare(b.source);
+        return sourceCompare !== 0 ? sourceCompare : a.name.localeCompare(b.name);
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    // Calculate stats
+    const stats = {
+      total: resources.length,
+      mods: resources.filter(r => r.type === 'mod').length,
+      resourcepacks: resources.filter(r => r.type === 'resourcepack').length,
+      shaders: resources.filter(r => r.type === 'shader').length,
+      enabled: resources.filter(r => r.enabled).length,
+      disabled: resources.filter(r => !r.enabled).length,
+      locked: resources.filter(r => r.locked).length,
+    };
+
+    // Format output
+    let formatted: string;
+    if (format === 'markdown') {
+      const lines = [
+        `# ${modpack.name} - Resource List`,
+        ``,
+        `**Minecraft:** ${modpack.minecraft_version} | **Loader:** ${modpack.loader} ${modpack.loader_version || ''}`,
+        `**Total:** ${stats.total} | **Mods:** ${stats.mods} | **Resource Packs:** ${stats.resourcepacks} | **Shaders:** ${stats.shaders}`,
+        ``,
+        `| Name | Version | Type | Source | Status |`,
+        `|------|---------|------|--------|--------|`,
+      ];
+      for (const r of resources) {
+        const status = !r.enabled ? '❌ Disabled' : r.locked ? '🔒 Locked' : '✓';
+        const name = r.url ? `[${r.name}](${r.url})` : r.name;
+        lines.push(`| ${name} | ${r.version} | ${r.type} | ${r.source} | ${status} |`);
+      }
+      formatted = lines.join('\n');
+    } else if (format === 'detailed') {
+      const lines = [
+        `${modpack.name} - Resource List`,
+        `${'='.repeat(50)}`,
+        `Minecraft: ${modpack.minecraft_version} | Loader: ${modpack.loader} ${modpack.loader_version || ''}`,
+        `Total: ${stats.total} | Mods: ${stats.mods} | Resource Packs: ${stats.resourcepacks} | Shaders: ${stats.shaders}`,
+        ``,
+      ];
+      for (const r of resources) {
+        const status = !r.enabled ? '[DISABLED]' : r.locked ? '[LOCKED]' : '';
+        lines.push(`• ${r.name} v${r.version} (${r.type}, ${r.source}) ${status}`);
+        if (r.url) lines.push(`  └─ ${r.url}`);
+      }
+      formatted = lines.join('\n');
+    } else {
+      // Simple format - just names and versions
+      const lines = [
+        `${modpack.name} (${stats.total} resources)`,
+        ``,
+      ];
+      for (const r of resources) {
+        const status = !r.enabled ? ' [disabled]' : r.locked ? ' [locked]' : '';
+        lines.push(`${r.name} - ${r.version}${status}`);
+      }
+      formatted = lines.join('\n');
+    }
+
+    return { list: resources, formatted, stats };
+  }
+
+  /**
+   * Export modpack manifest for remote hosting (JSON string)
+   * @param modpackId - The modpack ID
+   * @param options - Export options (passed to exportToModex)
+   */
+  async exportRemoteManifest(modpackId: string, options?: {
+    versionHistoryMode?: 'full' | 'current';
+  }): Promise<string> {
+    const { manifest } = await this.exportToModex(modpackId, options);
     return JSON.stringify(manifest, null, 2);
   }
 
@@ -3778,14 +3949,19 @@ ${modLinks}
           if (currentProjectMap.has(projectKey)) {
             // Same project, different file -> Update
             const oldMod = currentProjectMap.get(projectKey)!;
+            // Use rMod.version if available, otherwise use filename as fallback
+            const newVersion = rMod.version || rMod.filename || 'unknown';
             // Only report update if version string is different or file ID is different
             // This prevents "phantom" updates if IDs match but something else differs
             updatedMods.push(
-              `${oldMod.name} (${oldMod.version} → ${rMod.version})`
+              `${oldMod.name} (${oldMod.version} → ${newVersion})`
             );
           } else {
-            // New project -> Add
-            addedMods.push({ name: rMod.name, version: rMod.version });
+            // New project -> Add (use filename as fallback for name/version)
+            addedMods.push({ 
+              name: rMod.name || rMod.filename || 'Unknown Mod', 
+              version: rMod.version || rMod.filename || 'unknown' 
+            });
           }
         }
       }
@@ -3830,11 +4006,13 @@ ${modLinks}
 
         if (localMod) {
           const isLocalDisabled = currentDisabled.has(localMod.id);
+          // Use local mod name (we know it exists) with remote as fallback
+          const modName = localMod.name || rMod.name || rMod.filename || 'Unknown Mod';
 
           if (isLocalDisabled && !isRemoteDisabled) {
-            enabledMods.push(rMod.name);
+            enabledMods.push(modName);
           } else if (!isLocalDisabled && isRemoteDisabled) {
-            disabledMods.push(rMod.name);
+            disabledMods.push(modName);
           }
         }
       }
@@ -3897,11 +4075,13 @@ ${modLinks}
           }
 
           const isLocalLocked = currentLocked.has(localMod.id);
+          // Use local mod name (we know it exists) with remote as fallback
+          const modName = localMod.name || rMod.name || rMod.filename || 'Unknown Mod';
 
           if (isLocalLocked && !isRemoteLocked) {
-            unlockedMods.push(rMod.name);
+            unlockedMods.push(modName);
           } else if (!isLocalLocked && isRemoteLocked) {
-            lockedMods.push(rMod.name);
+            lockedMods.push(modName);
           }
         }
       }
@@ -5265,6 +5445,7 @@ ${modLinks}
 
     // Import mods (same logic as importFromModex but simplified - no update logic needed)
     const manifestMods = manifest.mods || [];
+    console.log(`[ImportFromUrl] Starting import of ${manifestMods.length} mods`);
     
     // Build disabled mods lookup using disabled_mods_by_project (preferred) or disabled_mods (fallback)
     const disabledByProject = new Map<string, boolean>(); // key: "cf-{projectId}" or "mr-{projectId}"
@@ -5274,6 +5455,7 @@ ${modLinks}
       for (const entry of manifest.disabled_mods_by_project) {
         if (entry.cf_project_id) {
           disabledByProject.set(`cf-${entry.cf_project_id}`, true);
+          console.log(`[ImportFromUrl] Disabled mod by project: cf-${entry.cf_project_id} (${entry.name})`);
         }
         if (entry.mr_project_id) {
           disabledByProject.set(`mr-${entry.mr_project_id}`, true);
@@ -5286,7 +5468,9 @@ ${modLinks}
 
     for (let i = 0; i < manifestMods.length; i++) {
       const modEntry = manifestMods[i];
-      onProgress?.(i + 1, manifestMods.length, modEntry.name);
+      const modName = modEntry.name || modEntry.filename || `Mod ${i + 1}`;
+      console.log(`[ImportFromUrl] Processing mod ${i+1}/${manifestMods.length}: ${modName} (cf_project_id: ${modEntry.cf_project_id})`);
+      onProgress?.(i + 1, manifestMods.length, modName);
 
       try {
         // Try to find existing mod in library using correct method
@@ -5302,14 +5486,19 @@ ${modLinks}
             modEntry.mr_project_id,
             modEntry.mr_version_id
           );
+          if (existingMod) {
+            console.log(`[ImportFromUrl] Found existing mod by MR IDs: ${existingMod.name}`);
+          }
         }
 
         if (!existingMod) {
-          // Add mod to library using CurseForge API (same logic as curseforge:addToLibrary)
+          console.log(`[ImportFromUrl] Mod not in library, fetching from API...`);
+          // Add mod to library using CurseForge API
           if (modEntry.source === "curseforge" && (modEntry.cf_project_id || modEntry.project_id)) {
             try {
               const projectId = modEntry.cf_project_id || modEntry.project_id;
               const fileId = modEntry.cf_file_id || modEntry.file_id;
+              console.log(`[ImportFromUrl] Fetching CF mod: projectId=${projectId}, fileId=${fileId}`);
               
               const cfMod = await cfService.getMod(projectId);
               const cfFile = await cfService.getFile(projectId, fileId);
@@ -5327,12 +5516,18 @@ ${modLinks}
                 // Add to library
                 const newMod = await this.addMod(modData);
                 existingMod = newMod;
-                console.log(`[ImportFromUrl] Added ${modEntry.name} to library`);
+                console.log(`[ImportFromUrl] Added ${modData.name} to library with id ${newMod.id}`);
+              } else {
+                console.error(`[ImportFromUrl] CF API returned null - mod: ${!!cfMod}, file: ${!!cfFile}`);
               }
             } catch (err) {
-              console.error(`[ImportFromUrl] Failed to add mod ${modEntry.name} from CF:`, err);
+              console.error(`[ImportFromUrl] Failed to add mod ${modName} from CF:`, err);
             }
+          } else {
+            console.log(`[ImportFromUrl] Cannot fetch - source: ${modEntry.source}, cf_project_id: ${modEntry.cf_project_id}`);
           }
+        } else {
+          console.log(`[ImportFromUrl] Using existing mod from library: ${existingMod.name} (id: ${existingMod.id})`);
         }
 
         if (existingMod) {
@@ -5353,13 +5548,18 @@ ${modLinks}
                         disabledByInternalId.has(existingMod.id);
           }
           
+          console.log(`[ImportFromUrl] Adding ${existingMod.name} to modpack (disabled: ${isDisabled})`);
           await this.addModToModpack(modpackId, existingMod.id, isDisabled);
           modsImported++;
+        } else {
+          console.error(`[ImportFromUrl] FAILED to import mod: ${modName} - no existingMod after all attempts`);
         }
       } catch (err) {
-        console.error(`[ImportFromUrl] Failed to import mod ${modEntry.name}:`, err);
+        console.error(`[ImportFromUrl] Failed to import mod ${modName}:`, err);
       }
     }
+    
+    console.log(`[ImportFromUrl] Import complete: ${modsImported}/${manifestMods.length} mods imported`);
 
     // Import version history if present (can be object or array format)
     const versionHistoryData = manifest.version_history;
@@ -5418,8 +5618,20 @@ ${modLinks}
         console.log(`[ImportFromUrl] Imported ${manifest.incompatible_mods.length} incompatible mods`);
       }
       
+      // Store CF source info if present in manifest (for potential config download)
+      if (manifest.modpack?.cf_project_id && manifest.modpack?.cf_file_id) {
+        modpack.cf_project_id = manifest.modpack.cf_project_id;
+        modpack.cf_file_id = manifest.modpack.cf_file_id;
+        console.log(`[ImportFromUrl] Stored CF source: project=${manifest.modpack.cf_project_id}, file=${manifest.modpack.cf_file_id}`);
+      }
+      
       await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     }
+
+    // Note: Configs are NOT downloaded from CF modpack during gist import.
+    // The gist manifest represents the user's customized state, which may differ
+    // from the original CF modpack. Configs should only be included when importing
+    // directly from CurseForge (the full modpack zip contains overrides/).
 
     return {
       success: true,

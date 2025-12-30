@@ -2300,18 +2300,45 @@ async function handleAddModFromAnalysis(cfProjectId: number, fileId?: number) {
   }
 }
 
-async function exportManifest() {
+async function exportManifest(mode: 'full' | 'current' = 'full') {
   if (!props.modpackId) return;
   try {
-    const json = await window.api.remote.exportManifest(props.modpackId);
+    const json = await window.api.remote.exportManifest(props.modpackId, {
+      versionHistoryMode: mode
+    });
     await navigator.clipboard.writeText(json);
     toast.success(
       "Manifest Copied",
-      "JSON copied to clipboard. You can now paste it into a GitHub Gist."
+      `JSON copied to clipboard (${mode === 'full' ? 'full history' : 'current version only'}). You can now paste it into a GitHub Gist.`
     );
   } catch (err) {
     console.error("Failed to export manifest:", err);
     toast.error("Export Failed", (err as Error).message);
+  }
+}
+
+// Resource list export
+const isExportingResourceList = ref(false);
+
+async function exportResourceList(format: 'simple' | 'detailed' | 'markdown') {
+  if (!props.modpackId) return;
+  isExportingResourceList.value = true;
+  try {
+    const result = await window.api.modpacks.generateResourceList(props.modpackId, {
+      format,
+      sortBy: 'name',
+      includeDisabled: true
+    });
+    await navigator.clipboard.writeText(result.formatted);
+    toast.success(
+      "Resource List Copied",
+      `${result.stats.total} resources copied to clipboard in ${format} format.`
+    );
+  } catch (err) {
+    console.error("Failed to export resource list:", err);
+    toast.error("Export Failed", (err as Error).message);
+  } finally {
+    isExportingResourceList.value = false;
   }
 }
 
@@ -3520,7 +3547,7 @@ watch(
                     </div>
                     <div class="text-[11px] text-muted-foreground space-y-0.5">
                       <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
-                      }}</span></p>
+                          }}</span></p>
                       <p>Modpack: <span class="text-blue-400 font-medium">{{
                         extractLoaderVersion(modpack?.loader_version ||
                           'unknown') }}</span></p>
@@ -4645,14 +4672,42 @@ watch(
 
                   <div class="pt-4 border-t border-border/50">
                     <h4 class="text-sm font-medium mb-2">Export for Hosting</h4>
-                    <Button variant="outline" size="sm" class="gap-2 w-full sm:w-auto" @click="exportManifest">
-                      <Share2 class="w-3.5 h-3.5" />
-                      Export Manifest JSON
-                    </Button>
-                    <p class="text-xs text-muted-foreground mt-2">
+                    <p class="text-xs text-muted-foreground mb-3">
                       Generates a .json file you can upload to Gist/GitHub to
                       act as the "Master" version.
                     </p>
+                    <div class="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" class="gap-2" @click="exportManifest('full')">
+                        <Share2 class="w-3.5 h-3.5" />
+                        Full History
+                      </Button>
+                      <Button variant="outline" size="sm" class="gap-2" @click="exportManifest('current')">
+                        <Share2 class="w-3.5 h-3.5" />
+                        Current Only
+                      </Button>
+                    </div>
+                  </div>
+
+                  <!-- Resource List Export -->
+                  <div class="pt-4 border-t border-border/50">
+                    <h4 class="text-sm font-medium mb-2">Export Resource List</h4>
+                    <p class="text-xs text-muted-foreground mb-3">
+                      Generate a sorted list of all mods and resources for sharing or documentation.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" class="gap-2" @click="exportResourceList('simple')"
+                        :disabled="isExportingResourceList">
+                        Simple
+                      </Button>
+                      <Button variant="outline" size="sm" class="gap-2" @click="exportResourceList('detailed')"
+                        :disabled="isExportingResourceList">
+                        Detailed
+                      </Button>
+                      <Button variant="outline" size="sm" class="gap-2" @click="exportResourceList('markdown')"
+                        :disabled="isExportingResourceList">
+                        Markdown
+                      </Button>
+                    </div>
                   </div>
                 </div>
 

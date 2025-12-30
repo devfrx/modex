@@ -181,6 +181,32 @@ export interface ElectronAPI {
     getDisabledMods: (modpackId: string) => Promise<string[]>;
     /** Get list of locked mod IDs */
     getLockedMods: (modpackId: string) => Promise<string[]>;
+    /** Generate a sorted resource list for documentation/sharing */
+    generateResourceList: (modpackId: string, options?: {
+      format?: 'simple' | 'detailed' | 'markdown';
+      sortBy?: 'name' | 'type' | 'source';
+      includeDisabled?: boolean;
+    }) => Promise<{
+      list: Array<{
+        name: string;
+        version: string;
+        type: string;
+        source: string;
+        enabled: boolean;
+        locked: boolean;
+        url?: string;
+      }>;
+      formatted: string;
+      stats: {
+        total: number;
+        mods: number;
+        resourcepacks: number;
+        shaders: number;
+        enabled: number;
+        disabled: number;
+        locked: number;
+      };
+    }>;
     /** Set a mod's locked state */
     setModLocked: (
       modpackId: string,
@@ -329,7 +355,10 @@ export interface ElectronAPI {
     ) => Promise<{ success: boolean; path: string } | null>;
     /** Export modpack as MODEX manifest */
     modex: (
-      modpackId: string
+      modpackId: string,
+      options?: {
+        versionHistoryMode?: 'full' | 'current';
+      }
     ) => Promise<{ success: boolean; code: string; path: string } | null>;
     /** Select save location */
     selectPath: (
@@ -338,7 +367,10 @@ export interface ElectronAPI {
     ) => Promise<string | null>;
     /** Export raw manifest JSON for debug/sharing */
     manifest: (
-      modpackId: string
+      modpackId: string,
+      options?: {
+        versionHistoryMode?: 'full' | 'current';
+      }
     ) => Promise<{ success: boolean; path: string } | null>;
   };
 
@@ -471,7 +503,9 @@ export interface ElectronAPI {
   };
 
   remote: {
-    exportManifest: (modpackId: string) => Promise<string>;
+    exportManifest: (modpackId: string, options?: {
+      versionHistoryMode?: 'full' | 'current';
+    }) => Promise<string>;
     checkUpdate: (modpackId: string) => Promise<{
       hasUpdate: boolean;
       remoteManifest?: any;

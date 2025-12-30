@@ -110,6 +110,10 @@ export interface ElectronAPI {
     getPopular: (gameVersion?: string, modLoader?: string) => Promise<CFMod[]>;
     /** Get available mod loader versions for a Minecraft version */
     getModLoaders: (gameVersion?: string) => Promise<CFModLoader[]>;
+    /** Get all available Minecraft versions */
+    getMinecraftVersions: () => Promise<{ versionString: string; approved: boolean }[]>;
+    /** Get unique loader types (forge, fabric, neoforge, quilt) */
+    getLoaderTypes: () => Promise<string[]>;
     /** Add a mod from CurseForge to library (metadata only, no download) */
     addToLibrary: (
       projectId: number,

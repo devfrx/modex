@@ -901,6 +901,62 @@ export class CurseForgeService {
   }
 
   /**
+   * Get all Minecraft versions from CurseForge
+   */
+  async getMinecraftVersions(): Promise<{ versionString: string; approved: boolean }[]> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    const url = `${this.apiUrl}/minecraft/version?sortDescending=true`;
+    console.log(`[CurseForge] Fetching Minecraft versions from: ${url}`);
+
+    const response = await fetch(url, {
+      headers: {
+        "x-api-key": this.apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[CurseForge] Failed to fetch Minecraft versions: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const versions = data.data || [];
+    console.log(`[CurseForge] Received ${versions.length} Minecraft versions`);
+    
+    return versions;
+  }
+
+  /**
+   * Get unique loader types (forge, fabric, neoforge, quilt) from mod loaders
+   */
+  async getLoaderTypes(): Promise<string[]> {
+    const loaders = await this.getModLoaders();
+    
+    // ModLoaderType enum: 0=Any, 1=Forge, 2=Cauldron, 3=LiteLoader, 4=Fabric, 5=Quilt, 6=NeoForge
+    const typeMap: Record<number, string> = {
+      1: "forge",
+      4: "fabric",
+      5: "quilt",
+      6: "neoforge",
+    };
+    
+    const uniqueTypes = new Set<string>();
+    for (const loader of loaders) {
+      if (loader.type && typeMap[loader.type]) {
+        uniqueTypes.add(typeMap[loader.type]);
+      }
+    }
+    
+    // Return in preferred order
+    const orderedTypes = ["forge", "fabric", "neoforge", "quilt"];
+    return orderedTypes.filter(t => uniqueTypes.has(t));
+  }
+
+  /**
    * Get all available mod loaders for a specific game version
    */
   async getModLoaders(gameVersion?: string): Promise<CFModLoader[]> {

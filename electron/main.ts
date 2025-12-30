@@ -256,6 +256,14 @@ async function initializeBackend() {
     }
   );
 
+  ipcMain.handle("curseforge:getMinecraftVersions", async () => {
+    return curseforgeService.getMinecraftVersions();
+  });
+
+  ipcMain.handle("curseforge:getLoaderTypes", async () => {
+    return curseforgeService.getLoaderTypes();
+  });
+
   ipcMain.handle(
     "curseforge:getRecommendations",
     async (
@@ -2794,6 +2802,45 @@ async function initializeBackend() {
         );
       } catch (error: any) {
         console.error("[Main] Dependency check error:", error);
+        return [];
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "analyzer:getPerformanceTips",
+    async (_, modpackId: string) => {
+      try {
+        const modpack = await metadataManager.getModpackById(modpackId);
+        if (!modpack) {
+          return [];
+        }
+
+        const modIds = modpack.mod_ids || [];
+        const mods = await Promise.all(
+          modIds.map(async (modId) => {
+            const mod = await metadataManager.getModById(modId);
+            return mod;
+          })
+        );
+
+        const validMods = mods
+          .filter(
+            (m): m is NonNullable<typeof m> => m !== null && m !== undefined
+          )
+          .map((m) => ({
+            id: m.id,
+            name: m.name,
+            curseforge_id: m.cf_project_id,
+            loader: m.loader,
+            game_version: m.game_version,
+            version: m.version,
+          }));
+
+        const result = await modAnalyzerService.analyzeModpack(validMods);
+        return result.performance.map((p) => p.description);
+      } catch (error: any) {
+        console.error("[Main] Performance tips error:", error);
         return [];
       }
     }

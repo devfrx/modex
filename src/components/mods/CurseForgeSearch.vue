@@ -130,8 +130,14 @@ const compatibleModpacks = computed(() => {
     .filter((pack) => !pack.remote_source?.url); // Exclude linked/read-only modpacks
 });
 
-// Available filters
-const gameVersions = [
+// Dynamic fetched versions
+const fetchedGameVersions = ref<string[]>([]);
+const fetchedLoaderTypes = ref<string[]>([]);
+const isLoadingGameVersions = ref(false);
+const isLoadingLoaderTypes = ref(false);
+
+// Fallback values if fetch fails
+const fallbackGameVersions = [
   "",
   "1.21.4",
   "1.21.3",
@@ -160,13 +166,72 @@ const gameVersions = [
   "1.15.2",
 ];
 
-const modLoaders = [
+const fallbackLoaders = [
   { value: "", label: "All Loaders" },
   { value: "forge", label: "Forge" },
   { value: "fabric", label: "Fabric" },
   { value: "neoforge", label: "NeoForge" },
   { value: "quilt", label: "Quilt" },
 ];
+
+// Computed for available game versions - uses fetched or fallback
+const gameVersions = computed(() => {
+  if (fetchedGameVersions.value.length > 0) {
+    return ["", ...fetchedGameVersions.value];
+  }
+  return fallbackGameVersions;
+});
+
+// Computed for available loaders - uses fetched or fallback
+const modLoaders = computed(() => {
+  if (fetchedLoaderTypes.value.length > 0) {
+    return [
+      { value: "", label: "All Loaders" },
+      ...fetchedLoaderTypes.value.map(l => ({
+        value: l.toLowerCase(),
+        label: l.charAt(0).toUpperCase() + l.slice(1).toLowerCase()
+      }))
+    ];
+  }
+  return fallbackLoaders;
+});
+
+// Fetch Minecraft versions from CurseForge
+async function fetchGameVersions() {
+  if (!window.api || isLoadingGameVersions.value) return;
+  if (fetchedGameVersions.value.length > 0) return; // Already fetched
+
+  isLoadingGameVersions.value = true;
+  try {
+    const versions = await window.api.curseforge.getMinecraftVersions();
+    const approvedVersions = versions
+      .filter((v: { approved: boolean }) => v.approved)
+      .map((v: { versionString: string }) => v.versionString);
+    fetchedGameVersions.value = approvedVersions;
+    console.log(`[CurseForgeSearch] Fetched ${approvedVersions.length} MC versions`);
+  } catch (err) {
+    console.error("[CurseForgeSearch] Failed to fetch MC versions:", err);
+  } finally {
+    isLoadingGameVersions.value = false;
+  }
+}
+
+// Fetch loader types from CurseForge
+async function fetchLoaderTypes() {
+  if (!window.api || isLoadingLoaderTypes.value) return;
+  if (fetchedLoaderTypes.value.length > 0) return; // Already fetched
+
+  isLoadingLoaderTypes.value = true;
+  try {
+    const loaders = await window.api.curseforge.getLoaderTypes();
+    fetchedLoaderTypes.value = loaders;
+    console.log(`[CurseForgeSearch] Fetched ${loaders.length} loader types:`, loaders);
+  } catch (err) {
+    console.error("[CurseForgeSearch] Failed to fetch loader types:", err);
+  } finally {
+    isLoadingLoaderTypes.value = false;
+  }
+}
 
 const sortFields = [
   { value: 2, label: "Popularity" },
@@ -193,6 +258,10 @@ const STORAGE_KEYS = {
 
 onMounted(async () => {
   hasApiKey.value = await window.api.curseforge.hasApiKey();
+
+  // Fetch dynamic versions and loaders from CurseForge
+  fetchGameVersions();
+  fetchLoaderTypes();
 
   // Load modpacks for direct-add feature
   try {

@@ -6,7 +6,8 @@ export type Theme =
   | "forest"
   | "ocean"
   | "sunset"
-  | "cyberpunk";
+  | "cyberpunk"
+  | "slate";
 
 export interface ThemeCustomization {
   // Colors
@@ -315,6 +316,7 @@ export function useTheme() {
     themes: [
       { id: "dark", name: "Midnight (Default)", color: "bg-zinc-950" },
       { id: "light", name: "Daylight", color: "bg-white" },
+      { id: "slate", name: "Slate", color: "bg-slate-600" },
       { id: "forest", name: "Forest", color: "bg-emerald-950" },
       { id: "ocean", name: "Ocean", color: "bg-blue-950" },
       { id: "sunset", name: "Sunset", color: "bg-orange-950" },

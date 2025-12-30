@@ -119,7 +119,7 @@ const isLoading = ref(true);
 // Race condition protection: track current load requests
 let loadRequestId = 0;
 let instanceRequestId = 0;
-const sortBy = ref<"name" | "version">("name");
+const sortBy = ref<"name" | "version" | "date">("name");
 const sortDir = ref<"asc" | "desc">("asc");
 const selectedModIds = ref<Set<string>>(new Set());
 const showSingleModUpdateDialog = ref(false);
@@ -369,25 +369,49 @@ const editForm = ref({
   auto_check_remote: false,
 });
 
-const gameVersions = [
-  "1.21.4",
-  "1.21.3",
-  "1.21.1",
-  "1.21",
-  "1.20.6",
-  "1.20.4",
-  "1.20.2",
-  "1.20.1",
-  "1.20",
-  "1.19.4",
-  "1.19.2",
-  "1.19",
-  "1.18.2",
-  "1.17.1",
-  "1.16.5",
+// Dynamic game versions from CurseForge
+const fetchedGameVersions = ref<string[]>([]);
+const isLoadingGameVersions = ref(false);
+
+// Dynamic loader types from CurseForge
+const fetchedLoaderTypes = ref<string[]>([]);
+const isLoadingLoaderTypes = ref(false);
+
+// Fallback static versions (used if API fails)
+const fallbackGameVersions = [
+  "1.21.4", "1.21.3", "1.21.1", "1.21",
+  "1.20.6", "1.20.4", "1.20.2", "1.20.1", "1.20",
+  "1.19.4", "1.19.2", "1.19",
+  "1.18.2", "1.17.1", "1.16.5",
 ];
 
-const loaders = ["forge", "fabric", "neoforge", "quilt"];
+const fallbackLoaders = ["forge", "fabric", "neoforge", "quilt"];
+
+// Computed list that includes the current modpack version
+const availableGameVersions = computed(() => {
+  const versions = fetchedGameVersions.value.length > 0 ? fetchedGameVersions.value : fallbackGameVersions;
+  const currentVersion = editForm.value.minecraft_version;
+  if (currentVersion && !versions.includes(currentVersion)) {
+    // Insert current version at the appropriate position (sorted)
+    const allVersions = [...versions, currentVersion];
+    return allVersions.sort((a, b) => {
+      const partsA = a.split('.').map(Number);
+      const partsB = b.split('.').map(Number);
+      for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+        const numA = partsA[i] || 0;
+        const numB = partsB[i] || 0;
+        if (numA !== numB) return numB - numA; // Descending order
+      }
+      return 0;
+    });
+  }
+  return versions;
+});
+
+// Computed loaders list
+const loaders = computed(() => {
+  return fetchedLoaderTypes.value.length > 0 ? fetchedLoaderTypes.value : fallbackLoaders;
+});
 
 // Loader version selection state
 const availableLoaderVersions = ref<CFModLoader[]>([]);
@@ -500,6 +524,46 @@ async function fetchLoaderVersions() {
     availableLoaderVersions.value = [];
   } finally {
     isLoadingLoaderVersions.value = false;
+  }
+}
+
+// Fetch Minecraft versions from CurseForge
+async function fetchMinecraftVersions() {
+  if (!window.api || isLoadingGameVersions.value) return;
+  if (fetchedGameVersions.value.length > 0) return; // Already fetched
+
+  isLoadingGameVersions.value = true;
+  try {
+    const versions = await window.api.curseforge.getMinecraftVersions();
+    console.log(`[ModpackEditor] Received ${versions.length} Minecraft versions`);
+    // Filter to approved versions and extract version strings
+    const approvedVersions = versions
+      .filter((v: { approved: boolean }) => v.approved)
+      .map((v: { versionString: string }) => v.versionString);
+    fetchedGameVersions.value = approvedVersions;
+  } catch (err) {
+    console.error("Failed to fetch Minecraft versions:", err);
+    // Keep using fallback
+  } finally {
+    isLoadingGameVersions.value = false;
+  }
+}
+
+// Fetch loader types from CurseForge
+async function fetchLoaderTypes() {
+  if (!window.api || isLoadingLoaderTypes.value) return;
+  if (fetchedLoaderTypes.value.length > 0) return; // Already fetched
+
+  isLoadingLoaderTypes.value = true;
+  try {
+    const types = await window.api.curseforge.getLoaderTypes();
+    console.log(`[ModpackEditor] Received loader types:`, types);
+    fetchedLoaderTypes.value = types;
+  } catch (err) {
+    console.error("Failed to fetch loader types:", err);
+    // Keep using fallback
+  } finally {
+    isLoadingLoaderTypes.value = false;
   }
 }
 
@@ -633,6 +697,11 @@ const filteredInstalledMods = computed(() => {
     return true;
   });
   mods.sort((a, b) => {
+    if (sortBy.value === "date") {
+      const aDate = new Date(a.created_at || 0).getTime();
+      const bDate = new Date(b.created_at || 0).getTime();
+      return sortDir.value === "asc" ? aDate - bDate : bDate - aDate;
+    }
     const aVal = a[sortBy.value] || "";
     const bVal = b[sortBy.value] || "";
     const cmp = aVal.localeCompare(bVal);
@@ -2173,12 +2242,13 @@ function cancelDependencyImpactAction() {
   dependencyImpact.value = null;
 }
 
-function toggleSort(field: "name" | "version") {
+function toggleSort(field: "name" | "version" | "date") {
   if (sortBy.value === field) {
     sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
   } else {
     sortBy.value = field;
-    sortDir.value = "asc";
+    // Default to descending for date (newest first), ascending for others
+    sortDir.value = field === "date" ? "desc" : "asc";
   }
 }
 
@@ -2706,6 +2776,10 @@ watch(
       if (props.initialTab) {
         activeTab.value = props.initialTab;
       }
+
+      // Fetch Minecraft versions and loader types from CurseForge (cached after first fetch)
+      fetchMinecraftVersions();
+      fetchLoaderTypes();
 
       await loadData();
       await loadInstance();
@@ -3547,7 +3621,7 @@ watch(
                     </div>
                     <div class="text-[11px] text-muted-foreground space-y-0.5">
                       <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
-                          }}</span></p>
+                      }}</span></p>
                       <p>Modpack: <span class="text-blue-400 font-medium">{{
                         extractLoaderVersion(modpack?.loader_version ||
                           'unknown') }}</span></p>
@@ -3848,7 +3922,7 @@ watch(
                   </button>
                   <button v-if="incompatibleModCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'incompatible'
-                      ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30'
+                      ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/40'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                     @click="modsFilter = 'incompatible'">
                     <AlertCircle class="w-3 h-3" />
@@ -4000,17 +4074,25 @@ watch(
                 </div>
                 <div class="flex items-center gap-2">
                   <!-- Sort buttons -->
-                  <div class="flex rounded border border-border/30 overflow-hidden">
-                    <button class="h-6 text-[10px] px-2 transition-colors" :class="sortBy === 'name'
-                      ? 'bg-muted text-foreground'
+                  <div class="flex rounded-md border border-border/40 overflow-hidden bg-muted/20">
+                    <button class="h-6 text-[10px] px-2.5 transition-colors font-medium" :class="sortBy === 'name'
+                      ? 'bg-background text-foreground shadow-sm'
                       : 'hover:bg-muted/50 text-muted-foreground'
                       " @click="toggleSort('name')">
                       Name
                     </button>
-                    <button class="h-6 text-[10px] px-2 border-l border-border/30 transition-colors" :class="sortBy === 'version'
-                      ? 'bg-muted text-foreground'
-                      : 'hover:bg-muted/50 text-muted-foreground'
-                      " @click="toggleSort('version')">
+                    <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
+                      :class="sortBy === 'date'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'hover:bg-muted/50 text-muted-foreground'
+                        " @click="toggleSort('date')">
+                      Date
+                    </button>
+                    <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
+                      :class="sortBy === 'version'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'hover:bg-muted/50 text-muted-foreground'
+                        " @click="toggleSort('version')">
                       Version
                     </button>
                   </div>
@@ -4026,208 +4108,225 @@ watch(
               </div>
 
               <!-- Mod List -->
-              <div class="flex-1 overflow-y-auto p-3 space-y-1.5">
+              <div class="flex-1 overflow-y-auto p-2 space-y-2">
                 <div v-for="mod in installedModsWithCompatibility" :key="mod.id"
-                  class="resource-row flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group" :class="[
+                  class="resource-card group relative rounded-xl transition-all duration-150" :class="[
                     selectedModIds.has(mod.id)
-                      ? 'bg-primary/10 ring-1 ring-primary/40 shadow-sm shadow-primary/5'
+                      ? 'bg-primary/12 ring-1 ring-primary/40'
                       : !mod.isCompatible
-                        ? 'bg-red-500/5 ring-1 ring-red-500/20 hover:bg-red-500/10'
+                        ? 'bg-red-500/5 hover:bg-red-500/8'
                         : mod.hasWarning
-                          ? 'bg-amber-500/5 ring-1 ring-amber-500/15 hover:bg-amber-500/10'
-                          : 'bg-muted/30 hover:bg-muted/50 ring-1 ring-transparent hover:ring-border/40',
+                          ? 'bg-amber-500/5 hover:bg-amber-500/8'
+                          : 'bg-muted/30 ring-1 ring-border/20 hover:bg-muted/50 hover:ring-border/40',
                     disabledModIds.has(mod.id) ? 'opacity-50' : '',
                     isLinked ? 'cursor-default' : 'cursor-pointer',
                   ]" @click="!isLinked && toggleSelect(mod.id)">
-                  <!-- Mod Thumbnail -->
-                  <div class="w-10 h-10 rounded-lg bg-muted/60 overflow-hidden shrink-0 ring-1 ring-border/30">
-                    <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
-                      class="w-full h-full object-cover" alt="" loading="lazy"
-                      @error="($event.target as HTMLImageElement).style.display = 'none'" />
-                    <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/40">
-                      <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-5 h-5" />
-                      <Image v-else-if="mod.content_type === 'resourcepack'" class="w-5 h-5" />
-                      <Sparkles v-else class="w-5 h-5" />
-                    </div>
-                  </div>
 
-                  <!-- Enable/Disable Toggle -->
-                  <button class="w-9 h-5 rounded-full relative shrink-0 transition-all duration-200" :class="[
-                    disabledModIds.has(mod.id)
-                      ? 'bg-muted-foreground/20'
-                      : 'bg-primary shadow-sm shadow-primary/30',
-                    (isLinked || lockedModIds.has(mod.id)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90',
-                  ]" @click.stop="!(isLinked || lockedModIds.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
-                    ? 'Managed by remote source'
-                    : lockedModIds.has(mod.id)
-                      ? 'Unlock mod to change state'
-                      : disabledModIds.has(mod.id)
-                        ? 'Click to enable mod'
-                        : 'Click to disable mod'
-                    " :disabled="isLinked || lockedModIds.has(mod.id)">
-                    <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200"
-                      :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[18px]'
-                        " />
-                  </button>
-
-                  <!-- Mod Info -->
-                  <div class="min-w-0 flex-1">
-                    <div class="font-semibold text-sm truncate flex items-center gap-2">
-                      <span class="hover:text-primary cursor-pointer transition-colors"
-                        @click.stop="openModDetails(mod)" title="Click to view details">{{ mod.name }}</span>
-                      <!-- Recently Updated Badge -->
-                      <span v-if="recentlyUpdatedMods.has(mod.id)"
-                        class="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-semibold animate-pulse">
-                        Updated
-                      </span>
-                      <!-- Recently Added Badge -->
-                      <span v-else-if="recentlyAddedMods.has(mod.id)"
-                        class="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
-                        New
-                      </span>
-                      <span v-if="disabledModIds.has(mod.id)"
-                        class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-semibold">
-                        disabled
-                      </span>
-                      <span v-if="!mod.isCompatible"
-                        class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 font-semibold">
-                        incompatible
-                      </span>
-                      <span v-else-if="mod.hasWarning"
-                        class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-semibold"
-                        title="This mod uses a different loader but may work via compatibility layers">
-                        different loader
-                      </span>
-                    </div>
-                    <div class="flex items-center gap-2 mt-1 flex-wrap">
-                      <!-- Game versions (show list for ALL content types if available) -->
-                      <span v-if="mod.game_versions && mod.game_versions.length >= 1"
-                        class="text-[10px] px-2 py-0.5 rounded-full font-semibold" :class="mod.isCompatible
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-red-500/10 text-red-500'
-                          " :title="mod.game_versions.join(', ')">
-                        {{ mod.game_versions.slice(0, 2).join(", ")
-                        }}{{
-                          mod.game_versions.length > 2
-                            ? ` +${mod.game_versions.length - 2}`
-                            : ""
-                        }}
-                      </span>
-                      <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
-                        class="text-[10px] px-2 py-0.5 rounded-full font-semibold" :class="mod.isCompatible
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-red-500/10 text-red-500'
-                          ">
-                        {{ mod.game_version }}
-                      </span>
-                      <span v-if="mod.loader && mod.loader !== 'unknown'"
-                        class="text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize" :class="!mod.isCompatible
-                          ? 'bg-red-500/10 text-red-500'
-                          : mod.hasWarning
-                            ? 'bg-amber-500/10 text-amber-500'
-                            : 'bg-muted/80 text-muted-foreground'
-                          ">
-                        {{ mod.loader }}
-                      </span>
-                      <span v-if="mod.version"
-                        class="text-[10px] text-muted-foreground/70 truncate max-w-[120px] font-mono"
-                        :title="mod.version">
-                        {{ mod.version }}
-                      </span>
-                    </div>
-                    <div v-if="!mod.isCompatible && mod.incompatibilityReason"
-                      class="text-[10px] text-red-500 mt-0.5 truncate" :title="mod.incompatibilityReason">
-                      {{ mod.incompatibilityReason }}
-                    </div>
-                    <div v-else-if="mod.hasWarning && mod.incompatibilityReason"
-                      class="text-[10px] text-amber-500 mt-0.5 truncate" :title="mod.incompatibilityReason">
-                      {{ mod.incompatibilityReason }}
-                    </div>
-                  </div>
-
-                  <!-- Lock Status Indicator (always visible) -->
-                  <div v-if="lockedModIds.has(mod.id)" class="flex items-center shrink-0"
-                    title="This mod is locked and protected from changes">
-                    <Lock class="w-4 h-4 text-amber-500" />
-                  </div>
-
-                  <!-- Update Status Indicator (always visible, hidden if locked) -->
-                  <div v-if="!isLinked && mod.cf_project_id && !lockedModIds.has(mod.id)"
-                    class="flex items-center shrink-0">
-                    <!-- Update Available Badge -->
-                    <Button v-if="updateAvailable[mod.id] && !checkingUpdates[mod.id]" variant="ghost" size="icon"
-                      class="h-8 w-8 rounded-lg text-primary hover:text-primary hover:bg-primary/15 transition-all duration-200"
-                      :title="`Update to ${updateAvailable[mod.id].displayName}`" @click.stop="quickUpdateMod(mod)">
-                      <ArrowUpCircle class="w-4 h-4" />
-                    </Button>
-
-                    <!-- Checking Indicator -->
-                    <div v-else-if="checkingUpdates[mod.id]" class="h-8 w-8 flex items-center justify-center"
-                      title="Checking for updates...">
-                      <RefreshCw class="w-4 h-4 animate-spin text-primary" />
+                  <!-- Main Content Row -->
+                  <div class="flex items-center gap-3 p-2.5">
+                    <!-- Thumbnail -->
+                    <div class="relative">
+                      <div class="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-muted/50">
+                        <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
+                          class="w-full h-full object-cover" alt="" loading="lazy"
+                          @error="($event.target as HTMLImageElement).style.display = 'none'" />
+                        <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/40">
+                          <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-4 h-4" />
+                          <Image v-else-if="mod.content_type === 'resourcepack'" class="w-4 h-4" />
+                          <Sparkles v-else class="w-4 h-4" />
+                        </div>
+                      </div>
+                      <!-- Selection indicator overlay -->
+                      <div v-if="selectedModIds.has(mod.id)"
+                        class="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center ring-2 ring-background">
+                        <Check class="w-2.5 h-2.5 text-primary-foreground" />
+                      </div>
                     </div>
 
-                    <!-- Up to date indicator (checked, no update) -->
-                    <div v-else-if="updateAvailable[mod.id] === null" class="h-8 w-8 flex items-center justify-center"
-                      title="Up to date">
-                      <Check class="w-4 h-4 text-muted-foreground/40" />
+                    <!-- Info Section -->
+                    <div class="flex-1 min-w-0">
+                      <!-- Title Row -->
+                      <div class="flex items-center gap-2 mb-1">
+                        <h4
+                          class="font-medium text-sm truncate text-foreground hover:text-primary cursor-pointer transition-colors"
+                          @click.stop="openModDetails(mod)" title="Click to view details">
+                          {{ mod.name }}
+                        </h4>
+
+                        <!-- Status Badges -->
+                        <div class="flex items-center gap-1 shrink-0">
+                          <span v-if="recentlyUpdatedMods.has(mod.id)"
+                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                            <ArrowUpCircle class="w-2.5 h-2.5" />
+                            Updated
+                          </span>
+                          <span v-else-if="recentlyAddedMods.has(mod.id)"
+                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 font-medium">
+                            <Plus class="w-2.5 h-2.5" />
+                            New
+                          </span>
+                          <span v-if="!mod.isCompatible"
+                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium">
+                            <AlertCircle class="w-2.5 h-2.5" />
+                            Incompatible
+                          </span>
+                          <span v-else-if="mod.hasWarning"
+                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 font-medium"
+                            title="This mod uses a different loader but may work via compatibility layers">
+                            <AlertTriangle class="w-2.5 h-2.5" />
+                            Loader
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Meta Row -->
+                      <div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <!-- Version -->
+                        <span v-if="mod.version" class="font-mono truncate max-w-[100px]" :title="mod.version">
+                          v{{ mod.version }}
+                        </span>
+
+                        <span v-if="mod.version && (mod.game_versions?.length || mod.game_version)"
+                          class="opacity-40">•</span>
+
+                        <!-- Game Version -->
+                        <span v-if="mod.game_versions && mod.game_versions.length >= 1" class="font-medium"
+                          :class="mod.isCompatible ? 'text-primary/80' : 'text-red-500/80'"
+                          :title="mod.game_versions.join(', ')">
+                          {{ mod.game_versions[0] }}{{ mod.game_versions.length > 1 ? ` +${mod.game_versions.length -
+                            1}` : '' }}
+                        </span>
+                        <span v-else-if="mod.game_version && mod.game_version !== 'unknown'" class="font-medium"
+                          :class="mod.isCompatible ? 'text-primary/80' : 'text-red-500/80'">
+                          {{ mod.game_version }}
+                        </span>
+
+                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="opacity-40">•</span>
+
+                        <!-- Loader -->
+                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="capitalize font-medium"
+                          :class="mod.hasWarning ? 'text-amber-500/80' : ''">
+                          {{ mod.loader }}
+                        </span>
+
+                        <!-- Incompatibility reason -->
+                        <span v-if="!mod.isCompatible && mod.incompatibilityReason"
+                          class="text-red-500/70 truncate max-w-[150px] ml-1" :title="mod.incompatibilityReason">
+                          — {{ mod.incompatibilityReason }}
+                        </span>
+                        <span v-else-if="mod.hasWarning && mod.incompatibilityReason"
+                          class="text-amber-500/70 truncate max-w-[150px] ml-1" :title="mod.incompatibilityReason">
+                          — {{ mod.incompatibilityReason }}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  <!-- Actions Container (visible on hover) -->
-                  <div
-                    class="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <!-- Lock/Unlock Button -->
-                    <Button v-if="!isLinked" variant="ghost" size="icon"
-                      class="h-8 w-8 rounded-lg transition-all duration-200" :class="lockedModIds.has(mod.id)
-                        ? 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10'
-                        : 'text-muted-foreground hover:text-amber-500 hover:bg-muted/60'"
-                      :title="lockedModIds.has(mod.id) ? 'Unlock mod' : 'Lock mod (protect from changes)'"
-                      @click.stop="toggleModLocked(mod.id)">
-                      <Lock v-if="lockedModIds.has(mod.id)" class="w-4 h-4" />
-                      <LockOpen v-else class="w-4 h-4" />
-                    </Button>
+                    <!-- Right Side Controls -->
+                    <div class="flex items-center gap-1.5 pl-2 shrink-0">
+                      <!-- Enable/Disable Toggle -->
+                      <button class="w-7 h-4 rounded-full relative shrink-0 transition-all duration-200" :class="[
+                        disabledModIds.has(mod.id)
+                          ? 'bg-muted-foreground/25'
+                          : 'bg-primary',
+                        (isLinked || lockedModIds.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-85',
+                      ]" @click.stop="!(isLinked || lockedModIds.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
+                        ? 'Managed by remote source'
+                        : lockedModIds.has(mod.id)
+                          ? 'Unlock mod to change state'
+                          : disabledModIds.has(mod.id)
+                            ? 'Click to enable mod'
+                            : 'Click to disable mod'" :disabled="isLinked || lockedModIds.has(mod.id)">
+                        <span
+                          class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all duration-200"
+                          :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[14px]'" />
+                      </button>
 
-                    <!-- Change Version Button (disabled if locked) -->
-                    <Button v-if="!isLinked && mod.cf_project_id" variant="ghost" size="icon"
-                      class="h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted/60 transition-all duration-200"
-                      :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed' : ''"
-                      :disabled="lockedModIds.has(mod.id)"
-                      :title="lockedModIds.has(mod.id) ? 'Unlock mod to change version' : 'Change version'"
-                      @click.stop="!lockedModIds.has(mod.id) && openVersionPicker(mod)">
-                      <GitBranch class="w-4 h-4" />
-                    </Button>
+                      <!-- Status Icons -->
+                      <div class="flex items-center gap-0.5">
+                        <!-- Lock Indicator -->
+                        <div v-if="lockedModIds.has(mod.id)"
+                          class="w-5 h-5 flex items-center justify-center text-amber-500" title="Locked">
+                          <Lock class="w-3 h-3" />
+                        </div>
 
-                    <!-- Remove Button (disabled if locked) -->
-                    <Button v-if="!isLinked" variant="ghost" size="icon"
-                      class="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
-                      :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed' : ''"
-                      :disabled="lockedModIds.has(mod.id)"
-                      :title="lockedModIds.has(mod.id) ? 'Unlock mod to remove' : 'Remove mod'"
-                      @click.stop="!lockedModIds.has(mod.id) && removeMod(mod.id)">
-                      <Trash2 class="w-4 h-4" />
-                    </Button>
-                    <div v-else class="h-8 w-8 flex items-center justify-center" title="Managed by remote source">
-                      <Lock class="w-4 h-4 text-muted-foreground/40" />
+                        <!-- Update Available -->
+                        <button
+                          v-if="!isLinked && mod.cf_project_id && !lockedModIds.has(mod.id) && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
+                          class="w-5 h-5 flex items-center justify-center text-primary hover:text-primary/80 transition-colors"
+                          :title="`Update to ${updateAvailable[mod.id].displayName}`" @click.stop="quickUpdateMod(mod)">
+                          <ArrowUpCircle class="w-3.5 h-3.5" />
+                        </button>
+
+                        <!-- Checking Indicator -->
+                        <div v-else-if="!isLinked && mod.cf_project_id && checkingUpdates[mod.id]"
+                          class="w-5 h-5 flex items-center justify-center" title="Checking...">
+                          <RefreshCw class="w-3 h-3 animate-spin text-primary/60" />
+                        </div>
+                      </div>
+
+                      <!-- Action Buttons (visible on hover) -->
+                      <div
+                        class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+                        <!-- Lock/Unlock Button -->
+                        <button v-if="!isLinked"
+                          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors" :class="lockedModIds.has(mod.id)
+                            ? 'text-amber-500 hover:bg-amber-500/10'
+                            : 'text-muted-foreground/60 hover:text-amber-500 hover:bg-muted'"
+                          :title="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" @click.stop="toggleModLocked(mod.id)">
+                          <Lock v-if="lockedModIds.has(mod.id)" class="w-3 h-3" />
+                          <LockOpen v-else class="w-3 h-3" />
+                        </button>
+
+                        <!-- Change Version Button -->
+                        <button v-if="!isLinked && mod.cf_project_id"
+                          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors"
+                          :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed text-muted-foreground/40' : 'text-muted-foreground/60 hover:text-primary hover:bg-muted'"
+                          :disabled="lockedModIds.has(mod.id)"
+                          :title="lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
+                          @click.stop="!lockedModIds.has(mod.id) && openVersionPicker(mod)">
+                          <GitBranch class="w-3 h-3" />
+                        </button>
+
+                        <!-- Remove Button -->
+                        <button v-if="!isLinked"
+                          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors"
+                          :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed text-muted-foreground/40' : 'text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10'"
+                          :disabled="lockedModIds.has(mod.id)"
+                          :title="lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
+                          @click.stop="!lockedModIds.has(mod.id) && removeMod(mod.id)">
+                          <Trash2 class="w-3 h-3" />
+                        </button>
+
+                        <!-- Managed indicator -->
+                        <div v-if="isLinked" class="w-6 h-6 flex items-center justify-center text-muted-foreground/30"
+                          title="Remote managed">
+                          <Lock class="w-3 h-3" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- Empty State -->
-                <div v-if="filteredInstalledMods.length === 0" class="p-8 text-center">
-                  <Layers v-if="contentTypeTab === 'mods'" class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                  <Image v-else-if="contentTypeTab === 'resourcepacks'"
-                    class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                  <Sparkles v-else class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                  <p class="text-sm text-muted-foreground">
+                <div v-if="filteredInstalledMods.length === 0"
+                  class="flex flex-col items-center justify-center py-12 px-4">
+                  <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-4">
+                    <Layers v-if="contentTypeTab === 'mods'" class="w-8 h-8 text-muted-foreground/40" />
+                    <Image v-else-if="contentTypeTab === 'resourcepacks'" class="w-8 h-8 text-muted-foreground/40" />
+                    <Sparkles v-else class="w-8 h-8 text-muted-foreground/40" />
+                  </div>
+                  <p class="text-sm font-medium text-muted-foreground mb-1">
+                    {{ searchQueryInstalled ? "No matching items" : "Nothing here yet" }}
+                  </p>
+                  <p class="text-xs text-muted-foreground/70">
                     {{
                       searchQueryInstalled
-                        ? "No matching items"
+                        ? "Try a different search term"
                         : contentTypeTab === "mods"
-                          ? "No mods in this pack yet"
+                          ? "Add mods from the library or CurseForge"
                           : contentTypeTab === "resourcepacks"
-                            ? "No resource packs in this pack yet"
-                            : "No shaders in this pack yet"
+                            ? "Add resource packs from your library"
+                            : "Add shaders from your library"
                     }}
                   </p>
                 </div>
@@ -4237,111 +4336,122 @@ watch(
             <!-- Right: Available Mods (Library) -->
             <div v-if="!isLibraryCollapsed" class="flex flex-col bg-muted/5 transition-all duration-150 w-[40%]">
               <!-- Header -->
-              <div class="shrink-0 px-3 py-2 border-b border-border/20 bg-muted/10">
-                <div class="flex items-center justify-between">
+              <div class="shrink-0 px-3 py-2.5 border-b border-border/20 bg-muted/10">
+                <div class="flex items-center justify-between mb-2">
                   <div class="flex items-center gap-2">
-                    <Package class="w-3.5 h-3.5 text-muted-foreground" />
+                    <Package class="w-3.5 h-3.5 text-primary" />
                     <span class="text-xs font-medium">Library</span>
-                    <span class="text-[10px] text-primary">{{ compatibleCount }}</span>
-                    <span v-if="warningAvailableCount > 0" class="text-[10px] text-amber-500"
-                      title="Mods with different loader">
-                      +{{ warningAvailableCount }} other loader
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">{{
+                      compatibleCount }}</span>
+                    <span v-if="warningAvailableCount > 0" class="text-[10px] text-amber-500" title="Different loader">
+                      +{{ warningAvailableCount }}
                     </span>
                   </div>
                   <button @click="isLibraryCollapsed = true"
-                    class="p-1 rounded hover:bg-muted transition-colors duration-150 text-muted-foreground hover:text-foreground"
-                    title="Collapse Library">
-                    <X class="w-3.5 h-3.5" />
+                    class="w-5 h-5 rounded hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                    title="Collapse">
+                    <X class="w-3 h-3" />
                   </button>
                 </div>
-                <div class="relative mt-2">
-                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                  <input v-model="searchQueryAvailable" placeholder="Search library..."
-                    class="w-full h-7 pl-7 pr-3 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all duration-150" />
+                <div class="relative">
+                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/60" />
+                  <input v-model="searchQueryAvailable" placeholder="Search..."
+                    class="w-full h-7 pl-7 pr-3 text-xs rounded-lg bg-background/50 border border-border/30 focus:border-primary/40 focus:bg-background outline-none transition-all" />
                 </div>
               </div>
 
               <!-- Mod List -->
-              <div class="flex-1 overflow-y-auto p-2 space-y-1">
+              <div class="flex-1 overflow-y-auto p-2 space-y-2">
                 <div v-for="mod in filteredAvailableMods" :key="mod.id"
-                  class="flex items-center justify-between p-2 rounded-lg transition-all duration-150 relative" :class="mod.isCompatible
-                    ? mod.hasWarning
-                      ? 'hover:bg-amber-500/10 cursor-pointer group border border-amber-500/20'
-                      : 'hover:bg-accent/50 cursor-pointer group'
-                    : 'opacity-40'
-                    ">
-                  <!-- Mod Info -->
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2">
-                      <span class="font-medium text-sm truncate hover:text-primary cursor-pointer transition-colors"
-                        @click.stop="openModDetails(mod)" title="Click to view details">{{
-                          mod.name
-                        }}</span>
-                      <AlertCircle v-if="!mod.isCompatible" class="w-3.5 h-3.5 text-red-500 shrink-0"
-                        title="Incompatible" />
-                      <AlertTriangle v-else-if="mod.hasWarning" class="w-3.5 h-3.5 text-amber-500 shrink-0"
-                        title="Different loader" />
+                  class="library-card group relative rounded-lg transition-all duration-150" :class="[
+                    mod.isCompatible
+                      ? mod.hasWarning
+                        ? 'bg-amber-500/5 ring-1 ring-amber-500/20 hover:bg-amber-500/10 cursor-pointer'
+                        : 'bg-muted/30 ring-1 ring-border/20 hover:bg-muted/50 hover:ring-border/40 cursor-pointer'
+                      : 'bg-muted/10 opacity-40 cursor-not-allowed'
+                  ]">
+                  <div class="flex items-center p-2 gap-2.5">
+                    <!-- Thumbnail -->
+                    <div class="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-muted/50">
+                      <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
+                        class="w-full h-full object-cover" alt="" loading="lazy"
+                        @error="($event.target as HTMLImageElement).style.display = 'none'" />
+                      <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/30">
+                        <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-3.5 h-3.5" />
+                        <Image v-else-if="mod.content_type === 'resourcepack'" class="w-3.5 h-3.5" />
+                        <Sparkles v-else class="w-3.5 h-3.5" />
+                      </div>
                     </div>
-                    <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <!-- Game versions (show list for ALL content types if available) -->
-                      <span v-if="mod.game_versions && mod.game_versions.length >= 1"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium"
-                        :title="mod.game_versions.join(', ')">
-                        {{ mod.game_versions.slice(0, 2).join(", ")
-                        }}{{
-                          mod.game_versions.length > 2
-                            ? ` +${mod.game_versions.length - 2}`
-                            : ""
-                        }}
-                      </span>
-                      <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium">
-                        {{ mod.game_version }}
-                      </span>
-                      <span v-if="mod.loader && mod.loader !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize"
-                        :class="mod.hasWarning ? 'bg-amber-500/15 text-amber-500' : 'bg-muted text-muted-foreground'">
-                        {{ mod.loader }}
-                      </span>
-                      <span v-if="mod.version" class="text-[10px] text-muted-foreground truncate max-w-[80px] font-mono"
-                        :title="mod.version">
-                        {{ mod.version }}
-                      </span>
-                      <span v-if="!mod.isCompatible" class="text-[10px] text-red-500 italic">
+
+                    <!-- Info -->
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-1.5">
+                        <span class="font-medium text-xs truncate hover:text-primary cursor-pointer transition-colors"
+                          @click.stop="openModDetails(mod)" title="Click for details">
+                          {{ mod.name }}
+                        </span>
+                        <AlertCircle v-if="!mod.isCompatible" class="w-2.5 h-2.5 text-red-500 shrink-0" />
+                        <AlertTriangle v-else-if="mod.hasWarning" class="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                      </div>
+                      <div class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <!-- Game Version -->
+                        <span v-if="mod.game_versions && mod.game_versions.length >= 1" class="text-primary/70"
+                          :title="mod.game_versions.join(', ')">
+                          {{ mod.game_versions[0] }}{{ mod.game_versions.length > 1 ? `+${mod.game_versions.length - 1}`
+                            : '' }}
+                        </span>
+                        <span v-else-if="mod.game_version && mod.game_version !== 'unknown'" class="text-primary/70">
+                          {{ mod.game_version }}
+                        </span>
+
+                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="opacity-40">•</span>
+
+                        <!-- Loader -->
+                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="capitalize"
+                          :class="mod.hasWarning ? 'text-amber-500/80' : ''">
+                          {{ mod.loader }}
+                        </span>
+
+                        <span v-if="mod.version" class="opacity-40">•</span>
+
+                        <!-- Version -->
+                        <span v-if="mod.version" class="font-mono truncate max-w-[60px]" :title="mod.version">
+                          {{ mod.version }}
+                        </span>
+                      </div>
+
+                      <!-- Error/Warning reason -->
+                      <div v-if="!mod.isCompatible && mod.incompatibilityReason"
+                        class="text-[9px] text-red-500/80 mt-0.5 truncate" :title="mod.incompatibilityReason">
                         {{ mod.incompatibilityReason }}
-                      </span>
-                      <span v-else-if="mod.hasWarning" class="text-[10px] text-amber-500 italic">
+                      </div>
+                      <div v-else-if="mod.hasWarning && mod.incompatibilityReason"
+                        class="text-[9px] text-amber-500/80 mt-0.5 truncate" :title="mod.incompatibilityReason">
                         {{ mod.incompatibilityReason }}
-                      </span>
+                      </div>
+                    </div>
+
+                    <!-- Add Button -->
+                    <button v-if="mod.isCompatible && !isLinked"
+                      class="w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                      :class="mod.hasWarning
+                        ? 'text-amber-500 hover:bg-amber-500/10'
+                        : 'text-primary hover:bg-primary/10'" @click.stop="addMod(mod.id)"
+                      :title="mod.hasWarning ? 'Add (different loader)' : 'Add'">
+                      <Plus class="w-3.5 h-3.5" />
+                    </button>
+                    <div v-else-if="!mod.isCompatible"
+                      class="w-6 h-6 flex items-center justify-center shrink-0 text-muted-foreground/20">
+                      <Lock class="w-3 h-3" />
                     </div>
                   </div>
-
-                  <!-- Add Button - Now also enabled for warning mods -->
-                  <Button v-if="mod.isCompatible && !isLinked" variant="ghost" size="icon"
-                    class="h-8 w-8 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                    :class="mod.hasWarning ? 'text-amber-500 hover:bg-amber-500/10' : 'text-primary hover:bg-primary/10'"
-                    @click.stop="addMod(mod.id)"
-                    :title="mod.hasWarning ? 'Add (different loader - may need compatibility mod)' : 'Add to modpack'">
-                    <Plus class="w-4 h-4" />
-                  </Button>
-                  <Lock v-else class="w-4 h-4 text-muted-foreground/50 shrink-0 mr-2" :title="isLinked ? 'Managed by remote source' : 'Incompatible'
-                    " />
                 </div>
 
                 <!-- Empty State -->
-                <div v-if="filteredAvailableMods.length === 0" class="p-8 text-center">
-                  <Package class="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                  <p class="text-sm text-muted-foreground">
-                    No
-                    {{
-                      contentTypeTab === "mods"
-                        ? "mods"
-                        : contentTypeTab === "resourcepacks"
-                          ? "resource packs"
-                          : "shaders"
-                    }}
-                    available to add
-                  </p>
+                <div v-if="filteredAvailableMods.length === 0"
+                  class="flex flex-col items-center justify-center py-8 px-4">
+                  <Package class="w-8 h-8 text-muted-foreground/25 mb-2" />
+                  <p class="text-xs text-muted-foreground">No items available</p>
                 </div>
               </div>
             </div>
@@ -4405,7 +4515,7 @@ watch(
                     <select v-model="editForm.minecraft_version" :disabled="isExistingModpack"
                       class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed">
                       <option value="">Select version...</option>
-                      <option v-for="v in gameVersions" :key="v" :value="v">
+                      <option v-for="v in availableGameVersions" :key="v" :value="v">
                         {{ v }}
                       </option>
                     </select>

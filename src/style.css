@@ -163,6 +163,35 @@
     --glow-primary: 0 0 20px hsla(310, 80%, 55%, 0.3);
     --glow-strong: 0 0 40px hsla(310, 80%, 55%, 0.4);
   }
+
+  [data-theme="slate"] {
+    /* Deep slate background with subtle blue undertone */
+    --background: 215 28% 5%;
+    --foreground: 210 20% 96%;
+    --card: 215 25% 9%;
+    --card-foreground: 210 20% 96%;
+    --popover: 215 26% 7%;
+    --popover-foreground: 210 20% 96%;
+    /* Cool teal-cyan accent as primary */
+    --primary: 187 65% 48%;
+    --primary-foreground: 215 28% 5%;
+    --secondary: 215 20% 13%;
+    --secondary-foreground: 210 20% 94%;
+    --muted: 215 18% 16%;
+    --muted-foreground: 215 15% 58%;
+    --accent: 215 18% 18%;
+    --accent-foreground: 210 20% 96%;
+    --destructive: 0 68% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 18% 14%;
+    --input: 215 22% 11%;
+    --ring: 187 65% 48%;
+    --success: 160 60% 42%;
+    --warning: 40 90% 50%;
+    --info: 200 85% 50%;
+    --glow-primary: 0 0 20px hsla(187, 65%, 48%, 0.2);
+    --glow-strong: 0 0 40px hsla(187, 65%, 48%, 0.3);
+  }
 }
 
 @layer base {

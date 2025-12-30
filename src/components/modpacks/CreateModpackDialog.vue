@@ -31,8 +31,12 @@ const emit = defineEmits<{
   ): void;
 }>();
 
-// Common Minecraft versions
-const minecraftVersions = [
+// Fetched Minecraft versions from CurseForge
+const fetchedMinecraftVersions = ref<string[]>([]);
+const isLoadingMinecraftVersions = ref(false);
+
+// Fallback Minecraft versions (used if fetch fails)
+const fallbackMinecraftVersions = [
   "1.21.4",
   "1.21.3",
   "1.21.1",
@@ -62,6 +66,40 @@ const minecraftVersions = [
   "1.12",
   "1.7.10",
 ];
+
+// Computed for available MC versions - uses fetched or fallback
+const minecraftVersions = computed(() => {
+  const versions = fetchedMinecraftVersions.value.length > 0
+    ? fetchedMinecraftVersions.value
+    : fallbackMinecraftVersions;
+
+  // Include forced version if it's not in the list
+  if (props.forcedMinecraftVersion && !versions.includes(props.forcedMinecraftVersion)) {
+    return [props.forcedMinecraftVersion, ...versions];
+  }
+  return versions;
+});
+
+// Fetch Minecraft versions from CurseForge
+async function fetchMinecraftVersions() {
+  if (!window.api || isLoadingMinecraftVersions.value) return;
+  if (fetchedMinecraftVersions.value.length > 0) return; // Already fetched
+
+  isLoadingMinecraftVersions.value = true;
+  try {
+    const versions = await window.api.curseforge.getMinecraftVersions();
+    // Filter to only approved versions and extract version strings
+    const approvedVersions = versions
+      .filter((v: { approved: boolean }) => v.approved)
+      .map((v: { versionString: string }) => v.versionString);
+    fetchedMinecraftVersions.value = approvedVersions;
+    console.log(`[CreateModpackDialog] Fetched ${approvedVersions.length} MC versions`);
+  } catch (err) {
+    console.error("[CreateModpackDialog] Failed to fetch MC versions:", err);
+  } finally {
+    isLoadingMinecraftVersions.value = false;
+  }
+}
 
 const loaders = [
   { value: "forge", label: "Forge" },
@@ -226,7 +264,8 @@ watch(
       form.value.image_path = undefined;
       nameError.value = "";
 
-      // Fetch loader versions
+      // Fetch MC versions and loader versions
+      await fetchMinecraftVersions();
       await fetchLoaderVersions();
     }
   }

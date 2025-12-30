@@ -655,6 +655,13 @@ export class InstanceService {
       const PARALLEL_DOWNLOADS = 20; // Number of concurrent downloads
       let completed = 0;
       
+      // Log resourcepacks and shaders to sync
+      const resourcepacks = modpackData.mods.filter(m => m.content_type === "resourcepack");
+      const shaders = modpackData.mods.filter(m => m.content_type === "shader");
+      console.log(`[Sync] Resourcepacks to sync: ${resourcepacks.length}`);
+      resourcepacks.forEach(r => console.log(`  - ${r.filename} (cf_file_id: ${r.cf_file_id})`));
+      console.log(`[Sync] Shaders to sync: ${shaders.length}`);
+      
       // Prepare download tasks
       const downloadTasks = modpackData.mods.map(mod => async () => {
         try {
@@ -663,6 +670,7 @@ export class InstanceService {
           switch (mod.content_type) {
             case "resourcepack":
               destFolder = resourcepacksPath;
+              console.log(`[Sync] Processing resourcepack: ${mod.filename} -> ${destFolder}`);
               break;
             case "shader":
               destFolder = shaderpacksPath;
@@ -676,7 +684,7 @@ export class InstanceService {
 
           // Skip if already exists (either enabled or disabled version)
           if (await fs.pathExists(destPath) || await fs.pathExists(disabledDestPath)) {
-            console.log(`[Sync] Skipping ${mod.name} - already exists`);
+            console.log(`[Sync] Skipping ${mod.name} - already exists at ${destPath}`);
             completed++;
             options.onProgress?.("Downloading content", completed, totalMods, mod.name);
             return { status: "skipped" as const, mod };
@@ -703,18 +711,22 @@ export class InstanceService {
           }
 
           // Download
+          console.log(`[Sync] Downloading ${mod.content_type || 'mod'}: ${mod.filename} from ${downloadUrl}`);
           const response = await fetch(downloadUrl);
           if (!response.ok) {
+            console.log(`[Sync] Download FAILED for ${mod.filename}: HTTP ${response.status}`);
             throw new Error(`HTTP ${response.status}`);
           }
 
           const buffer = Buffer.from(await response.arrayBuffer());
           await fs.writeFile(destPath, buffer);
+          console.log(`[Sync] Successfully downloaded ${mod.filename} (${buffer.length} bytes) to ${destPath}`);
           
           completed++;
           options.onProgress?.("Downloading content", completed, totalMods, mod.name);
           return { status: "downloaded" as const, mod };
         } catch (error: any) {
+          console.log(`[Sync] ERROR downloading ${mod.filename}: ${error.message}`);
           completed++;
           options.onProgress?.("Downloading content", completed, totalMods, mod.name);
           return { status: "error" as const, mod, error: error.message };
@@ -730,6 +742,13 @@ export class InstanceService {
       }
 
       // Process results
+      // Log resourcepack sync results
+      const rpResults = downloadResults.filter(r => r.mod.content_type === "resourcepack");
+      console.log(`[Sync] Resourcepack results: ${rpResults.length} total`);
+      for (const rp of rpResults) {
+        console.log(`  - ${rp.mod.filename}: ${rp.status}${rp.error ? ` (${rp.error})` : ''}`);
+      }
+      
       for (const downloadResult of downloadResults) {
         switch (downloadResult.status) {
           case "downloaded":
@@ -2000,6 +2019,8 @@ export class InstanceService {
         const packMods = modpackMods.filter(m => m.content_type === contentType);
         const expectedPacks = new Set(packMods.map(m => m.filename).filter(Boolean));
         
+        console.log(`[checkSyncStatus] Checking ${contentType}s: ${packMods.length} expected`);
+        
         // Also include packs from overrides folder (these are not tracked as mods)
         if (overridesPath) {
           const overridesFolderPath = path.join(overridesPath, folderName);
@@ -2015,22 +2036,40 @@ export class InstanceService {
         
         if (await fs.pathExists(folderPath)) {
           const files = await fs.readdir(folderPath);
+          // Include both .zip and .zip.disabled files (strip .disabled suffix for matching)
           const zipFiles = files.filter(f => f.endsWith(".zip"));
+          const disabledZipFiles = files.filter(f => f.endsWith(".zip.disabled")).map(f => f.replace(".disabled", ""));
+          const allZipFiles = [...new Set([...zipFiles, ...disabledZipFiles])];
+          
+          console.log(`[checkSyncStatus] ${contentType} folder has: ${zipFiles.join(', ')}`);
+          console.log(`[checkSyncStatus] ${contentType} disabled: ${disabledZipFiles.join(', ')}`);
+          
+          // Build case-insensitive map for matching (include disabled files)
+          const zipFilesLower = new Map(allZipFiles.map(f => [f.toLowerCase(), f]));
           
           // Check missing from mods database only (overrides are copied during sync)
           for (const mod of packMods) {
-            if (mod.filename && !zipFiles.includes(mod.filename)) {
-              result.missingInInstance.push({ filename: mod.filename, type: contentType });
+            if (mod.filename) {
+              const existsExact = allZipFiles.includes(mod.filename);
+              const existsCaseInsensitive = zipFilesLower.has(mod.filename.toLowerCase());
+              
+              if (!existsExact && !existsCaseInsensitive) {
+                console.log(`[checkSyncStatus] MISSING ${contentType}: ${mod.filename}`);
+                result.missingInInstance.push({ filename: mod.filename, type: contentType });
+              } else if (!existsExact && existsCaseInsensitive) {
+                console.log(`[checkSyncStatus] ${contentType} found with different case: expected "${mod.filename}", found "${zipFilesLower.get(mod.filename.toLowerCase())}"`);
+              }
             }
           }
           
-          // Check extra (files not in mods OR overrides)
-          for (const file of zipFiles) {
+          // Check extra (files not in mods OR overrides) - use allZipFiles to include disabled
+          for (const file of allZipFiles) {
             if (!expectedPacks.has(file)) {
               result.extraInInstance.push({ filename: file, type: contentType });
             }
           }
         } else if (packMods.length > 0) {
+          console.log(`[checkSyncStatus] ${contentType} folder does not exist: ${folderPath}`);
           // Folder doesn't exist but we have packs
           for (const mod of packMods) {
             if (mod.filename) {

@@ -134,6 +134,10 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("curseforge:getPopular", gameVersion, modLoader),
     getModLoaders: (gameVersion?: string): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getModLoaders", gameVersion),
+    getMinecraftVersions: (): Promise<{ versionString: string; approved: boolean }[]> =>
+      ipcRenderer.invoke("curseforge:getMinecraftVersions"),
+    getLoaderTypes: (): Promise<string[]> =>
+      ipcRenderer.invoke("curseforge:getLoaderTypes"),
     addToLibrary: (
       projectId: number,
       fileId: number,

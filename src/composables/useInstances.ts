@@ -294,7 +294,7 @@ export function useInstances() {
   // Log line callbacks (registered per-component)
   const logLineCallbacks = new Set<(instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) => void>();
 
-  onMounted(() => {
+  onMounted(async () => {
     // Subscribe to sync progress events
     unsubscribeSyncProgress = window.api.instances.onSyncProgress((data) => {
       syncProgress.value = data;
@@ -315,6 +315,20 @@ export function useInstances() {
     unsubscribeGameLogLine = window.api.instances.onLogLine((data) => {
       logLineCallbacks.forEach(cb => cb(data.instanceId, data));
     });
+
+    // Load any running games from backend (for page reload detection)
+    try {
+      const games = await window.api.instances.getAllRunningGames();
+      if (games.length > 0) {
+        console.log(`[useInstances] Detected ${games.length} running game(s) from backend`);
+        for (const game of games) {
+          runningGames.value.set(game.instanceId, game);
+        }
+        runningGames.value = new Map(runningGames.value);
+      }
+    } catch (err) {
+      console.warn("[useInstances] Failed to load running games:", err);
+    }
   });
 
   onUnmounted(() => {
@@ -328,7 +342,7 @@ export function useInstances() {
   /**
    * Register a callback for log lines (for a specific instance or all)
    */
-  function onGameLogLine(callback: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) => void): () => void {
+  function onGameLogLine(callback: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string; source?: string }) => void): () => void {
     logLineCallbacks.add(callback);
     return () => logLineCallbacks.delete(callback);
   }

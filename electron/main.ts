@@ -458,6 +458,24 @@ async function initializeBackend() {
     return metadataManager.getDisabledMods(modpackId);
   });
 
+  ipcMain.handle("modpacks:getLockedMods", async (_, modpackId: string) => {
+    return metadataManager.getLockedMods(modpackId);
+  });
+
+  ipcMain.handle(
+    "modpacks:setModLocked",
+    async (_, modpackId: string, modId: string, locked: boolean) => {
+      return metadataManager.setModLocked(modpackId, modId, locked);
+    }
+  );
+
+  ipcMain.handle(
+    "modpacks:updateLockedMods",
+    async (_, modpackId: string, lockedModIds: string[]) => {
+      return metadataManager.updateLockedMods(modpackId, lockedModIds);
+    }
+  );
+
   ipcMain.handle(
     "modpacks:clone",
     async (_, modpackId: string, newName: string) => {
@@ -512,44 +530,6 @@ async function initializeBackend() {
       return false;
     }
   });
-
-  // ========== MODPACK PROFILES ==========
-
-  ipcMain.handle(
-    "modpacks:createProfile",
-    async (_, modpackId: string, name: string) => {
-      return metadataManager.createProfile(modpackId, name);
-    }
-  );
-
-  ipcMain.handle(
-    "modpacks:deleteProfile",
-    async (_, modpackId: string, profileId: string) => {
-      return metadataManager.deleteProfile(modpackId, profileId);
-    }
-  );
-
-  ipcMain.handle(
-    "modpacks:applyProfile",
-    async (_, modpackId: string, profileId: string) => {
-      return metadataManager.applyProfile(modpackId, profileId);
-    }
-  );
-
-  // Profile config management
-  ipcMain.handle(
-    "modpacks:saveProfileConfigs",
-    async (_, modpackId: string, profileId: string) => {
-      return metadataManager.saveProfileConfigs(modpackId, profileId);
-    }
-  );
-
-  ipcMain.handle(
-    "modpacks:applyProfileConfigs",
-    async (_, modpackId: string, profileId: string) => {
-      return metadataManager.applyProfileConfigs(modpackId, profileId);
-    }
-  );
 
   ipcMain.handle(
     "modpacks:hasOverrides",
@@ -2382,20 +2362,18 @@ async function initializeBackend() {
 
   ipcMain.handle(
     "updates:setApiKey",
-    async (_, source: "curseforge" | "modrinth", apiKey: string) => {
-      console.log(`[IPC] Setting API key for ${source}`);
-      await metadataManager.setApiKey(source, apiKey);
-      if (source === "curseforge") {
-        await curseforgeService.setApiKey(apiKey);
-      }
+    async (_, apiKey: string) => {
+      console.log(`[IPC] Setting CurseForge API key`);
+      await metadataManager.setApiKey(apiKey);
+      await curseforgeService.setApiKey(apiKey);
       return { success: true };
     }
   );
 
   ipcMain.handle(
     "updates:getApiKey",
-    async (_, source: "curseforge" | "modrinth") => {
-      return metadataManager.getApiKey(source);
+    async () => {
+      return metadataManager.getApiKey();
     }
   );
 
@@ -3100,6 +3078,38 @@ async function initializeBackend() {
   // Game tracking: Kill running game
   ipcMain.handle("instance:killGame", async (_, instanceId: string) => {
     return instanceService.killGame(instanceId);
+  });
+
+  // Game tracking: Get all running games (for reload detection)
+  ipcMain.handle("instance:getAllRunningGames", async () => {
+    const games = instanceService.getAllRunningGames();
+    const result: Array<{
+      instanceId: string;
+      launcherPid?: number;
+      gamePid?: number;
+      startTime: number;
+      status: "launching" | "loading_mods" | "running" | "stopped";
+      loadedMods: number;
+      totalMods: number;
+      currentMod?: string;
+      gameProcessRunning: boolean;
+    }> = [];
+    
+    for (const [_, info] of games) {
+      result.push({
+        instanceId: info.instanceId,
+        launcherPid: info.launcherPid,
+        gamePid: info.gamePid,
+        startTime: info.startTime,
+        status: info.status,
+        loadedMods: info.loadedMods,
+        totalMods: info.totalMods,
+        currentMod: info.currentMod,
+        gameProcessRunning: info.gameProcessRunning || false
+      });
+    }
+    
+    return result;
   });
 
   // Setup game status change callback

@@ -38,23 +38,23 @@ ModEx tracks dependencies automatically:
 - Shows dependency impact when disabling mods
 - The **Health** tab identifies compatibility issues
 
-## Profiles
+## Locking Mods
 
-Modpacks support multiple **profiles** — variations of the same modpack:
+You can **lock** important mods to protect them from accidental changes:
 
-- **Default Profile** — Your main configuration
-- **Custom Profiles** — Create lightweight or extended versions
+- **Locked mods** cannot be removed, disabled, or have their version changed
+- They are excluded from bulk operations (enable all, disable all, remove selected)
+- They are preserved during version rollback
 
-### Creating a Profile
+### How to Lock
 
-1. Open the modpack editor
-2. Click the **Profiles** tab
-3. Click **New Profile**
-4. Name it and optionally base it on an existing profile
+1. In the mods list, hover over a mod
+2. Click the lock icon
+3. The mod is now protected
 
-### Switching Profiles
+### Unlocking
 
-The active profile determines which mods are exported. Switch profiles in the editor header.
+Click the lock icon again to unlock a mod and allow changes.
 
 ## Version History
 
@@ -63,6 +63,7 @@ ModEx automatically tracks changes to your modpacks:
 - Every add/remove creates a history entry
 - View the timeline in the **Versions** panel
 - Restore previous versions if needed
+- Lock/unlock actions are also tracked
 
 ### Viewing History
 
@@ -76,6 +77,8 @@ ModEx automatically tracks changes to your modpacks:
 1. Find the version you want in Versions tab
 2. Click **Restore**
 3. The modpack reverts to that state
+
+> **Note:** Locked mod status is also restored from the version you rollback to.
 
 ## Configuration Editor
 
@@ -127,7 +130,7 @@ The `.modex` format preserves:
 - All modpack metadata
 - Mod references (CurseForge IDs)
 - Folder organization
-- Profiles and history
+- Locked mods and history
 
 Share this file with others — they can import it into their ModEx.
 

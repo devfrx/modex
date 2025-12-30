@@ -170,6 +170,9 @@ export interface Modpack {
   /** Disabled mod IDs (mods that are in the pack but temporarily disabled) */
   disabled_mod_ids?: string[];
 
+  /** Locked mod IDs (mods that cannot be updated, removed, or modified) */
+  locked_mod_ids?: string[];
+
   /** Remote source configuration for collaboration/updates */
   remote_source?: {
     /** URL to the remote manifest JSON (e.g. GitHub Gist Raw URL) */
@@ -181,9 +184,6 @@ export interface Modpack {
     /** Skip initial auto-check (set after fresh import) */
     skip_initial_check?: boolean;
   };
-
-  /** Saved configuration profiles (sets of enabled mods) */
-  profiles?: ModpackProfile[];
   
   /** Mods that failed to import due to incompatibility */
   incompatible_mods?: Array<{
@@ -201,15 +201,6 @@ export interface Modpack {
   cf_slug?: string;
   /** Path to saved overrides (config files, scripts, etc.) for this modpack */
   overridesPath?: string;
-}
-
-export interface ModpackProfile {
-  id: string;
-  name: string;
-  enabled_mod_ids: string[];
-  created_at: string;
-  /** Optional: config overrides specific to this profile */
-  config_overrides_path?: string;
 }
 
 // ==================== MODPACK CREATION ====================
@@ -331,7 +322,7 @@ export interface RemoteUpdateResult {
 
 /** A single change in a modpack version */
 export interface ModpackChange {
-  type: "add" | "remove" | "update" | "enable" | "disable" | "version_control" | "loader_change";
+  type: "add" | "remove" | "update" | "enable" | "disable" | "lock" | "unlock" | "version_control" | "loader_change";
   modId: string;
   modName: string;
   /** For updates: previous version string */
@@ -362,6 +353,8 @@ export interface ModpackVersion {
   mod_ids: string[];
   /** Snapshot of disabled mod IDs at this version */
   disabled_mod_ids?: string[];
+  /** Snapshot of locked mod IDs at this version */
+  locked_mod_ids?: string[];
   /** Loader type at this version (forge, fabric, etc.) */
   loader?: string;
   /** Loader version at this version */
@@ -402,7 +395,6 @@ export interface ModpackVersionHistory {
 
 export interface AppConfig {
   curseforge_api_key?: string;
-  modrinth_api_key?: string;
   theme?: "light" | "dark" | "system";
   /** Instance sync settings */
   instanceSync?: {

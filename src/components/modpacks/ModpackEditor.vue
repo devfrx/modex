@@ -13,6 +13,7 @@ import {
   ArrowUpCircle,
   ArrowLeft,
   Lock,
+  LockOpen,
   Save,
   GitBranch,
   Package,
@@ -30,7 +31,6 @@ import {
   Square,
   Image,
   Sparkles,
-  Users,
   History,
   ExternalLink,
   Info,
@@ -65,7 +65,6 @@ import FilePickerDialog from "@/components/mods/FilePickerDialog.vue";
 import VersionHistoryPanel from "@/components/modpacks/VersionHistoryPanel.vue";
 import ModpackAnalysisPanel from "@/components/modpacks/ModpackAnalysisPanel.vue";
 import RecommendationsPanel from "@/components/modpacks/RecommendationsPanel.vue";
-import ProfilesPanel from "@/components/modpacks/ProfilesPanel.vue";
 import UpdateReviewDialog from "@/components/modpacks/UpdateReviewDialog.vue";
 import ConfigBrowser from "@/components/configs/ConfigBrowser.vue";
 import ConfigStructuredEditor from "@/components/configs/ConfigStructuredEditor.vue";
@@ -78,7 +77,7 @@ import type { CFModLoader } from "@/types/electron";
 const props = defineProps<{
   modpackId: string;
   isOpen: boolean;
-  initialTab?: "play" | "mods" | "discover" | "health" | "versions" | "profiles" | "settings" | "remote" | "configs";
+  initialTab?: "play" | "mods" | "discover" | "health" | "versions" | "settings" | "remote" | "configs";
   /** When true, renders as a full-screen view instead of a modal dialog */
   fullScreen?: boolean;
 }>();
@@ -113,6 +112,7 @@ const modpack = ref<Modpack | null>(null);
 const currentMods = ref<Mod[]>([]);
 const availableMods = ref<Mod[]>([]);
 const disabledModIds = ref<Set<string>>(new Set());
+const lockedModIds = ref<Set<string>>(new Set());
 const searchQueryInstalled = ref("");
 const searchQueryAvailable = ref("");
 const isLoading = ref(true);
@@ -131,14 +131,13 @@ const isSaving = ref(false);
 // Mod Details Modal state
 const showModDetailsModal = ref(false);
 const modDetailsTarget = ref<Mod | null>(null);
-const modsFilter = ref<"all" | "incompatible" | "warning" | "disabled" | "updates" | "recent-updated" | "recent-added">("all");
+const modsFilter = ref<"all" | "incompatible" | "warning" | "disabled" | "locked" | "updates" | "recent-updated" | "recent-added">("all");
 const activeTab = ref<
   | "play"
   | "mods"
   | "discover"
   | "health"
   | "versions"
-  | "profiles"
   | "settings"
   | "remote"
   | "configs"
@@ -209,8 +208,55 @@ const maxAllowedRam = computed(() => {
 // Live Log State
 const gameLogs = ref<Array<{ time: string; level: string; message: string }>>([]);
 const showLogConsole = ref(false);
+
+// Version History unsaved changes count
+const versionUnsavedCount = ref(0);
+
+// Helper to refresh unsaved changes count
+async function refreshUnsavedChangesCount() {
+  try {
+    const unsavedData = await window.api.modpacks.getUnsavedChanges(props.modpackId);
+    if (unsavedData?.hasChanges && unsavedData.changes) {
+      const c = unsavedData.changes;
+      const configCount = c.configDetails?.length || (c.configsChanged ? 1 : 0);
+      const loaderChange = c.loaderChanged ? 1 : 0;
+      versionUnsavedCount.value = c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length +
+        c.modsDisabled.length + (c.modsUpdated?.length || 0) + (c.modsLocked?.length || 0) +
+        (c.modsUnlocked?.length || 0) + loaderChange + configCount;
+    } else {
+      versionUnsavedCount.value = 0;
+    }
+  } catch (err) {
+    console.error("Failed to refresh unsaved changes count:", err);
+  }
+}
 const logScrollRef = ref<HTMLDivElement | null>(null);
 const maxLogLines = 200;
+const logLevelFilter = ref<"all" | "info" | "warn" | "error">("all");
+
+// Filtered logs based on level
+const filteredGameLogs = computed(() => {
+  if (logLevelFilter.value === "all") return gameLogs.value;
+  const filterMap: Record<string, string[]> = {
+    "info": ["INFO"],
+    "warn": ["WARN", "WARNING"],
+    "error": ["ERROR", "FATAL", "SEVERE"]
+  };
+  const allowedLevels = filterMap[logLevelFilter.value] || [];
+  return gameLogs.value.filter(log => allowedLevels.includes(log.level.toUpperCase()));
+});
+
+// Log level counts for badges
+const logLevelCounts = computed(() => {
+  const counts = { info: 0, warn: 0, error: 0 };
+  for (const log of gameLogs.value) {
+    const level = log.level.toUpperCase();
+    if (level === "INFO") counts.info++;
+    else if (level === "WARN" || level === "WARNING") counts.warn++;
+    else if (level === "ERROR" || level === "FATAL" || level === "SEVERE") counts.error++;
+  }
+  return counts;
+});
 
 // Running game computed
 const runningGame = computed(() => {
@@ -572,6 +618,9 @@ const filteredInstalledMods = computed(() => {
     if (modsFilter.value === "disabled") {
       return disabledModIds.value.has(m.id);
     }
+    if (modsFilter.value === "locked") {
+      return lockedModIds.value.has(m.id);
+    }
     if (modsFilter.value === "updates") {
       return !!updateAvailable.value[m.id];
     }
@@ -682,7 +731,7 @@ function handleCFSearchClose() {
   showCFSearch.value = false;
 }
 
-async function handleCFModAdded(mod: any, addedIds?: string[]) {
+async function handleCFModAdded(mod: Mod | null, addedIds?: string[]) {
   // Reload data after a mod is added from CurseForge search
   await loadData();
   emit("update");
@@ -706,7 +755,7 @@ async function handleCFModAdded(mod: any, addedIds?: string[]) {
   }
 }
 
-function openSingleModUpdate(mod: any) {
+function openSingleModUpdate(mod: Mod) {
   selectedUpdateMod.value = mod;
   showSingleModUpdateDialog.value = true;
 }
@@ -728,7 +777,7 @@ function handleSingleModUpdated() {
   emit("update");
 }
 
-async function checkModUpdate(mod: any) {
+async function checkModUpdate(mod: Mod) {
   if (!mod.cf_project_id || !mod.cf_file_id || checkingUpdates.value[mod.id])
     return;
 
@@ -757,7 +806,7 @@ async function checkModUpdate(mod: any) {
   }
 }
 
-async function updateMod(mod: any) {
+async function updateMod(mod: Mod) {
   const latest = updateAvailable.value[mod.id];
   if (!latest) return;
 
@@ -777,8 +826,18 @@ async function updateMod(mod: any) {
 }
 
 // Version picker for changing mod version
-function openVersionPicker(mod: any) {
+function openVersionPicker(mod: Mod) {
   if (!mod.cf_project_id) return;
+
+  // Check if mod is locked
+  if (lockedModIds.value.has(mod.id)) {
+    toast.error(
+      "Mod Locked",
+      "This mod is locked and cannot be changed. Unlock it first."
+    );
+    return;
+  }
+
   versionPickerMod.value = {
     id: mod.cf_project_id,
     name: mod.name,
@@ -894,7 +953,16 @@ async function checkAllUpdates() {
 }
 
 // Quick update a single mod to latest
-async function quickUpdateMod(mod: any) {
+async function quickUpdateMod(mod: Mod) {
+  // Check if mod is locked
+  if (lockedModIds.value.has(mod.id)) {
+    toast.error(
+      "Mod Locked",
+      "This mod is locked and cannot be updated. Unlock it first."
+    );
+    return;
+  }
+
   const latest = updateAvailable.value[mod.id];
   if (!latest) return;
 
@@ -923,10 +991,15 @@ async function quickUpdateMod(mod: any) {
   }
 }
 
-// Update all mods with available updates
+// Update all mods with available updates (excluding locked mods)
 async function updateAllMods() {
-  const modsToUpdate = currentMods.value.filter(m => updateAvailable.value[m.id]);
-  if (modsToUpdate.length === 0) return;
+  const modsToUpdate = currentMods.value.filter(m =>
+    updateAvailable.value[m.id] && !lockedModIds.value.has(m.id)
+  );
+  if (modsToUpdate.length === 0) {
+    toast.info("No Updates", "All mods are up to date or locked.");
+    return;
+  }
 
   let successCount = 0;
   let failCount = 0;
@@ -991,6 +1064,23 @@ const disabledModCount = computed(() => {
     if (contentTypeTab.value === "shaders" && modContentType !== "shader")
       return false;
     return disabledModIds.value.has(m.id);
+  }).length;
+});
+
+// Count of locked mods (per tab)
+const lockedModCount = computed(() => {
+  return currentMods.value.filter((m) => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod")
+      return false;
+    if (
+      contentTypeTab.value === "resourcepacks" &&
+      modContentType !== "resourcepack"
+    )
+      return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
+      return false;
+    return lockedModIds.value.has(m.id);
   }).length;
 });
 
@@ -1077,17 +1167,22 @@ const enabledModCount = computed(() => {
     .length;
 });
 
+// Lightweight refresh of just the sync status (without full data reload)
+async function refreshSyncStatus() {
+  if (!instance.value) {
+    instanceSyncStatus.value = null;
+    return;
+  }
+  try {
+    instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
+  } catch (err) {
+    console.error("Failed to refresh sync status:", err);
+  }
+}
+
 // Refresh data and notify parent to update modpack list (e.g., for unsaved changes icon)
 async function refreshAndNotify() {
   await loadData();
-  // Also refresh instance sync status if linked
-  if (instance.value) {
-    try {
-      instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
-    } catch (err) {
-      console.error("Failed to refresh sync status:", err);
-    }
-  }
   emit("update");
 }
 
@@ -1102,11 +1197,12 @@ async function loadData() {
   updateResult.value = null;
 
   try {
-    const [pack, cMods, allMods, disabled, linkedInstance] = await Promise.all([
+    const [pack, cMods, allMods, disabled, locked, linkedInstance] = await Promise.all([
       window.api.modpacks.getById(props.modpackId),
       window.api.modpacks.getMods(props.modpackId),
       window.api.mods.getAll(),
       window.api.modpacks.getDisabledMods(props.modpackId),
+      window.api.modpacks.getLockedMods(props.modpackId),
       window.api.instances.getByModpack(props.modpackId),
     ]);
 
@@ -1120,8 +1216,25 @@ async function loadData() {
     currentMods.value = cMods;
     availableMods.value = allMods;
     disabledModIds.value = new Set(disabled);
+    lockedModIds.value = new Set(locked);
     selectedModIds.value.clear();
     linkedInstanceId.value = linkedInstance?.id || null;
+
+    // Load unsaved changes count for version history badge
+    await refreshUnsavedChangesCount();
+
+    // Update instance sync status if linked
+    if (linkedInstance) {
+      instance.value = linkedInstance;
+      try {
+        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(linkedInstance.id, props.modpackId);
+      } catch (err) {
+        console.error("Failed to refresh sync status:", err);
+      }
+    } else {
+      instance.value = null;
+      instanceSyncStatus.value = null;
+    }
 
     // Initialize edit form
     if (pack) {
@@ -1353,7 +1466,12 @@ async function handleLaunch(options?: { forceSync?: boolean; skipSync?: boolean 
   gameLaunched.value = false;
   gameLoadingMessage.value = "";
 
-  const removeProgressListener = window.api.on("loader:installProgress", (data: any) => {
+  const removeProgressListener = window.api.on("loader:installProgress", (data: {
+    stage: string;
+    current: number;
+    total: number;
+    detail?: string;
+  }) => {
     loaderProgress.value = {
       stage: data.stage,
       current: data.current,
@@ -1651,6 +1769,14 @@ async function removeMod(modId: string) {
     return;
   }
 
+  if (lockedModIds.value.has(modId)) {
+    toast.error(
+      "Mod Locked",
+      "This mod is locked and cannot be removed. Unlock it first."
+    );
+    return;
+  }
+
   // Check dependency impact before removing
   try {
     const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "remove");
@@ -1686,6 +1812,15 @@ async function executeModRemoval(modId: string) {
 }
 
 async function toggleModEnabled(modId: string) {
+  // Check if mod is locked
+  if (lockedModIds.value.has(modId)) {
+    toast.error(
+      "Mod Locked",
+      "This mod is locked and cannot be enabled/disabled. Unlock it first."
+    );
+    return;
+  }
+
   // Check if we're disabling (mod is currently enabled)
   const isCurrentlyEnabled = !disabledModIds.value.has(modId);
 
@@ -1726,6 +1861,10 @@ async function executeModToggle(modId: string) {
       }
       // Trigger reactivity
       disabledModIds.value = new Set(disabledModIds.value);
+      // Refresh sync status to reflect enabled/disabled changes
+      await refreshSyncStatus();
+      // Refresh unsaved changes count
+      await refreshUnsavedChangesCount();
       emit("update");
     }
   } catch (err) {
@@ -1734,10 +1873,46 @@ async function executeModToggle(modId: string) {
   }
 }
 
+async function toggleModLocked(modId: string) {
+  const isCurrentlyLocked = lockedModIds.value.has(modId);
+  const mod = currentMods.value.find(m => m.id === modId);
+  const modName = mod?.name || modId;
+
+  try {
+    const result = await window.api.modpacks.setModLocked(props.modpackId, modId, !isCurrentlyLocked);
+    if (result) {
+      // Update local state immediately
+      if (isCurrentlyLocked) {
+        lockedModIds.value.delete(modId);
+        toast.success("Mod Unlocked", `${modName} can now be modified`);
+      } else {
+        lockedModIds.value.add(modId);
+        toast.success("Mod Locked", `${modName} is now protected from changes`);
+      }
+      // Trigger reactivity
+      lockedModIds.value = new Set(lockedModIds.value);
+      // Refresh unsaved changes count
+      await refreshUnsavedChangesCount();
+      emit("update");
+    }
+  } catch (err) {
+    console.error("Failed to toggle mod lock:", err);
+    toast.error("Lock Failed", (err as Error).message);
+  }
+}
+
 async function removeSelectedMods() {
   if (selectedModIds.value.size === 0) return;
 
-  const idsToRemove: string[] = Array.from(selectedModIds.value);
+  // Filter out locked mods
+  const idsToRemove: string[] = Array.from(selectedModIds.value).filter(
+    id => !lockedModIds.value.has(id)
+  );
+
+  if (idsToRemove.length === 0) {
+    toast.warning("Cannot Remove", "All selected mods are locked");
+    return;
+  }
 
   try {
     for (const id of idsToRemove) {
@@ -1779,7 +1954,13 @@ async function bulkEnableSelected() {
 
   let successCount = 0;
   let failCount = 0;
+  let skippedLocked = 0;
   for (const modId of selectedModIds.value) {
+    // Skip locked mods
+    if (lockedModIds.value.has(modId)) {
+      skippedLocked++;
+      continue;
+    }
     if (disabledModIds.value.has(modId)) {
       try {
         await window.api.modpacks.toggleMod(props.modpackId, modId);
@@ -1792,9 +1973,15 @@ async function bulkEnableSelected() {
     }
   }
   disabledModIds.value = new Set(disabledModIds.value);
+  // Refresh sync status to reflect enabled/disabled changes
+  await refreshSyncStatus();
+  // Refresh unsaved changes count
+  await refreshUnsavedChangesCount();
   emit("update");
-  if (failCount === 0) {
+  if (failCount === 0 && skippedLocked === 0) {
     toast.success("Mods Enabled", `Enabled ${successCount} mod(s)`);
+  } else if (skippedLocked > 0) {
+    toast.warning("Mods Enabled", `Enabled ${successCount} mod(s), ${skippedLocked} locked mod(s) skipped`);
   } else {
     toast.warning("Mods Enabled", `Enabled ${successCount} mod(s), ${failCount} failed`);
   }
@@ -1805,7 +1992,13 @@ async function bulkDisableSelected() {
 
   let successCount = 0;
   let failCount = 0;
+  let skippedLocked = 0;
   for (const modId of selectedModIds.value) {
+    // Skip locked mods
+    if (lockedModIds.value.has(modId)) {
+      skippedLocked++;
+      continue;
+    }
     if (!disabledModIds.value.has(modId)) {
       try {
         await window.api.modpacks.toggleMod(props.modpackId, modId);
@@ -1818,24 +2011,89 @@ async function bulkDisableSelected() {
     }
   }
   disabledModIds.value = new Set(disabledModIds.value);
+  // Refresh sync status to reflect enabled/disabled changes
+  await refreshSyncStatus();
+  // Refresh unsaved changes count
+  await refreshUnsavedChangesCount();
   emit("update");
-  if (failCount === 0) {
+  if (failCount === 0 && skippedLocked === 0) {
     toast.success("Mods Disabled", `Disabled ${successCount} mod(s)`);
+  } else if (skippedLocked > 0) {
+    toast.warning("Mods Disabled", `Disabled ${successCount} mod(s), ${skippedLocked} locked mod(s) skipped`);
   } else {
     toast.warning("Mods Disabled", `Disabled ${successCount} mod(s), ${failCount} failed`);
+  }
+}
+
+async function bulkLockSelected() {
+  if (selectedModIds.value.size === 0 || isLinked.value) return;
+
+  let successCount = 0;
+  let failCount = 0;
+  for (const modId of selectedModIds.value) {
+    // Skip already locked mods
+    if (lockedModIds.value.has(modId)) continue;
+    try {
+      const result = await window.api.modpacks.setModLocked(props.modpackId, modId, true);
+      if (result) {
+        lockedModIds.value.add(modId);
+        successCount++;
+      }
+    } catch (err) {
+      console.error(`Failed to lock mod ${modId}:`, err);
+      failCount++;
+    }
+  }
+  lockedModIds.value = new Set(lockedModIds.value);
+  await refreshUnsavedChangesCount();
+  emit("update");
+  if (failCount === 0) {
+    toast.success("Mods Locked", `Locked ${successCount} mod(s)`);
+  } else {
+    toast.warning("Mods Locked", `Locked ${successCount} mod(s), ${failCount} failed`);
+  }
+}
+
+async function bulkUnlockSelected() {
+  if (selectedModIds.value.size === 0 || isLinked.value) return;
+
+  let successCount = 0;
+  let failCount = 0;
+  for (const modId of selectedModIds.value) {
+    // Skip already unlocked mods
+    if (!lockedModIds.value.has(modId)) continue;
+    try {
+      const result = await window.api.modpacks.setModLocked(props.modpackId, modId, false);
+      if (result) {
+        lockedModIds.value.delete(modId);
+        successCount++;
+      }
+    } catch (err) {
+      console.error(`Failed to unlock mod ${modId}:`, err);
+      failCount++;
+    }
+  }
+  lockedModIds.value = new Set(lockedModIds.value);
+  await refreshUnsavedChangesCount();
+  emit("update");
+  if (failCount === 0) {
+    toast.success("Mods Unlocked", `Unlocked ${successCount} mod(s)`);
+  } else {
+    toast.warning("Mods Unlocked", `Unlocked ${successCount} mod(s), ${failCount} failed`);
   }
 }
 
 async function removeIncompatibleMods() {
   if (isLinked.value) return;
 
+  // Exclude locked mods from incompatible list
   const incompatibleMods = currentMods.value.filter(
-    (m) => !isModCompatible(m).compatible
+    (m) => !isModCompatible(m).compatible && !lockedModIds.value.has(m.id)
   );
   if (incompatibleMods.length === 0) {
     toast.info(
       "No Incompatible Mods",
-      "All mods are compatible with this modpack"
+      "All incompatible mods are either compatible or locked"
     );
     return;
   }
@@ -1847,8 +2105,9 @@ async function removeIncompatibleMods() {
 async function confirmRemoveIncompatibleMods() {
   showRemoveIncompatibleDialog.value = false;
 
+  // Exclude locked mods
   const incompatibleMods = currentMods.value.filter(
-    (m) => !isModCompatible(m).compatible
+    (m) => !isModCompatible(m).compatible && !lockedModIds.value.has(m.id)
   );
 
   let removed = 0;
@@ -2062,7 +2321,7 @@ async function checkForRemoteUpdates() {
       // Map backend changes to ModpackChange[]
       const changes: ModpackChange[] = [];
 
-      result.changes.addedMods.forEach((mod: any) => {
+      result.changes.addedMods.forEach((mod: { name: string; version: string }) => {
         changes.push({
           type: "add",
           modId: mod.name,
@@ -2437,166 +2696,152 @@ watch(
         ? 'flex-1 flex flex-col overflow-hidden'
         : 'bg-background border border-border/50 rounded-lg sm:rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150'">
 
-      <!-- Modern Header with Hero Style -->
-      <div class="shrink-0 relative overflow-hidden" :class="fullScreen && 'border-b border-border/50'">
-        <!-- Background gradient -->
-        <div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-card to-card/80"></div>
-        <div
-          class="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent">
-        </div>
-
+      <!-- Modern Header -->
+      <div class="shrink-0 relative bg-card/50" :class="fullScreen && 'border-b border-border/40'">
         <!-- Content -->
-        <div class="relative">
-          <!-- Top Bar -->
-          <div class="px-3 sm:px-5 py-3 sm:py-4 flex items-start gap-3 sm:gap-4">
+        <div class="px-4 sm:px-6 py-4 sm:py-5">
+          <div class="flex items-center gap-4">
             <!-- Back Button (full-screen mode only) -->
-            <Button v-if="fullScreen" variant="ghost" size="sm" class="h-10 w-10 p-0 rounded-lg shrink-0"
-              @click="$emit('close')">
-              <ArrowLeft class="w-5 h-5" />
+            <Button v-if="fullScreen" variant="ghost" size="sm"
+              class="h-9 w-9 p-0 rounded-xl shrink-0 hover:bg-muted/60" @click="$emit('close')">
+              <ArrowLeft class="w-4 h-4" />
             </Button>
 
-            <!-- Pack Info with larger thumbnail -->
-            <div class="flex items-start gap-3 min-w-0 flex-1">
-              <!-- Thumbnail - Responsive size -->
-              <div v-if="modpack?.image_url"
-                class="w-11 h-11 sm:w-14 sm:h-14 rounded-lg overflow-hidden ring-1 ring-border/50 shrink-0">
-                <img :src="modpack.image_url.startsWith('http') ||
-                  modpack.image_url.startsWith('file:')
-                  ? modpack.image_url
-                  : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
-                  " class="w-full h-full object-cover" />
-              </div>
-              <div v-else
-                class="w-11 h-11 sm:w-14 sm:h-14 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
-                <Package class="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+            <!-- Pack Thumbnail -->
+            <div v-if="modpack?.image_url"
+              class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden ring-2 ring-primary/30 shadow-lg shadow-primary/10 shrink-0">
+              <img :src="modpack.image_url.startsWith('http') ||
+                modpack.image_url.startsWith('file:')
+                ? modpack.image_url
+                : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
+                " class="w-full h-full object-cover" />
+            </div>
+            <div v-else
+              class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-primary/10 flex items-center justify-center ring-2 ring-primary/20 shrink-0">
+              <Package class="w-6 h-6 text-primary" />
+            </div>
+
+            <!-- Name & Meta -->
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-3 mb-2">
+                <h2 class="text-lg sm:text-xl font-bold truncate text-foreground tracking-tight">
+                  {{ modpack?.name || "Loading..." }}
+                </h2>
+                <span v-if="modpack?.version"
+                  class="hidden sm:inline text-xs px-2.5 py-1 rounded-lg bg-muted/80 text-muted-foreground font-mono border border-border/40">
+                  v{{ modpack.version }}
+                </span>
+                <span v-if="modpack?.remote_source?.url"
+                  class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium border border-primary/20"
+                  title="This modpack is linked to a remote source">
+                  <Share2 class="w-3 h-3" />
+                  Linked
+                </span>
               </div>
 
-              <!-- Name & Meta -->
-              <div class="min-w-0 flex-1 py-0.5 sm:py-1">
-                <div class="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-1.5">
-                  <h2 class="text-base sm:text-lg font-semibold truncate text-foreground">
-                    {{ modpack?.name || "Loading..." }}
-                  </h2>
-                  <span v-if="modpack?.version"
-                    class="hidden sm:inline text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
-                    v{{ modpack.version }}
-                  </span>
-                  <span v-if="modpack?.remote_source?.url"
-                    class="hidden sm:inline px-2 py-0.5 rounded-md bg-primary/15 text-primary text-[10px] font-medium border border-primary/20 flex items-center gap-1"
-                    title="This modpack is linked to a remote source">
-                    <Share2 class="w-3 h-3" />
-                    Linked
-                  </span>
+              <!-- Stats Row -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <div v-if="modpack?.minecraft_version"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20">
+                  <div class="w-2 h-2 rounded-full bg-primary"></div>
+                  <span class="text-xs font-semibold text-primary">{{ modpack.minecraft_version }}</span>
                 </div>
-
-                <!-- Stats Row -->
-                <div class="flex items-center gap-2 flex-wrap">
-                  <div v-if="modpack?.minecraft_version"
-                    class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
-                    <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                    <span class="text-[10px] sm:text-xs font-medium text-primary">{{ modpack.minecraft_version
-                    }}</span>
-                  </div>
-                  <div v-if="modpack?.loader"
-                    class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/50 border border-border/30">
-                    <div class="w-1.5 h-1.5 rounded-full bg-muted-foreground"></div>
-                    <span class="text-[10px] sm:text-xs font-medium text-muted-foreground capitalize">{{ modpack.loader
-                    }}</span>
-                  </div>
-                  <div
-                    class="hidden xs:flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/30 border border-border/30">
-                    <Layers class="w-3 h-3 text-muted-foreground" />
-                    <span class="text-[10px] sm:text-xs font-medium text-muted-foreground">{{ currentMods.length }}
-                      mods</span>
-                  </div>
+                <div v-if="modpack?.loader"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/40">
+                  <div class="w-2 h-2 rounded-full bg-muted-foreground/60"></div>
+                  <span class="text-xs font-medium text-muted-foreground capitalize">{{ modpack.loader }}</span>
+                </div>
+                <div
+                  class="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/30">
+                  <Layers class="w-3.5 h-3.5 text-muted-foreground" />
+                  <span class="text-xs font-medium text-muted-foreground">{{ currentMods.length }} mods</span>
                 </div>
               </div>
             </div>
 
-            <!-- Actions - Responsive -->
-            <div class="flex items-center gap-1 sm:gap-2 shrink-0">
-              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-lg" @click="selectImage"
-                title="Set cover image">
+            <!-- Actions -->
+            <div class="flex items-center gap-2 shrink-0">
+              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-xl hover:bg-muted/60"
+                @click="selectImage" title="Set cover image">
                 <ImagePlus class="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-lg"
+              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-xl hover:bg-muted/60"
                 :disabled="isCheckingAllUpdates" title="Check for mod updates" @click="checkAllUpdates">
                 <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingAllUpdates }" />
               </Button>
-              <div class="hidden sm:block w-px h-6 bg-border/50 mx-1"></div>
-              <Button variant="outline" size="sm" class="hidden md:flex h-9 px-3 gap-2 rounded-lg"
+              <div class="hidden sm:block w-px h-6 bg-border/40 mx-1"></div>
+              <Button variant="outline" size="sm"
+                class="hidden md:flex h-9 px-4 gap-2 rounded-xl border-border/50 hover:bg-muted/60"
                 @click="$emit('export')">
                 <Download class="w-4 h-4" />
-                <span>Export</span>
+                <span class="font-medium">Export</span>
               </Button>
               <!-- Close button (modal mode only) -->
               <Button v-if="!fullScreen" variant="ghost" size="sm"
-                class="h-8 w-8 sm:h-9 sm:w-9 p-0 rounded-lg hover:bg-red-500/10 hover:text-red-400"
-                @click="$emit('close')">
-                <X class="w-4 h-4 sm:w-5 sm:h-5" />
+                class="h-9 w-9 p-0 rounded-xl hover:bg-destructive/10 hover:text-destructive" @click="$emit('close')">
+                <X class="w-4 h-4" />
               </Button>
             </div>
           </div>
+        </div>
 
-          <!-- Remote Update Banner -->
-          <div v-if="updateResult?.hasUpdate" class="px-3 sm:px-6 pb-3 sm:pb-4">
-            <UpdateAvailableBanner :current-version="modpack?.version || 'unknown'" :new-version="updateResult.remoteManifest?.modpack.version || 'unknown'
-              " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
-          </div>
+        <!-- Remote Update Banner -->
+        <div v-if="updateResult?.hasUpdate" class="px-3 sm:px-6 pb-3 sm:pb-4">
+          <UpdateAvailableBanner :current-version="modpack?.version || 'unknown'" :new-version="updateResult.remoteManifest?.modpack.version || 'unknown'
+            " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
+        </div>
 
-          <!-- Tab Navigation - Scrollable on mobile -->
-          <div class="px-3 sm:px-6 pb-3 sm:pb-4 overflow-x-auto scrollbar-hide">
-            <div
-              class="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border/30 w-fit min-w-full sm:min-w-0">
-              <!-- Play Tab - Primary action -->
-              <button class="tab-pill"
-                :class="activeTab === 'play' ? 'tab-pill-active tab-pill-play' : 'tab-pill-inactive'"
-                @click="activeTab = 'play'">
-                <Play class="w-3.5 h-3.5" />
-                <span class="hidden xs:inline">Play</span>
-                <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'mods'">
-                <Layers class="w-3.5 h-3.5" />
-                <span class="hidden xs:inline">Resources</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'discover' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'discover'">
-                <Sparkles class="w-3.5 h-3.5" />
-                <span class="hidden sm:inline">Discover</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'configs'">
-                <FileCode class="w-3.5 h-3.5" />
-                <span class="hidden sm:inline">Configs</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'health'">
-                <AlertCircle class="w-3.5 h-3.5" />
-                <span class="hidden md:inline">Health</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'versions' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'versions'">
-                <GitBranch class="w-3.5 h-3.5" />
-                <span class="hidden md:inline">History</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'profiles' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'profiles'">
-                <Users class="w-3.5 h-3.5" />
-                <span class="hidden lg:inline">Profiles</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'remote'">
-                <Globe class="w-3.5 h-3.5" />
-                <span class="hidden lg:inline">Remote</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'settings'">
-                <Settings class="w-3.5 h-3.5" />
-                <span class="hidden lg:inline">Settings</span>
-              </button>
-            </div>
+        <!-- Tab Navigation - Scrollable on mobile -->
+        <div class="px-3 sm:px-6 pb-3 sm:pb-4 overflow-x-auto scrollbar-hide">
+          <div
+            class="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border/30 w-fit min-w-full sm:min-w-0">
+            <!-- Play Tab - Primary action -->
+            <button class="tab-pill"
+              :class="activeTab === 'play' ? 'tab-pill-active tab-pill-play' : 'tab-pill-inactive'"
+              @click="activeTab = 'play'">
+              <Play class="w-3.5 h-3.5" />
+              <span class="hidden xs:inline">Play</span>
+              <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+            </button>
+            <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'mods'">
+              <Layers class="w-3.5 h-3.5" />
+              <span class="hidden xs:inline">Resources</span>
+            </button>
+            <button class="tab-pill" :class="activeTab === 'discover' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'discover'">
+              <Sparkles class="w-3.5 h-3.5" />
+              <span class="hidden sm:inline">Discover</span>
+            </button>
+            <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'configs'">
+              <FileCode class="w-3.5 h-3.5" />
+              <span class="hidden sm:inline">Configs</span>
+            </button>
+            <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'health'">
+              <AlertCircle class="w-3.5 h-3.5" />
+              <span class="hidden md:inline">Health</span>
+            </button>
+            <button class="tab-pill" :class="activeTab === 'versions' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'versions'">
+              <GitBranch class="w-3.5 h-3.5" />
+              <span class="hidden md:inline">History</span>
+              <span v-if="versionUnsavedCount > 0"
+                class="ml-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                {{ versionUnsavedCount }}
+              </span>
+            </button>
+            <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'remote'">
+              <Globe class="w-3.5 h-3.5" />
+              <span class="hidden lg:inline">Remote</span>
+            </button>
+            <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'settings'">
+              <Settings class="w-3.5 h-3.5" />
+              <span class="hidden lg:inline">Settings</span>
+            </button>
           </div>
         </div>
 
@@ -2712,6 +2957,7 @@ watch(
                       <li><b>Checkbox:</b> Select multiple mods for bulk actions</li>
                       <li><b>Arrow up icon:</b> Quick update to latest release version</li>
                       <li><b>Branch icon:</b> Change to any specific version (downgrade/beta/alpha)</li>
+                      <li><b>Lock icon:</b> Lock a mod to prevent changes (updates, enable/disable, remove)</li>
                       <li><b>Trash icon:</b> Remove a mod from the modpack</li>
                       <li><b>Updated badge:</b> Shows mods updated in last 5 minutes</li>
                       <li><b>New badge:</b> Shows recently added mods</li>
@@ -2728,8 +2974,10 @@ watch(
                       <li><b>All:</b> Show all installed mods</li>
                       <li><b>Incompatible:</b> Show only mods with wrong version/loader</li>
                       <li><b>Disabled:</b> Show only disabled mods</li>
+                      <li><b>Locked:</b> Show only locked mods (protected from changes)</li>
                       <li><b>Updates:</b> Show only mods with updates available</li>
-                      <li><b>Update All:</b> Update all mods to latest version at once</li>
+                      <li><b>Update All:</b> Update all mods to latest version (excludes locked)</li>
+                      <li><b>Remove Incompatible:</b> Remove all incompatible mods (excludes locked)</li>
                     </ul>
                   </div>
                 </div>
@@ -2737,8 +2985,8 @@ watch(
                 <div
                   class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
                   <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
-                  <span><b>Tip:</b> Updates are checked automatically when you open the modpack. Use the arrow for quick
-                    updates, or Branch icon to pick a specific version!</span>
+                  <span><b>Tip:</b> Lock important mods to prevent accidental changes. Locked mods are excluded from
+                    bulk actions like "Update All" and "Remove Incompatible"!</span>
                 </div>
               </div>
             </div>
@@ -2864,50 +3112,6 @@ watch(
             </div>
           </div>
 
-          <!-- Profiles Tab Help -->
-          <div v-else-if="activeTab === 'profiles'" class="help-content">
-            <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen class="w-4 h-4 text-primary" />
-              </div>
-              <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">Profiles - Save Mod Configurations</h4>
-                <p class="text-sm text-muted-foreground mb-3">
-                  Create and switch between different mod setups without removing mods. Perfect for different
-                  playstyles!
-                </p>
-
-                <div class="grid md:grid-cols-2 gap-4 text-sm">
-                  <div class="space-y-2">
-                    <h5 class="font-medium text-foreground">Example profiles:</h5>
-                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
-                      <li><b>Performance Mode:</b> Only essential mods enabled</li>
-                      <li><b>Full Experience:</b> All mods enabled</li>
-                      <li><b>Building Only:</b> Decorative and building mods</li>
-                      <li><b>Adventure Mode:</b> RPG and exploration mods</li>
-                    </ul>
-                  </div>
-
-                  <div class="space-y-2">
-                    <h5 class="font-medium text-foreground">How to use:</h5>
-                    <ul class="space-y-1 text-muted-foreground list-disc ml-4">
-                      <li>Enable/disable mods as you want them</li>
-                      <li>Click <b>"Save Current Profile"</b></li>
-                      <li>Give it a name</li>
-                      <li>Click <b>"Load"</b> anytime to restore that setup</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div
-                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
-                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
-                  <span><b>Tip:</b> Loading a profile only enables/disables mods - it never removes them!</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- Remote Tab Help -->
           <div v-else-if="activeTab === 'remote'" class="help-content">
             <div class="flex items-start gap-3">
@@ -2988,201 +3192,239 @@ watch(
       <div class="flex-1 flex flex-col overflow-hidden">
         <!-- PLAY TAB -->
         <template v-if="activeTab === 'play'">
-          <div class="flex-1 overflow-y-auto">
-            <!-- No Instance State - Hero Style -->
-            <div v-if="!instance" class="flex flex-col items-center justify-center h-full p-8">
-              <!-- Background Effects -->
-              <div class="absolute inset-0 overflow-hidden pointer-events-none">
-                <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-[100px]" />
-                <div class="absolute bottom-1/4 right-1/4 w-48 h-48 bg-primary/5 rounded-full blur-[80px]" />
+          <!-- Header Bar (consistent with Mods tab style) -->
+          <div class="shrink-0 px-4 py-3 border-b border-border/30 bg-muted/10">
+            <div class="flex items-center justify-between gap-4">
+              <!-- Left: Status -->
+              <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-2 h-2 rounded-full"
+                    :class="isGameRunning ? 'bg-green-500 animate-pulse' : instance ? 'bg-primary' : 'bg-muted-foreground'">
+                  </div>
+                  <span class="text-sm font-medium">
+                    {{ isGameRunning
+                      ? (runningGame?.gameProcessRunning ? 'Game Running' : 'Launching...')
+                      : instance
+                        ? 'Ready'
+                        : 'No Instance' }}
+                  </span>
+                </div>
+                <span v-if="instance" class="text-xs text-muted-foreground">
+                  {{ instanceStats?.modCount || 0 }} mods • {{ modpack?.loader }} {{ modpack?.minecraft_version }}
+                </span>
               </div>
 
-              <div class="relative z-10 text-center max-w-md">
-                <div class="mb-5 flex justify-center">
-                  <div class="relative">
-                    <div class="absolute inset-0 bg-primary/20 rounded-lg blur-lg opacity-50" />
-                    <div
-                      class="relative w-14 h-14 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-                      <Rocket class="w-7 h-7 text-primary" />
-                    </div>
-                  </div>
+              <!-- Right: Actions -->
+              <div class="flex items-center gap-2">
+                <template v-if="instance">
+                  <button @click="showInstanceSettings = true"
+                    class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Settings">
+                    <Sliders class="w-4 h-4" />
+                  </button>
+                  <button @click="handleOpenInstanceFolder()"
+                    class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Open Folder">
+                    <FolderOpen class="w-4 h-4" />
+                  </button>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-4">
+            <!-- No Instance State -->
+            <div v-if="!instance" class="flex flex-col items-center justify-center h-full">
+              <div class="text-center max-w-sm">
+                <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-muted/50 flex items-center justify-center">
+                  <Rocket class="w-6 h-6 text-muted-foreground" />
                 </div>
-
-                <h3 class="text-lg font-semibold mb-2">Ready to Play?</h3>
-                <p class="text-muted-foreground text-sm mb-5 leading-relaxed">
-                  Create an isolated game instance for this modpack. Your mods and configs will be synced automatically.
+                <h3 class="text-base font-semibold mb-1.5">Create Instance</h3>
+                <p class="text-sm text-muted-foreground mb-4">
+                  Create an isolated game instance for this modpack with synced mods and configs.
                 </p>
-
                 <button @click="handleCreateInstance" :disabled="isCreatingInstance"
-                  class="px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium flex items-center gap-2 mx-auto transition-all duration-150">
+                  class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium inline-flex items-center gap-2 transition-colors">
                   <Loader2 v-if="isCreatingInstance" class="w-4 h-4 animate-spin" />
                   <Play v-else class="w-4 h-4" />
-                  {{ isCreatingInstance ? 'Creating Instance...' : 'Create & Play' }}
+                  {{ isCreatingInstance ? 'Creating...' : 'Create Instance' }}
                 </button>
               </div>
             </div>
 
             <!-- Instance Ready State -->
-            <div v-else class="p-6 space-y-6">
-              <!-- Main Play Card -->
-              <div class="rounded-lg bg-gradient-to-br from-card to-card/50 border border-border/50 overflow-hidden">
-                <!-- Play Header -->
-                <div class="p-5 bg-gradient-to-r from-primary/5 via-primary/5 to-transparent border-b border-border/30">
-                  <div class="flex items-center gap-4">
+            <div v-else class="space-y-4">
+              <!-- Play Section -->
+              <div class="rounded-lg border border-border/50 bg-card/30 overflow-hidden">
+                <div class="p-4">
+                  <div class="flex items-start gap-4">
                     <!-- Play Button -->
                     <button @click="handleLaunch()"
                       :disabled="instance.state !== 'ready' || isLaunching || isGameRunning"
-                      class="h-10 px-5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-150 shrink-0"
-                      :class="isGameRunning
-                        ? 'bg-primary/15 text-primary border border-primary/30'
+                      class="w-14 h-14 rounded-xl flex items-center justify-center transition-all shrink-0" :class="isGameRunning
+                        ? 'bg-green-500/15 text-green-500 border border-green-500/30'
                         : instance.state === 'ready' && !isLaunching
-                          ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20'
+                          ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
                           : 'bg-muted text-muted-foreground cursor-not-allowed'">
-                      <Loader2 v-if="isLaunching" class="w-4 h-4 animate-spin" />
-                      <Gamepad2 v-else-if="isGameRunning" class="w-4 h-4" />
-                      <Play v-else class="w-4 h-4" />
-                      <span>{{ isGameRunning ? 'Playing' : isLaunching ? 'Starting...' : 'Play' }}</span>
+                      <Loader2 v-if="isLaunching" class="w-6 h-6 animate-spin" />
+                      <Gamepad2 v-else-if="isGameRunning" class="w-6 h-6" />
+                      <Play v-else class="w-6 h-6" />
                     </button>
 
+                    <!-- Status & Actions -->
                     <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-3">
-                        <div>
-                          <h3 class="text-base font-semibold">
-                            {{ runningGame?.gameProcessRunning
+                      <div class="flex items-center gap-2 mb-1">
+                        <h3 class="font-semibold">
+                          {{ isGameRunning
+                            ? (runningGame?.gameProcessRunning
                               ? (runningGame?.status === 'loading_mods' ? 'Loading Mods...' : 'Game Running')
-                              : isGameRunning
-                                ? 'Launching...'
-                                : isLaunching
-                                  ? 'Starting Launcher...'
-                                  : 'Ready to Play' }}
-                          </h3>
-                          <p class="text-sm text-muted-foreground">
-                            {{ instanceStats?.modCount || 0 }} mods • {{ modpack?.loader }} {{
-                              modpack?.minecraft_version }}
-                          </p>
-                        </div>
+                              : 'Launching...')
+                            : isLaunching
+                              ? 'Starting...'
+                              : 'Play' }}
+                        </h3>
+                        <span v-if="isGameRunning && runningGame?.gameProcessRunning"
+                          class="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-500 font-medium">
+                          LIVE
+                        </span>
                       </div>
+
+                      <p class="text-sm text-muted-foreground">
+                        {{ instance.name }}
+                      </p>
 
                       <!-- First launch info -->
                       <div v-if="!isGameRunning && !isLaunching && !instance?.lastPlayed"
-                        class="flex items-center gap-2 mt-2 text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded w-fit">
+                        class="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
                         <Info class="w-3 h-3" />
                         <span>{{ modpack?.loader }} will be installed on first launch</span>
                       </div>
 
                       <!-- Loader Progress -->
-                      <div v-if="loaderProgress && isLaunching" class="mt-3 space-y-1">
-                        <div class="flex items-center gap-2 text-sm">
-                          <Loader2 class="w-4 h-4 animate-spin text-primary" />
+                      <div v-if="loaderProgress && isLaunching" class="mt-3">
+                        <div class="flex items-center gap-2 text-sm text-muted-foreground">
                           <span>{{ loaderProgress.stage }}</span>
-                          <span v-if="loaderProgress.total > 0" class="text-primary font-medium">
+                          <span v-if="loaderProgress.total > 0" class="text-foreground font-medium">
                             {{ loaderProgress.current }}/{{ loaderProgress.total }}
                           </span>
                         </div>
-                        <div v-if="loaderProgress.detail" class="text-xs text-muted-foreground truncate">
+                        <div v-if="loaderProgress.detail" class="text-xs text-muted-foreground truncate mt-0.5">
                           {{ loaderProgress.detail }}
                         </div>
                       </div>
 
                       <!-- Game Running Actions -->
-                      <div v-if="isGameRunning" class="flex items-center gap-3 mt-3">
+                      <div v-if="isGameRunning" class="flex items-center gap-2 mt-3">
                         <button @click="handleKillGame"
-                          class="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                          class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
                           :class="runningGame?.gameProcessRunning
-                            ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
-                            : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400'">
-                          <X class="w-4 h-4" />
-                          {{ runningGame?.gameProcessRunning ? 'Stop Game' : 'Cancel Launch' }}
+                            ? 'bg-red-500/15 hover:bg-red-500/20 text-red-400'
+                            : 'bg-amber-500/15 hover:bg-amber-500/20 text-amber-400'">
+                          <X class="w-3.5 h-3.5" />
+                          {{ runningGame?.gameProcessRunning ? 'Stop' : 'Cancel' }}
                         </button>
                         <button v-if="runningGame?.gameProcessRunning" @click="showLogConsole = !showLogConsole"
-                          class="px-4 py-2 rounded-lg bg-muted/50 hover:bg-muted text-sm font-medium flex items-center gap-2 transition-colors">
-                          <Terminal class="w-4 h-4" />
-                          {{ showLogConsole ? 'Hide' : 'Show' }} Logs
+                          class="px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted text-xs font-medium flex items-center gap-1.5 transition-colors">
+                          <Terminal class="w-3.5 h-3.5" />
+                          {{ showLogConsole ? 'Hide Logs' : 'Logs' }}
                         </button>
                       </div>
-                    </div>
-
-                    <!-- Quick Actions -->
-                    <div class="flex flex-col gap-2 shrink-0">
-                      <button @click="showInstanceSettings = true"
-                        class="p-2.5 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-150"
-                        title="Settings">
-                        <Sliders class="w-4 h-4" />
-                      </button>
-                      <button @click="handleOpenInstanceFolder()"
-                        class="p-2.5 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-150"
-                        title="Open Folder">
-                        <FolderOpen class="w-4 h-4" />
-                      </button>
                     </div>
                   </div>
                 </div>
 
                 <!-- Log Console -->
-                <div v-if="showLogConsole && isGameRunning" class="border-t border-border/50">
-                  <div class="bg-card/80 px-4 py-2 border-b border-border/50 flex items-center justify-between">
-                    <span class="text-sm font-medium flex items-center gap-2">
-                      <Terminal class="w-4 h-4 text-primary" />
-                      Game Logs
-                    </span>
-                    <span class="text-xs text-muted-foreground">{{ gameLogs.length }} lines</span>
-                  </div>
-                  <div ref="logScrollRef" class="h-48 overflow-y-auto bg-black/50 p-3 font-mono text-xs space-y-0.5">
-                    <div v-if="gameLogs.length === 0" class="text-muted-foreground text-center py-4">
-                      Waiting for logs...
+                <div v-if="showLogConsole && isGameRunning" class="border-t border-border/30">
+                  <div class="px-4 py-2 bg-muted/30 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <Terminal class="w-3.5 h-3.5 text-muted-foreground" />
+                      <span class="text-xs font-medium">Console</span>
+                      <!-- Log Level Filters -->
+                      <div class="flex items-center gap-0.5 ml-2">
+                        <button @click="logLevelFilter = 'all'"
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'all'
+                            ? 'bg-muted text-foreground'
+                            : 'text-muted-foreground hover:text-foreground'">
+                          All
+                        </button>
+                        <button @click="logLevelFilter = 'info'"
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'info'
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : 'text-muted-foreground hover:text-foreground'">
+                          Info{{ logLevelCounts.info > 0 ? ` (${logLevelCounts.info})` : '' }}
+                        </button>
+                        <button @click="logLevelFilter = 'warn'"
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'warn'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'text-muted-foreground hover:text-foreground'">
+                          Warn{{ logLevelCounts.warn > 0 ? ` (${logLevelCounts.warn})` : '' }}
+                        </button>
+                        <button @click="logLevelFilter = 'error'"
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'error'
+                            ? 'bg-red-500/20 text-red-400'
+                            : 'text-muted-foreground hover:text-foreground'">
+                          Error{{ logLevelCounts.error > 0 ? ` (${logLevelCounts.error})` : '' }}
+                        </button>
+                      </div>
                     </div>
-                    <div v-for="(log, idx) in gameLogs" :key="idx" class="flex gap-2">
-                      <span class="text-muted-foreground shrink-0">{{ log.time }}</span>
-                      <span class="shrink-0 font-medium" :class="{
+                    <button @click="gameLogs = []; logLevelFilter = 'all'"
+                      class="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                      Clear
+                    </button>
+                  </div>
+                  <div ref="logScrollRef" class="h-40 overflow-y-auto bg-black/40 p-2 font-mono text-[11px] space-y-px">
+                    <div v-if="filteredGameLogs.length === 0" class="text-muted-foreground text-center py-4 text-xs">
+                      {{ gameLogs.length === 0 ? 'Waiting for logs...' : 'No logs match filter' }}
+                    </div>
+                    <div v-for="(log, idx) in filteredGameLogs" :key="idx" class="flex gap-2 leading-relaxed">
+                      <span class="text-muted-foreground/60 shrink-0">{{ log.time }}</span>
+                      <span class="shrink-0 font-medium w-12" :class="{
                         'text-blue-400': log.level === 'INFO',
-                        'text-amber-400': log.level === 'WARN',
-                        'text-red-400': log.level === 'ERROR',
-                        'text-muted-foreground': log.level === 'DEBUG'
+                        'text-amber-400': log.level === 'WARN' || log.level === 'WARNING',
+                        'text-red-400': log.level === 'ERROR' || log.level === 'FATAL' || log.level === 'SEVERE',
+                        'text-muted-foreground/50': log.level === 'DEBUG' || log.level === 'TRACE'
                       }">{{ log.level }}</span>
-                      <span class="text-foreground/90 break-all">{{ log.message }}</span>
+                      <span class="text-foreground/80 break-all">{{ log.message }}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Sync Status Card -->
+              <!-- Sync Status -->
               <div v-if="instanceSyncStatus?.needsSync"
-                class="rounded-lg bg-amber-500/5 border border-amber-500/20 overflow-hidden">
-                <div class="p-3 flex items-center justify-between">
+                class="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+                <div class="p-3 flex items-center gap-3">
+                  <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
+                  <div class="flex-1 min-w-0">
+                    <span class="text-sm font-medium">Instance Out of Sync</span>
+                    <span class="text-xs text-muted-foreground ml-2">
+                      {{ instanceSyncStatus.totalDifferences }} differences detected
+                    </span>
+                  </div>
                   <button @click="showSyncDetails = !showSyncDetails"
-                    class="flex items-center gap-3 hover:bg-amber-500/5 -m-2 p-2 rounded-md transition-colors duration-150 flex-1">
-                    <div class="p-2 rounded-lg bg-amber-500/15">
-                      <AlertTriangle class="w-4 h-4 text-amber-400" />
-                    </div>
-                    <div class="text-left">
-                      <div class="font-medium text-sm">Instance Out of Sync</div>
-                      <div class="text-xs text-muted-foreground">
-                        {{ instanceSyncStatus.totalDifferences }} differences detected
-                      </div>
-                    </div>
-                    <ChevronDown class="w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 ml-auto"
-                      :class="{ 'rotate-180': showSyncDetails }" />
+                    class="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground transition-colors">
+                    <ChevronDown class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showSyncDetails }" />
                   </button>
                   <button @click="handleSyncInstance" :disabled="isSyncingInstance"
-                    class="px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium flex items-center gap-2 transition-colors duration-150 ml-3">
-                    <Loader2 v-if="isSyncingInstance" class="w-3.5 h-3.5 animate-spin" />
-                    <RefreshCw v-else class="w-3.5 h-3.5" />
+                    class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium flex items-center gap-1.5 transition-colors">
+                    <Loader2 v-if="isSyncingInstance" class="w-3 h-3 animate-spin" />
+                    <RefreshCw v-else class="w-3 h-3" />
                     {{ isSyncingInstance ? 'Syncing...' : 'Sync Now' }}
                   </button>
                 </div>
 
-                <!-- Expanded Details -->
-                <div v-if="showSyncDetails" class="px-4 pb-3 space-y-3 border-t border-amber-500/10 pt-3">
+                <!-- Sync Details -->
+                <div v-if="showSyncDetails" class="px-3 pb-3 space-y-3 border-t border-amber-500/20 pt-3">
                   <!-- Missing in Instance -->
                   <div v-if="instanceSyncStatus.missingInInstance.length > 0"
-                    class="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                    <div class="flex items-center gap-2 text-primary font-medium text-sm mb-2">
+                    class="p-2.5 rounded-lg bg-primary/5 border border-primary/20">
+                    <div class="flex items-center gap-2 text-primary font-medium text-xs mb-2">
                       <Plus class="w-3.5 h-3.5" />
                       {{ instanceSyncStatus.missingInInstance.length }} files to add
                     </div>
-                    <div class="space-y-1 max-h-32 overflow-y-auto">
+                    <div class="space-y-1 max-h-28 overflow-y-auto">
                       <div v-for="item in instanceSyncStatus.missingInInstance" :key="item.filename"
-                        class="text-xs text-muted-foreground flex items-center gap-2">
+                        class="text-[11px] text-muted-foreground flex items-center gap-2">
                         <span class="px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[10px] uppercase">{{
                           item.type }}</span>
                         <span class="truncate">{{ item.filename }}</span>
@@ -3192,17 +3434,17 @@ watch(
 
                   <!-- Extra in Instance -->
                   <div v-if="instanceSyncStatus.extraInInstance.length > 0"
-                    class="p-3 rounded-lg bg-muted/30 border border-border/30">
-                    <div class="flex items-center gap-2 text-muted-foreground font-medium text-sm mb-2">
-                      <Plus class="w-3.5 h-3.5" />
+                    class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
+                    <div class="flex items-center gap-2 text-muted-foreground font-medium text-xs mb-2">
+                      <FileWarning class="w-3.5 h-3.5" />
                       {{ instanceSyncStatus.extraInInstance.length }} additional files
                     </div>
-                    <p class="text-xs text-muted-foreground mb-2">
-                      These are files you added manually. They will be preserved.
+                    <p class="text-[11px] text-muted-foreground mb-2">
+                      These files were added manually and will be preserved.
                     </p>
-                    <div class="space-y-1 max-h-32 overflow-y-auto">
+                    <div class="space-y-1 max-h-28 overflow-y-auto">
                       <div v-for="item in instanceSyncStatus.extraInInstance" :key="item.filename"
-                        class="text-xs text-muted-foreground flex items-center gap-2">
+                        class="text-[11px] text-muted-foreground flex items-center gap-2">
                         <span class="px-1.5 py-0.5 rounded bg-zinc-500/20 text-zinc-400 text-[10px] uppercase">{{
                           item.type }}</span>
                         <span class="truncate">{{ item.filename }}</span>
@@ -3212,32 +3454,31 @@ watch(
 
                   <!-- Loader Version Mismatch -->
                   <div v-if="instanceSyncStatus.loaderVersionMismatch"
-                    class="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <div class="flex items-center gap-2 text-blue-400 font-medium text-sm mb-2">
+                    class="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div class="flex items-center gap-2 text-blue-400 font-medium text-xs mb-1">
                       <RefreshCw class="w-3.5 h-3.5" />
                       Loader version update
                     </div>
-                    <div class="text-xs text-muted-foreground">
-                      <p>The modpack loader version has changed.</p>
-                      <p class="mt-1">Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion ||
-                        'unknown' }}</span></p>
+                    <div class="text-[11px] text-muted-foreground space-y-0.5">
+                      <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
+                          }}</span></p>
                       <p>Modpack: <span class="text-blue-400 font-medium">{{
-                        extractLoaderVersion(modpack?.loader_version || 'unknown')
-                      }}</span></p>
-                      <p class="mt-2 text-blue-400/80">The new loader will be installed on next launch.</p>
+                        extractLoaderVersion(modpack?.loader_version ||
+                          'unknown') }}</span></p>
+                      <p class="text-blue-400/80 mt-1">New loader will be installed on next launch.</p>
                     </div>
                   </div>
 
                   <!-- Disabled State Mismatch -->
                   <div v-if="instanceSyncStatus.disabledMismatch.length > 0"
-                    class="p-3 rounded-lg bg-muted/30 border border-border/30">
-                    <div class="flex items-center gap-2 text-muted-foreground font-medium text-sm mb-2">
+                    class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
+                    <div class="flex items-center gap-2 text-muted-foreground font-medium text-xs mb-2">
                       <FileWarning class="w-3.5 h-3.5" />
                       {{ instanceSyncStatus.disabledMismatch.length }} state mismatches
                     </div>
-                    <div class="space-y-1 max-h-32 overflow-y-auto">
+                    <div class="space-y-1 max-h-28 overflow-y-auto">
                       <div v-for="item in instanceSyncStatus.disabledMismatch" :key="item.filename"
-                        class="text-xs text-muted-foreground flex items-center gap-2">
+                        class="text-[11px] text-muted-foreground flex items-center gap-2">
                         <span class="truncate flex-1">{{ item.filename }}</span>
                         <span class="text-muted-foreground/70 text-[10px]">{{ item.issue }}</span>
                       </div>
@@ -3245,24 +3486,24 @@ watch(
                   </div>
 
                   <!-- Sync Mode -->
-                  <div class="p-3 rounded-lg bg-muted/30 border border-border/30">
-                    <div class="text-sm font-medium mb-3">Sync Mode</div>
-                    <div class="flex gap-2 flex-wrap">
+                  <div class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
+                    <div class="text-xs font-medium mb-2">Sync Mode</div>
+                    <div class="flex gap-1.5 flex-wrap">
                       <button @click="selectedSyncMode = 'new_only'"
-                        class="px-4 py-2 rounded-lg text-sm font-medium transition-all" :class="selectedSyncMode === 'new_only'
-                          ? 'bg-primary text-primary-foreground shadow-lg'
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all" :class="selectedSyncMode === 'new_only'
+                          ? 'bg-primary text-primary-foreground'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
                         Only New Files
                       </button>
                       <button @click="selectedSyncMode = 'overwrite'"
-                        class="px-4 py-2 rounded-lg text-sm font-medium transition-all" :class="selectedSyncMode === 'overwrite'
-                          ? 'bg-amber-500 text-white shadow-lg'
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all" :class="selectedSyncMode === 'overwrite'
+                          ? 'bg-amber-500 text-white'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
                         Overwrite All
                       </button>
                       <button @click="selectedSyncMode = 'skip'"
-                        class="px-4 py-2 rounded-lg text-sm font-medium transition-all" :class="selectedSyncMode === 'skip'
-                          ? 'bg-zinc-600 text-white shadow-lg'
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all" :class="selectedSyncMode === 'skip'
+                          ? 'bg-zinc-600 text-white'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
                         Skip Existing
                       </button>
@@ -3271,110 +3512,89 @@ watch(
                 </div>
               </div>
 
-              <!-- Synced Status -->
+              <!-- In Sync Badge -->
               <div v-else-if="instanceSyncStatus && !instanceSyncStatus.needsSync"
-                class="rounded-lg bg-primary/5 border border-primary/20 p-3">
-                <div class="flex items-center gap-3">
-                  <div class="p-2 rounded-lg bg-primary/15">
-                    <Check class="w-4 h-4 text-primary" />
-                  </div>
-                  <div class="flex-1">
-                    <div class="font-medium text-sm text-primary">Instance In Sync</div>
-                    <div class="text-sm text-muted-foreground">
-                      All modpack content matches the instance
-                      <span v-if="instanceSyncStatus.extraInInstance.length > 0" class="text-muted-foreground/70">
-                        • {{ instanceSyncStatus.extraInInstance.length }} additional files
-                      </span>
-                    </div>
-                  </div>
+                class="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-3">
+                <Check class="w-4 h-4 text-primary" />
+                <div class="flex-1">
+                  <span class="text-sm font-medium text-primary">Instance In Sync</span>
+                  <span v-if="instanceSyncStatus.extraInInstance.length > 0" class="text-xs text-muted-foreground ml-2">
+                    • {{ instanceSyncStatus.extraInInstance.length }} additional files
+                  </span>
                 </div>
               </div>
 
-              <!-- Quick Access Grid -->
-              <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <!-- Quick Access -->
+              <div class="grid grid-cols-4 gap-2">
                 <button @click="handleOpenInstanceFolder('mods')"
-                  class="group p-4 rounded-lg bg-card/50 hover:bg-card border border-border/40 hover:border-primary/30 text-center transition-all duration-150 hover:shadow-md hover:shadow-primary/5">
-                  <div
-                    class="w-10 h-10 mx-auto mb-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/15 flex items-center justify-center transition-colors">
-                    <Layers class="w-5 h-5 text-primary" />
-                  </div>
-                  <span class="font-medium text-sm">Mods</span>
-                  <p class="text-xs text-muted-foreground mt-0.5">{{ instanceStats?.modCount || 0 }} files</p>
+                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  <Layers
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <div class="text-xs font-medium">Mods</div>
+                  <div class="text-[10px] text-muted-foreground">{{ instanceStats?.modCount || 0 }}</div>
                 </button>
                 <button @click="handleOpenInstanceFolder('config')"
-                  class="group p-4 rounded-lg bg-card/50 hover:bg-card border border-border/40 hover:border-primary/30 text-center transition-all duration-150 hover:shadow-md hover:shadow-primary/5">
-                  <div
-                    class="w-10 h-10 mx-auto mb-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/15 flex items-center justify-center transition-colors">
-                    <FileCode class="w-5 h-5 text-primary" />
-                  </div>
-                  <span class="font-medium text-sm">Configs</span>
-                  <p class="text-xs text-muted-foreground mt-0.5">Game settings</p>
+                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  <FileCode
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <div class="text-xs font-medium">Config</div>
+                  <div class="text-[10px] text-muted-foreground">Settings</div>
                 </button>
                 <button @click="handleOpenInstanceFolder('resourcepacks')"
-                  class="group p-4 rounded-lg bg-card/50 hover:bg-card border border-border/40 hover:border-primary/30 text-center transition-all duration-150 hover:shadow-md hover:shadow-primary/5">
-                  <div
-                    class="w-10 h-10 mx-auto mb-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/15 flex items-center justify-center transition-colors">
-                    <Image class="w-5 h-5 text-primary" />
-                  </div>
-                  <span class="font-medium text-sm">Resources</span>
-                  <p class="text-xs text-muted-foreground mt-0.5">Texture packs</p>
+                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  <Image
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <div class="text-xs font-medium">Packs</div>
+                  <div class="text-[10px] text-muted-foreground">Textures</div>
                 </button>
                 <button @click="handleOpenInstanceFolder('saves')"
-                  class="group p-4 rounded-lg bg-card/50 hover:bg-card border border-border/40 hover:border-primary/30 text-center transition-all duration-150 hover:shadow-md hover:shadow-primary/5">
-                  <div
-                    class="w-10 h-10 mx-auto mb-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/15 flex items-center justify-center transition-colors">
-                    <Save class="w-5 h-5 text-primary" />
-                  </div>
-                  <span class="font-medium text-sm">Saves</span>
-                  <p class="text-xs text-muted-foreground mt-0.5">World files</p>
+                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  <Save
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <div class="text-xs font-medium">Saves</div>
+                  <div class="text-[10px] text-muted-foreground">Worlds</div>
                 </button>
               </div>
 
-              <!-- Instance Info Card -->
-              <div class="rounded-lg bg-card/30 border border-border/30 p-4">
-                <div class="flex items-center gap-3 mb-3">
-                  <div class="w-12 h-12 rounded-lg flex items-center justify-center"
-                    :class="instance.state === 'ready' ? 'bg-primary/15' : 'bg-amber-500/15'">
-                    <Gamepad2 class="w-6 h-6" :class="instance.state === 'ready' ? 'text-primary' : 'text-amber-400'" />
+              <!-- Instance Info -->
+              <div class="rounded-lg border border-border/30 bg-card/30 p-4 space-y-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center">
+                    <Gamepad2 class="w-5 h-5 text-muted-foreground" />
                   </div>
-                  <div class="flex-1">
-                    <h4 class="font-semibold">{{ instance.name }}</h4>
-                    <div class="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                      <span class="flex items-center gap-1.5">
-                        <Clock class="w-3.5 h-3.5" />
+                  <div class="flex-1 min-w-0">
+                    <div class="font-medium text-sm truncate">{{ instance.name }}</div>
+                    <div class="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                      <span class="flex items-center gap-1">
+                        <Clock class="w-3 h-3" />
                         {{ formatPlayDate(instance.lastPlayed) }}
                       </span>
-                      <span class="flex items-center gap-1.5">
-                        <HardDrive class="w-3.5 h-3.5" />
-                        {{ instanceStats?.totalSize || 'Calculating...' }}
+                      <span class="flex items-center gap-1">
+                        <HardDrive class="w-3 h-3" />
+                        {{ instanceStats?.totalSize || '...' }}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <!-- Sync Settings -->
+                <!-- Settings -->
                 <div class="border-t border-border/30 pt-4 space-y-3">
                   <div class="flex items-center justify-between">
-                    <div>
-                      <div class="text-sm font-medium">Auto-sync before launch</div>
-                      <div class="text-xs text-muted-foreground">Sync modpack changes automatically</div>
-                    </div>
-                    <button @click="toggleAutoSync" class="relative w-11 h-6 rounded-full transition-colors"
+                    <div class="text-sm">Auto-sync before launch</div>
+                    <button @click="toggleAutoSync" class="relative w-9 h-5 rounded-full transition-colors"
                       :class="syncSettings.autoSyncEnabled ? 'bg-primary' : 'bg-muted'">
-                      <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                        :class="{ 'translate-x-5': syncSettings.autoSyncEnabled }" />
+                      <span
+                        class="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
+                        :class="{ 'translate-x-4': syncSettings.autoSyncEnabled }" />
                     </button>
                   </div>
-
                   <div class="flex items-center justify-between">
-                    <div>
-                      <div class="text-sm font-medium">Show sync confirmation</div>
-                      <div class="text-xs text-muted-foreground">Ask before syncing</div>
-                    </div>
-                    <button @click="toggleSyncConfirmation" class="relative w-11 h-6 rounded-full transition-colors"
+                    <div class="text-sm">Confirm before sync</div>
+                    <button @click="toggleSyncConfirmation" class="relative w-9 h-5 rounded-full transition-colors"
                       :class="syncSettings.showConfirmation ? 'bg-primary' : 'bg-muted'">
-                      <span class="absolute left-1 top-1 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                        :class="{ 'translate-x-5': syncSettings.showConfirmation }" />
+                      <span
+                        class="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
+                        :class="{ 'translate-x-4': syncSettings.showConfirmation }" />
                     </button>
                   </div>
                 </div>
@@ -3565,6 +3785,14 @@ watch(
                     <ToggleLeft class="w-3 h-3" />
                     {{ disabledModCount }}
                   </button>
+                  <button v-if="lockedModCount > 0"
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'locked'
+                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'locked'"
+                    title="Locked mods (protected from changes)">
+                    <Lock class="w-3 h-3" />
+                    {{ lockedModCount }}
+                  </button>
                   <button v-if="updatesAvailableCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
                       ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
@@ -3627,6 +3855,18 @@ watch(
                   @click="bulkDisableSelected">
                   <ToggleLeft class="w-3 h-3" />
                   Disable
+                </button>
+                <button
+                  class="h-6 px-2 text-[10px] rounded bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 flex items-center gap-1"
+                  @click="bulkLockSelected">
+                  <Lock class="w-3 h-3" />
+                  Lock
+                </button>
+                <button
+                  class="h-6 px-2 text-[10px] rounded bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 flex items-center gap-1"
+                  @click="bulkUnlockSelected">
+                  <LockOpen class="w-3 h-3" />
+                  Unlock
                 </button>
                 <button
                   class="h-6 px-2 text-[10px] rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 flex items-center gap-1"
@@ -3700,95 +3940,85 @@ watch(
               </div>
 
               <!-- Mod List -->
-              <div class="flex-1 overflow-y-auto p-2 space-y-1">
+              <div class="flex-1 overflow-y-auto p-3 space-y-1.5">
                 <div v-for="mod in installedModsWithCompatibility" :key="mod.id"
-                  class="flex items-center gap-2.5 p-2.5 rounded-lg border transition-all group cursor-pointer" :class="[
+                  class="resource-row flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group" :class="[
                     selectedModIds.has(mod.id)
-                      ? 'bg-primary/10 border-primary/50 shadow-sm'
+                      ? 'bg-primary/10 ring-1 ring-primary/40 shadow-sm shadow-primary/5'
                       : !mod.isCompatible
-                        ? 'bg-red-500/10 border-red-500/30 hover:bg-red-500/15'
+                        ? 'bg-red-500/5 ring-1 ring-red-500/20 hover:bg-red-500/10'
                         : mod.hasWarning
-                          ? 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10'
-                          : 'border-transparent hover:bg-accent/50 hover:border-border/50',
+                          ? 'bg-amber-500/5 ring-1 ring-amber-500/15 hover:bg-amber-500/10'
+                          : 'bg-muted/30 hover:bg-muted/50 ring-1 ring-transparent hover:ring-border/40',
                     disabledModIds.has(mod.id) ? 'opacity-50' : '',
                     isLinked ? 'cursor-default' : 'cursor-pointer',
-                  ]" @click="!isLinked && toggleSelect(mod.id)" @dblclick.stop="openModDetails(mod)">
+                  ]" @click="!isLinked && toggleSelect(mod.id)">
                   <!-- Mod Thumbnail -->
-                  <div class="w-8 h-8 rounded-md bg-muted/50 overflow-hidden shrink-0 border border-border/30">
+                  <div class="w-10 h-10 rounded-lg bg-muted/60 overflow-hidden shrink-0 ring-1 ring-border/30">
                     <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
                       class="w-full h-full object-cover" alt="" loading="lazy"
                       @error="($event.target as HTMLImageElement).style.display = 'none'" />
-                    <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/50">
-                      <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-4 h-4" />
-                      <Image v-else-if="mod.content_type === 'resourcepack'" class="w-4 h-4" />
-                      <Sparkles v-else class="w-4 h-4" />
+                    <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/40">
+                      <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-5 h-5" />
+                      <Image v-else-if="mod.content_type === 'resourcepack'" class="w-5 h-5" />
+                      <Sparkles v-else class="w-5 h-5" />
                     </div>
                   </div>
 
-                  <!-- Checkbox -->
-                  <div v-if="!isLinked"
-                    class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors" :class="selectedModIds.has(mod.id)
-                      ? 'bg-primary border-primary'
-                      : 'border-muted-foreground/30 group-hover:border-muted-foreground/50'
-                      ">
-                    <Check v-if="selectedModIds.has(mod.id)" class="w-3 h-3 text-primary-foreground" />
-                  </div>
-                  <div v-else class="w-4 h-4 flex items-center justify-center shrink-0">
-                    <div class="w-1.5 h-1.5 rounded-full bg-muted-foreground/30"></div>
-                  </div>
-
                   <!-- Enable/Disable Toggle -->
-                  <button class="w-8 h-4 rounded-full relative shrink-0 transition-colors duration-150" :class="[
+                  <button class="w-9 h-5 rounded-full relative shrink-0 transition-all duration-200" :class="[
                     disabledModIds.has(mod.id)
-                      ? 'bg-muted-foreground/30'
-                      : 'bg-primary',
-                    isLinked ? 'opacity-50 cursor-not-allowed' : '',
-                  ]" @click.stop="!isLinked && toggleModEnabled(mod.id)" :title="isLinked
+                      ? 'bg-muted-foreground/20'
+                      : 'bg-primary shadow-sm shadow-primary/30',
+                    (isLinked || lockedModIds.has(mod.id)) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90',
+                  ]" @click.stop="!(isLinked || lockedModIds.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
                     ? 'Managed by remote source'
-                    : disabledModIds.has(mod.id)
-                      ? 'Click to enable mod'
-                      : 'Click to disable mod'
-                    " :disabled="isLinked">
-                    <span class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all duration-150"
-                      :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-4'
+                    : lockedModIds.has(mod.id)
+                      ? 'Unlock mod to change state'
+                      : disabledModIds.has(mod.id)
+                        ? 'Click to enable mod'
+                        : 'Click to disable mod'
+                    " :disabled="isLinked || lockedModIds.has(mod.id)">
+                    <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200"
+                      :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[18px]'
                         " />
                   </button>
 
                   <!-- Mod Info -->
                   <div class="min-w-0 flex-1">
-                    <div class="font-medium text-sm truncate flex items-center gap-1.5">
+                    <div class="font-semibold text-sm truncate flex items-center gap-2">
                       <span class="hover:text-primary cursor-pointer transition-colors"
                         @click.stop="openModDetails(mod)" title="Click to view details">{{ mod.name }}</span>
                       <!-- Recently Updated Badge -->
                       <span v-if="recentlyUpdatedMods.has(mod.id)"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium animate-pulse">
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-semibold animate-pulse">
                         Updated
                       </span>
                       <!-- Recently Added Badge -->
                       <span v-else-if="recentlyAddedMods.has(mod.id)"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium">
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
                         New
                       </span>
                       <span v-if="disabledModIds.has(mod.id)"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-medium">
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-semibold">
                         disabled
                       </span>
                       <span v-if="!mod.isCompatible"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium">
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 font-semibold">
                         incompatible
                       </span>
                       <span v-else-if="mod.hasWarning"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-medium"
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-semibold"
                         title="This mod uses a different loader but may work via compatibility layers">
                         different loader
                       </span>
                     </div>
-                    <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <div class="flex items-center gap-2 mt-1 flex-wrap">
                       <!-- Game versions (show list for ALL content types if available) -->
                       <span v-if="mod.game_versions && mod.game_versions.length >= 1"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
-                          ? 'bg-primary/15 text-primary'
-                          : 'bg-red-500/15 text-red-500'
+                        class="text-[10px] px-2 py-0.5 rounded-full font-semibold" :class="mod.isCompatible
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-red-500/10 text-red-500'
                           " :title="mod.game_versions.join(', ')">
                         {{ mod.game_versions.slice(0, 2).join(", ")
                         }}{{
@@ -3798,23 +4028,24 @@ watch(
                         }}
                       </span>
                       <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium" :class="mod.isCompatible
-                          ? 'bg-primary/15 text-primary'
-                          : 'bg-red-500/15 text-red-500'
+                        class="text-[10px] px-2 py-0.5 rounded-full font-semibold" :class="mod.isCompatible
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-red-500/10 text-red-500'
                           ">
                         {{ mod.game_version }}
                       </span>
                       <span v-if="mod.loader && mod.loader !== 'unknown'"
-                        class="text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize" :class="!mod.isCompatible
-                          ? 'bg-red-500/15 text-red-500'
+                        class="text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize" :class="!mod.isCompatible
+                          ? 'bg-red-500/10 text-red-500'
                           : mod.hasWarning
-                            ? 'bg-amber-500/15 text-amber-500'
-                            : 'bg-muted text-muted-foreground'
+                            ? 'bg-amber-500/10 text-amber-500'
+                            : 'bg-muted/80 text-muted-foreground'
                           ">
                         {{ mod.loader }}
                       </span>
                       <span v-if="mod.version"
-                        class="text-[10px] text-muted-foreground truncate max-w-[100px] font-mono" :title="mod.version">
+                        class="text-[10px] text-muted-foreground/70 truncate max-w-[120px] font-mono"
+                        :title="mod.version">
                         {{ mod.version }}
                       </span>
                     </div>
@@ -3828,48 +4059,71 @@ watch(
                     </div>
                   </div>
 
-                  <!-- Update Actions -->
-                  <div v-if="!isLinked && mod.cf_project_id" class="flex items-center gap-0.5">
-                    <!-- Quick Update Button (when update available) -->
+                  <!-- Lock Status Indicator (always visible) -->
+                  <div v-if="lockedModIds.has(mod.id)" class="flex items-center shrink-0"
+                    title="This mod is locked and protected from changes">
+                    <Lock class="w-4 h-4 text-amber-500" />
+                  </div>
+
+                  <!-- Update Status Indicator (always visible, hidden if locked) -->
+                  <div v-if="!isLinked && mod.cf_project_id && !lockedModIds.has(mod.id)"
+                    class="flex items-center shrink-0">
+                    <!-- Update Available Badge -->
                     <Button v-if="updateAvailable[mod.id] && !checkingUpdates[mod.id]" variant="ghost" size="icon"
-                      class="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+                      class="h-8 w-8 rounded-lg text-primary hover:text-primary hover:bg-primary/15 transition-all duration-200"
                       :title="`Update to ${updateAvailable[mod.id].displayName}`" @click.stop="quickUpdateMod(mod)">
-                      <ArrowUpCircle class="w-3.5 h-3.5" />
+                      <ArrowUpCircle class="w-4 h-4" />
                     </Button>
 
                     <!-- Checking Indicator -->
-                    <div v-else-if="checkingUpdates[mod.id]" class="h-7 w-7 flex items-center justify-center shrink-0"
+                    <div v-else-if="checkingUpdates[mod.id]" class="h-8 w-8 flex items-center justify-center"
                       title="Checking for updates...">
-                      <RefreshCw class="w-3.5 h-3.5 animate-spin text-primary" />
+                      <RefreshCw class="w-4 h-4 animate-spin text-primary" />
                     </div>
 
                     <!-- Up to date indicator (checked, no update) -->
-                    <div v-else-if="updateAvailable[mod.id] === null"
-                      class="h-7 w-7 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100"
+                    <div v-else-if="updateAvailable[mod.id] === null" class="h-8 w-8 flex items-center justify-center"
                       title="Up to date">
-                      <Check class="w-3.5 h-3.5 text-muted-foreground/50" />
+                      <Check class="w-4 h-4 text-muted-foreground/40" />
                     </div>
-
-                    <!-- Unchecked - show nothing, auto-check runs in background -->
                   </div>
 
-                  <!-- Change Version Button -->
-                  <Button v-if="!isLinked && mod.cf_project_id" variant="ghost" size="icon"
-                    class="h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                    title="Change version" @click.stop="openVersionPicker(mod)">
-                    <GitBranch class="w-3.5 h-3.5" />
-                  </Button>
+                  <!-- Actions Container (visible on hover) -->
+                  <div
+                    class="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <!-- Lock/Unlock Button -->
+                    <Button v-if="!isLinked" variant="ghost" size="icon"
+                      class="h-8 w-8 rounded-lg transition-all duration-200" :class="lockedModIds.has(mod.id)
+                        ? 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10'
+                        : 'text-muted-foreground hover:text-amber-500 hover:bg-muted/60'"
+                      :title="lockedModIds.has(mod.id) ? 'Unlock mod' : 'Lock mod (protect from changes)'"
+                      @click.stop="toggleModLocked(mod.id)">
+                      <Lock v-if="lockedModIds.has(mod.id)" class="w-4 h-4" />
+                      <LockOpen v-else class="w-4 h-4" />
+                    </Button>
 
-                  <!-- Remove Button -->
-                  <Button v-if="!isLinked" variant="ghost" size="icon"
-                    class="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                    @click.stop="removeMod(mod.id)">
-                    <Trash2 class="w-3.5 h-3.5" />
-                  </Button>
-                  <div v-else
-                    class="h-7 w-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                    title="Managed by remote source">
-                    <Lock class="w-3.5 h-3.5 text-muted-foreground/50" />
+                    <!-- Change Version Button (disabled if locked) -->
+                    <Button v-if="!isLinked && mod.cf_project_id" variant="ghost" size="icon"
+                      class="h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted/60 transition-all duration-200"
+                      :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed' : ''"
+                      :disabled="lockedModIds.has(mod.id)"
+                      :title="lockedModIds.has(mod.id) ? 'Unlock mod to change version' : 'Change version'"
+                      @click.stop="!lockedModIds.has(mod.id) && openVersionPicker(mod)">
+                      <GitBranch class="w-4 h-4" />
+                    </Button>
+
+                    <!-- Remove Button (disabled if locked) -->
+                    <Button v-if="!isLinked" variant="ghost" size="icon"
+                      class="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                      :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed' : ''"
+                      :disabled="lockedModIds.has(mod.id)"
+                      :title="lockedModIds.has(mod.id) ? 'Unlock mod to remove' : 'Remove mod'"
+                      @click.stop="!lockedModIds.has(mod.id) && removeMod(mod.id)">
+                      <Trash2 class="w-4 h-4" />
+                    </Button>
+                    <div v-else class="h-8 w-8 flex items-center justify-center" title="Managed by remote source">
+                      <Lock class="w-4 h-4 text-muted-foreground/40" />
+                    </div>
                   </div>
                 </div>
 
@@ -3929,7 +4183,7 @@ watch(
                       ? 'hover:bg-amber-500/10 cursor-pointer group border border-amber-500/20'
                       : 'hover:bg-accent/50 cursor-pointer group'
                     : 'opacity-40'
-                    " @dblclick.stop="openModDetails(mod)">
+                    ">
                   <!-- Mod Info -->
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
@@ -4023,12 +4277,8 @@ watch(
         <!-- Version History Tab -->
         <div v-else-if="activeTab === 'versions'" class="flex-1 p-6 overflow-auto">
           <VersionHistoryPanel v-if="modpack" :modpack-id="modpackId" :modpack-name="modpack.name"
-            :instance-id="linkedInstanceId || undefined" :is-linked="isLinked" @refresh="refreshAndNotify" />
-        </div>
-
-        <!-- Profiles Tab -->
-        <div v-else-if="activeTab === 'profiles'" class="flex-1 p-6 overflow-auto">
-          <ProfilesPanel v-if="modpack" :modpack="modpack" :is-linked="isLinked" @refresh="loadData" />
+            :instance-id="linkedInstanceId || undefined" :is-linked="isLinked" @refresh="refreshAndNotify"
+            @unsaved-changes="(count) => versionUnsavedCount = count" />
         </div>
 
         <!-- Settings Tab -->
@@ -4451,7 +4701,8 @@ watch(
       modpackId: modpackId,
       gameVersion: modpack?.minecraft_version,
       loader: modpack?.loader
-    }" :current-file-id="modDetailsTarget?.cf_file_id" :full-screen="true" @close="closeModDetails"
+    }" :current-file-id="modDetailsTarget?.cf_file_id" :full-screen="true"
+      :is-locked="modDetailsTarget ? lockedModIds.has(modDetailsTarget.id) : false" @close="closeModDetails"
       @version-changed="handleModDetailsVersionChange" />
 
     <!-- CurseForge Changelog Dialog -->
@@ -4764,6 +5015,15 @@ watch(
 /* Card hover effect */
 .mod-card {
   @apply transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30;
+}
+
+/* Resource Row Styles */
+.resource-row {
+  @apply transition-all duration-200;
+}
+
+.resource-row:hover {
+  @apply shadow-sm;
 }
 
 /* Help Content Styles */

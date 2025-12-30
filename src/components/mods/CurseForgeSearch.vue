@@ -28,7 +28,8 @@ import Dialog from "@/components/ui/Dialog.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
-import type { Modpack } from "@/types/electron";
+import type { Modpack, CFMod, CFFile, CFFileIndex, CFCategory } from "@/types/electron";
+import type { Mod } from "@/types";
 
 const { folders: foldersList, moveModToFolder } = useFolderTree();
 const toast = useToast();
@@ -48,7 +49,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "added", mod: any | null, addedIds?: string[]): void;
+  (e: "added", mod: Mod | null, addedIds?: string[]): void;
 }>();
 
 // State
@@ -56,7 +57,7 @@ const searchQuery = ref("");
 const selectedVersion = ref(props.gameVersion || "");
 const selectedLoader = ref(props.modLoader || "");
 const selectedContentType = ref<"mods" | "resourcepacks" | "shaders">(props.initialContentType || "mods");
-const searchResults = ref<any[]>([]);
+const searchResults = ref<CFMod[]>([]);
 const isSearching = ref(false);
 const isAddingMod = ref<number | null>(null);
 const hasApiKey = ref(false);
@@ -74,7 +75,7 @@ const selectedChangelogMod = ref<{
   slug: string;
 } | null>(null);
 
-function viewChangelog(mod: any, file: any) {
+function viewChangelog(mod: CFMod, file: CFFile) {
   selectedChangelogMod.value = {
     id: mod.id,
     name: mod.name,
@@ -87,7 +88,7 @@ function viewChangelog(mod: any, file: any) {
 
 // Accordion & Files State
 const expandedModId = ref<number | null>(null);
-const modFiles = ref<any[]>([]);
+const modFiles = ref<CFFile[]>([]);
 const isLoadingFiles = ref(false);
 
 // Mobile responsive state
@@ -229,7 +230,7 @@ onMounted(async () => {
       );
       categories.value = [
         { value: 0, label: "All Categories" },
-        ...cfCategories.map((cat: any) => ({ value: cat.id, label: cat.name })),
+        ...cfCategories.map((cat: CFCategory) => ({ value: cat.id, label: cat.name })),
       ];
     } catch (err) {
       console.error("Failed to load categories:", err);
@@ -250,7 +251,7 @@ watch(selectedContentType, async (newType) => {
     const cfCategories = await window.api.curseforge.getCategories(newType);
     categories.value = [
       { value: 0, label: "All Categories" },
-      ...cfCategories.map((cat: any) => ({ value: cat.id, label: cat.name })),
+      ...cfCategories.map((cat: CFCategory) => ({ value: cat.id, label: cat.name })),
     ];
   } catch (err) {
     console.error("Failed to load categories:", err);
@@ -324,6 +325,9 @@ watch(
 // --- Selection Logic ---
 
 function toggleModHeaderSelection(modId: number) {
+  // Block selecting already installed mods
+  if (isModInstalled(modId)) return;
+
   // If we uncheck header, we keep file selections if any (or clear them? User said "allows selecting specific versions", usually implies clear or keep. Let's clear to avoid confusion or keep as is.
   // Actually, if we CHECK header, we should probably clear any individual file selections for this mod to avoid double-adding.
   if (selectedModIds.value.has(modId)) {
@@ -346,7 +350,12 @@ function toggleFileSelection(fileId: number) {
 }
 
 function selectAll() {
-  searchResults.value.forEach((mod) => selectedModIds.value.add(mod.id));
+  searchResults.value.forEach((mod) => {
+    // Skip already installed mods
+    if (!isModInstalled(mod.id)) {
+      selectedModIds.value.add(mod.id);
+    }
+  });
 }
 
 function deselectAll() {
@@ -383,7 +392,7 @@ async function addSelectedMods() {
 
         // Filter for Release type specifically for "Quick Download"
         // Also filter by game version for shaders/resourcepacks
-        let releaseFile = files.find((f: any) => {
+        let releaseFile = files.find((f: CFFile) => {
           if (f.releaseType !== 1) return false;
           // For non-mods, verify game version is in the file's gameVersions list
           if (!isModContent && selectedVersion.value) {
@@ -501,7 +510,7 @@ async function executeBulkAdd() {
       });
 
       // Find release file with proper version matching for non-mods
-      let releaseFile = files.find((f: any) => {
+      let releaseFile = files.find((f: CFFile) => {
         if (f.releaseType !== 1) return false;
         if (!isModContent && selectedVersion.value) {
           return f.gameVersions?.some(
@@ -667,7 +676,7 @@ async function loadMore() {
 }
 
 // Expand & Fetch
-async function toggleExpand(mod: any) {
+async function toggleExpand(mod: CFMod) {
   if (expandedModId.value === mod.id) {
     expandedModId.value = null;
     modFiles.value = [];
@@ -689,7 +698,7 @@ async function fetchModFiles(modId: number) {
     });
     // Sort by date desc
     modFiles.value = files.sort(
-      (a: any, b: any) =>
+      (a: CFFile, b: CFFile) =>
         new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
     );
   } catch (err) {
@@ -750,13 +759,13 @@ function isModInstalled(modId: number): boolean {
 
 // Get the latest file ID from latestFilesIndexes that matches current filters
 // Priority: Release (1) > Beta (2) > Alpha (3)
-function getLatestFileId(mod: any): number | null {
+function getLatestFileId(mod: CFMod): number | null {
   if (!mod.latestFilesIndexes?.length) return null;
 
   const isModContent = selectedContentType.value === "mods";
 
   // Helper to check if a file matches current filters
-  const matchesFilters = (f: any): boolean => {
+  const matchesFilters = (f: CFFileIndex): boolean => {
     // For mods, filter by loader
     if (isModContent && selectedLoader.value) {
       const loaderMap: Record<string, number> = { forge: 1, fabric: 4, quilt: 5, neoforge: 6 };
@@ -778,7 +787,7 @@ function getLatestFileId(mod: any): number | null {
 
   // Try to find files in priority order: Release > Beta > Alpha
   for (const releaseType of [1, 2, 3]) {
-    const matchingFile = mod.latestFilesIndexes.find((f: any) =>
+    const matchingFile = mod.latestFilesIndexes.find((f: CFFileIndex) =>
       f.releaseType === releaseType && matchesFilters(f)
     );
     if (matchingFile) return matchingFile.fileId;
@@ -786,7 +795,7 @@ function getLatestFileId(mod: any): number | null {
 
   // Fallback: try any file type without filters
   for (const releaseType of [1, 2, 3]) {
-    const fallbackFile = mod.latestFilesIndexes.find((f: any) => f.releaseType === releaseType);
+    const fallbackFile = mod.latestFilesIndexes.find((f: CFFileIndex) => f.releaseType === releaseType);
     if (fallbackFile) return fallbackFile.fileId;
   }
 
@@ -794,13 +803,13 @@ function getLatestFileId(mod: any): number | null {
 }
 
 // Check if the latest file for a mod is already installed
-function isLatestFileInstalled(mod: any): boolean {
+function isLatestFileInstalled(mod: CFMod): boolean {
   const latestFileId = getLatestFileId(mod);
   if (!latestFileId) return false;
   return isFileInstalled(mod.id, latestFileId);
 }
 
-async function addFileToLibrary(mod: any, file: any) {
+async function addFileToLibrary(mod: CFMod, file: CFFile) {
   isAddingMod.value = mod.id;
   try {
     // For shaders/resourcepacks, don't pass loader
@@ -846,7 +855,7 @@ async function addFileToLibrary(mod: any, file: any) {
 }
 
 // Quick Download (Latest file matching filters - Release > Beta > Alpha fallback)
-async function quickDownload(mod: any) {
+async function quickDownload(mod: CFMod) {
   isAddingMod.value = mod.id;
   try {
     // For shaders/resourcepacks, don't filter by loader
@@ -858,7 +867,7 @@ async function quickDownload(mod: any) {
     });
 
     // Helper to check version match for non-mods
-    const matchesVersion = (f: any): boolean => {
+    const matchesVersion = (f: CFFile): boolean => {
       if (!isModContent && selectedVersion.value) {
         return f.gameVersions?.some(
           (gv: string) =>
@@ -871,9 +880,9 @@ async function quickDownload(mod: any) {
     };
 
     // Find file with priority: Release (1) > Beta (2) > Alpha (3)
-    let targetFile = null;
+    let targetFile: CFFile | undefined;
     for (const releaseType of [1, 2, 3]) {
-      targetFile = files.find((f: any) => f.releaseType === releaseType && matchesVersion(f));
+      targetFile = files.find((f: CFFile) => f.releaseType === releaseType && matchesVersion(f));
       if (targetFile) break;
     }
 
@@ -921,7 +930,7 @@ async function quickDownload(mod: any) {
   }
 }
 
-function openModPage(mod: any) {
+function openModPage(mod: CFMod) {
   if (mod.slug) {
     const urlPaths: Record<string, string> = {
       mods: "mc-mods",
@@ -1321,7 +1330,8 @@ function getReleaseColor(type: number) {
                 <div class="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/30 transition-colors relative"
                   @click="toggleExpand(mod)">
                   <!-- Checkbox for Bulk Selection -->
-                  <button v-if="isSelectionMode" @click.stop="toggleModHeaderSelection(mod.id)"
+                  <button v-if="isSelectionMode && !isModInstalled(mod.id)"
+                    @click.stop="toggleModHeaderSelection(mod.id)"
                     class="p-1 rounded hover:bg-background transition-colors mr-1" title="Select Latest Release">
                     <div class="w-5 h-5 border rounded flex items-center justify-center transition-all" :class="selectedModIds.has(mod.id)
                       ? 'bg-primary border-primary text-primary-foreground'
@@ -1330,6 +1340,14 @@ function getReleaseColor(type: number) {
                       <Check v-if="selectedModIds.has(mod.id)" class="w-3.5 h-3.5" />
                     </div>
                   </button>
+                  <!-- Disabled checkbox for installed mods in selection mode -->
+                  <div v-else-if="isSelectionMode && isModInstalled(mod.id)"
+                    class="p-1 mr-1 opacity-50 cursor-not-allowed" title="Already installed">
+                    <div
+                      class="w-5 h-5 border rounded flex items-center justify-center border-muted-foreground/30 bg-muted/50">
+                      <Check class="w-3.5 h-3.5 text-muted-foreground" />
+                    </div>
+                  </div>
 
                   <!-- Icon -->
                   <div class="w-12 h-12 rounded-lg bg-muted border border-border overflow-hidden shrink-0">

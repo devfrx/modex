@@ -25,6 +25,7 @@ import {
   Clock,
   HardDrive,
   Gauge,
+  Loader2,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import type {
@@ -67,6 +68,7 @@ const ramAnalysis = ref<{
   compatibilityNotes: string[];
 } | null>(null);
 const isLoading = ref(false);
+const installingDepIds = ref<Set<number>>(new Set()); // Track which dependencies are being installed
 const expandedSections = ref({
   dependencies: true,
   conflicts: true,
@@ -227,9 +229,133 @@ function toggleNode(id: string) {
 }
 
 async function addDependency(dep: DependencyInfo) {
-  emit("addMod", dep.modId);
-  // Re-run analysis after adding
-  setTimeout(() => runAnalysis(), 500);
+  if (installingDepIds.value.has(dep.modId)) return; // Already installing
+
+  installingDepIds.value.add(dep.modId);
+
+  try {
+    // Get the mod details from CurseForge
+    const cfMod = await window.api.curseforge.getMod(dep.modId);
+    if (!cfMod) {
+      toast.error("Mod not found", `Could not find ${dep.modName} on CurseForge`);
+      return;
+    }
+
+    // Get the modpack to know version/loader
+    const modpack = await window.api.modpacks.getById(props.modpackId);
+    if (!modpack) {
+      toast.error("Error", "Could not load modpack details");
+      return;
+    }
+
+    // Find the best file for this mod
+    const files = await window.api.curseforge.getModFiles(dep.modId, {
+      gameVersion: modpack.minecraft_version,
+      modLoader: modpack.loader,
+    });
+
+    if (files.length === 0) {
+      toast.error("No compatible files", `No files found for ${dep.modName} matching your MC version and loader`);
+      return;
+    }
+
+    // Add to library
+    const addedMod = await window.api.curseforge.addToLibrary(
+      dep.modId,
+      files[0].id,
+      modpack.loader || "fabric"
+    );
+
+    if (addedMod) {
+      // Add to modpack
+      await window.api.modpacks.addMod(props.modpackId, addedMod.id);
+      toast.success("Dependency Added", `${dep.modName} has been added to the modpack`);
+
+      // Notify parent to refresh
+      emit("refresh");
+
+      // Re-run analysis to update the list
+      await runAnalysis();
+    }
+  } catch (err) {
+    console.error("Failed to add dependency:", err);
+    toast.error("Failed to add", (err as Error).message);
+  } finally {
+    installingDepIds.value.delete(dep.modId);
+  }
+}
+
+// Track if we're installing all dependencies
+const isInstallingAll = ref(false);
+
+// Install all missing dependencies
+async function installAllDependencies() {
+  if (!analysis.value || analysis.value.missingDependencies.length === 0) return;
+  if (isInstallingAll.value) return;
+
+  isInstallingAll.value = true;
+  const deps = [...analysis.value.missingDependencies];
+  let installed = 0;
+  let failed = 0;
+
+  try {
+    const modpack = await window.api.modpacks.getById(props.modpackId);
+    if (!modpack) {
+      toast.error("Error", "Could not load modpack details");
+      return;
+    }
+
+    for (const dep of deps) {
+      if (installingDepIds.value.has(dep.modId)) continue;
+      installingDepIds.value.add(dep.modId);
+
+      try {
+        const cfMod = await window.api.curseforge.getMod(dep.modId);
+        if (!cfMod) {
+          failed++;
+          continue;
+        }
+
+        const files = await window.api.curseforge.getModFiles(dep.modId, {
+          gameVersion: modpack.minecraft_version,
+          modLoader: modpack.loader,
+        });
+
+        if (files.length === 0) {
+          failed++;
+          continue;
+        }
+
+        const addedMod = await window.api.curseforge.addToLibrary(
+          dep.modId,
+          files[0].id,
+          modpack.loader || "fabric"
+        );
+
+        if (addedMod) {
+          await window.api.modpacks.addMod(props.modpackId, addedMod.id);
+          installed++;
+        }
+      } catch {
+        failed++;
+      } finally {
+        installingDepIds.value.delete(dep.modId);
+      }
+    }
+
+    if (installed > 0) {
+      toast.success("Dependencies Installed", `${installed} dependencies added${failed > 0 ? `, ${failed} failed` : ''}`);
+      emit("refresh");
+      await runAnalysis();
+    } else if (failed > 0) {
+      toast.error("Installation Failed", `Could not install ${failed} dependencies`);
+    }
+  } catch (err) {
+    console.error("Failed to install all dependencies:", err);
+    toast.error("Failed", (err as Error).message);
+  } finally {
+    isInstallingAll.value = false;
+  }
 }
 
 function toggleSection(section: keyof typeof expandedSections.value) {
@@ -470,6 +596,19 @@ watch(
 
           <div v-if="expandedSections.dependencies && analysis.missingDependencies.length > 0"
             class="border-t border-border/30">
+            <!-- Install All Header -->
+            <div v-if="analysis.missingDependencies.length > 1 && !isLinked"
+              class="px-4 py-2 bg-muted/30 border-b border-border/20 flex items-center justify-between">
+              <span class="text-xs text-muted-foreground">
+                {{ analysis.missingDependencies.length }} dependencies missing
+              </span>
+              <Button variant="default" size="sm" class="h-7 text-xs gap-1.5" @click.stop="installAllDependencies"
+                :disabled="isInstallingAll || installingDepIds.size > 0">
+                <Loader2 v-if="isInstallingAll" class="w-3.5 h-3.5 animate-spin" />
+                <Package v-else class="w-3.5 h-3.5" />
+                {{ isInstallingAll ? 'Installing...' : 'Install All' }}
+              </Button>
+            </div>
             <div class="divide-y divide-border/20">
               <div v-for="dep in analysis.missingDependencies" :key="dep.modId"
                 class="p-4 flex items-center justify-between gap-4 hover:bg-accent/10 transition-colors">
@@ -489,10 +628,11 @@ watch(
                     <ExternalLink class="w-4 h-4 text-muted-foreground hover:text-foreground" />
                   </a>
                   <Button variant="default" size="sm" class="h-8 text-xs gap-1.5" @click="addDependency(dep)"
-                    :disabled="isLinked">
-                    <Package v-if="!isLinked" class="w-3.5 h-3.5" />
+                    :disabled="isLinked || installingDepIds.has(dep.modId)">
+                    <Loader2 v-if="installingDepIds.has(dep.modId)" class="w-3.5 h-3.5 animate-spin" />
+                    <Package v-else-if="!isLinked" class="w-3.5 h-3.5" />
                     <Lock v-else class="w-3.5 h-3.5" />
-                    {{ isLinked ? "Locked" : "Install" }}
+                    {{ installingDepIds.has(dep.modId) ? "Installing..." : isLinked ? "Locked" : "Install" }}
                   </Button>
                 </div>
               </div>
@@ -523,13 +663,16 @@ watch(
               </div>
             </div>
             <div class="flex items-center gap-2">
-              <span v-if="errorConflicts.length > 0" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-500/20 text-red-400">
+              <span v-if="errorConflicts.length > 0"
+                class="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-500/20 text-red-400">
                 {{ errorConflicts.length }}
               </span>
-              <span v-if="warningConflicts.length > 0" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-400">
+              <span v-if="warningConflicts.length > 0"
+                class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-400">
                 {{ warningConflicts.length }}
               </span>
-              <span v-if="analysis.conflicts.length === 0" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-400">
+              <span v-if="analysis.conflicts.length === 0"
+                class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-400">
                 0
               </span>
               <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
@@ -555,14 +698,15 @@ watch(
                   💡 {{ conflict.suggestion }}
                 </p>
               </div>
-              
+
               <!-- Warning Conflicts (loader mismatch, etc.) -->
               <div v-for="(conflict, idx) in warningConflicts" :key="'warning-' + idx" class="p-4 bg-amber-500/5">
                 <div class="flex items-center gap-3 mb-2">
                   <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 text-sm">
                     <AlertTriangle class="w-4 h-4 text-amber-500" />
                     <span class="font-medium text-amber-400">{{ conflict.mod1.name }}</span>
-                    <span class="text-amber-400/70 text-xs">({{ conflict.type === 'loader_mismatch' ? 'different loader' : conflict.type }})</span>
+                    <span class="text-amber-400/70 text-xs">({{ conflict.type === 'loader_mismatch' ? 'different loader'
+                      : conflict.type }})</span>
                   </div>
                 </div>
                 <p class="text-sm text-muted-foreground pl-1">

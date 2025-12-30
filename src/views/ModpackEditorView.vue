@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useToast } from "@/composables/useToast";
 import ModpackEditor from "@/components/modpacks/ModpackEditor.vue";
 
-type TabType = "play" | "mods" | "discover" | "health" | "versions" | "profiles" | "settings" | "remote" | "configs";
+type TabType = "play" | "mods" | "discover" | "health" | "versions" | "settings" | "remote" | "configs";
 
 const route = useRoute();
 const router = useRouter();
@@ -14,7 +14,7 @@ const toast = useToast();
 const modpackId = computed(() => route.params.id as string);
 const initialTab = computed((): TabType => {
     const tab = route.query.tab as string;
-    const validTabs: TabType[] = ["play", "mods", "discover", "health", "versions", "profiles", "settings", "remote", "configs"];
+    const validTabs: TabType[] = ["play", "mods", "discover", "health", "versions", "settings", "remote", "configs"];
     return validTabs.includes(tab as TabType) ? (tab as TabType) : "mods";
 });
 

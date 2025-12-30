@@ -87,9 +87,7 @@ watch(
     if (isOpen) {
       updates.value = [];
       try {
-        curseforgeApiKey.value = await window.api.updates.getApiKey(
-          "curseforge"
-        );
+        curseforgeApiKey.value = await window.api.updates.getApiKey();
       } catch (err) {
         console.error("Failed to load API key:", err);
       }
@@ -213,7 +211,7 @@ async function applyAllUpdates() {
 async function saveApiKey() {
   savingKey.value = true;
   try {
-    await window.api.updates.setApiKey("curseforge", curseforgeApiKey.value);
+    await window.api.updates.setApiKey(curseforgeApiKey.value);
     showSettings.value = false;
     toast.success(
       "API Key Saved",

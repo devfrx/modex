@@ -9,7 +9,7 @@ Every significant change to a modpack creates a history entry:
 - Adding or removing mods
 - Enabling or disabling mods
 - Changing modpack settings
-- Profile modifications
+- Locking or unlocking mods
 
 ## Viewing History
 
@@ -32,7 +32,8 @@ Each entry shows:
 | **Bulk Add** | Multiple mods added at once |
 | **Bulk Remove** | Multiple mods removed at once |
 | **Settings Changed** | Modpack configuration modified |
-| **Profile Created** | New profile added |
+| **Mod Locked** | A mod was protected from changes |
+| **Mod Unlocked** | A mod protection was removed |
 
 ## Restoring Versions
 
@@ -45,32 +46,7 @@ To restore a previous state:
 
 The modpack reverts to that exact state. This is a non-destructive operation — a new history entry is created for the restore action.
 
-## Profiles
-
-Profiles are variations of a modpack:
-
-### Use Cases
-
-- **Lite Profile** — Minimal mods for performance
-- **Full Profile** — All mods enabled
-- **Server Profile** — Server-compatible mods only
-
-### Creating Profiles
-
-1. Open modpack editor
-2. Go to **Profiles** tab
-3. Click **New Profile**
-4. Name it and optionally base on existing profile
-5. Customize which mods are enabled
-
-### Switching Profiles
-
-The active profile determines:
-- Which mods are exported
-- What appears in the editor
-- Sync target for instances
-
-Switch profiles from the dropdown in the editor header.
+> **Note:** Locked mods are preserved during rollback. Their lock status from the target version is restored.
 
 ## Best Practices
 
@@ -79,17 +55,11 @@ Switch profiles from the dropdown in the editor header.
 Group related changes together:
 - Add all dependencies at once
 - Update mods in batches
-- Use profiles for variations
+- Lock important mods to protect them
 
 ### Regular Exports
 
 Export important versions as `.modex` files for external backup beyond the built-in history.
-
-### Profile Naming
-
-Use descriptive names:
-- `1.20.1-Performance` instead of `Profile 1`
-- `Server-Friendly` instead of `Alt`
 
 ## Limitations
 

@@ -168,7 +168,7 @@ async function loadSettings() {
     modpackCount.value = modpacks.length;
 
     // Load API Key
-    cfApiKey.value = await window.api.updates.getApiKey("curseforge");
+    cfApiKey.value = await window.api.updates.getApiKey();
   } catch (err) {
     console.error("Failed to load stats:", err);
   }
@@ -176,7 +176,7 @@ async function loadSettings() {
 
 async function saveCfApiKey() {
   try {
-    await window.api.updates.setApiKey("curseforge", cfApiKey.value);
+    await window.api.updates.setApiKey(cfApiKey.value);
     toast.success("Saved", "CurseForge API Key updated");
   } catch (err) {
     toast.error("Error", "Failed to save API Key");

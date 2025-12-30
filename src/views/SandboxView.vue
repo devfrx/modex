@@ -539,7 +539,7 @@
                     Version
                   </div>
                   <div class="text-sm text-muted-foreground">
-                    {{ detailNode.data?.version || "-" }}
+                    {{ getDetailMod?.version || "-" }}
                   </div>
                 </div>
                 <div>
@@ -547,7 +547,7 @@
                     Loader
                   </div>
                   <div class="text-sm text-muted-foreground">
-                    {{ detailNode.data?.loader || "-" }}
+                    {{ getDetailMod?.loader || "-" }}
                   </div>
                 </div>
               </div>
@@ -556,7 +556,7 @@
                   Author
                 </div>
                 <div class="text-sm text-muted-foreground">
-                  {{ detailNode.data?.author || "Unknown" }}
+                  {{ getDetailMod?.author || "Unknown" }}
                 </div>
               </div>
               <div>
@@ -564,7 +564,7 @@
                   File
                 </div>
                 <div class="text-xs font-mono truncate text-muted-foreground/50">
-                  {{ detailNode.data?.filename }}
+                  {{ getDetailMod?.filename }}
                 </div>
               </div>
             </template>
@@ -576,7 +576,7 @@
                   Version
                 </div>
                 <div class="text-sm text-muted-foreground">
-                  {{ detailNode.data?.version || "-" }}
+                  {{ getDetailModpack?.version || "-" }}
                 </div>
               </div>
               <div>
@@ -584,7 +584,7 @@
                   Description
                 </div>
                 <div class="text-sm text-muted-foreground">
-                  {{ detailNode.data?.description || "No description" }}
+                  {{ getDetailModpack?.description || "No description" }}
                 </div>
               </div>
               <div>
@@ -592,7 +592,7 @@
                   Mods
                 </div>
                 <div class="text-sm text-muted-foreground">
-                  {{ detailNode.data?.mod_count || 0 }} mods
+                  {{ getDetailModpack?.mod_count || 0 }} mods
                 </div>
               </div>
             </template>
@@ -605,10 +605,10 @@
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="w-4 h-4 rounded" :style="{
-                    backgroundColor: detailNode.data?.color || '#6366f1',
+                    backgroundColor: getDetailFolder?.color || '#6366f1',
                   }"></span>
                   <span class="text-sm text-muted-foreground">{{
-                    detailNode.data?.color || "Default" }}</span>
+                    getDetailFolder?.color || "Default" }}</span>
                 </div>
               </div>
             </template>
@@ -666,7 +666,7 @@ import {
 } from "vue";
 import { useRouter } from "vue-router";
 import { useFolderTree } from "@/composables/useFolderTree";
-import type { Mod, Modpack } from "@/types/electron";
+import type { Mod, Modpack, ModFolder } from "@/types";
 import * as d3 from "d3";
 import {
   FileText,
@@ -688,7 +688,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
   type: "folder" | "mod" | "modpack" | "resourcepack" | "shader";
   label: string;
   color: string;
-  data: any;
+  data: Mod | Modpack | ModFolder;
 }
 
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
@@ -712,6 +712,19 @@ const zoomGroup = ref<SVGGElement | null>(null);
 
 // Detail panel
 const detailNode = ref<GraphNode | null>(null);
+
+// Helper functions for type-safe access to node data
+const getDetailMod = computed(() =>
+  detailNode.value?.type === 'mod' || detailNode.value?.type === 'resourcepack' || detailNode.value?.type === 'shader'
+    ? (detailNode.value.data as Mod)
+    : null
+);
+const getDetailModpack = computed(() =>
+  detailNode.value?.type === 'modpack' ? (detailNode.value.data as Modpack) : null
+);
+const getDetailFolder = computed(() =>
+  detailNode.value?.type === 'folder' ? (detailNode.value.data as ModFolder) : null
+);
 
 const nodes = shallowRef<GraphNode[]>([]);
 const links = shallowRef<GraphLink[]>([]);
@@ -1076,7 +1089,7 @@ async function loadData() {
     const centerY = height.value / 2;
 
     // Folders - spread in a circle
-    folders.value.forEach((f: any, i: number) => {
+    folders.value.forEach((f: ModFolder, i: number) => {
       const angle = (i / Math.max(folders.value.length, 1)) * Math.PI * 2;
       const radius = 150;
       const saved = savedPositions[f.id];

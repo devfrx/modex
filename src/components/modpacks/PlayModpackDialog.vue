@@ -132,6 +132,31 @@ const gameLogs = ref<Array<{ time: string; level: string; message: string }>>([]
 const showLogConsole = ref(false);
 const logScrollRef = ref<HTMLDivElement | null>(null);
 const maxLogLines = 200;
+const logLevelFilter = ref<"all" | "info" | "warn" | "error">("all");
+
+// Filtered logs based on level
+const filteredGameLogs = computed(() => {
+    if (logLevelFilter.value === "all") return gameLogs.value;
+    const filterMap: Record<string, string[]> = {
+        "info": ["INFO"],
+        "warn": ["WARN", "WARNING"],
+        "error": ["ERROR", "FATAL", "SEVERE"]
+    };
+    const allowedLevels = filterMap[logLevelFilter.value] || [];
+    return gameLogs.value.filter(log => allowedLevels.includes(log.level.toUpperCase()));
+});
+
+// Log level counts for badges
+const logLevelCounts = computed(() => {
+    const counts = { info: 0, warn: 0, error: 0 };
+    for (const log of gameLogs.value) {
+        const level = log.level.toUpperCase();
+        if (level === "INFO") counts.info++;
+        else if (level === "WARN" || level === "WARNING") counts.warn++;
+        else if (level === "ERROR" || level === "FATAL" || level === "SEVERE") counts.error++;
+    }
+    return counts;
+});
 
 // Computed: current running game info for this instance
 const runningGame = computed(() => {
@@ -514,11 +539,13 @@ watch(() => props.open, async (open) => {
         gameLaunched.value = false;
         gameLoadingMessage.value = "";
         gameLogs.value = [];
+        logLevelFilter.value = "all";
         await checkInstance();
     } else {
         // Clear logs when dialog closes
         gameLogs.value = [];
         showLogConsole.value = false;
+        logLevelFilter.value = "all";
     }
 });
 
@@ -866,22 +893,61 @@ function handleConfigReverted(event: Event) {
                                     <!-- Log Console -->
                                     <div v-if="showLogConsole" class="log-console">
                                         <div class="log-console-header">
-                                            <div class="flex items-center gap-2">
-                                                <Terminal class="w-4 h-4 text-muted-foreground" />
-                                                <span class="text-sm font-medium">Game Logs</span>
-                                                <span class="text-xs text-muted-foreground">({{ gameLogs.length }}
-                                                    lines)</span>
+                                            <div class="flex items-center gap-3">
+                                                <div class="flex items-center gap-2">
+                                                    <Terminal class="w-4 h-4 text-muted-foreground" />
+                                                    <span class="text-sm font-medium">Game Logs</span>
+                                                </div>
+                                                <!-- Log Level Filters -->
+                                                <div class="flex items-center gap-1">
+                                                    <button @click="logLevelFilter = 'all'"
+                                                        class="px-2 py-0.5 text-[10px] rounded transition-colors"
+                                                        :class="logLevelFilter === 'all'
+                                                            ? 'bg-muted text-foreground'
+                                                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'">
+                                                        All ({{ gameLogs.length }})
+                                                    </button>
+                                                    <button @click="logLevelFilter = 'info'"
+                                                        class="px-2 py-0.5 text-[10px] rounded transition-colors flex items-center gap-1"
+                                                        :class="logLevelFilter === 'info'
+                                                            ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30'
+                                                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'">
+                                                        Info
+                                                        <span v-if="logLevelCounts.info > 0" class="opacity-70">{{
+                                                            logLevelCounts.info }}</span>
+                                                    </button>
+                                                    <button @click="logLevelFilter = 'warn'"
+                                                        class="px-2 py-0.5 text-[10px] rounded transition-colors flex items-center gap-1"
+                                                        :class="logLevelFilter === 'warn'
+                                                            ? 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30'
+                                                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'">
+                                                        Warn
+                                                        <span v-if="logLevelCounts.warn > 0" class="opacity-70">{{
+                                                            logLevelCounts.warn }}</span>
+                                                    </button>
+                                                    <button @click="logLevelFilter = 'error'"
+                                                        class="px-2 py-0.5 text-[10px] rounded transition-colors flex items-center gap-1"
+                                                        :class="logLevelFilter === 'error'
+                                                            ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30'
+                                                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'">
+                                                        Error
+                                                        <span v-if="logLevelCounts.error > 0" class="opacity-70">{{
+                                                            logLevelCounts.error }}</span>
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <button @click="gameLogs = []"
+                                            <button @click="gameLogs = []; logLevelFilter = 'all'"
                                                 class="text-xs text-muted-foreground hover:text-foreground transition-colors">
                                                 Clear
                                             </button>
                                         </div>
                                         <div ref="logScrollRef" class="log-console-content">
-                                            <div v-if="gameLogs.length === 0" class="log-empty">
-                                                <span class="text-muted-foreground text-sm">Waiting for logs...</span>
+                                            <div v-if="filteredGameLogs.length === 0" class="log-empty">
+                                                <span class="text-muted-foreground text-sm">{{ gameLogs.length === 0 ?
+                                                    'Waiting for logs...' : 'No logs
+                                                    match the current filter' }}</span>
                                             </div>
-                                            <div v-for="(log, index) in gameLogs" :key="index" class="log-line"
+                                            <div v-for="(log, index) in filteredGameLogs" :key="index" class="log-line"
                                                 :class="`log-${log.level.toLowerCase()}`">
                                                 <span class="log-time">{{ log.time }}</span>
                                                 <span class="log-level">{{ log.level }}</span>

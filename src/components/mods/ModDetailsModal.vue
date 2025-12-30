@@ -44,6 +44,8 @@ const props = defineProps<{
   currentFileId?: number;
   // Full screen mode
   fullScreen?: boolean;
+  // Whether the mod is locked (prevents version changes)
+  isLocked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -80,7 +82,7 @@ const filterLoader = ref<string>("all");
 
 // Computed
 const isModContext = computed(() => props.mod?.content_type === "mod" || !props.mod?.content_type);
-const canChangeVersion = computed(() => props.context?.type === "modpack");
+const canChangeVersion = computed(() => props.context?.type === "modpack" && !props.isLocked);
 
 // Available game versions from loaded files
 const availableGameVersions = computed(() => {

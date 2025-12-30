@@ -145,7 +145,7 @@ export class InstanceService {
   private onGameStatusChange?: (instanceId: string, info: RunningGameInfo) => void;
   
   /** Callback for game log lines (for real-time log console) */
-  private onGameLogLine?: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string }) => void;
+  private onGameLogLine?: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string; source?: string }) => void;
 
   constructor(basePath: string) {
     // Store instances in userData/modex/instances
@@ -1044,21 +1044,26 @@ export class InstanceService {
       await this.saveInstanceMeta(instance);
 
       // Launch without --workDir (profile handles the game directory)
+      // Capture the launcher process PID for later termination
+      let launcherProcess;
       if (platform === "darwin" && launcherPath.endsWith(".app")) {
-        spawn("open", [launcherPath], { 
+        launcherProcess = spawn("open", [launcherPath], { 
           detached: true, 
           stdio: "ignore" 
-        }).unref();
+        });
       } else {
-        spawn(launcherPath, [], { 
+        launcherProcess = spawn(launcherPath, [], { 
           detached: true, 
           stdio: "ignore",
           cwd: path.dirname(launcherPath)
-        }).unref();
+        });
       }
+      
+      const launcherPid = launcherProcess.pid;
+      launcherProcess.unref();
 
-      // Start tracking the game
-      await this.startGameTracking(instance);
+      // Start tracking the game (pass launcher PID)
+      await this.startGameTracking(instance, launcherPid);
 
       return { success: true };
     } catch (error: any) {
@@ -2426,9 +2431,10 @@ export class InstanceService {
   /**
    * Start tracking a launched game
    */
-  private async startGameTracking(instance: ModexInstance): Promise<void> {
+  private async startGameTracking(instance: ModexInstance, launcherPid?: number): Promise<void> {
     const gameInfo: RunningGameInfo = {
       instanceId: instance.id,
+      launcherPid: launcherPid,
       startTime: Date.now(),
       status: "launching",
       loadedMods: 0,
@@ -2538,105 +2544,284 @@ export class InstanceService {
 
   /**
    * Watch game logs for mod loading progress
+   * Uses a combination of fs.watch for instant notifications and fast polling as fallback
    */
   private async watchGameLogs(instance: ModexInstance): Promise<void> {
     const logsPath = path.join(instance.path, "logs");
     const latestLog = path.join(logsPath, "latest.log");
 
-    // Wait for logs directory to exist
+    // Wait for logs directory to exist (check more frequently)
     let attempts = 0;
-    while (!(await fs.pathExists(logsPath)) && attempts < 30) {
-      await new Promise(r => setTimeout(r, 1000));
+    while (!(await fs.pathExists(logsPath)) && attempts < 60) {
+      await new Promise(r => setTimeout(r, 500));
       attempts++;
     }
 
     if (!(await fs.pathExists(logsPath))) {
-      console.warn("[InstanceService] Logs directory not found");
+      console.warn("[InstanceService] Logs directory not found after 30s");
       return;
     }
 
     const gameInfo = this.runningGames.get(instance.id);
     if (!gameInfo) return;
 
-    // IMPORTANT: Start from the current file size to ignore old log content
-    // This ensures we only read NEW log entries from this launch
+    // Track file position for incremental reading
     let lastSize = 0;
-    let initialSize = 0;
+    let lastInode = 0;
     const launchTime = gameInfo.startTime;
+    let isReading = false; // Prevent concurrent reads
+    let pendingRead = false; // Track if a read was requested while reading
+    let lineBuffer = ""; // Buffer for incomplete lines
     
+    // Initialize position based on existing file
     try {
       if (await fs.pathExists(latestLog)) {
         const stats = await fs.stat(latestLog);
+        lastInode = (stats as any).ino || 0;
         // If the log file was modified before we launched, skip its content
         if (stats.mtimeMs < launchTime) {
           lastSize = stats.size;
-          initialSize = stats.size;
           console.log(`[InstanceService] Skipping existing log content (${lastSize} bytes)`);
+        } else {
+          // File was modified after launch start, read from beginning
+          lastSize = 0;
+          console.log("[InstanceService] Log file is fresh, reading from start");
         }
       }
     } catch {}
 
+    /**
+     * Read new content from log file using streams for better performance
+     */
     const readNewContent = async () => {
+      if (isReading) {
+        pendingRead = true;
+        return;
+      }
+      
+      isReading = true;
+      
       try {
-        if (!(await fs.pathExists(latestLog))) return;
+        if (!(await fs.pathExists(latestLog))) {
+          isReading = false;
+          return;
+        }
         
         const stats = await fs.stat(latestLog);
+        const currentInode = (stats as any).ino || 0;
         
-        // Check if log file was replaced (new game session)
-        if (stats.size < lastSize) {
-          // File was truncated/replaced, start from beginning
+        // Check if file was replaced (new inode) or truncated
+        if ((currentInode !== 0 && lastInode !== 0 && currentInode !== lastInode) || stats.size < lastSize) {
+          // File was replaced, start from beginning
           lastSize = 0;
+          lastInode = currentInode;
+          lineBuffer = "";
           console.log("[InstanceService] Log file was replaced, reading from start");
         }
         
-        if (stats.size === lastSize) return;
-        
-        // Read only new content using fs-extra
-        const content = await fs.readFile(latestLog, "utf-8");
-        const newContent = content.slice(lastSize);
-        lastSize = stats.size;
-        
-        if (newContent && newContent.trim()) {
-          this.parseLogContent(instance.id, newContent);
+        if (stats.size === lastSize) {
+          isReading = false;
+          if (pendingRead) {
+            pendingRead = false;
+            setImmediate(readNewContent);
+          }
+          return;
         }
-      } catch (error) {
-        // File might be locked, ignore
+
+        // Read only new bytes using a read stream with start position
+        const bytesToRead = stats.size - lastSize;
+        
+        // Use native fs for createReadStream with start position
+        const nativeFs = await import("fs");
+        const stream = nativeFs.createReadStream(latestLog, {
+          start: lastSize,
+          end: stats.size - 1,
+          encoding: "utf-8",
+          highWaterMark: 64 * 1024 // 64KB chunks for better performance
+        });
+        
+        let newContent = "";
+        
+        await new Promise<void>((resolve, reject) => {
+          stream.on("data", (chunk: string) => {
+            newContent += chunk;
+          });
+          stream.on("end", resolve);
+          stream.on("error", (err) => {
+            // EBUSY or EACCES means file is locked, just ignore
+            if ((err as any).code === "EBUSY" || (err as any).code === "EACCES") {
+              resolve();
+            } else {
+              reject(err);
+            }
+          });
+        });
+        
+        lastSize = stats.size;
+        lastInode = currentInode;
+        
+        if (newContent) {
+          // Handle incomplete lines by buffering
+          const fullContent = lineBuffer + newContent;
+          const lines = fullContent.split("\n");
+          
+          // If content doesn't end with newline, last element is incomplete
+          if (!newContent.endsWith("\n")) {
+            lineBuffer = lines.pop() || "";
+          } else {
+            lineBuffer = "";
+          }
+          
+          // Process complete lines
+          const completeContent = lines.join("\n");
+          if (completeContent.trim()) {
+            this.parseLogContent(instance.id, completeContent);
+          }
+        }
+      } catch (error: any) {
+        // Ignore file access errors (file might be locked by game)
+        if (error.code !== "EBUSY" && error.code !== "EACCES" && error.code !== "ENOENT") {
+          console.warn("[InstanceService] Error reading log:", error.message);
+        }
+      } finally {
+        isReading = false;
+        if (pendingRead) {
+          pendingRead = false;
+          setImmediate(readNewContent);
+        }
       }
     };
 
-    // Poll for log changes
-    const logCheckInterval = setInterval(readNewContent, 500);
+    // Set up file watcher for instant notifications
+    let watcher: import("fs").FSWatcher | null = null;
+    try {
+      const nativeFs = await import("fs");
+      
+      // Watch the logs directory for changes
+      watcher = nativeFs.watch(logsPath, { persistent: false }, (eventType, filename) => {
+        if (filename === "latest.log") {
+          readNewContent();
+        }
+      });
+      
+      watcher.on("error", (err) => {
+        console.warn("[InstanceService] Log watcher error:", err.message);
+      });
+      
+      console.log("[InstanceService] File watcher active for logs");
+    } catch (err) {
+      console.warn("[InstanceService] Could not set up file watcher, using polling only");
+    }
 
-    // Store interval for cleanup
+    // Also use fast polling as fallback (fs.watch can be unreliable on some systems)
+    // 100ms polling for more responsive log capture
+    const logCheckInterval = setInterval(readNewContent, 100);
+    
+    // Initial read
+    readNewContent();
+
+    // Store cleanup references
     const info = this.runningGames.get(instance.id);
     if (info) {
       (info as any).logCheckInterval = logCheckInterval;
+      (info as any).logFileWatcher = watcher;
     }
   }
 
   /**
    * Parse a single log line into structured format
+   * Handles various Minecraft log formats:
+   * - [HH:MM:SS] [Thread/LEVEL] [Category]: Message (standard)
+   * - [HH:MM:SS] [Thread/LEVEL]: Message
+   * - [LEVEL] Message (simple)
+   * - HH:MM:SS LEVEL Message (no brackets)
    */
-  private parseLogLine(rawLine: string): { time: string; level: string; message: string; raw: string } {
-    // Minecraft log format: [HH:MM:SS] [Thread/LEVEL] [Category]: Message
-    // Or simpler: [HH:MM:SS] [LEVEL]: Message
-    const timestampMatch = rawLine.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
-    const levelMatch = rawLine.match(/\[(INFO|WARN|ERROR|DEBUG|FATAL|TRACE)[\]/]/i);
+  private parseLogLine(rawLine: string): { time: string; level: string; message: string; raw: string; source?: string } {
+    // Try different timestamp formats
+    let time: string;
+    let timestampEnd = 0;
     
-    const time = timestampMatch ? timestampMatch[1] : new Date().toLocaleTimeString('en-US', { hour12: false });
-    const level = levelMatch ? levelMatch[1].toUpperCase() : 'INFO';
+    // Format: [HH:MM:SS]
+    const bracketTimeMatch = rawLine.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
+    if (bracketTimeMatch) {
+      time = bracketTimeMatch[1];
+      timestampEnd = bracketTimeMatch[0].length;
+    } else {
+      // Format: HH:MM:SS (no brackets)
+      const plainTimeMatch = rawLine.match(/^(\d{2}:\d{2}:\d{2})/);
+      if (plainTimeMatch) {
+        time = plainTimeMatch[1];
+        timestampEnd = plainTimeMatch[0].length;
+      } else {
+        time = new Date().toLocaleTimeString('en-US', { hour12: false }).slice(0, 8);
+      }
+    }
     
-    // Extract message - everything after the second ] or just the line
+    // Extract level - try multiple patterns
+    // Pattern 1: [Thread/LEVEL] or [LEVEL]
+    const afterTimestamp = rawLine.slice(timestampEnd);
+    const levelBracketMatch = afterTimestamp.match(/\[([^\]]*\/)?(INFO|WARN|WARNING|ERROR|DEBUG|FATAL|TRACE|SEVERE|FINE|FINER|FINEST)\]/i);
+    // Pattern 2: Just the word
+    const levelWordMatch = afterTimestamp.match(/\b(INFO|WARN|WARNING|ERROR|DEBUG|FATAL|TRACE|SEVERE)\b/i);
+    
+    let level = "INFO";
+    let source: string | undefined;
+    
+    if (levelBracketMatch) {
+      level = levelBracketMatch[2].toUpperCase();
+      if (level === "WARNING") level = "WARN";
+      if (level === "SEVERE") level = "ERROR";
+      // Extract thread/source if present
+      if (levelBracketMatch[1]) {
+        source = levelBracketMatch[1].slice(0, -1); // Remove trailing /
+      }
+    } else if (levelWordMatch) {
+      level = levelWordMatch[1].toUpperCase();
+      if (level === "WARNING") level = "WARN";
+      if (level === "SEVERE") level = "ERROR";
+    }
+    
+    // Try to extract source from [Thread/LEVEL] or [Source/LEVEL] format
+    if (!source) {
+      const sourceMatch = afterTimestamp.match(/\[([^\]\/]+)\/[^\]]+\]/);
+      if (sourceMatch) {
+        source = sourceMatch[1];
+      }
+    }
+    
+    // Extract message - everything after the bracket sections
     let message = rawLine;
-    const lastBracket = rawLine.lastIndexOf(']');
-    if (lastBracket > 0 && lastBracket < rawLine.length - 1) {
-      message = rawLine.substring(lastBracket + 1).trim();
+    
+    // Find the end of all bracket sections
+    let lastBracketEnd = 0;
+    let depth = 0;
+    let inBracket = false;
+    
+    for (let i = 0; i < rawLine.length; i++) {
+      if (rawLine[i] === '[') {
+        inBracket = true;
+        depth++;
+      } else if (rawLine[i] === ']') {
+        depth--;
+        if (depth === 0) {
+          inBracket = false;
+          lastBracketEnd = i + 1;
+        }
+      } else if (!inBracket && depth === 0 && lastBracketEnd > 0) {
+        // We've exited all brackets, rest is message
+        break;
+      }
+    }
+    
+    if (lastBracketEnd > 0 && lastBracketEnd < rawLine.length) {
+      message = rawLine.substring(lastBracketEnd).trim();
+      // Remove leading colon if present
       if (message.startsWith(':')) {
         message = message.substring(1).trim();
       }
     }
     
-    return { time, level, message, raw: rawLine };
+    return { time, level, message, raw: rawLine, source };
   }
 
   /**
@@ -2797,12 +2982,19 @@ export class InstanceService {
     const gameInfo = this.runningGames.get(instanceId);
     if (!gameInfo) return;
 
-    // Clean up log watcher
+    // Clean up log watcher (legacy)
     if (gameInfo.logWatcher) {
       gameInfo.logWatcher.close();
     }
+    // Clean up polling interval
     if ((gameInfo as any).logCheckInterval) {
       clearInterval((gameInfo as any).logCheckInterval);
+    }
+    // Clean up fs.watch file watcher
+    if ((gameInfo as any).logFileWatcher) {
+      try {
+        (gameInfo as any).logFileWatcher.close();
+      } catch {}
     }
 
     gameInfo.status = "stopped";
@@ -2843,7 +3035,8 @@ export class InstanceService {
       if (gameInfo.launcherPid) {
         try {
           if (platform === "win32") {
-            execSync(`taskkill /F /PID ${gameInfo.launcherPid}`, { encoding: "utf-8" });
+            // On Windows, also kill child processes of the launcher
+            execSync(`taskkill /F /T /PID ${gameInfo.launcherPid}`, { encoding: "utf-8" });
           } else {
             process.kill(gameInfo.launcherPid, "SIGKILL");
           }
@@ -2871,10 +3064,35 @@ export class InstanceService {
             
             for (const proc of processes) {
               if (!proc || !proc.CommandLine) continue;
-              if (proc.CommandLine.includes(instance.path)) {
+              if (proc.CommandLine.includes(instance.path) || proc.CommandLine.includes(instance.path.replace(/\\/g, "/"))) {
                 try {
                   execSync(`taskkill /F /PID ${proc.ProcessId}`);
                   console.log(`[InstanceService] Killed related java process ${proc.ProcessId}`);
+                } catch {}
+              }
+            }
+          }
+        } catch {}
+        
+        // Also try to find and kill Minecraft Launcher processes that might be lingering
+        try {
+          const launcherResult = execSync(
+            `powershell -Command "Get-Process -Name 'MinecraftLauncher','Minecraft Launcher' -ErrorAction SilentlyContinue | Select-Object Id | ConvertTo-Json"`,
+            { encoding: "utf-8", timeout: 5000 }
+          );
+          
+          if (launcherResult.trim()) {
+            let launcherProcs: any[] = [];
+            try {
+              const parsed = JSON.parse(launcherResult);
+              launcherProcs = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {}
+            
+            for (const proc of launcherProcs) {
+              if (proc && proc.Id) {
+                try {
+                  execSync(`taskkill /F /T /PID ${proc.Id}`);
+                  console.log(`[InstanceService] Killed Minecraft Launcher process ${proc.Id}`);
                 } catch {}
               }
             }

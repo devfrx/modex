@@ -59,15 +59,6 @@ export interface Mod {
   wiki_url?: string; // Wiki URL
 }
 
-export interface ModpackProfile {
-  id: string;
-  name: string;
-  enabled_mod_ids: string[];
-  created_at: string;
-  /** Optional: config overrides specific to this profile (stored in overrides/{modpackId}/profiles/{profileId}/) */
-  config_overrides_path?: string;
-}
-
 export interface Modpack {
   id: string;
   name: string;
@@ -91,7 +82,6 @@ export interface Modpack {
     last_checked?: string;
     skip_initial_check?: boolean;
   };
-  profiles?: ModpackProfile[];
   // Track mods that failed to import due to incompatibility
   incompatible_mods?: Array<{
     cf_project_id: number;
@@ -122,7 +112,6 @@ interface LibraryData {
 
 interface AppConfig {
   curseforge_api_key?: string;
-  modrinth_api_key?: string;
   /** Instance sync settings */
   instanceSync?: {
     /** Auto-sync modpack to instance before launching */
@@ -300,23 +289,14 @@ export class MetadataManager {
     await this.safeWriteJson(this.configPath, config);
   }
 
-  async getApiKey(source: "curseforge" | "modrinth"): Promise<string> {
+  async getApiKey(): Promise<string> {
     const config = await this.getConfig();
-    return source === "curseforge"
-      ? config.curseforge_api_key || ""
-      : config.modrinth_api_key || "";
+    return config.curseforge_api_key || "";
   }
 
-  async setApiKey(
-    source: "curseforge" | "modrinth",
-    apiKey: string
-  ): Promise<void> {
+  async setApiKey(apiKey: string): Promise<void> {
     const config = await this.getConfig();
-    if (source === "curseforge") {
-      config.curseforge_api_key = apiKey;
-    } else {
-      config.modrinth_api_key = apiKey;
-    }
+    config.curseforge_api_key = apiKey;
     await this.saveConfig(config);
   }
 
@@ -1014,6 +994,8 @@ export class MetadataManager {
       modsEnabled: Array<{ id: string; name: string }>;
       modsDisabled: Array<{ id: string; name: string }>;
       modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+      modsLocked: Array<{ id: string; name: string }>;
+      modsUnlocked: Array<{ id: string; name: string }>;
       loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
       configsChanged: boolean;
       configDetails: Array<{ 
@@ -1035,6 +1017,8 @@ export class MetadataManager {
         modsEnabled: [] as Array<{ id: string; name: string }>,
         modsDisabled: [] as Array<{ id: string; name: string }>,
         modsUpdated: [] as Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>,
+        modsLocked: [] as Array<{ id: string; name: string }>,
+        modsUnlocked: [] as Array<{ id: string; name: string }>,
         loaderChanged: null as { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null,
         configsChanged: false,
         configDetails: [] as Array<{ filePath: string; keyPath: string; line?: number; oldValue: any; newValue: any; timestamp: string }>,
@@ -1202,6 +1186,26 @@ export class MetadataManager {
       }
     }
 
+    // Find locked/unlocked mods
+    const savedLockedIds = new Set(currentVersion.locked_mod_ids || []);
+    const currentLockedIds = new Set(modpack.locked_mod_ids || []);
+
+    // Find newly locked mods
+    for (const modId of currentLockedIds) {
+      if (!savedLockedIds.has(modId)) {
+        const mod = library.mods.find(m => m.id === modId);
+        result.changes.modsLocked.push({ id: modId, name: mod?.name || modId });
+      }
+    }
+
+    // Find newly unlocked mods
+    for (const modId of savedLockedIds) {
+      if (!currentLockedIds.has(modId) && currentModIds.has(modId)) {
+        const mod = library.mods.find(m => m.id === modId);
+        result.changes.modsUnlocked.push({ id: modId, name: mod?.name || modId });
+      }
+    }
+
     // Check for config changes and load details
     result.changes.configsChanged = await this.hasConfigChanges(modpackId);
     
@@ -1260,6 +1264,8 @@ export class MetadataManager {
       result.changes.modsUpdated.length > 0 ||
       result.changes.modsEnabled.length > 0 ||
       result.changes.modsDisabled.length > 0 ||
+      result.changes.modsLocked.length > 0 ||
+      result.changes.modsUnlocked.length > 0 ||
       result.changes.loaderChanged !== null ||
       result.changes.configsChanged;
 
@@ -2242,210 +2248,52 @@ export class MetadataManager {
     return modpack.disabled_mod_ids || [];
   }
 
-  // ==================== PROFILES ====================
-
-  async createProfile(
-    modpackId: string,
-    name: string
-  ): Promise<ModpackProfile | null> {
+  /**
+   * Get the list of locked mod IDs for a modpack
+   */
+  async getLockedMods(modpackId: string): Promise<string[]> {
     const modpack = await this.getModpackById(modpackId);
-    if (!modpack) return null;
-
-    if (!modpack.profiles) {
-      modpack.profiles = [];
-    }
-
-    // Capture currently enabled mods
-    const disabledIds = new Set(modpack.disabled_mod_ids || []);
-    const enabledModIds = modpack.mod_ids.filter((id) => !disabledIds.has(id));
-
-    const profile: ModpackProfile = {
-      id: crypto.randomUUID(),
-      name,
-      enabled_mod_ids: enabledModIds,
-      created_at: new Date().toISOString(),
-    };
-
-    modpack.profiles.push(profile);
-    modpack.updated_at = new Date().toISOString();
-
-    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-    return profile;
+    if (!modpack) return [];
+    return modpack.locked_mod_ids || [];
   }
 
-  async deleteProfile(modpackId: string, profileId: string): Promise<boolean> {
+  /**
+   * Set locked status for a mod
+   */
+  async setModLocked(modpackId: string, modId: string, locked: boolean): Promise<boolean> {
     const modpack = await this.getModpackById(modpackId);
-    if (!modpack || !modpack.profiles) return false;
+    if (!modpack) return false;
 
-    const initialLength = modpack.profiles.length;
-    modpack.profiles = modpack.profiles.filter((p) => p.id !== profileId);
-
-    if (modpack.profiles.length === initialLength) return false;
-
-    modpack.updated_at = new Date().toISOString();
-    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-    
-    // Also delete profile-specific configs
-    await this.deleteProfileConfigs(modpackId, profileId);
-    
-    return true;
-  }
-
-  async applyProfile(modpackId: string, profileId: string): Promise<boolean> {
-    const modpack = await this.getModpackById(modpackId);
-    if (!modpack || !modpack.profiles) return false;
-
-    const profile = modpack.profiles.find((p) => p.id === profileId);
-    if (!profile) return false;
-
-    // Apply profile:
-    // Disabled = All mods NOT in profile.
-    // Note: If a mod is in the profile but NO LONGER in the pack (mod_ids),
-    // it won't affect anything because we iterate over modpack.mod_ids.
-    const profileEnabled = new Set(profile.enabled_mod_ids);
-    const disabledIds = modpack.mod_ids.filter((id) => !profileEnabled.has(id));
-
-    modpack.disabled_mod_ids = disabledIds;
-    modpack.updated_at = new Date().toISOString();
-
-    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-
-    // Record in version control
-    try {
-      await this.createVersion(modpackId, `Applied profile: ${profile.name}`);
-    } catch (err) {
-      console.error("Failed to create version for profile apply:", err);
-      // Continue even if version control fails
+    if (!modpack.locked_mod_ids) {
+      modpack.locked_mod_ids = [];
     }
 
+    const isCurrentlyLocked = modpack.locked_mod_ids.includes(modId);
+    
+    if (locked && !isCurrentlyLocked) {
+      modpack.locked_mod_ids.push(modId);
+    } else if (!locked && isCurrentlyLocked) {
+      modpack.locked_mod_ids = modpack.locked_mod_ids.filter(id => id !== modId);
+    } else {
+      return true; // Already in desired state
+    }
+
+    modpack.updated_at = new Date().toISOString();
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
     return true;
   }
 
   /**
-   * Get the config overrides path for a profile
+   * Update locked mod IDs for a modpack
    */
-  getProfileConfigPath(modpackId: string, profileId: string): string {
-    return path.join(this.overridesDir, modpackId, "profiles", profileId);
-  }
-
-  /**
-   * Save current config overrides as profile-specific configs
-   * @param modpackId The modpack ID
-   * @param profileId The profile ID
-   * @returns Path to the saved config overrides
-   */
-  async saveProfileConfigs(modpackId: string, profileId: string): Promise<string | null> {
+  async updateLockedMods(modpackId: string, lockedModIds: string[]): Promise<boolean> {
     const modpack = await this.getModpackById(modpackId);
-    if (!modpack || !modpack.profiles) return null;
+    if (!modpack) return false;
 
-    const profile = modpack.profiles.find(p => p.id === profileId);
-    if (!profile) return null;
-
-    const overridesPath = this.getOverridesPath(modpackId);
-    if (!(await fs.pathExists(overridesPath))) {
-      return null;
-    }
-
-    const profileConfigPath = this.getProfileConfigPath(modpackId, profileId);
-
-    try {
-      // Remove existing profile configs
-      if (await fs.pathExists(profileConfigPath)) {
-        await fs.remove(profileConfigPath);
-      }
-      
-      await fs.ensureDir(profileConfigPath);
-
-      // Copy current overrides to profile folder (excluding snapshots and profiles folders)
-      const entries = await fs.readdir(overridesPath, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.name === "snapshots" || entry.name === "profiles") continue;
-
-        const srcPath = path.join(overridesPath, entry.name);
-        const destPath = path.join(profileConfigPath, entry.name);
-        await fs.copy(srcPath, destPath);
-      }
-
-      // Update profile with config path
-      profile.config_overrides_path = profileConfigPath;
-      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-
-      return profileConfigPath;
-    } catch (error) {
-      console.error(`Failed to save profile configs for ${profileId}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Apply profile-specific config overrides to the main overrides folder
-   * @param modpackId The modpack ID
-   * @param profileId The profile ID
-   * @returns True if configs were applied successfully
-   */
-  async applyProfileConfigs(modpackId: string, profileId: string): Promise<boolean> {
-    const modpack = await this.getModpackById(modpackId);
-    if (!modpack || !modpack.profiles) return false;
-
-    const profile = modpack.profiles.find(p => p.id === profileId);
-    if (!profile || !profile.config_overrides_path) return false;
-
-    const profileConfigPath = profile.config_overrides_path;
-    if (!(await fs.pathExists(profileConfigPath))) {
-      return false;
-    }
-
-    const overridesPath = this.getOverridesPath(modpackId);
-
-    try {
-      // Remove current config folders (but keep snapshots and profiles)
-      const currentEntries = await fs.readdir(overridesPath, { withFileTypes: true });
-      for (const entry of currentEntries) {
-        if (entry.name === "snapshots" || entry.name === "profiles") continue;
-        await fs.remove(path.join(overridesPath, entry.name));
-      }
-
-      // Copy profile configs to main overrides folder
-      const profileEntries = await fs.readdir(profileConfigPath, { withFileTypes: true });
-      for (const entry of profileEntries) {
-        const srcPath = path.join(profileConfigPath, entry.name);
-        const destPath = path.join(overridesPath, entry.name);
-        await fs.copy(srcPath, destPath);
-      }
-
-      return true;
-    } catch (error) {
-      console.error(`Failed to apply profile configs for ${profileId}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Delete profile-specific config overrides
-   */
-  async deleteProfileConfigs(modpackId: string, profileId: string): Promise<boolean> {
-    const profileConfigPath = this.getProfileConfigPath(modpackId, profileId);
-    try {
-      if (await fs.pathExists(profileConfigPath)) {
-        await fs.remove(profileConfigPath);
-        
-        // Clear the path reference in the profile
-        const modpack = await this.getModpackById(modpackId);
-        if (modpack?.profiles) {
-          const profile = modpack.profiles.find(p => p.id === profileId);
-          if (profile) {
-            delete profile.config_overrides_path;
-            await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-          }
-        }
-        
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error(`Failed to delete profile configs for ${profileId}:`, error);
-      return false;
-    }
+    modpack.locked_mod_ids = lockedModIds;
+    modpack.updated_at = new Date().toISOString();
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return true;
   }
 
   // ==================== VERSION CONTROL ====================
@@ -2629,7 +2477,12 @@ export class MetadataManager {
       modpack.disabled_mod_ids || [],
       library
     );
-    const changes = [...modChanges, ...disabledChanges];
+    const lockedChanges = this.calculateLockedChanges(
+      currentVersion.locked_mod_ids || [],
+      modpack.locked_mod_ids || [],
+      library
+    );
+    const changes = [...modChanges, ...disabledChanges, ...lockedChanges];
 
     // Check for loader changes
     const savedLoader = currentVersion.loader || modpack.loader;
@@ -2716,6 +2569,7 @@ export class MetadataManager {
       changes,
       mod_ids: [...modpack.mod_ids],
       disabled_mod_ids: [...(modpack.disabled_mod_ids || [])],
+      locked_mod_ids: [...(modpack.locked_mod_ids || [])],
       loader: modpack.loader,
       loader_version: modpack.loader_version,
       parent_id: currentVersion.id,
@@ -2978,6 +2832,46 @@ export class MetadataManager {
   }
 
   /**
+   * Calculate lock/unlock changes between two locked_mod_ids arrays
+   */
+  private calculateLockedChanges(
+    oldLockedIds: string[],
+    newLockedIds: string[],
+    library: LibraryData
+  ): ModpackChange[] {
+    const changes: ModpackChange[] = [];
+    const oldSet = new Set(oldLockedIds);
+    const newSet = new Set(newLockedIds);
+    const modMap = new Map(library.mods.map((m) => [m.id, m]));
+
+    // Find newly locked mods (in new but not in old)
+    for (const modId of newLockedIds) {
+      if (!oldSet.has(modId)) {
+        const mod = modMap.get(modId);
+        changes.push({
+          type: "lock",
+          modId,
+          modName: mod?.name || modId,
+        });
+      }
+    }
+
+    // Find newly unlocked mods (was in old locked, not in new locked)
+    for (const modId of oldLockedIds) {
+      if (!newSet.has(modId)) {
+        const mod = modMap.get(modId);
+        changes.push({
+          type: "unlock",
+          modId,
+          modName: mod?.name || modId,
+        });
+      }
+    }
+
+    return changes;
+  }
+
+  /**
    * Generate the next semantic version tag
    */
   private generateNextTag(currentTag: string): string {
@@ -3098,9 +2992,10 @@ export class MetadataManager {
     const targetVersion = history.versions.find((v) => v.id === versionId);
     if (!targetVersion) return false;
 
-    // Update modpack with the version's mod_ids and disabled_mod_ids
+    // Update modpack with the version's mod_ids, disabled_mod_ids, and locked_mod_ids
     modpack.mod_ids = [...targetVersion.mod_ids];
     modpack.disabled_mod_ids = [...(targetVersion.disabled_mod_ids || [])];
+    modpack.locked_mod_ids = [...(targetVersion.locked_mod_ids || [])];
     modpack.version = targetVersion.tag;
     modpack.updated_at = new Date().toISOString();
 
@@ -3152,10 +3047,15 @@ export class MetadataManager {
     const restoredDisabledIds = (targetVersion.disabled_mod_ids || []).filter(
       (id) => modIdSet.has(id)
     );
+    // Filter locked_mod_ids to only include mods that were restored
+    const restoredLockedIds = (targetVersion.locked_mod_ids || []).filter(
+      (id) => modIdSet.has(id)
+    );
 
     // Update modpack with the provided mod_ids (filtered to only existing mods)
     modpack.mod_ids = [...modIds];
     modpack.disabled_mod_ids = restoredDisabledIds;
+    modpack.locked_mod_ids = restoredLockedIds;
     modpack.version = targetVersion.tag;
     modpack.updated_at = new Date().toISOString();
 

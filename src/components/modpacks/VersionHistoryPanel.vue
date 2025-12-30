@@ -26,6 +26,7 @@ import {
     AlertTriangle,
     Undo2,
     Lock,
+    LockOpen,
     Globe,
     Box,
 } from "lucide-vue-next";
@@ -41,6 +42,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: "refresh"): void;
+    (e: "unsaved-changes", count: number): void;
 }>();
 
 const toast = useToast();
@@ -66,6 +68,8 @@ const unsavedChanges = ref<{
         modsEnabled: Array<{ id: string; name: string }>;
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        modsLocked: Array<{ id: string; name: string }>;
+        modsUnlocked: Array<{ id: string; name: string }>;
         loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{
@@ -105,7 +109,7 @@ const unsavedChangeCount = computed(() => {
     if (!unsavedChanges.value?.changes) return 0;
     const c = unsavedChanges.value.changes;
     const loaderChange = c.loaderChanged ? 1 : 0;
-    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + loaderChange + configChangeCount.value;
+    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + (c.modsLocked?.length || 0) + (c.modsUnlocked?.length || 0) + loaderChange + configChangeCount.value;
 });
 
 // Helper functions for config display
@@ -125,6 +129,8 @@ const formatConfigValue = (value: any): string => {
 async function loadUnsavedChanges() {
     try {
         unsavedChanges.value = await window.api.modpacks.getUnsavedChanges(props.modpackId);
+        // Emit unsaved changes count to parent
+        emit("unsaved-changes", unsavedChangeCount.value);
     } catch (err) {
         console.error("Failed to load unsaved changes:", err);
     }
@@ -437,6 +443,8 @@ function getChangeIcon(type: ModpackChange["type"], modId?: string) {
         case "update": return RefreshCw;
         case "enable": return ToggleRight;
         case "disable": return ToggleLeft;
+        case "lock": return Lock;
+        case "unlock": return LockOpen;
         case "version_control": return GitBranch;
         case "loader_change": return Box;
     }
@@ -455,6 +463,8 @@ function getChangeColor(type: ModpackChange["type"], modId?: string): string {
         case "update": return "text-blue-500 bg-blue-500/10";
         case "enable": return "text-emerald-500 bg-emerald-500/10";
         case "disable": return "text-amber-500 bg-amber-500/10";
+        case "lock": return "text-amber-500 bg-amber-500/10";
+        case "unlock": return "text-emerald-500 bg-emerald-500/10";
         case "version_control": return "text-violet-500 bg-violet-500/10";
         case "loader_change": return "text-orange-500 bg-orange-500/10";
         default: return "text-muted-foreground bg-muted";
@@ -692,6 +702,54 @@ watch(() => props.modpackId, () => {
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('disabled')">
                                         +{{ unsavedChanges.changes.modsDisabled.length - 5 }} more
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Mods Locked -->
+                            <div v-if="unsavedChanges.changes.modsLocked?.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+                                    @click="toggleChangeSection('locked')">
+                                    <Lock class="w-3.5 h-3.5 text-amber-500" />
+                                    <span>{{ unsavedChanges.changes.modsLocked.length }} mods locked</span>
+                                    <component :is="expandedChangeSections.has('locked') ? ChevronUp : ChevronDown"
+                                        class="w-3 h-3 ml-auto" />
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('locked') ? unsavedChanges.changes.modsLocked : unsavedChanges.changes.modsLocked.slice(0, 5))"
+                                        :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <button
+                                        v-if="unsavedChanges.changes.modsLocked.length > 5 && !expandedChangeSections.has('locked')"
+                                        class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
+                                        @click.stop="toggleChangeSection('locked')">
+                                        +{{ unsavedChanges.changes.modsLocked.length - 5 }} more
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Mods Unlocked -->
+                            <div v-if="unsavedChanges.changes.modsUnlocked?.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+                                    @click="toggleChangeSection('unlocked')">
+                                    <LockOpen class="w-3.5 h-3.5 text-emerald-500" />
+                                    <span>{{ unsavedChanges.changes.modsUnlocked.length }} mods unlocked</span>
+                                    <component :is="expandedChangeSections.has('unlocked') ? ChevronUp : ChevronDown"
+                                        class="w-3 h-3 ml-auto" />
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('unlocked') ? unsavedChanges.changes.modsUnlocked : unsavedChanges.changes.modsUnlocked.slice(0, 5))"
+                                        :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <button
+                                        v-if="unsavedChanges.changes.modsUnlocked.length > 5 && !expandedChangeSections.has('unlocked')"
+                                        class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
+                                        @click.stop="toggleChangeSection('unlocked')">
+                                        +{{ unsavedChanges.changes.modsUnlocked.length - 5 }} more
                                     </button>
                                 </div>
                             </div>

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ModGrid from "@/components/mods/ModGrid.vue";
 import ModCard from "@/components/mods/ModCard.vue";
 import GalleryCard from "@/components/mods/GalleryCard.vue";
 import Button from "@/components/ui/Button.vue";

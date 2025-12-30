@@ -14,7 +14,6 @@ import type {
   ModpackVersion,
   ModpackVersionHistory,
   ModpackChange,
-  ModpackProfile,
   MinecraftInstallation,
   SyncResult,
   ModpackPreview,
@@ -43,7 +42,6 @@ export type {
   ModpackVersion,
   ModpackVersionHistory,
   ModpackChange,
-  ModpackProfile,
 };
 
 // ==================== MOD USAGE ====================
@@ -181,6 +179,19 @@ export interface ElectronAPI {
     ) => Promise<boolean>;
     /** Get list of disabled mod IDs */
     getDisabledMods: (modpackId: string) => Promise<string[]>;
+    /** Get list of locked mod IDs */
+    getLockedMods: (modpackId: string) => Promise<string[]>;
+    /** Set a mod's locked state */
+    setModLocked: (
+      modpackId: string,
+      modId: string,
+      locked: boolean
+    ) => Promise<boolean>;
+    /** Update all locked mod IDs */
+    updateLockedMods: (
+      modpackId: string,
+      lockedModIds: string[]
+    ) => Promise<boolean>;
     clone: (modpackId: string, newName: string) => Promise<string | null>;
     setImage: (modpackId: string, imageUrl: string) => Promise<boolean>;
     openFolder: (modpackId: string) => Promise<boolean>;
@@ -199,19 +210,6 @@ export interface ElectronAPI {
       modsSkipped: number;
       errors: string[];
     }>;
-    // Profiles
-    createProfile: (
-      modpackId: string,
-      name: string
-    ) => Promise<ModpackProfile | null>;
-    deleteProfile: (modpackId: string, profileId: string) => Promise<boolean>;
-    applyProfile: (modpackId: string, profileId: string) => Promise<boolean>;
-
-    // Profile config management
-    /** Save current configs as profile-specific configs */
-    saveProfileConfigs: (modpackId: string, profileId: string) => Promise<string | null>;
-    /** Apply profile-specific config overrides */
-    applyProfileConfigs: (modpackId: string, profileId: string) => Promise<boolean>;
     /** Check if modpack has saved overrides */
     hasOverrides: (modpackId: string) => Promise<boolean>;
     /** Check if modpack has unsaved changes (compared to last saved version) */
@@ -225,6 +223,8 @@ export interface ElectronAPI {
         modsEnabled: Array<{ id: string; name: string }>;
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        modsLocked: Array<{ id: string; name: string }>;
+        modsUnlocked: Array<{ id: string; name: string }>;
         loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{
@@ -501,11 +501,8 @@ export interface ElectronAPI {
 
   // ========== UPDATES ==========
   updates: {
-    setApiKey: (
-      source: "curseforge" | "modrinth",
-      apiKey: string
-    ) => Promise<{ success: boolean }>;
-    getApiKey: (source: "curseforge" | "modrinth") => Promise<string>;
+    setApiKey: (apiKey: string) => Promise<{ success: boolean }>;
+    getApiKey: () => Promise<string>;
     checkMod: (
       modId: number,
       gameVersion: string,
@@ -740,6 +737,18 @@ export interface ElectronAPI {
       gameProcessRunning: boolean;
     } | null>;
     killGame: (instanceId: string) => Promise<boolean>;
+    /** Get all running games (for reload detection) */
+    getAllRunningGames: () => Promise<Array<{
+      instanceId: string;
+      launcherPid?: number;
+      gamePid?: number;
+      startTime: number;
+      status: "launching" | "loading_mods" | "running" | "stopped";
+      loadedMods: number;
+      totalMods: number;
+      currentMod?: string;
+      gameProcessRunning: boolean;
+    }>>;
     onGameStatusChange: (callback: (data: {
       instanceId: string;
       launcherPid?: number;

@@ -32,14 +32,6 @@ export interface Mod {
   favorite?: boolean;
 }
 
-export interface ModpackProfile {
-  id: string;
-  name: string;
-  enabled_mod_ids: string[];
-  created_at: string;
-  config_overrides_path?: string;
-}
-
 export interface Modpack {
   id: string;
   name: string;
@@ -63,7 +55,6 @@ export interface Modpack {
     last_checked?: string;
     skip_initial_check?: boolean;
   };
-  profiles?: ModpackProfile[];
   incompatible_mods?: Array<{
     cf_project_id: number;
     name: string;
@@ -238,6 +229,19 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.invoke("modpacks:setModEnabled", modpackId, modId, enabled),
     getDisabledMods: (modpackId: string): Promise<string[]> =>
       ipcRenderer.invoke("modpacks:getDisabledMods", modpackId),
+    getLockedMods: (modpackId: string): Promise<string[]> =>
+      ipcRenderer.invoke("modpacks:getLockedMods", modpackId),
+    setModLocked: (
+      modpackId: string,
+      modId: string,
+      locked: boolean
+    ): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:setModLocked", modpackId, modId, locked),
+    updateLockedMods: (
+      modpackId: string,
+      lockedModIds: string[]
+    ): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:updateLockedMods", modpackId, lockedModIds),
     clone: (modpackId: string, newName: string): Promise<string | null> =>
       ipcRenderer.invoke("modpacks:clone", modpackId, newName),
     setImage: (modpackId: string, imageUrl: string): Promise<boolean> =>
@@ -278,23 +282,6 @@ contextBridge.exposeInMainWorld("api", {
       }
       return ipcRenderer.invoke("import:curseforgeUrl", downloadUrl, modpackName, cfProjectId, cfFileId, cfSlug);
     },
-
-    // Profiles
-    createProfile: (modpackId: string, name: string): Promise<any | null> =>
-      ipcRenderer.invoke("modpacks:createProfile", modpackId, name),
-
-    deleteProfile: (modpackId: string, profileId: string): Promise<boolean> =>
-      ipcRenderer.invoke("modpacks:deleteProfile", modpackId, profileId),
-
-    applyProfile: (modpackId: string, profileId: string): Promise<boolean> =>
-      ipcRenderer.invoke("modpacks:applyProfile", modpackId, profileId),
-
-    // Profile config management
-    saveProfileConfigs: (modpackId: string, profileId: string): Promise<string | null> =>
-      ipcRenderer.invoke("modpacks:saveProfileConfigs", modpackId, profileId),
-
-    applyProfileConfigs: (modpackId: string, profileId: string): Promise<boolean> =>
-      ipcRenderer.invoke("modpacks:applyProfileConfigs", modpackId, profileId),
 
     hasOverrides: (modpackId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:hasOverrides", modpackId),
@@ -630,13 +617,10 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== UPDATES ==========
   updates: {
-    setApiKey: (
-      source: "curseforge" | "modrinth",
-      apiKey: string
-    ): Promise<{ success: boolean }> =>
-      ipcRenderer.invoke("updates:setApiKey", source, apiKey),
-    getApiKey: (source: "curseforge" | "modrinth"): Promise<string> =>
-      ipcRenderer.invoke("updates:getApiKey", source),
+    setApiKey: (apiKey: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("updates:setApiKey", apiKey),
+    getApiKey: (): Promise<string> =>
+      ipcRenderer.invoke("updates:getApiKey"),
     checkMod: (
       modId: number,
       gameVersion: string,
@@ -1001,6 +985,19 @@ contextBridge.exposeInMainWorld("api", {
 
     killGame: (instanceId: string): Promise<boolean> =>
       ipcRenderer.invoke("instance:killGame", instanceId),
+
+    /** Get all running games (for reload detection) */
+    getAllRunningGames: (): Promise<Array<{
+      instanceId: string;
+      launcherPid?: number;
+      gamePid?: number;
+      startTime: number;
+      status: "launching" | "loading_mods" | "running" | "stopped";
+      loadedMods: number;
+      totalMods: number;
+      currentMod?: string;
+      gameProcessRunning: boolean;
+    }>> => ipcRenderer.invoke("instance:getAllRunningGames"),
 
     onGameStatusChange: (callback: (data: {
       instanceId: string;

@@ -55,6 +55,7 @@ import {
   FolderSync,
   FileEdit,
   FolderTree,
+  FileText,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -71,6 +72,7 @@ import ConfigStructuredEditor from "@/components/configs/ConfigStructuredEditor.
 import UpdateAvailableBanner from "@/components/modpacks/UpdateAvailableBanner.vue";
 import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
+import ChangelogDialog from "@/components/mods/ChangelogDialog.vue";
 import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
 import type { CFModLoader } from "@/types/electron";
 
@@ -132,6 +134,16 @@ const isSaving = ref(false);
 const showModDetailsModal = ref(false);
 const modDetailsTarget = ref<Mod | null>(null);
 const modsFilter = ref<"all" | "incompatible" | "warning" | "disabled" | "locked" | "updates" | "recent-updated" | "recent-added">("all");
+
+// Changelog Dialog state
+const showChangelogDialog = ref(false);
+const changelogMod = ref<{
+  id: number;
+  fileId: number;
+  name: string;
+  version: string;
+  slug?: string;
+} | null>(null);
 const activeTab = ref<
   | "play"
   | "mods"
@@ -1058,6 +1070,21 @@ async function quickUpdateMod(mod: Mod) {
   } finally {
     checkingUpdates.value[mod.id] = false;
   }
+}
+
+// View changelog for a mod update
+function viewModChangelog(mod: Mod) {
+  const update = updateAvailable.value[mod.id];
+  if (!mod.cf_project_id || !update) return;
+
+  changelogMod.value = {
+    id: mod.cf_project_id,
+    fileId: update.id,
+    name: mod.name,
+    version: update.displayName || update.fileName,
+    slug: mod.slug,
+  };
+  showChangelogDialog.value = true;
 }
 
 // Update all mods with available updates (excluding locked mods)
@@ -4222,13 +4249,89 @@ watch(
                     </div>
 
                     <!-- Right Side Controls -->
-                    <div class="flex items-center gap-1.5 pl-2 shrink-0">
-                      <!-- Enable/Disable Toggle -->
-                      <button class="w-7 h-4 rounded-full relative shrink-0 transition-all duration-200" :class="[
+                    <div class="flex items-center gap-2 pl-2 shrink-0">
+                      <!-- (buttons will be shown near lock-state) -->
+
+                      <!-- Hover-only action buttons -->
+                      <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                        <!-- Lock/Unlock Button (action) -->
+                        <button v-if="!isLinked"
+                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150" 
+                          :class="lockedModIds.has(mod.id)
+                            ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 hover:border-amber-500/50'
+                            : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-amber-500 border-border/40 hover:border-amber-500/50'"
+                          :title="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" @click.stop="toggleModLocked(mod.id)">
+                          <Lock v-if="lockedModIds.has(mod.id)" class="w-3.5 h-3.5" />
+                          <LockOpen v-else class="w-3.5 h-3.5" />
+                        </button>
+
+                        <!-- Change Version Button -->
+                        <button v-if="!isLinked && mod.cf_project_id"
+                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
+                          :class="lockedModIds.has(mod.id) 
+                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20' 
+                            : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-primary border-border/40 hover:border-primary/50'"
+                          :disabled="lockedModIds.has(mod.id)"
+                          :title="lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
+                          @click.stop="!lockedModIds.has(mod.id) && openVersionPicker(mod)">
+                          <GitBranch class="w-3.5 h-3.5" />
+                        </button>
+
+                        <!-- Remove Button -->
+                        <button v-if="!isLinked"
+                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
+                          :class="lockedModIds.has(mod.id) 
+                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20' 
+                            : 'bg-muted/60 hover:bg-destructive/15 text-muted-foreground hover:text-destructive border-border/40 hover:border-destructive/50'"
+                          :disabled="lockedModIds.has(mod.id)"
+                          :title="lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
+                          @click.stop="!lockedModIds.has(mod.id) && removeMod(mod.id)">
+                          <Trash2 class="w-3.5 h-3.5" />
+                        </button>
+
+                        <!-- Managed indicator -->
+                        <div v-if="isLinked" class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/30 text-muted-foreground/40 border border-border/20"
+                          title="Remote managed">
+                          <Lock class="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+
+                      <!-- Lock state indicator and update/changelog (moved next to toggle) -->
+                      <div class="flex items-center ml-1 gap-1">
+                        <!-- Checking Indicator (shows while checking) -->
+                        <div v-if="!isLinked && mod.cf_project_id && checkingUpdates[mod.id]"
+                          class="w-6 h-6 flex items-center justify-center rounded-md bg-primary/10" title="Checking...">
+                          <RefreshCw class="w-3.5 h-3.5 animate-spin text-primary/70" />
+                        </div>
+
+                        <!-- View Changelog (always visible when update available) -->
+                        <button
+                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
+                          class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/60 text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground transition-all duration-150"
+                          title="View changelog" @click.stop="viewModChangelog(mod)">
+                          <FileText class="w-3.5 h-3.5" />
+                        </button>
+
+                        <!-- Update Available (always visible when update available) -->
+                        <button
+                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
+                          class="w-7 h-7 flex items-center justify-center rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 hover:border-primary/50 transition-all duration-150"
+                          :title="`Update to ${updateAvailable[mod.id].displayName}`" @click.stop="quickUpdateMod(mod)">
+                          <ArrowUpCircle class="w-3.5 h-3.5" />
+                        </button>
+
+                        <!-- Lock state icon (indicator only) -->
+                        <div v-if="lockedModIds.has(mod.id)" class="w-6 h-6 flex items-center justify-center text-amber-500" title="Locked">
+                          <Lock class="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+
+                      <!-- Enable/Disable Toggle (moved to far right) -->
+                      <button class="w-8 h-5 rounded-full relative shrink-0 transition-all duration-200 shadow-inner" :class="[
                         disabledModIds.has(mod.id)
-                          ? 'bg-muted-foreground/25'
-                          : 'bg-primary',
-                        (isLinked || lockedModIds.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-85',
+                          ? 'bg-muted-foreground/20'
+                          : 'bg-primary shadow-primary/20',
+                        (isLinked || lockedModIds.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90',
                       ]" @click.stop="!(isLinked || lockedModIds.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
                         ? 'Managed by remote source'
                         : lockedModIds.has(mod.id)
@@ -4237,72 +4340,9 @@ watch(
                             ? 'Click to enable mod'
                             : 'Click to disable mod'" :disabled="isLinked || lockedModIds.has(mod.id)">
                         <span
-                          class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all duration-200"
+                          class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200"
                           :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[14px]'" />
                       </button>
-
-                      <!-- Status Icons -->
-                      <div class="flex items-center gap-0.5">
-                        <!-- Lock Indicator -->
-                        <div v-if="lockedModIds.has(mod.id)"
-                          class="w-5 h-5 flex items-center justify-center text-amber-500" title="Locked">
-                          <Lock class="w-3 h-3" />
-                        </div>
-
-                        <!-- Update Available -->
-                        <button
-                          v-if="!isLinked && mod.cf_project_id && !lockedModIds.has(mod.id) && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
-                          class="w-5 h-5 flex items-center justify-center text-primary hover:text-primary/80 transition-colors"
-                          :title="`Update to ${updateAvailable[mod.id].displayName}`" @click.stop="quickUpdateMod(mod)">
-                          <ArrowUpCircle class="w-3.5 h-3.5" />
-                        </button>
-
-                        <!-- Checking Indicator -->
-                        <div v-else-if="!isLinked && mod.cf_project_id && checkingUpdates[mod.id]"
-                          class="w-5 h-5 flex items-center justify-center" title="Checking...">
-                          <RefreshCw class="w-3 h-3 animate-spin text-primary/60" />
-                        </div>
-                      </div>
-
-                      <!-- Action Buttons (visible on hover) -->
-                      <div
-                        class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-                        <!-- Lock/Unlock Button -->
-                        <button v-if="!isLinked"
-                          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors" :class="lockedModIds.has(mod.id)
-                            ? 'text-amber-500 hover:bg-amber-500/10'
-                            : 'text-muted-foreground/60 hover:text-amber-500 hover:bg-muted'"
-                          :title="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" @click.stop="toggleModLocked(mod.id)">
-                          <Lock v-if="lockedModIds.has(mod.id)" class="w-3 h-3" />
-                          <LockOpen v-else class="w-3 h-3" />
-                        </button>
-
-                        <!-- Change Version Button -->
-                        <button v-if="!isLinked && mod.cf_project_id"
-                          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors"
-                          :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed text-muted-foreground/40' : 'text-muted-foreground/60 hover:text-primary hover:bg-muted'"
-                          :disabled="lockedModIds.has(mod.id)"
-                          :title="lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
-                          @click.stop="!lockedModIds.has(mod.id) && openVersionPicker(mod)">
-                          <GitBranch class="w-3 h-3" />
-                        </button>
-
-                        <!-- Remove Button -->
-                        <button v-if="!isLinked"
-                          class="w-6 h-6 flex items-center justify-center rounded-md transition-colors"
-                          :class="lockedModIds.has(mod.id) ? 'opacity-30 cursor-not-allowed text-muted-foreground/40' : 'text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10'"
-                          :disabled="lockedModIds.has(mod.id)"
-                          :title="lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
-                          @click.stop="!lockedModIds.has(mod.id) && removeMod(mod.id)">
-                          <Trash2 class="w-3 h-3" />
-                        </button>
-
-                        <!-- Managed indicator -->
-                        <div v-if="isLinked" class="w-6 h-6 flex items-center justify-center text-muted-foreground/30"
-                          title="Remote managed">
-                          <Lock class="w-3 h-3" />
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -4928,6 +4968,18 @@ watch(
     }" :current-file-id="modDetailsTarget?.cf_file_id" :full-screen="true"
       :is-locked="modDetailsTarget ? lockedModIds.has(modDetailsTarget.id) : false" @close="closeModDetails"
       @version-changed="handleModDetailsVersionChange" />
+
+    <!-- Mod Update Changelog Dialog -->
+    <ChangelogDialog
+      v-if="changelogMod"
+      :open="showChangelogDialog"
+      :mod-id="changelogMod.id"
+      :file-id="changelogMod.fileId"
+      :mod-name="changelogMod.name"
+      :version="changelogMod.version"
+      :slug="changelogMod.slug"
+      @close="showChangelogDialog = false"
+    />
 
     <!-- CurseForge Changelog Dialog -->
     <Dialog :open="showCFChangelog" @close="showCFChangelog = false" title="Modpack Changelog" size="lg">

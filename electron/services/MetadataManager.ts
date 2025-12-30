@@ -76,6 +76,7 @@ export interface Modpack {
   last_sync?: string;
   mod_ids: string[];
   disabled_mod_ids?: string[];
+  locked_mod_ids?: string[];
   remote_source?: {
     url: string;
     auto_check: boolean;
@@ -3771,6 +3772,9 @@ ${modLinks}
       lockedMods: string[];
       unlockedMods: string[];
       hasVersionHistoryChanges?: boolean;
+      loaderChanged?: { from?: string; to?: string };
+      loaderVersionChanged?: { from?: string; to?: string };
+      minecraftVersionChanged?: { from?: string; to?: string };
     };
   }> {
     const modpack = await this.getModpackById(modpackId);

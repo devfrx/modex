@@ -522,9 +522,9 @@ export interface ElectronAPI {
         unlockedMods: string[];
         hasVersionHistoryChanges?: boolean;
         // Metadata changes
-        loaderChanged?: { from: string; to: string };
-        loaderVersionChanged?: { from: string; to: string };
-        minecraftVersionChanged?: { from: string; to: string };
+        loaderChanged?: { from?: string; to?: string };
+        loaderVersionChanged?: { from?: string; to?: string };
+        minecraftVersionChanged?: { from?: string; to?: string };
       };
     }>;
     /** Import a modpack directly from a remote Gist/URL */

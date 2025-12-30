@@ -49,6 +49,7 @@ export interface Modpack {
   last_sync?: string;
   mod_ids: string[];
   disabled_mod_ids?: string[];
+  locked_mod_ids?: string[];
   remote_source?: {
     url: string;
     auto_check: boolean;
@@ -635,9 +636,9 @@ contextBridge.exposeInMainWorld("api", {
         unlockedMods: string[];
         hasVersionHistoryChanges?: boolean;
         // Metadata changes
-        loaderChanged?: { from: string; to: string };
-        loaderVersionChanged?: { from: string; to: string };
-        minecraftVersionChanged?: { from: string; to: string };
+        loaderChanged?: { from?: string; to?: string };
+        loaderVersionChanged?: { from?: string; to?: string };
+        minecraftVersionChanged?: { from?: string; to?: string };
       };
     }> => ipcRenderer.invoke("remote:checkUpdate", modpackId),
     /** Import a modpack directly from a remote Gist/URL */

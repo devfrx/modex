@@ -14,15 +14,15 @@ export interface ThemeCustomization {
   primaryHue: number; // -10 to 370: -10 to 0 = black, 0-360 = hue, 360-370 = white
   primarySaturation: number;
   primaryLightness: number; // Auto-calculated for normal hues, 0-100 for B/W
-  
+
   // Borders
   borderRadius: number; // in px
   borderWidth: number; // in px
-  
+
   // Effects
   glassEffect: boolean;
   shadowIntensity: number; // 0-100
-  
+
   // Style preset
   stylePreset: string;
 }
@@ -36,10 +36,10 @@ export interface StylePreset {
 }
 
 const defaultCustomization: ThemeCustomization = {
-  primaryHue: 153,  // Green/Emerald for Supabase style
+  primaryHue: 153, // Green/Emerald for Supabase style
   primarySaturation: 60,
   primaryLightness: 55, // Default lightness for normal colors
-  borderRadius: 8,  // Matches rounded-lg
+  borderRadius: 8, // Matches rounded-lg
   borderWidth: 1,
   glassEffect: false,
   shadowIntensity: 20,
@@ -178,7 +178,10 @@ function loadCustomization(): ThemeCustomization {
 
 function saveCustomization() {
   try {
-    localStorage.setItem("modex-theme-customization", JSON.stringify(customization.value));
+    localStorage.setItem(
+      "modex-theme-customization",
+      JSON.stringify(customization.value)
+    );
   } catch (e) {
     console.error("Failed to save theme customization:", e);
   }
@@ -231,24 +234,19 @@ export function useTheme() {
       sat = 0;
       lightness = 90 + whiteProgress * 10; // 90% to 100%
     } else {
-      // Normal hue range
-      lightness = 55; // Standard lightness for colored hues
+      // Normal hue range - use user's lightness (defaults to 55)
+      lightness = config.primaryLightness || 55;
     }
 
     // Primary color (HSL) - only apply if not using a preset theme's color
     // or if explicitly customized (different from default)
-    const isCustomColor = config.primaryHue !== 262 || config.primarySaturation !== 83;
+    const isCustomColor =
+      config.primaryHue !== 262 || config.primarySaturation !== 83;
     if (isCustomColor || currentTheme.value === "dark") {
       root.style.setProperty("--primary-hue", hue.toString());
       root.style.setProperty("--primary-sat", `${sat}%`);
-      root.style.setProperty(
-        "--primary",
-        `${hue} ${sat}% ${lightness}%`
-      );
-      root.style.setProperty(
-        "--ring",
-        `${hue} ${sat}% ${lightness}%`
-      );
+      root.style.setProperty("--primary", `${hue} ${sat}% ${lightness}%`);
+      root.style.setProperty("--ring", `${hue} ${sat}% ${lightness}%`);
     }
 
     // Border radius

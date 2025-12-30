@@ -20,6 +20,7 @@ import {
 } from "lucide-vue-next";
 import { ref } from "vue";
 import Button from "@/components/ui/Button.vue";
+import DefaultModpackImage from "@/assets/modpack-placeholder.png";
 
 interface ModpackWithCount {
   id: string;
@@ -99,16 +100,29 @@ function closeMoreActions() {
 <template>
   <div
     class="relative rounded-lg bg-card border border-border/40 group transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
-    :class="{ 'ring-2 ring-primary bg-primary/5': selected }" @click="$emit('toggle-select', modpack.id)"
-    @mouseleave="closeMoreActions">
+    :class="{
+      'ring-2 ring-primary bg-primary/5': selected,
+      'z-50': showMoreActions,
+    }" @click="$emit('toggle-select', modpack.id)" @mouseleave="closeMoreActions">
     <!-- Image Background -->
-    <div v-if="modpack.image_url" class="absolute inset-0 z-0 overflow-hidden rounded-lg">
-      <img :src="modpack.image_url.startsWith('http') || modpack.image_url.startsWith('file:')
-        ? modpack.image_url
-        : 'atom:///' + modpack.image_url.replace(/\\/g, '/')"
-        class="w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-all duration-300" alt=""
-        @error="handleImageError" />
-      <div class="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-card/50" />
+    <div class="absolute inset-0 z-0 overflow-hidden rounded-lg">
+      <img :src="modpack.image_url
+        ? modpack.image_url.startsWith('http') ||
+          modpack.image_url.startsWith('file:')
+          ? modpack.image_url
+          : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
+        : DefaultModpackImage
+        " class="w-full h-full object-cover transition-all duration-300" :class="modpack.image_url
+          ? 'opacity-30 group-hover:opacity-40'
+          : 'opacity-30 group-hover:opacity-40'
+          " alt="" @error="handleImageError" />
+      <div class="absolute inset-0" :class="modpack.image_url
+        ? 'bg-gradient-to-t from-card via-card/80 to-card/50'
+        : 'bg-gradient-to-t from-card/30 via-card/20 to-card/10'
+        " />
+
+      <!-- Subtle black overlay that fades to transparent -->
+      <div class="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/20 to-transparent" />
     </div>
 
     <!-- Running Indicator Border -->
@@ -127,14 +141,19 @@ function closeMoreActions() {
         class="transition-all duration-150 p-1.5 rounded-md bg-card/80 backdrop-blur-sm border border-border/40 hover:bg-card hover:border-border"
         :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         @click.stop="$emit('toggle-favorite', modpack.id)" title="Toggle favorite">
-        <Heart class="w-3.5 h-3.5 transition-colors"
-          :class="favorite ? 'fill-rose-500 text-rose-500' : 'text-muted-foreground hover:text-rose-500'" />
+        <Heart class="w-3.5 h-3.5 transition-colors" :class="favorite
+          ? 'fill-rose-500 text-rose-500'
+          : 'text-muted-foreground hover:text-rose-500'
+          " />
       </button>
 
       <!-- Selection Checkbox -->
       <div class="transition-all duration-150" :class="selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
         <div class="w-5 h-5 rounded-md border flex items-center justify-center transition-colors backdrop-blur-sm"
-          :class="selected ? 'bg-primary border-primary' : 'bg-card/80 border-border/50 hover:border-primary/50'">
+          :class="selected
+            ? 'bg-primary border-primary'
+            : 'bg-card/80 border-border/50 hover:border-primary/50'
+            ">
           <Check v-if="selected" class="w-3 h-3 text-primary-foreground" />
         </div>
       </div>
@@ -154,7 +173,9 @@ function closeMoreActions() {
           </h3>
           <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
             <Clock class="w-3 h-3" />
-            <span>{{ formatDate(modpack.updated_at || modpack.created_at) }}</span>
+            <span>{{
+              formatDate(modpack.updated_at || modpack.created_at)
+            }}</span>
           </div>
         </div>
       </div>
@@ -169,7 +190,9 @@ function closeMoreActions() {
         <!-- Mod count -->
         <div class="flex items-center gap-1 text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
           <span class="w-1 h-1 rounded-full bg-primary" />
-          <span class="text-foreground font-medium">{{ modpack.modCount }}</span>
+          <span class="text-foreground font-medium">{{
+            modpack.modCount
+          }}</span>
           <span>mods</span>
         </div>
 
@@ -259,26 +282,38 @@ function closeMoreActions() {
               class="absolute right-0 top-full mt-1 w-40 rounded-lg bg-card/95 backdrop-blur-xl border border-border/50 shadow-xl shadow-black/20 z-[100] py-1 overflow-hidden">
               <button
                 class="w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted transition-colors"
-                @click.stop="$emit('open-folder', modpack.id); closeMoreActions()">
+                @click.stop="
+                  $emit('open-folder', modpack.id);
+                closeMoreActions();
+                ">
                 <FolderOpen class="w-3.5 h-3.5 text-muted-foreground" />
                 Open Folder
               </button>
               <button
                 class="w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted transition-colors"
-                @click.stop="$emit('clone', modpack.id); closeMoreActions()">
+                @click.stop="
+                  $emit('clone', modpack.id);
+                closeMoreActions();
+                ">
                 <Copy class="w-3.5 h-3.5 text-muted-foreground" />
                 Clone
               </button>
               <button
                 class="w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-muted transition-colors"
-                @click.stop="$emit('convert', modpack.id); closeMoreActions()">
+                @click.stop="
+                  $emit('convert', modpack.id);
+                closeMoreActions();
+                ">
                 <RefreshCw class="w-3.5 h-3.5 text-muted-foreground" />
                 Convert Version
               </button>
               <div class="h-px bg-border/50 my-1" />
               <button
                 class="w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 hover:bg-destructive/10 text-destructive transition-colors"
-                @click.stop="$emit('delete', modpack.id); closeMoreActions()">
+                @click.stop="
+                  $emit('delete', modpack.id);
+                closeMoreActions();
+                ">
                 <Trash2 class="w-3.5 h-3.5" />
                 Delete
               </button>

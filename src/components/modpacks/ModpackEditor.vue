@@ -722,7 +722,7 @@ const installedProjectFiles = computed(() => {
   return map;
 });
 const RECENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-const isLibraryCollapsed = ref(false); // Collapsible library panel
+const isLibraryCollapsed = ref(true); // Collapsible library panel - collapsed by default
 
 // CurseForge Browse Dialog State
 const showCFSearch = ref(false);
@@ -1952,24 +1952,31 @@ function clearSelection() {
 async function bulkEnableSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
+  // Filter out locked mods first
+  const unlockedMods = [...selectedModIds.value].filter(id => !lockedModIds.value.has(id));
+  const skippedLocked = selectedModIds.value.size - unlockedMods.length;
+
+  // Check if all unlocked mods are already enabled
+  const modsToEnable = unlockedMods.filter(id => disabledModIds.value.has(id));
+  if (modsToEnable.length === 0) {
+    if (skippedLocked > 0) {
+      toast.warning("Cannot Enable", `All ${skippedLocked} selected mod(s) are locked`);
+    } else {
+      toast.info("All Already Enabled", "All selected mods are already enabled");
+    }
+    return;
+  }
+
   let successCount = 0;
   let failCount = 0;
-  let skippedLocked = 0;
-  for (const modId of selectedModIds.value) {
-    // Skip locked mods
-    if (lockedModIds.value.has(modId)) {
-      skippedLocked++;
-      continue;
-    }
-    if (disabledModIds.value.has(modId)) {
-      try {
-        await window.api.modpacks.toggleMod(props.modpackId, modId);
-        disabledModIds.value.delete(modId);
-        successCount++;
-      } catch (err) {
-        console.error(`Failed to enable mod ${modId}:`, err);
-        failCount++;
-      }
+  for (const modId of modsToEnable) {
+    try {
+      await window.api.modpacks.toggleMod(props.modpackId, modId);
+      disabledModIds.value.delete(modId);
+      successCount++;
+    } catch (err) {
+      console.error(`Failed to enable mod ${modId}:`, err);
+      failCount++;
     }
   }
   disabledModIds.value = new Set(disabledModIds.value);
@@ -1980,8 +1987,8 @@ async function bulkEnableSelected() {
   emit("update");
   if (failCount === 0 && skippedLocked === 0) {
     toast.success("Mods Enabled", `Enabled ${successCount} mod(s)`);
-  } else if (skippedLocked > 0) {
-    toast.warning("Mods Enabled", `Enabled ${successCount} mod(s), ${skippedLocked} locked mod(s) skipped`);
+  } else if (failCount === 0 && skippedLocked > 0) {
+    toast.success("Mods Enabled", `Enabled ${successCount} mod(s), ${skippedLocked} locked mod(s) skipped`);
   } else {
     toast.warning("Mods Enabled", `Enabled ${successCount} mod(s), ${failCount} failed`);
   }
@@ -1990,24 +1997,31 @@ async function bulkEnableSelected() {
 async function bulkDisableSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
+  // Filter out locked mods first
+  const unlockedMods = [...selectedModIds.value].filter(id => !lockedModIds.value.has(id));
+  const skippedLocked = selectedModIds.value.size - unlockedMods.length;
+
+  // Check if all unlocked mods are already disabled
+  const modsToDisable = unlockedMods.filter(id => !disabledModIds.value.has(id));
+  if (modsToDisable.length === 0) {
+    if (skippedLocked > 0) {
+      toast.warning("Cannot Disable", `All ${skippedLocked} selected mod(s) are locked`);
+    } else {
+      toast.info("All Already Disabled", "All selected mods are already disabled");
+    }
+    return;
+  }
+
   let successCount = 0;
   let failCount = 0;
-  let skippedLocked = 0;
-  for (const modId of selectedModIds.value) {
-    // Skip locked mods
-    if (lockedModIds.value.has(modId)) {
-      skippedLocked++;
-      continue;
-    }
-    if (!disabledModIds.value.has(modId)) {
-      try {
-        await window.api.modpacks.toggleMod(props.modpackId, modId);
-        disabledModIds.value.add(modId);
-        successCount++;
-      } catch (err) {
-        console.error(`Failed to disable mod ${modId}:`, err);
-        failCount++;
-      }
+  for (const modId of modsToDisable) {
+    try {
+      await window.api.modpacks.toggleMod(props.modpackId, modId);
+      disabledModIds.value.add(modId);
+      successCount++;
+    } catch (err) {
+      console.error(`Failed to disable mod ${modId}:`, err);
+      failCount++;
     }
   }
   disabledModIds.value = new Set(disabledModIds.value);
@@ -2018,8 +2032,8 @@ async function bulkDisableSelected() {
   emit("update");
   if (failCount === 0 && skippedLocked === 0) {
     toast.success("Mods Disabled", `Disabled ${successCount} mod(s)`);
-  } else if (skippedLocked > 0) {
-    toast.warning("Mods Disabled", `Disabled ${successCount} mod(s), ${skippedLocked} locked mod(s) skipped`);
+  } else if (failCount === 0 && skippedLocked > 0) {
+    toast.success("Mods Disabled", `Disabled ${successCount} mod(s), ${skippedLocked} locked mod(s) skipped`);
   } else {
     toast.warning("Mods Disabled", `Disabled ${successCount} mod(s), ${failCount} failed`);
   }
@@ -2028,11 +2042,16 @@ async function bulkDisableSelected() {
 async function bulkLockSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
+  // Check if all selected mods are already locked
+  const modsToLock = [...selectedModIds.value].filter(id => !lockedModIds.value.has(id));
+  if (modsToLock.length === 0) {
+    toast.info("All Already Locked", "All selected mods are already locked");
+    return;
+  }
+
   let successCount = 0;
   let failCount = 0;
-  for (const modId of selectedModIds.value) {
-    // Skip already locked mods
-    if (lockedModIds.value.has(modId)) continue;
+  for (const modId of modsToLock) {
     try {
       const result = await window.api.modpacks.setModLocked(props.modpackId, modId, true);
       if (result) {
@@ -2057,11 +2076,16 @@ async function bulkLockSelected() {
 async function bulkUnlockSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
+  // Check if all selected mods are already unlocked
+  const modsToUnlock = [...selectedModIds.value].filter(id => lockedModIds.value.has(id));
+  if (modsToUnlock.length === 0) {
+    toast.info("All Already Unlocked", "All selected mods are already unlocked");
+    return;
+  }
+
   let successCount = 0;
   let failCount = 0;
-  for (const modId of selectedModIds.value) {
-    // Skip already unlocked mods
-    if (!lockedModIds.value.has(modId)) continue;
+  for (const modId of modsToUnlock) {
     try {
       const result = await window.api.modpacks.setModLocked(props.modpackId, modId, false);
       if (result) {
@@ -2362,12 +2386,47 @@ async function checkForRemoteUpdates() {
         });
       }
 
+      if (result.changes.lockedMods) {
+        result.changes.lockedMods.forEach((name) => {
+          changes.push({ type: "lock", modId: name, modName: name });
+        });
+      }
+
+      if (result.changes.unlockedMods) {
+        result.changes.unlockedMods.forEach((name) => {
+          changes.push({ type: "unlock", modId: name, modName: name });
+        });
+      }
+
       // Show version control changes (includes config changes synced via version history)
       if (result.changes.hasVersionHistoryChanges) {
         changes.push({
           type: "version_control",
           modId: "version_history",
           modName: "Version Control History"
+        });
+      }
+
+      // Show loader/version metadata changes
+      if (result.changes.loaderChanged) {
+        changes.push({
+          type: "loader_change",
+          modId: "_loader_type_",
+          modName: `Loader: ${result.changes.loaderChanged.from || 'none'} → ${result.changes.loaderChanged.to || 'none'}`
+        });
+      }
+      if (result.changes.loaderVersionChanged) {
+        changes.push({
+          type: "loader_change",
+          modId: "_loader_version_",
+          modName: `Loader Version: ${result.changes.loaderVersionChanged.from || 'none'} → ${result.changes.loaderVersionChanged.to || 'none'}`
+        });
+      }
+      if (result.changes.minecraftVersionChanged) {
+        changes.push({
+          type: "loader_change",
+          modId: "_minecraft_version_",
+          modName: `Minecraft: ${result.changes.minecraftVersionChanged.from || 'none'} → ${result.changes.minecraftVersionChanged.to || 'none'}`
         });
       }
 
@@ -3461,7 +3520,7 @@ watch(
                     </div>
                     <div class="text-[11px] text-muted-foreground space-y-0.5">
                       <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
-                          }}</span></p>
+                      }}</span></p>
                       <p>Modpack: <span class="text-blue-400 font-medium">{{
                         extractLoaderVersion(modpack?.loader_version ||
                           'unknown') }}</span></p>

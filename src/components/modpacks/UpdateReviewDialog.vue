@@ -38,6 +38,12 @@ const enabledMods = computed(() =>
 const disabledMods = computed(() =>
   props.changes.filter((c) => c.type === "disable")
 );
+const lockedMods = computed(() =>
+  props.changes.filter((c) => c.type === "lock")
+);
+const unlockedMods = computed(() =>
+  props.changes.filter((c) => c.type === "unlock")
+);
 const versionControlChanges = computed(() =>
   props.changes.filter((c) => c.type === "version_control")
 );
@@ -148,6 +154,36 @@ async function handleConfirm() {
               class="p-2 rounded bg-amber-500/5 border border-amber-500/10 text-sm flex justify-between items-center gap-2 overflow-hidden">
               <span class="font-medium truncate min-w-0 flex-1">{{ mod.modName }}</span>
               <span class="text-xs text-amber-600/70 shrink-0">Disabled</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- locked -->
+        <div v-if="lockedMods.length > 0">
+          <h4 class="text-sm font-medium text-orange-500 mb-2 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+            Locked Mods ({{ lockedMods.length }})
+          </h4>
+          <div class="space-y-1">
+            <div v-for="mod in lockedMods" :key="mod.modId"
+              class="p-2 rounded bg-orange-500/5 border border-orange-500/10 text-sm flex justify-between items-center gap-2 overflow-hidden">
+              <span class="font-medium truncate min-w-0 flex-1">{{ mod.modName }}</span>
+              <span class="text-xs text-orange-600/70 shrink-0">Version Locked</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- unlocked -->
+        <div v-if="unlockedMods.length > 0">
+          <h4 class="text-sm font-medium text-teal-500 mb-2 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+            Unlocked Mods ({{ unlockedMods.length }})
+          </h4>
+          <div class="space-y-1">
+            <div v-for="mod in unlockedMods" :key="mod.modId"
+              class="p-2 rounded bg-teal-500/5 border border-teal-500/10 text-sm flex justify-between items-center gap-2 overflow-hidden">
+              <span class="font-medium truncate min-w-0 flex-1">{{ mod.modName }}</span>
+              <span class="text-xs text-teal-600/70 shrink-0">Version Unlocked</span>
             </div>
           </div>
         </div>

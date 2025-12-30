@@ -32,6 +32,16 @@ createApp(App)
   .use(router)
   .mount("#app")
   .$nextTick(() => {
+    // Hide the loading screen once Vue is mounted
+    const loadingScreen = document.getElementById("loading-screen");
+    if (loadingScreen) {
+      loadingScreen.classList.add("hidden");
+      // Remove from DOM after transition completes
+      setTimeout(() => {
+        loadingScreen.remove();
+      }, 300);
+    }
+    
     // Use contextBridge
     window.ipcRenderer.on("main-process-message", (_event, message) => {
       console.log(message);

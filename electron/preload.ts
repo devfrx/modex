@@ -598,7 +598,13 @@ contextBridge.exposeInMainWorld("api", {
         updatedMods: string[];
         enabledMods: string[];
         disabledMods: string[];
+        lockedMods: string[];
+        unlockedMods: string[];
         hasVersionHistoryChanges?: boolean;
+        // Metadata changes
+        loaderChanged?: { from: string; to: string };
+        loaderVersionChanged?: { from: string; to: string };
+        minecraftVersionChanged?: { from: string; to: string };
       };
     }> => ipcRenderer.invoke("remote:checkUpdate", modpackId),
     /** Import a modpack directly from a remote Gist/URL */

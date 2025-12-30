@@ -5,8 +5,121 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ModEx - Minecraft Mod Manager</title>
+    <style>
+      /* Loading screen styles - inline to show immediately */
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #0c0a09 0%, #1c1917 50%, #0c0a09 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+      }
+      /* Light theme support */
+      html.light #loading-screen {
+        background: linear-gradient(135deg, #fafaf9 0%, #f5f5f4 50%, #fafaf9 100%);
+      }
+      #loading-screen.hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+      .loading-logo {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 24px;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+      .loading-logo svg {
+        width: 100%;
+        height: 100%;
+        filter: drop-shadow(0 0 20px var(--loading-accent-glow, rgba(139, 92, 246, 0.5)));
+      }
+      .loading-logo svg path {
+        stroke: var(--loading-accent, #8b5cf6);
+      }
+      .loading-title {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 28px;
+        font-weight: 700;
+        color: #fafaf9;
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+      }
+      html.light .loading-title {
+        color: #1c1917;
+      }
+      .loading-subtitle {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        color: #a8a29e;
+        margin-bottom: 32px;
+      }
+      html.light .loading-subtitle {
+        color: #78716c;
+      }
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--loading-accent-dim, rgba(139, 92, 246, 0.2));
+        border-top-color: var(--loading-accent, #8b5cf6);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.85; }
+      }
+    </style>
+    <script>
+      // Apply theme and accent color immediately to avoid flash
+      (function() {
+        var savedTheme = localStorage.getItem("modex:theme") || "dark";
+        if (savedTheme === "system") {
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (!prefersDark) document.documentElement.classList.add("light");
+        } else if (savedTheme === "light") {
+          document.documentElement.classList.add("light");
+        }
+        // Apply accent color to loading screen
+        var accentColors = {
+          purple: { hex: "#8b5cf6", glow: "rgba(139, 92, 246, 0.5)", dim: "rgba(139, 92, 246, 0.2)" },
+          blue: { hex: "#3b82f6", glow: "rgba(59, 130, 246, 0.5)", dim: "rgba(59, 130, 246, 0.2)" },
+          green: { hex: "#22c55e", glow: "rgba(34, 197, 94, 0.5)", dim: "rgba(34, 197, 94, 0.2)" },
+          red: { hex: "#ef4444", glow: "rgba(239, 68, 68, 0.5)", dim: "rgba(239, 68, 68, 0.2)" },
+          orange: { hex: "#f97316", glow: "rgba(249, 115, 22, 0.5)", dim: "rgba(249, 115, 22, 0.2)" },
+          pink: { hex: "#ec4899", glow: "rgba(236, 72, 153, 0.5)", dim: "rgba(236, 72, 153, 0.2)" }
+        };
+        var savedAccent = localStorage.getItem("modex:accent") || "purple";
+        var accent = accentColors[savedAccent] || accentColors.purple;
+        document.documentElement.style.setProperty("--loading-accent", accent.hex);
+        document.documentElement.style.setProperty("--loading-accent-glow", accent.glow);
+        document.documentElement.style.setProperty("--loading-accent-dim", accent.dim);
+      })();
+    </script>
   </head>
   <body>
+    <!-- Loading screen shown before Vue mounts -->
+    <div id="loading-screen">
+      <div class="loading-logo">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="loading-title">ModEx</div>
+      <div class="loading-subtitle">Loading your mod manager...</div>
+      <div class="loading-spinner"></div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

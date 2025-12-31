@@ -5218,7 +5218,7 @@ watch(
       :message="`This will delete the game instance and all its data (mods, configs, saves). The modpack itself will not be affected. You can recreate the instance from the Play tab.`"
       confirm-text="Delete Instance"
       cancel-text="Cancel"
-      variant="destructive"
+      variant="danger"
       :loading="isDeletingInstance"
       @confirm="handleDeleteInstance"
       @cancel="showDeleteInstanceDialog = false"

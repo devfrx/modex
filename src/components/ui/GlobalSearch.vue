@@ -202,7 +202,7 @@ const searchResults = computed(() => {
             name: inst.name,
             type: "instance",
             icon: Gamepad2,
-            subtitle: `Instance • ${inst.loaderType || "Unknown"} ${inst.loaderVersion || ""} • ${inst.minecraftVersion || "Unknown"}`,
+            subtitle: `Instance • ${inst.loader || "Unknown"} ${inst.loaderVersion || ""} • ${inst.minecraftVersion || "Unknown"}`,
             data: inst,
         });
     }

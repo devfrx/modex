@@ -1097,10 +1097,10 @@ async function initializeBackend() {
                 reason: "missing"
               });
             } else {
-              unrestorableMods.push({ 
-                modId, 
-                modName: snapshot?.name || modId, 
-                reason: "No CurseForge info available" 
+              unrestorableMods.push({
+                modId,
+                modName: snapshot?.name || modId,
+                reason: "No CurseForge info available"
               });
             }
           }
@@ -1194,7 +1194,7 @@ async function initializeBackend() {
         const loaderUpdate: { loader?: string; loader_version?: string } = {};
         if (version.loader) loaderUpdate.loader = version.loader;
         if (version.loader_version) loaderUpdate.loader_version = version.loader_version;
-        
+
         await metadataManager.updateModpack(modpackId, loaderUpdate);
         console.log(`[Rollback] Restored loader: ${version.loader} ${version.loader_version}`);
 
@@ -2320,10 +2320,10 @@ async function initializeBackend() {
               // Update: check if version history was imported from manifest
               // We need to check if the manifest HAD version history that was imported
               // If the manifest included version_history, those versions are now in the local history
-              const manifestHadVersionHistory = !!(manifest.version_history && 
-                (Array.isArray(manifest.version_history) ? manifest.version_history.length > 0 : 
-                 manifest.version_history.versions?.length > 0));
-              
+              const manifestHadVersionHistory = !!(manifest.version_history &&
+                (Array.isArray(manifest.version_history) ? manifest.version_history.length > 0 :
+                  manifest.version_history.versions?.length > 0));
+
               // Always create a version after update to mark current state as "synced"
               // This ensures no "unsaved changes" appear after downloading an update
               const changesSummary = importResult.changes
@@ -3067,23 +3067,23 @@ async function initializeBackend() {
     overridesZipPath?: string;
   }) => {
     console.log(`[instance:syncModpack] Called with instanceId: ${instanceId}, modpackId: ${modpackId}`);
-    
+
     // Get modpack and mods
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) {
       console.log(`[instance:syncModpack] Modpack not found: ${modpackId}`);
       return { success: false, modsDownloaded: 0, modsSkipped: 0, configsCopied: 0, configsSkipped: 0, errors: ["Modpack not found"], warnings: [] };
     }
-    
+
     console.log(`[instance:syncModpack] Found modpack: ${modpack.name}, mod_ids count: ${modpack.mod_ids?.length}, disabled_mod_ids: ${JSON.stringify(modpack.disabled_mod_ids)}`);
 
     // Update instance loader and loaderVersion to match modpack (so next launch installs correct loader)
     const instance = await instanceService.getInstance(instanceId);
     if (instance) {
-      const needsLoaderUpdate = 
-        instance.loader !== modpack.loader || 
+      const needsLoaderUpdate =
+        instance.loader !== modpack.loader ||
         instance.loaderVersion !== modpack.loader_version;
-      
+
       if (needsLoaderUpdate) {
         console.log(`[instance:syncModpack] Updating instance loader: ${instance.loader}/${instance.loaderVersion} -> ${modpack.loader}/${modpack.loader_version}`);
         await instanceService.updateInstance(instanceId, {
@@ -3097,7 +3097,7 @@ async function initializeBackend() {
     const disabledModIds = new Set(modpack.disabled_mod_ids || []);
 
     console.log(`[instance:syncModpack] Modpack has ${mods.length} mods, ${disabledModIds.size} disabled`);
-    
+
     // Log mods without CF IDs (potential problems)
     const modsWithoutCFIds = mods.filter(m => !m.cf_project_id || !m.cf_file_id);
     if (modsWithoutCFIds.length > 0) {
@@ -3205,7 +3205,7 @@ async function initializeBackend() {
       currentMod?: string;
       gameProcessRunning: boolean;
     }> = [];
-    
+
     for (const [_, info] of games) {
       result.push({
         instanceId: info.instanceId,
@@ -3219,7 +3219,7 @@ async function initializeBackend() {
         gameProcessRunning: info.gameProcessRunning || false
       });
     }
-    
+
     return result;
   });
 
@@ -3278,13 +3278,13 @@ async function initializeBackend() {
     const overridesPath = modpack.overridesPath;
 
     const syncStatus = await instanceService.checkSyncStatus(instanceId, modData, modpack.disabled_mod_ids || [], overridesPath);
-    
+
     // Check loader version mismatch
     const instance = await instanceService.getInstance(instanceId);
-    const loaderVersionMismatch = instance 
+    const loaderVersionMismatch = instance
       ? (instance.loader !== modpack.loader || instance.loaderVersion !== modpack.loader_version)
       : false;
-    
+
     return {
       ...syncStatus,
       loaderVersionMismatch,
@@ -3512,10 +3512,10 @@ async function initializeBackend() {
       );
 
       // Check loader version mismatch (not checked by instanceService.checkSyncStatus)
-      const loaderVersionMismatch = 
-        instance.loader !== modpack.loader || 
+      const loaderVersionMismatch =
+        instance.loader !== modpack.loader ||
         instance.loaderVersion !== modpack.loader_version;
-      
+
       const effectiveNeedsSync = syncStatus.needsSync || loaderVersionMismatch;
       const effectiveTotalDifferences = syncStatus.totalDifferences + (loaderVersionMismatch ? 1 : 0);
 
@@ -3991,12 +3991,16 @@ async function initializeBackend() {
     const os = await import("os");
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
+    const totalMB = Math.floor(totalMem / (1024 * 1024));
+    // Suggested max: leave 4GB for system, or 25% of RAM, whichever is larger
+    const reserveForSystem = Math.max(4096, Math.floor(totalMB * 0.25));
+    const suggestedMax = Math.max(4096, totalMB - reserveForSystem);
     return {
-      total: Math.floor(totalMem / (1024 * 1024)), // MB
+      total: totalMB, // MB
       free: Math.floor(freeMem / (1024 * 1024)), // MB
       used: Math.floor((totalMem - freeMem) / (1024 * 1024)), // MB
-      // Suggested max for Minecraft (leave 2GB for system)
-      suggestedMax: Math.max(4096, Math.floor((totalMem / (1024 * 1024)) - 2048))
+      // Suggested max for Minecraft (conservative to leave room for system)
+      suggestedMax: suggestedMax
     };
   });
 }

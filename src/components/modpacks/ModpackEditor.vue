@@ -204,6 +204,8 @@ const gameLoadingMessage = ref("");
 
 // Instance Settings (RAM & JVM Args)
 const showInstanceSettings = ref(false);
+const showDeleteInstanceDialog = ref(false);
+const isDeletingInstance = ref(false);
 const memoryMin = ref(2048);
 const memoryMax = ref(4096);
 const customJavaArgs = ref("");
@@ -1656,6 +1658,18 @@ async function handleOpenInstanceFolder(subfolder?: string) {
   await openInstanceFolder(instance.value.id, subfolder);
 }
 
+// Open instance settings dialog with current values
+function openInstanceSettings() {
+  if (!instance.value) return;
+  
+  // Load current values from instance
+  memoryMin.value = instance.value.memory?.min || 2048;
+  memoryMax.value = instance.value.memory?.max || 4096;
+  customJavaArgs.value = instance.value.javaArgs || "";
+  
+  showInstanceSettings.value = true;
+}
+
 // Save instance settings
 async function saveInstanceSettings() {
   if (!instance.value) return;
@@ -1665,10 +1679,41 @@ async function saveInstanceSettings() {
       memory: { min: memoryMin.value, max: memoryMax.value },
       javaArgs: customJavaArgs.value || undefined
     });
+    
+    // Update local instance state with new values
+    instance.value = {
+      ...instance.value,
+      memory: { min: memoryMin.value, max: memoryMax.value },
+      javaArgs: customJavaArgs.value || undefined
+    };
+    
     toast.success("Settings Saved", "Memory and JVM arguments updated");
     showInstanceSettings.value = false;
   } catch (err: any) {
     toast.error("Failed to save", err.message);
+  }
+}
+
+// Delete instance
+async function handleDeleteInstance() {
+  if (!instance.value) return;
+
+  isDeletingInstance.value = true;
+  try {
+    const success = await window.api.instances.delete(instance.value.id);
+    if (success) {
+      toast.success("Instance Deleted", "You can recreate it from the Play tab");
+      instance.value = null;
+      instanceStats.value = null;
+      instanceSyncStatus.value = null;
+    } else {
+      toast.error("Failed to delete instance");
+    }
+  } catch (err: any) {
+    toast.error("Failed to delete", err.message);
+  } finally {
+    isDeletingInstance.value = false;
+    showDeleteInstanceDialog.value = false;
   }
 }
 
@@ -2952,11 +2997,6 @@ watch(
                 @click="selectImage" title="Set cover image">
                 <ImagePlus class="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-xl hover:bg-muted/60"
-                :disabled="isCheckingAllUpdates" title="Check for mod updates" @click="checkAllUpdates">
-                <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingAllUpdates }" />
-              </Button>
-              <div class="hidden sm:block w-px h-6 bg-border/40 mx-1"></div>
               <Button variant="outline" size="sm"
                 class="hidden md:flex h-9 px-4 gap-2 rounded-xl border-border/50 hover:bg-muted/60"
                 @click="$emit('export')">
@@ -3404,7 +3444,7 @@ watch(
               <!-- Right: Actions -->
               <div class="flex items-center gap-2">
                 <template v-if="instance">
-                  <button @click="showInstanceSettings = true"
+                  <button @click="openInstanceSettings()"
                     class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
                     title="Settings">
                     <Sliders class="w-4 h-4" />
@@ -3413,6 +3453,11 @@ watch(
                     class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
                     title="Open Folder">
                     <FolderOpen class="w-4 h-4" />
+                  </button>
+                  <button @click="showDeleteInstanceDialog = true"
+                    class="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    title="Delete Instance">
+                    <Trash2 class="w-4 h-4" />
                   </button>
                 </template>
               </div>
@@ -3929,15 +3974,6 @@ watch(
                 </button>
               </div>
 
-              <!-- Center: Search -->
-              <div class="flex-1 max-w-md">
-                <div class="relative">
-                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                  <input v-model="searchQueryInstalled" placeholder="Search installed..."
-                    class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
-                </div>
-              </div>
-
               <!-- Right: Actions -->
               <div class="flex items-center gap-2">
                 <!-- Quick Filters -->
@@ -4005,6 +4041,19 @@ watch(
                     {{ recentlyAddedCount }}
                   </button>
                 </div>
+
+                <!-- Check Updates Button - For all content types with CurseForge support -->
+                <button 
+                  @click="checkAllUpdates"
+                  :disabled="isCheckingAllUpdates"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all"
+                  :class="isCheckingAllUpdates 
+                    ? 'bg-primary/20 text-primary cursor-wait' 
+                    : 'bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary'"
+                  :title="isCheckingAllUpdates ? 'Checking for updates...' : 'Check all resources for updates'">
+                  <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isCheckingAllUpdates }" />
+                  <span>{{ isCheckingAllUpdates ? 'Checking...' : 'Check Updates' }}</span>
+                </button>
 
                 <!-- Library Toggle -->
                 <button @click="isLibraryCollapsed = !isLibraryCollapsed"
@@ -4087,19 +4136,38 @@ watch(
             <!-- Left: Installed Mods -->
             <div class="flex-1 border-r border-border/50 flex flex-col"
               :class="isLibraryCollapsed ? '' : 'max-w-[60%]'">
-              <!-- Compact Header -->
-              <div class="shrink-0 px-3 py-2 border-b border-border/20 bg-muted/10 flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-medium text-muted-foreground">
-                    {{ filteredInstalledMods.length }} installed
-                    <span v-if="disabledModCount > 0" class="text-amber-500">({{ disabledModCount }} disabled)</span>
-                  </span>
-                  <span v-if="isCheckingAllUpdates" class="text-xs text-primary flex items-center gap-1">
-                    <RefreshCw class="w-3 h-3 animate-spin" />
-                    Checking...
-                  </span>
-                </div>
-                <div class="flex items-center gap-2">
+              <!-- Compact Header with Search -->
+              <div class="shrink-0 px-3 py-2 border-b border-border/20 bg-muted/10">
+                <div class="flex items-center justify-between gap-3">
+                  <!-- Left: Count & Status -->
+                  <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-xs font-medium text-muted-foreground">
+                      {{ filteredInstalledMods.length }} installed
+                      <span v-if="disabledModCount > 0" class="text-amber-500">({{ disabledModCount }} disabled)</span>
+                    </span>
+                  </div>
+
+                  <!-- Center: Search Bar -->
+                  <div class="flex-1 max-w-xs">
+                    <div class="relative group">
+                      <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors" />
+                      <input 
+                        v-model="searchQueryInstalled" 
+                        placeholder="Search resources..."
+                        class="w-full h-8 pl-9 pr-8 text-sm rounded-lg bg-background/80 border border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:text-muted-foreground/50" 
+                      />
+                      <button 
+                        v-if="searchQueryInstalled" 
+                        @click="searchQueryInstalled = ''"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X class="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Right: Sort & Select -->
+                  <div class="flex items-center gap-2 shrink-0">
                   <!-- Sort buttons -->
                   <div class="flex rounded-md border border-border/40 overflow-hidden bg-muted/20">
                     <button class="h-6 text-[10px] px-2.5 transition-colors font-medium" :class="sortBy === 'name'
@@ -4130,6 +4198,7 @@ watch(
                     <span class="text-muted-foreground/50">|</span>
                     <button class="text-muted-foreground hover:text-foreground transition-colors"
                       @click="clearSelection">None</button>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -5141,6 +5210,19 @@ watch(
         <Button @click="saveInstanceSettings">Save Settings</Button>
       </template>
     </Dialog>
+
+    <!-- Delete Instance Confirmation Dialog -->
+    <ConfirmDialog
+      :open="showDeleteInstanceDialog"
+      title="Delete Instance"
+      :message="`This will delete the game instance and all its data (mods, configs, saves). The modpack itself will not be affected. You can recreate the instance from the Play tab.`"
+      confirm-text="Delete Instance"
+      cancel-text="Cancel"
+      variant="destructive"
+      :loading="isDeletingInstance"
+      @confirm="handleDeleteInstance"
+      @cancel="showDeleteInstanceDialog = false"
+    />
 
     <!-- Sync Confirmation Dialog -->
     <div v-if="showSyncConfirmDialog"

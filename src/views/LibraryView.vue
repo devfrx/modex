@@ -1436,15 +1436,16 @@ onMounted(() => {
 
           <!-- Right: Actions -->
           <div class="flex items-center gap-1.5 sm:gap-2 ml-auto shrink-0">
-            <Button @click="showUpdatesDialog = true" :disabled="!isElectron()" variant="secondary" size="sm"
-              class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 shadow-sm hover:shadow transition-all"
+            <Button @click="router.push('/library/search')" variant="default" size="sm"
+              class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-medium">
+              <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden sm:inline">Browse</span>
+            </Button>
+            <Button @click="showUpdatesDialog = true" :disabled="!isElectron()" variant="outline" size="sm"
+              class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 transition-all"
               title="Check for mod updates">
               <ArrowUpCircle class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500" />
-              <span class="hidden lg:inline text-xs font-medium">Check Updates</span>
-            </Button>
-            <Button @click="router.push('/library/search')" variant="default" size="sm"
-              class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
-              <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden lg:inline text-xs">Updates</span>
             </Button>
           </div>
         </div>

@@ -26,24 +26,40 @@ import {
     Share2,
     ExternalLink,
     Globe,
+    Play,
+    Image,
+    Sparkles,
+    Download,
+    RefreshCw,
+    Gamepad2,
+    Layers,
+    FileText,
+    Plus,
 } from "lucide-vue-next";
-import type { Mod, Modpack } from "@/types/electron";
+import type { Mod, Modpack, ModexInstance } from "@/types";
 import { useToast } from "@/composables/useToast";
+import { useInstances } from "@/composables/useInstances";
 
 const router = useRouter();
 const toast = useToast();
+const { launchInstance, smartLaunch, openInstanceFolder } = useInstances();
+
 const isOpen = ref(false);
 const searchQuery = ref("");
 const inputRef = ref<HTMLInputElement | null>(null);
 const selectedIndex = ref(0);
 
 // Context menu state
-const contextMenuTarget = ref<{ id: string; type: string; x: number; y: number } | null>(null);
+const contextMenuTarget = ref<{ id: string; type: string; x: number; y: number; data?: any } | null>(null);
 const showContextMenu = ref(false);
 
 // Data
 const mods = ref<Mod[]>([]);
 const modpacks = ref<Modpack[]>([]);
+const instances = ref<ModexInstance[]>([]);
+
+// Result type union
+type ResultType = "mod" | "modpack" | "instance" | "resourcepack" | "shader" | "nav" | "action";
 
 // Quick navigation items
 const quickNav = [
@@ -53,11 +69,44 @@ const quickNav = [
     { id: "organize", name: "Organize", icon: FolderTree, route: "/organize", type: "nav" },
     { id: "stats", name: "Statistics", icon: BarChart3, route: "/stats", type: "nav" },
     { id: "sandbox", name: "Sandbox", icon: LayoutGrid, route: "/sandbox", type: "nav" },
-    { id: "browse-mods", name: "Browse Mods", icon: Globe, route: "/library?action=browse", type: "nav" },
-    { id: "browse-modpacks", name: "Browse Modpacks", icon: Package, route: "/modpacks?action=browse", type: "nav" },
     { id: "guide", name: "Guide", icon: BookOpen, route: "/guide", type: "nav" },
     { id: "settings", name: "Settings", icon: Settings, route: "/settings", type: "nav" },
 ];
+
+// Quick actions
+const quickActions = [
+    { id: "create-modpack", name: "Create New Modpack", icon: Plus, action: "create-modpack", type: "action" },
+    { id: "browse-mods", name: "Browse CurseForge Mods", icon: Globe, route: "/library?action=browse", type: "action" },
+    { id: "browse-modpacks", name: "Browse CurseForge Modpacks", icon: Package, route: "/modpacks?action=browse", type: "action" },
+    { id: "import-modpack", name: "Import Modpack", icon: Download, action: "import-modpack", type: "action" },
+];
+
+// Icon map for different content types
+function getIconForType(type: ResultType, contentType?: string) {
+    if (type === "mod") {
+        if (contentType === "resourcepack") return Image;
+        if (contentType === "shader") return Sparkles;
+        return Box;
+    }
+    if (type === "resourcepack") return Image;
+    if (type === "shader") return Sparkles;
+    if (type === "modpack") return Package;
+    if (type === "instance") return Gamepad2;
+    return Layers;
+}
+
+// Color class for different content types
+function getColorClassForType(type: ResultType, contentType?: string) {
+    if (type === "mod" && contentType === "resourcepack") return "bg-blue-500/10 text-blue-400";
+    if (type === "mod" && contentType === "shader") return "bg-pink-500/10 text-pink-400";
+    if (type === "resourcepack") return "bg-blue-500/10 text-blue-400";
+    if (type === "shader") return "bg-pink-500/10 text-pink-400";
+    if (type === "mod") return "bg-primary/10 text-primary";
+    if (type === "modpack") return "bg-primary/10 text-primary";
+    if (type === "instance") return "bg-green-500/10 text-green-400";
+    if (type === "action") return "bg-amber-500/10 text-amber-400";
+    return "bg-muted/50 text-muted-foreground";
+}
 
 // Search results
 const searchResults = computed(() => {
@@ -65,41 +114,63 @@ const searchResults = computed(() => {
     const results: Array<{
         id: string;
         name: string;
-        type: "mod" | "modpack" | "nav";
+        type: ResultType;
         icon: any;
-        route: string;
+        route?: string;
+        action?: string;
         subtitle?: string;
+        contentType?: string;
+        data?: any;
     }> = [];
 
     if (!query) {
-        // Show quick nav when empty
-        return quickNav.map((item) => ({
-            id: item.id,
-            name: item.name,
-            type: item.type as "nav",
-            icon: item.icon,
-            route: item.route,
-            subtitle: undefined as string | undefined,
-        }));
+        // Show quick actions first, then nav
+        for (const item of quickActions) {
+            results.push({
+                id: item.id,
+                name: item.name,
+                type: item.type as ResultType,
+                icon: item.icon,
+                route: item.route,
+                action: item.action,
+            });
+        }
+        for (const item of quickNav) {
+            results.push({
+                id: item.id,
+                name: item.name,
+                type: item.type as ResultType,
+                icon: item.icon,
+                route: item.route,
+            });
+        }
+        return results;
     }
 
-    // Search mods
+    // Search mods (including resourcepacks and shaders)
     const matchingMods = mods.value
         .filter(
             (mod) =>
                 mod.name.toLowerCase().includes(query) ||
                 mod.slug?.toLowerCase().includes(query)
         )
-        .slice(0, 5);
+        .slice(0, 8);
 
     for (const mod of matchingMods) {
+        const contentType = mod.content_type || "mod";
+        let typeLabel = "Mod";
+        if (contentType === "resourcepack") typeLabel = "Resource Pack";
+        else if (contentType === "shader") typeLabel = "Shader";
+
         results.push({
             id: `mod-${mod.id}`,
             name: mod.name,
             type: "mod",
-            icon: Box,
+            icon: getIconForType("mod", contentType),
             route: `/library?mod=${mod.id}`,
-            subtitle: `${mod.loader} • ${mod.game_version || "Unknown version"}`,
+            subtitle: `${typeLabel} • ${mod.loader || "Unknown"} • ${mod.game_version || "Unknown version"}`,
+            contentType,
+            data: mod,
         });
     }
 
@@ -116,6 +187,23 @@ const searchResults = computed(() => {
             icon: Package,
             route: `/modpacks?id=${pack.id}`,
             subtitle: `${pack.loader || "Unknown"} • ${pack.minecraft_version || "Unknown"}`,
+            data: pack,
+        });
+    }
+
+    // Search instances
+    const matchingInstances = instances.value
+        .filter((inst) => inst.name.toLowerCase().includes(query))
+        .slice(0, 3);
+
+    for (const inst of matchingInstances) {
+        results.push({
+            id: `instance-${inst.id}`,
+            name: inst.name,
+            type: "instance",
+            icon: Gamepad2,
+            subtitle: `Instance • ${inst.loaderType || "Unknown"} ${inst.loaderVersion || ""} • ${inst.minecraftVersion || "Unknown"}`,
+            data: inst,
         });
     }
 
@@ -134,6 +222,22 @@ const searchResults = computed(() => {
         });
     }
 
+    // Search quick actions
+    const matchingActions = quickActions.filter((item) =>
+        item.name.toLowerCase().includes(query)
+    );
+
+    for (const item of matchingActions) {
+        results.push({
+            id: item.id,
+            name: item.name,
+            type: "action",
+            icon: item.icon,
+            route: item.route,
+            action: item.action,
+        });
+    }
+
     return results;
 });
 
@@ -146,12 +250,14 @@ watch(searchResults, () => {
 async function loadData() {
     if (!window.api) return;
     try {
-        const [modsData, modpacksData] = await Promise.all([
+        const [modsData, modpacksData, instancesData] = await Promise.all([
             window.api.mods.getAll(),
             window.api.modpacks.getAll(),
+            window.api.instances.getAll(),
         ]);
         mods.value = modsData;
         modpacks.value = modpacksData;
+        instances.value = instancesData || [];
     } catch (err) {
         console.error("Failed to load data for search:", err);
     }
@@ -177,13 +283,14 @@ function openContextMenu(event: MouseEvent, result: (typeof searchResults.value)
     event.preventDefault();
     event.stopPropagation();
 
-    if (result.type === "nav") return; // No context menu for nav items
+    if (result.type === "nav" || result.type === "action") return; // No context menu for nav/action items
 
     contextMenuTarget.value = {
         id: result.id,
         type: result.type,
         x: event.clientX,
         y: event.clientY,
+        data: result.data,
     };
     showContextMenu.value = true;
 }
@@ -197,8 +304,8 @@ function closeContextMenu() {
 async function handleContextAction(action: string) {
     if (!contextMenuTarget.value) return;
 
-    const { id, type } = contextMenuTarget.value;
-    const actualId = id.replace(/^(mod-|pack-)/, "");
+    const { id, type, data } = contextMenuTarget.value;
+    const actualId = id.replace(/^(mod-|pack-|instance-)/, "");
 
     closeContextMenu();
 
@@ -214,8 +321,34 @@ async function handleContextAction(action: string) {
 
         case "edit":
             if (type === "modpack") {
-                router.push(`/modpacks?id=${actualId}`);
+                // Navigate to modpack detail page for editing
+                router.push(`/modpacks/${actualId}`);
                 close();
+            }
+            break;
+
+        case "play":
+            if (type === "modpack" && window.api) {
+                try {
+                    // Use smart launch for modpacks
+                    const pack = modpacks.value.find(p => p.id === actualId);
+                    if (pack) {
+                        toast.info("Launching...", `Starting ${pack.name}`);
+                        close();
+                        // Navigate to modpack with play tab
+                        router.push(`/modpacks?id=${actualId}&tab=play&autolaunch=true`);
+                    }
+                } catch (err) {
+                    toast.error("Failed to launch");
+                }
+            } else if (type === "instance" && data) {
+                try {
+                    toast.info("Launching...", `Starting ${data.name}`);
+                    close();
+                    await launchInstance(data.id);
+                } catch (err) {
+                    toast.error("Failed to launch instance");
+                }
             }
             break;
 
@@ -250,14 +383,13 @@ async function handleContextAction(action: string) {
             break;
 
         case "open-source":
-            if (type === "mod") {
-                const mod = mods.value.find((m) => m.id === actualId);
-                if (mod?.website_url) {
-                    window.open(mod.website_url, "_blank");
-                } else if (mod?.cf_project_id) {
-                    window.open(`https://www.curseforge.com/minecraft/mc-mods/${mod.slug || mod.cf_project_id}`, "_blank");
-                } else if (mod?.mr_project_id) {
-                    window.open(`https://modrinth.com/mod/${mod.slug || mod.mr_project_id}`, "_blank");
+            if (type === "mod" && data) {
+                if (data.website_url) {
+                    window.open(data.website_url, "_blank");
+                } else if (data.cf_project_id) {
+                    window.open(`https://www.curseforge.com/minecraft/mc-mods/${data.slug || data.cf_project_id}`, "_blank");
+                } else if (data.mr_project_id) {
+                    window.open(`https://modrinth.com/mod/${data.slug || data.mr_project_id}`, "_blank");
                 } else {
                     toast.error("Source URL not available");
                 }
@@ -268,6 +400,12 @@ async function handleContextAction(action: string) {
             if (type === "modpack" && window.api) {
                 try {
                     await window.api.modpacks.openFolder(actualId);
+                } catch (err) {
+                    toast.error("Failed to open folder");
+                }
+            } else if (type === "instance") {
+                try {
+                    await openInstanceFolder(actualId);
                 } catch (err) {
                     toast.error("Failed to open folder");
                 }
@@ -289,6 +427,14 @@ async function handleContextAction(action: string) {
             }
             break;
 
+        case "export":
+            if (type === "modpack" && window.api) {
+                // Navigate to modpack with export action
+                close();
+                router.push(`/modpacks?id=${actualId}&action=export`);
+            }
+            break;
+
         case "delete":
             if (type === "mod" && window.api) {
                 try {
@@ -306,14 +452,55 @@ async function handleContextAction(action: string) {
                 } catch (err) {
                     toast.error("Failed to delete modpack");
                 }
+            } else if (type === "instance" && window.api) {
+                try {
+                    await window.api.instances.delete(actualId);
+                    toast.success("Instance deleted");
+                    loadData();
+                } catch (err) {
+                    toast.error("Failed to delete instance");
+                }
             }
             break;
     }
 }
 
-function handleSelect(result: (typeof searchResults.value)[0]) {
-    router.push(result.route);
-    close();
+async function handleSelect(result: (typeof searchResults.value)[0]) {
+    // Handle actions
+    if (result.action) {
+        switch (result.action) {
+            case "create-modpack":
+                router.push("/modpacks?action=create");
+                break;
+            case "import-modpack":
+                router.push("/modpacks?action=import");
+                break;
+            default:
+                if (result.route) {
+                    router.push(result.route);
+                }
+        }
+        close();
+        return;
+    }
+
+    // Handle instances (no route, need to launch or show)
+    if (result.type === "instance" && result.data) {
+        // Navigate to the linked modpack if exists
+        if (result.data.modpackId) {
+            router.push(`/modpacks?id=${result.data.modpackId}&tab=play`);
+        } else {
+            toast.info("Instance has no linked modpack");
+        }
+        close();
+        return;
+    }
+
+    // Handle routes
+    if (result.route) {
+        router.push(result.route);
+        close();
+    }
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -396,27 +583,66 @@ defineExpose({ open, close });
                         </div>
 
                         <div v-else class="py-1.5">
-                            <!-- Group by type -->
+                            <!-- Section headers when no search query -->
                             <template v-if="!searchQuery">
                                 <div
                                     class="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
-                                    Quick Navigation
+                                    Quick Actions
+                                </div>
+                                
+                                <!-- Quick actions -->
+                                <div v-for="(result, index) in searchResults.slice(0, quickActions.length)" :key="result.id"
+                                    class="group w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
+                                    :class="selectedIndex === index
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
+                                    @mouseenter="selectedIndex = index"
+                                    style="width: calc(100% - 12px)">
+                                    <div class="p-1.5 rounded-md shrink-0 bg-amber-500/10 text-amber-400">
+                                        <component :is="result.icon" class="w-3.5 h-3.5" />
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-medium truncate">{{ result.name }}</div>
+                                    </div>
+                                    <ArrowRight v-if="selectedIndex === index"
+                                        class="w-3.5 h-3.5 text-primary shrink-0" />
+                                </div>
+
+                                <div
+                                    class="px-3 py-1.5 mt-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
+                                    Navigation
+                                </div>
+                                
+                                <!-- Navigation items -->
+                                <div v-for="(result, index) in searchResults.slice(quickActions.length)" :key="result.id"
+                                    class="group w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
+                                    :class="selectedIndex === (index + quickActions.length)
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
+                                    @mouseenter="selectedIndex = index + quickActions.length"
+                                    style="width: calc(100% - 12px)">
+                                    <div class="p-1.5 rounded-md shrink-0 bg-muted/50 text-muted-foreground">
+                                        <component :is="result.icon" class="w-3.5 h-3.5" />
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-medium truncate">{{ result.name }}</div>
+                                    </div>
+                                    <ArrowRight v-if="selectedIndex === (index + quickActions.length)"
+                                        class="w-3.5 h-3.5 text-primary shrink-0" />
                                 </div>
                             </template>
 
+                            <!-- Search results with mixed content -->
+                            <template v-else>
+
                             <div v-for="(result, index) in searchResults" :key="result.id"
-                                class="w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
+                                class="group w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
                                 :class="selectedIndex === index
                                     ? 'bg-primary/10 text-primary'
                                     : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
                                 @mouseenter="selectedIndex = index" @contextmenu="openContextMenu($event, result)"
                                 style="width: calc(100% - 12px)">
-                                <div class="p-1.5 rounded-md shrink-0" :class="result.type === 'mod'
-                                    ? 'bg-primary/10 text-primary'
-                                    : result.type === 'modpack'
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'bg-muted/50 text-muted-foreground'
-                                    ">
+                                <div class="p-1.5 rounded-md shrink-0" :class="getColorClassForType(result.type as ResultType, result.contentType)">
                                     <component :is="result.icon" class="w-3.5 h-3.5" />
                                 </div>
                                 <div class="flex-1 min-w-0">
@@ -425,8 +651,14 @@ defineExpose({ open, close });
                                         {{ result.subtitle }}
                                     </div>
                                 </div>
-                                <!-- Action button for non-nav items -->
-                                <button v-if="result.type !== 'nav'" @click.stop="openContextMenu($event, result)"
+                                <!-- Type badge -->
+                                <span v-if="result.type === 'instance'" 
+                                    class="px-1.5 py-0.5 rounded text-[9px] font-medium uppercase bg-green-500/10 text-green-400">
+                                    Instance
+                                </span>
+                                <!-- Action button for contextual items -->
+                                <button v-if="result.type !== 'nav' && result.type !== 'action'" 
+                                    @click.stop="openContextMenu($event, result)"
                                     class="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
                                     :class="{ 'opacity-100': selectedIndex === index }">
                                     <MoreHorizontal class="w-3.5 h-3.5" />
@@ -434,6 +666,7 @@ defineExpose({ open, close });
                                 <ArrowRight v-else-if="selectedIndex === index"
                                     class="w-3.5 h-3.5 text-primary shrink-0" />
                             </div>
+                            </template>
                         </div>
                     </div>
 
@@ -462,7 +695,7 @@ defineExpose({ open, close });
                 <!-- Context Menu -->
                 <Transition name="fade">
                     <div v-if="showContextMenu && contextMenuTarget"
-                        class="fixed z-[110] min-w-[160px] bg-card/95 backdrop-blur-xl border border-border/50 rounded-lg shadow-xl shadow-black/20 py-1"
+                        class="fixed z-[110] min-w-[180px] bg-card/95 backdrop-blur-xl border border-border/50 rounded-lg shadow-xl shadow-black/20 py-1"
                         :style="{ left: contextMenuTarget.x + 'px', top: contextMenuTarget.y + 'px' }">
                         <!-- Mod actions -->
                         <template v-if="contextMenuTarget.type === 'mod'">
@@ -496,21 +729,32 @@ defineExpose({ open, close });
                             <button @click="handleContextAction('delete')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors">
                                 <Trash2 class="w-3.5 h-3.5" />
-                                Delete
+                                Delete from Library
                             </button>
                         </template>
 
                         <!-- Modpack actions -->
                         <template v-else-if="contextMenuTarget.type === 'modpack'">
+                            <button @click="handleContextAction('play')"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-primary/10 text-primary transition-colors font-medium">
+                                <Play class="w-3.5 h-3.5" />
+                                Play
+                            </button>
+                            <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('edit')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
                                 <Edit class="w-3.5 h-3.5 text-muted-foreground" />
                                 Edit Modpack
                             </button>
+                            <button @click="handleContextAction('export')"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                                <Download class="w-3.5 h-3.5 text-muted-foreground" />
+                                Export
+                            </button>
                             <button @click="handleContextAction('open-folder')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
                                 <FolderOpen class="w-3.5 h-3.5 text-muted-foreground" />
-                                Open in Folder
+                                Open Folder
                             </button>
                             <button @click="handleContextAction('clone')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
@@ -528,6 +772,32 @@ defineExpose({ open, close });
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors">
                                 <Trash2 class="w-3.5 h-3.5" />
                                 Delete
+                            </button>
+                        </template>
+
+                        <!-- Instance actions -->
+                        <template v-else-if="contextMenuTarget.type === 'instance'">
+                            <button @click="handleContextAction('play')"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-primary/10 text-primary transition-colors font-medium">
+                                <Play class="w-3.5 h-3.5" />
+                                Launch
+                            </button>
+                            <div class="my-1 border-t border-border/50"></div>
+                            <button @click="handleContextAction('open-folder')"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                                <FolderOpen class="w-3.5 h-3.5 text-muted-foreground" />
+                                Open Folder
+                            </button>
+                            <button @click="handleContextAction('copy-name')"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                                <Copy class="w-3.5 h-3.5 text-muted-foreground" />
+                                Copy Name
+                            </button>
+                            <div class="my-1 border-t border-border/50"></div>
+                            <button @click="handleContextAction('delete')"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors">
+                                <Trash2 class="w-3.5 h-3.5" />
+                                Delete Instance
                             </button>
                         </template>
                     </div>

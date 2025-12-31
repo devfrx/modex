@@ -947,12 +947,27 @@ watch(
   { immediate: true }
 );
 
-// Handle URL action parameter (e.g. browse)
+// Handle URL action parameter (e.g. browse, create, import, export)
 watch(
   () => route.query.action,
-  (action) => {
+  async (action) => {
     if (action === 'browse') {
       router.push('/modpacks/browse');
+    } else if (action === 'create') {
+      showCreateDialog.value = true;
+      // Clear the query param after opening
+      router.replace({ query: { ...route.query, action: undefined } });
+    } else if (action === 'import') {
+      // Trigger import flow
+      await importCurseForgeModpack();
+      router.replace({ query: { ...route.query, action: undefined } });
+    } else if (action === 'export') {
+      // Export requires an id
+      const id = route.query.id as string;
+      if (id) {
+        await exportModpack(id);
+      }
+      router.replace({ query: { ...route.query, action: undefined } });
     }
   },
   { immediate: true }
@@ -1113,14 +1128,40 @@ onMounted(() => {
 
           <!-- Right: Actions -->
           <div class="flex items-center gap-1.5 sm:gap-2">
-            <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
-              class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3">
-              <ArrowLeftRight class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden lg:inline text-xs">Compare</span>
+            <!-- Primary Actions -->
+            <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
+              class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-medium">
+              <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden xs:inline">Create</span>
+            </Button>
+            <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
+              class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs">
+              <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden xs:inline">Import</span>
             </Button>
 
-            <!-- Selection Actions -->
-            <div class="hidden md:flex items-center gap-1 border-l border-border pl-2 ml-1">
+            <!-- Separator -->
+            <div class="hidden sm:block h-4 w-px bg-border" />
+
+            <!-- Secondary Actions -->
+            <Button @click="router.push('/modpacks/browse')" :disabled="!isElectron()" variant="outline" size="sm"
+              class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs hidden sm:flex">
+              <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span class="hidden lg:inline">Browse</span>
+            </Button>
+            <Button @click="openShareImport" :disabled="!isElectron()" variant="ghost" size="sm"
+              class="gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex"
+              title="Import/Export .modex packages">
+              <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </Button>
+            <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
+              class="gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 hidden sm:flex"
+              title="Compare modpacks">
+              <ArrowLeftRight class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </Button>
+
+            <!-- Selection Actions (Desktop) -->
+            <div class="hidden lg:flex items-center gap-1 border-l border-border pl-2 ml-1">
               <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                 @click="selectAll" :disabled="modpacks.length === 0">
                 Select All
@@ -1130,27 +1171,6 @@ onMounted(() => {
                 Clear
               </Button>
             </div>
-
-            <Button @click="openShareImport" :disabled="!isElectron()" variant="ghost" size="sm"
-              class="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex">
-              <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden lg:inline text-xs">.modex</span>
-            </Button>
-            <Button @click="router.push('/modpacks/browse')" :disabled="!isElectron()" variant="outline" size="sm"
-              class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
-              <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden xs:inline">Browse CF</span>
-            </Button>
-            <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
-              class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
-              <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden xs:inline">Import</span>
-            </Button>
-            <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
-              class="gap-1 sm:gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs">
-              <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden xs:inline">Create</span>
-            </Button>
           </div>
         </div>
 

@@ -337,9 +337,9 @@ function formatBytes(bytes: number): string {
 
 <template>
   <Dialog :open="open" title="MODEX Share" @close="$emit('close')">
-    <div class="min-w-[400px]">
+    <div class="min-w-[400px] max-w-md mx-auto">
       <!-- Tabs -->
-      <div class="flex border-b border-border mb-4">
+      <div class="flex border-b border-border mb-4 ">
         <button v-if="modpackId" class="flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2" :class="activeTab === 'export'
           ? 'border-primary text-primary'
           : 'border-transparent text-muted-foreground hover:text-foreground'

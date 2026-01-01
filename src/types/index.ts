@@ -92,6 +92,9 @@ export interface Mod {
   /** Mod categories (e.g., "Technology", "Magic") */
   categories?: string[];
 
+  /** CurseForge category IDs for recommendation matching */
+  cf_categories?: number[];
+
   /** File size in bytes */
   file_size?: number;
 

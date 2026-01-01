@@ -192,6 +192,35 @@
     --glow-primary: 0 0 20px hsla(187, 65%, 48%, 0.2);
     --glow-strong: 0 0 40px hsla(187, 65%, 48%, 0.3);
   }
+
+  [data-theme="noir"] {
+    /* Pure black background with subtle warmth */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 92%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 92%;
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 92%;
+    /* Pure white accent - clean and minimal */
+    --primary: 0 0% 95%;
+    --primary-foreground: 0 0% 5%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 88%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 92%;
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 15%;
+    --input: 0 0% 10%;
+    --ring: 0 0% 90%;
+    --success: 145 50% 45%;
+    --warning: 40 80% 50%;
+    --info: 210 60% 55%;
+    --glow-primary: 0 0 20px hsla(0, 0%, 95%, 0.1);
+    --glow-strong: 0 0 40px hsla(0, 0%, 95%, 0.15);
+  }
 }
 
 @layer base {

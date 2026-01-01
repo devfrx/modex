@@ -7,7 +7,8 @@ export type Theme =
   | "ocean"
   | "sunset"
   | "cyberpunk"
-  | "slate";
+  | "slate"
+  | "noir";
 
 export interface ThemeCustomization {
   // Colors
@@ -159,6 +160,21 @@ export const stylePresets: StylePreset[] = [
       shadowIntensity: 10,
     },
   },
+  {
+    id: "snow",
+    name: "Snow",
+    description: "Pure white accent on dark",
+    preview: "#ffffff",
+    config: {
+      primaryHue: 365, // Maps to white (360-370 range)
+      primarySaturation: 0,
+      primaryLightness: 95,
+      borderRadius: 8,
+      borderWidth: 1,
+      glassEffect: false,
+      shadowIntensity: 15,
+    },
+  },
 ];
 
 const currentTheme = ref<Theme>("dark");
@@ -247,6 +263,19 @@ export function useTheme() {
       root.style.setProperty("--primary-sat", `${sat}%`);
       root.style.setProperty("--primary", `${hue} ${sat}% ${lightness}%`);
       root.style.setProperty("--ring", `${hue} ${sat}% ${lightness}%`);
+      
+      // Set primary-foreground based on lightness for contrast
+      // White/light accents need dark text, dark accents need light text
+      if (lightness > 70) {
+        // Light accent - use dark foreground for readability
+        root.style.setProperty("--primary-foreground", "220 13% 10%");
+      } else if (lightness < 30) {
+        // Dark accent - use light foreground
+        root.style.setProperty("--primary-foreground", "0 0% 98%");
+      } else {
+        // Normal range - use standard foreground based on theme
+        root.style.setProperty("--primary-foreground", "0 0% 98%");
+      }
     }
 
     // Border radius
@@ -315,6 +344,7 @@ export function useTheme() {
       { id: "dark", name: "Midnight (Default)", color: "bg-zinc-950" },
       { id: "light", name: "Daylight", color: "bg-white" },
       { id: "slate", name: "Slate", color: "bg-slate-600" },
+      { id: "noir", name: "Noir", color: "bg-zinc-900" },
       { id: "forest", name: "Forest", color: "bg-emerald-950" },
       { id: "ocean", name: "Ocean", color: "bg-blue-950" },
       { id: "sunset", name: "Sunset", color: "bg-orange-950" },

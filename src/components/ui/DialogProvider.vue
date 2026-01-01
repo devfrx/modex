@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch, nextTick, ref } from 'vue';
-import { useDialog, type DialogVariant, type DialogIcon } from '@/composables/useDialog';
+import { useDialog, type DialogVariant, type DialogIcon, type ConfirmOptions, type AlertOptions, type InputOptions, type SelectOptions } from '@/composables/useDialog';
 import Dialog from './Dialog.vue';
 import Button from './Button.vue';
 import {
@@ -35,9 +35,17 @@ watch(isOpen, async (open) => {
     }
 });
 
+// Type-safe computed properties for dialog options
+const dialogIcon = computed(() => (dialogOptions.value as ConfirmOptions | AlertOptions).icon);
+const inputType = computed(() => (dialogOptions.value as InputOptions).inputType || 'text');
+const placeholder = computed(() => (dialogOptions.value as InputOptions).placeholder);
+const selectOptions = computed(() => (dialogOptions.value as SelectOptions).options || []);
+const buttonText = computed(() => (dialogOptions.value as AlertOptions).buttonText || 'OK');
+const cancelText = computed(() => (dialogOptions.value as ConfirmOptions | InputOptions).cancelText || 'Cancel');
+const confirmText = computed(() => (dialogOptions.value as ConfirmOptions | InputOptions).confirmText || 'Confirm');
+
 const iconComponent = computed(() => {
-    const icon = (dialogOptions.value as any).icon as DialogIcon;
-    switch (icon) {
+    switch (dialogIcon.value) {
         case 'trash': return Trash2;
         case 'warning': return AlertTriangle;
         case 'info': return Info;
@@ -50,7 +58,8 @@ const iconComponent = computed(() => {
 });
 
 const variantClasses = computed(() => {
-    const variant = (dialogOptions.value as any).variant as DialogVariant;
+    const opts = dialogOptions.value as ConfirmOptions | AlertOptions;
+    const variant = opts.variant;
     switch (variant) {
         case 'danger':
             return {
@@ -102,7 +111,7 @@ function handleInputKeydown(e: KeyboardEvent) {
     <Dialog :open="isOpen" @close="handleCancel" @keydown="handleKeydown">
         <template #header>
             <div class="flex items-center gap-3">
-                <div v-if="iconComponent && (dialogOptions as any).icon !== 'none'"
+                <div v-if="iconComponent && dialogIcon !== 'none'"
                     class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                     :class="variantClasses.iconBg">
                     <component :is="iconComponent" class="w-5 h-5" :class="variantClasses.iconText" />
@@ -120,8 +129,7 @@ function handleInputKeydown(e: KeyboardEvent) {
 
             <!-- Input field for input dialog -->
             <div v-if="dialogType === 'input'" class="space-y-2">
-                <input ref="inputRef" v-model="inputValue" :type="(dialogOptions as any).inputType || 'text'"
-                    :placeholder="(dialogOptions as any).placeholder"
+                <input ref="inputRef" v-model="inputValue" :type="inputType" :placeholder="placeholder"
                     class="w-full h-10 px-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                     :class="{ 'border-red-500': inputError }" @keydown="handleInputKeydown" />
                 <p v-if="inputError" class="text-xs text-red-500">{{ inputError }}</p>
@@ -131,8 +139,7 @@ function handleInputKeydown(e: KeyboardEvent) {
             <div v-if="dialogType === 'select'" class="space-y-2">
                 <select v-model="selectedValue"
                     class="w-full h-10 px-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option v-for="opt in (dialogOptions as any).options" :key="opt.value" :value="opt.value"
-                        :disabled="opt.disabled">
+                    <option v-for="opt in selectOptions" :key="opt.value" :value="opt.value" :disabled="opt.disabled">
                         {{ opt.label }}
                     </option>
                 </select>
@@ -144,17 +151,17 @@ function handleInputKeydown(e: KeyboardEvent) {
                 <!-- Alert only has one button -->
                 <template v-if="dialogType === 'alert'">
                     <Button @click="handleConfirm">
-                        {{ (dialogOptions as any).buttonText || 'OK' }}
+                        {{ buttonText }}
                     </Button>
                 </template>
 
                 <!-- Confirm, Input, Select have two buttons -->
                 <template v-else>
                     <Button variant="outline" @click="handleCancel">
-                        {{ (dialogOptions as any).cancelText || 'Cancel' }}
+                        {{ cancelText }}
                     </Button>
                     <Button :variant="variantClasses.confirmBtn" @click="handleConfirm">
-                        {{ (dialogOptions as any).confirmText || 'Confirm' }}
+                        {{ confirmText }}
                     </Button>
                 </template>
             </div>

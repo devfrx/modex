@@ -699,6 +699,7 @@ export class CurseForgeService {
     date_released: string;
     dependencies: { modId: number; type: string }[];
     categories: string[];
+    cf_categories: number[];
     file_size: number;
     date_created: string;
     date_modified: string;
@@ -851,6 +852,7 @@ export class CurseForgeService {
         type: dependencyTypes[d.relationType] || "unknown",
       })),
       categories: Array.from(new Set(mod.categories.map((c) => c.name))),
+      cf_categories: Array.from(new Set(mod.categories.map((c) => c.id))),
       file_size: file.fileLength,
       date_created: mod.dateCreated,
       date_modified: mod.dateModified,

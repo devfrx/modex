@@ -201,6 +201,7 @@ async function searchConfigs() {
         searchResults.value = results;
     } catch (error: any) {
         console.error("Failed to search configs:", error);
+        toast.error("Search failed", error.message);
     } finally {
         isSearching.value = false;
     }
@@ -308,6 +309,7 @@ async function loadBackups() {
         backups.value = await window.api.configs.listBackups(props.instanceId);
     } catch (error: any) {
         console.error("Failed to load backups:", error);
+        toast.error("Failed to load backups", error.message);
     }
 }
 

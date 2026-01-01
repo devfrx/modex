@@ -67,8 +67,8 @@ async function loadRecommendations(randomize = false) {
     // Extract categories from installed mods for smart recommendations
     const categoryIds: number[] = [];
     mods.forEach((mod) => {
-      if ((mod as any).cf_categories) {
-        categoryIds.push(...(mod as any).cf_categories);
+      if (mod.cf_categories) {
+        categoryIds.push(...mod.cf_categories);
       }
     });
 

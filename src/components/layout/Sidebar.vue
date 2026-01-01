@@ -18,7 +18,7 @@ import {
   Zap,
 } from "lucide-vue-next";
 import { cn } from "@/lib/utils";
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useSidebar } from "@/composables/useSidebar";
 
 // Check if in dev mode (must be in script, not template)
@@ -120,14 +120,26 @@ function handleNavClick() {
   emit("close");
 }
 
+// Interval reference for cleanup
+let statsInterval: ReturnType<typeof setInterval> | null = null;
+
 onMounted(() => {
   loadStats();
   // Refresh stats periodically
-  setInterval(loadStats, 5000);
+  statsInterval = setInterval(loadStats, 5000);
+  // Listen for storage changes from other components
+  window.addEventListener("storage", loadStats);
 });
 
-// Listen for storage changes from other components
-window.addEventListener("storage", loadStats);
+onUnmounted(() => {
+  // Cleanup interval
+  if (statsInterval) {
+    clearInterval(statsInterval);
+    statsInterval = null;
+  }
+  // Cleanup event listener
+  window.removeEventListener("storage", loadStats);
+});
 </script>
 
 <template>

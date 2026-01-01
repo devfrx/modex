@@ -50,6 +50,7 @@ export interface Mod {
   // Additional metadata for better UX
   logo_url?: string; // Full size logo
   categories?: string[]; // Mod categories (e.g., "Technology", "Magic")
+  cf_categories?: number[]; // CurseForge category IDs for recommendation matching
   file_size?: number; // File size in bytes
   date_created?: string; // Mod project creation date
   date_modified?: string; // Last mod update date

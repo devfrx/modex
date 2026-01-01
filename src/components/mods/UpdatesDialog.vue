@@ -108,7 +108,7 @@ async function checkForUpdates() {
   }) => {
     checkProgress.value = data;
   };
-  window.api.on("updates:progress", progressHandler);
+  const cleanupProgressListener = window.api.on("updates:progress", progressHandler);
 
   try {
     if (props.modpackId) {
@@ -120,7 +120,7 @@ async function checkForUpdates() {
     console.error("Failed to check updates:", err);
     toast.error("Update Check Failed", (err as Error).message);
   } finally {
-    window.ipcRenderer?.off("updates:progress", progressHandler as any);
+    cleanupProgressListener();
     isLoading.value = false;
   }
 }

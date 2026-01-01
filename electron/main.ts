@@ -120,6 +120,27 @@ async function initializeBackend() {
     return net.fetch("file:///" + normalizedPath);
   });
 
+  // ========== HELPER: Check if modpack is linked (has remote_source) ==========
+  
+  /**
+   * Helper to check if a modpack is linked to a remote source.
+   * Linked modpacks should not be modified directly - changes should come from remote sync.
+   */
+  async function isModpackLinked(modpackId: string): Promise<boolean> {
+    const modpack = await metadataManager.getModpackById(modpackId);
+    return !!(modpack?.remote_source?.url);
+  }
+
+  /**
+   * Helper to guard write operations on linked modpacks.
+   * Throws an error if the modpack is linked.
+   */
+  async function guardLinkedModpack(modpackId: string, operation: string): Promise<void> {
+    if (await isModpackLinked(modpackId)) {
+      throw new Error(`Cannot ${operation}: modpack is linked to a remote source. Sync from remote to update.`);
+    }
+  }
+
   // ========== MODS IPC HANDLERS ==========
 
   ipcMain.handle("mods:getAll", async () => {
@@ -347,6 +368,7 @@ async function initializeBackend() {
           cf_file_id: fileId,
           dependencies: modData.dependencies,
           categories: modData.categories,
+          cf_categories: modData.cf_categories,
           file_size: modData.file_size,
           date_created: modData.date_created,
           date_modified: modData.date_modified,
@@ -416,6 +438,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:addMod",
     async (_, modpackId: string, modId: string) => {
+      await guardLinkedModpack(modpackId, "add mod");
       return metadataManager.addModToModpack(modpackId, modId);
     }
   );
@@ -423,6 +446,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:addModsBatch",
     async (_, modpackId: string, modIds: string[]) => {
+      await guardLinkedModpack(modpackId, "add mods");
       return metadataManager.addModsToModpackBatch(modpackId, modIds);
     }
   );
@@ -444,6 +468,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:removeMod",
     async (_, modpackId: string, modId: string) => {
+      await guardLinkedModpack(modpackId, "remove mod");
       return metadataManager.removeModFromModpack(modpackId, modId);
     }
   );
@@ -451,6 +476,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:toggleMod",
     async (_, modpackId: string, modId: string) => {
+      await guardLinkedModpack(modpackId, "toggle mod");
       return metadataManager.toggleModInModpack(modpackId, modId);
     }
   );
@@ -458,6 +484,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:setModEnabled",
     async (_, modpackId: string, modId: string, enabled: boolean) => {
+      await guardLinkedModpack(modpackId, "change mod state");
       return metadataManager.setModEnabledInModpack(modpackId, modId, enabled);
     }
   );
@@ -482,6 +509,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:setModLocked",
     async (_, modpackId: string, modId: string, locked: boolean) => {
+      await guardLinkedModpack(modpackId, "change mod lock state");
       return metadataManager.setModLocked(modpackId, modId, locked);
     }
   );
@@ -489,6 +517,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:updateLockedMods",
     async (_, modpackId: string, lockedModIds: string[]) => {
+      await guardLinkedModpack(modpackId, "update locked mods");
       return metadataManager.updateLockedMods(modpackId, lockedModIds);
     }
   );

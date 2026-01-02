@@ -78,6 +78,7 @@ export interface Modpack {
   mod_ids: string[];
   disabled_mod_ids?: string[];
   locked_mod_ids?: string[];
+  mod_notes?: Record<string, string>;
   remote_source?: {
     url: string;
     auto_check: boolean;
@@ -130,13 +131,15 @@ interface AppConfig {
 // ==================== VERSION CONTROL TYPES ====================
 
 export interface ModpackChange {
-  type: "add" | "remove" | "update" | "enable" | "disable" | "version_control" | "loader_change" | "lock" | "unlock";
+  type: "add" | "remove" | "update" | "enable" | "disable" | "version_control" | "loader_change" | "lock" | "unlock" | "note_add" | "note_remove" | "note_change";
   modId: string;
   modName: string;
   previousVersion?: string;
   newVersion?: string;
   previousFileId?: number;
   newFileId?: number;
+  previousNote?: string;
+  newNote?: string;
 }
 
 export interface ModpackVersion {
@@ -149,6 +152,7 @@ export interface ModpackVersion {
   mod_ids: string[];
   disabled_mod_ids?: string[];
   locked_mod_ids?: string[];
+  mod_notes?: Record<string, string>;
   /** Loader type at this version (forge, fabric, etc.) */
   loader?: string;
   /** Loader version at this version */
@@ -424,7 +428,7 @@ export class MetadataManager {
     const existingIndex = library.mods.findIndex((m) => m.id === id);
     if (existingIndex >= 0) {
       const existingMod = library.mods[existingIndex];
-      
+
       // Update content_type if the new data has a more specific type
       // (e.g., existing mod has "mod" or undefined, but new data specifies "resourcepack" or "shader")
       if (modData.content_type && modData.content_type !== existingMod.content_type) {
@@ -434,7 +438,7 @@ export class MetadataManager {
         existingMod.content_type = modData.content_type;
         await this.saveLibrary(library);
       }
-      
+
       console.log(
         `[MetadataManager] Mod ${id} already exists in library, reusing existing`
       );
@@ -1014,6 +1018,9 @@ export class MetadataManager {
       modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
       modsLocked: Array<{ id: string; name: string }>;
       modsUnlocked: Array<{ id: string; name: string }>;
+      notesAdded: Array<{ id: string; name: string; note: string }>;
+      notesRemoved: Array<{ id: string; name: string; note: string }>;
+      notesChanged: Array<{ id: string; name: string; oldNote: string; newNote: string }>;
       loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
       configsChanged: boolean;
       configDetails: Array<{
@@ -1037,6 +1044,9 @@ export class MetadataManager {
         modsUpdated: [] as Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>,
         modsLocked: [] as Array<{ id: string; name: string }>,
         modsUnlocked: [] as Array<{ id: string; name: string }>,
+        notesAdded: [] as Array<{ id: string; name: string; note: string }>,
+        notesRemoved: [] as Array<{ id: string; name: string; note: string }>,
+        notesChanged: [] as Array<{ id: string; name: string; oldNote: string; newNote: string }>,
         loaderChanged: null as { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null,
         configsChanged: false,
         configDetails: [] as Array<{ filePath: string; keyPath: string; line?: number; oldValue: any; newValue: any; timestamp: string }>,
@@ -1224,6 +1234,39 @@ export class MetadataManager {
       }
     }
 
+    // Find note changes
+    const savedNotes = currentVersion.mod_notes || {};
+    const currentNotes = modpack.mod_notes || {};
+
+    // Find added notes
+    for (const modId of Object.keys(currentNotes)) {
+      if (!savedNotes[modId] && currentModIds.has(modId)) {
+        const mod = library.mods.find(m => m.id === modId);
+        result.changes.notesAdded.push({ id: modId, name: mod?.name || modId, note: currentNotes[modId] });
+      }
+    }
+
+    // Find removed notes
+    for (const modId of Object.keys(savedNotes)) {
+      if (!currentNotes[modId] && currentModIds.has(modId)) {
+        const mod = library.mods.find(m => m.id === modId);
+        result.changes.notesRemoved.push({ id: modId, name: mod?.name || modId, note: savedNotes[modId] });
+      }
+    }
+
+    // Find changed notes
+    for (const modId of Object.keys(currentNotes)) {
+      if (savedNotes[modId] && savedNotes[modId] !== currentNotes[modId]) {
+        const mod = library.mods.find(m => m.id === modId);
+        result.changes.notesChanged.push({
+          id: modId,
+          name: mod?.name || modId,
+          oldNote: savedNotes[modId],
+          newNote: currentNotes[modId]
+        });
+      }
+    }
+
     // Check for config changes and load details
     result.changes.configsChanged = await this.hasConfigChanges(modpackId);
 
@@ -1284,6 +1327,9 @@ export class MetadataManager {
       result.changes.modsDisabled.length > 0 ||
       result.changes.modsLocked.length > 0 ||
       result.changes.modsUnlocked.length > 0 ||
+      result.changes.notesAdded.length > 0 ||
+      result.changes.notesRemoved.length > 0 ||
+      result.changes.notesChanged.length > 0 ||
       result.changes.loaderChanged !== null ||
       result.changes.configsChanged;
 
@@ -1356,6 +1402,16 @@ export class MetadataManager {
     modpack.mod_ids = validModIds;
     modpack.disabled_mod_ids = validDisabledIds;
     modpack.locked_mod_ids = validLockedIds;
+
+    // Restore mod notes from the saved version (only for mods that still exist)
+    const savedNotes = currentVersion.mod_notes || {};
+    const validNotes: Record<string, string> = {};
+    for (const [modId, note] of Object.entries(savedNotes)) {
+      if (libraryModIds.has(modId)) {
+        validNotes[modId] = note;
+      }
+    }
+    modpack.mod_notes = validNotes;
 
     // Restore loader from the saved version
     if (currentVersion.loader) {
@@ -2453,6 +2509,7 @@ export class MetadataManager {
       mod_ids: [...modpack.mod_ids],
       disabled_mod_ids: [...(modpack.disabled_mod_ids || [])],
       locked_mod_ids: [...(modpack.locked_mod_ids || [])],
+      mod_notes: modpack.mod_notes ? { ...modpack.mod_notes } : undefined,
       loader: modpack.loader,
       loader_version: modpack.loader_version,
       mod_snapshots: modSnapshots,
@@ -2523,7 +2580,12 @@ export class MetadataManager {
       modpack.locked_mod_ids || [],
       library
     );
-    const changes = [...modChanges, ...disabledChanges, ...lockedChanges];
+    const noteChanges = this.calculateNoteChanges(
+      currentVersion.mod_notes,
+      modpack.mod_notes,
+      library
+    );
+    const changes = [...modChanges, ...disabledChanges, ...lockedChanges, ...noteChanges];
 
     // Check for loader changes
     const savedLoader = currentVersion.loader || modpack.loader;
@@ -2611,6 +2673,7 @@ export class MetadataManager {
       mod_ids: [...modpack.mod_ids],
       disabled_mod_ids: [...(modpack.disabled_mod_ids || [])],
       locked_mod_ids: [...(modpack.locked_mod_ids || [])],
+      mod_notes: modpack.mod_notes ? { ...modpack.mod_notes } : undefined,
       loader: modpack.loader,
       loader_version: modpack.loader_version,
       parent_id: currentVersion.id,
@@ -2913,6 +2976,57 @@ export class MetadataManager {
   }
 
   /**
+   * Calculate note changes between two mod_notes objects
+   */
+  private calculateNoteChanges(
+    oldNotes: Record<string, string> | undefined,
+    newNotes: Record<string, string> | undefined,
+    library: LibraryData
+  ): ModpackChange[] {
+    const changes: ModpackChange[] = [];
+    const oldNotesMap = oldNotes || {};
+    const newNotesMap = newNotes || {};
+    const modMap = new Map(library.mods.map((m) => [m.id, m]));
+
+    const allModIds = new Set([
+      ...Object.keys(oldNotesMap),
+      ...Object.keys(newNotesMap),
+    ]);
+
+    for (const modId of allModIds) {
+      const oldNote = oldNotesMap[modId];
+      const newNote = newNotesMap[modId];
+      const mod = modMap.get(modId);
+      const modName = mod?.name || modId;
+
+      if (!oldNote && newNote) {
+        // Note added
+        changes.push({
+          type: "note_add",
+          modId,
+          modName,
+        });
+      } else if (oldNote && !newNote) {
+        // Note removed
+        changes.push({
+          type: "note_remove",
+          modId,
+          modName,
+        });
+      } else if (oldNote && newNote && oldNote !== newNote) {
+        // Note changed
+        changes.push({
+          type: "note_change",
+          modId,
+          modName,
+        });
+      }
+    }
+
+    return changes;
+  }
+
+  /**
    * Generate the next semantic version tag
    */
   private generateNextTag(currentTag: string): string {
@@ -3037,6 +3151,7 @@ export class MetadataManager {
     modpack.mod_ids = [...targetVersion.mod_ids];
     modpack.disabled_mod_ids = [...(targetVersion.disabled_mod_ids || [])];
     modpack.locked_mod_ids = [...(targetVersion.locked_mod_ids || [])];
+    modpack.mod_notes = targetVersion.mod_notes ? { ...targetVersion.mod_notes } : undefined;
     modpack.version = targetVersion.tag;
     modpack.updated_at = new Date().toISOString();
 
@@ -3097,6 +3212,17 @@ export class MetadataManager {
     modpack.mod_ids = [...modIds];
     modpack.disabled_mod_ids = restoredDisabledIds;
     modpack.locked_mod_ids = restoredLockedIds;
+
+    // Restore notes only for mods that exist in the new mod_ids
+    const restoredNotes: Record<string, string> = {};
+    if (targetVersion.mod_notes) {
+      for (const [modId, note] of Object.entries(targetVersion.mod_notes)) {
+        if (modIdSet.has(modId)) {
+          restoredNotes[modId] = note;
+        }
+      }
+    }
+    modpack.mod_notes = Object.keys(restoredNotes).length > 0 ? restoredNotes : undefined;
     modpack.version = targetVersion.tag;
     modpack.updated_at = new Date().toISOString();
 
@@ -3540,10 +3666,17 @@ ${modLinks}
       .digest("hex")
       .substring(0, 8);
 
+    // Generate notes hash (to detect note changes)
+    const notesHash = crypto
+      .createHash("sha256")
+      .update(Object.entries(modpack.mod_notes || {}).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `${k}:${v}`).join(","))
+      .digest("hex")
+      .substring(0, 8);
+
     // Combined checksum that includes all data
     const checksum = crypto
       .createHash("sha256")
-      .update(`${modChecksum}-${disabledHash}-${lockedHash}-${metadataHash}-${contentTypesHash}-${versionHistoryHash || 'none'}`)
+      .update(`${modChecksum}-${disabledHash}-${lockedHash}-${metadataHash}-${contentTypesHash}-${notesHash}-${versionHistoryHash || 'none'}`)
       .digest("hex")
       .substring(0, 16);
 
@@ -3602,7 +3735,23 @@ ${modLinks}
         mod_count: mods.length,
         disabled_count: disabledIds.size,
         locked_count: (modpack.locked_mod_ids || []).length,
+        notes_count: Object.keys(modpack.mod_notes || {}).length,
       },
+      // Include mod notes using internal IDs for backwards compatibility
+      mod_notes: modpack.mod_notes || {},
+      // Include mod notes using stable identifiers for cross-import compatibility
+      mod_notes_by_project: Object.entries(modpack.mod_notes || {})
+        .map(([modId, note]) => {
+          const mod = allMods.find(m => m.id === modId);
+          if (!mod) return null;
+          return {
+            cf_project_id: mod.cf_project_id,
+            mr_project_id: mod.mr_project_id,
+            name: mod.name,
+            note
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
       // Include version history based on export mode
       version_history: versionHistory ? (
         versionHistoryMode === 'current' && versionHistory.versions.length > 0
@@ -4103,6 +4252,53 @@ ${modLinks}
         }
       }
 
+      // Check for note changes
+      const notesAdded: Array<{ modName: string; note: string }> = [];
+      const notesRemoved: Array<{ modName: string; note: string }> = [];
+      const notesChanged: Array<{ modName: string; oldNote: string; newNote: string }> = [];
+      const currentNotes = modpack.mod_notes || {};
+
+      // Build a map of remote notes by project ID
+      const remoteNotesByProject = new Map<string, { name: string; note: string }>();
+      if (remoteManifest.mod_notes_by_project && Array.isArray(remoteManifest.mod_notes_by_project)) {
+        for (const entry of remoteManifest.mod_notes_by_project) {
+          const projectKey = entry.cf_project_id
+            ? `cf-${entry.cf_project_id}`
+            : entry.mr_project_id
+              ? `mr-${entry.mr_project_id}`
+              : null;
+          if (projectKey) {
+            remoteNotesByProject.set(projectKey, { name: entry.name, note: entry.note });
+          }
+        }
+      }
+
+      // Check for note changes in mods that exist in both
+      for (const rMod of remoteMods) {
+        const projectKey =
+          rMod.source === "curseforge"
+            ? `cf-${rMod.cf_project_id}`
+            : `mr-${rMod.mr_project_id}`;
+
+        const localMod = currentProjectMap.get(projectKey);
+        if (!localMod) continue;
+
+        const localNote = currentNotes[localMod.id];
+        const remoteNoteEntry = remoteNotesByProject.get(projectKey);
+        const remoteNote = remoteNoteEntry?.note;
+        const modName = localMod.name || rMod.name || 'Unknown Mod';
+
+        if (!localNote && remoteNote) {
+          notesAdded.push({ modName, note: remoteNote });
+        } else if (localNote && !remoteNote) {
+          notesRemoved.push({ modName, note: localNote });
+        } else if (localNote && remoteNote && localNote !== remoteNote) {
+          notesChanged.push({ modName, oldNote: localNote, newNote: remoteNote });
+        }
+      }
+
+      const hasNoteChanges = notesAdded.length > 0 || notesRemoved.length > 0 || notesChanged.length > 0;
+
       // Check for loader/version/minecraft_version changes
       let loaderChanged = false;
       let loaderVersionChanged = false;
@@ -4130,6 +4326,7 @@ ${modLinks}
         disabledMods.length > 0 ||
         lockedMods.length > 0 ||
         unlockedMods.length > 0 ||
+        hasNoteChanges ||
         hasVersionHistoryChanges ||
         hasMetadataChanges;
 
@@ -4156,6 +4353,9 @@ ${modLinks}
             disabledMods,
             lockedMods,
             unlockedMods,
+            notesAdded,
+            notesRemoved,
+            notesChanged,
             hasVersionHistoryChanges,
             // Metadata changes
             loaderChanged: loaderChanged ? { from: modpack.loader, to: remoteManifest.modpack?.loader } : undefined,
@@ -4950,6 +5150,15 @@ ${modLinks}
         console.log(
           `[Import] Reusing existing mod from library: ${existingMod.name}`
         );
+
+        // Update content_type if manifest specifies a different type
+        const manifestContentType = modEntry.content_type as "mod" | "resourcepack" | "shader" | undefined;
+        if (manifestContentType && existingMod.content_type !== manifestContentType) {
+          console.log(`[Import] Updating content_type for ${existingMod.name}: ${existingMod.content_type} -> ${manifestContentType}`);
+          await this.updateMod(existingMod.id, { content_type: manifestContentType });
+          existingMod.content_type = manifestContentType;
+        }
+
         newModIds.push(existingMod.id);
 
         // Check if this mod is being added to the pack (was not in old pack)
@@ -5214,6 +5423,36 @@ ${modLinks}
       }
 
       modpack.locked_mod_ids = lockedModIds;
+
+      // Import mod_notes from manifest
+      // Prefer mod_notes_by_project (stable IDs) over mod_notes (internal IDs)
+      let importedNotes: Record<string, string> = {};
+
+      if (manifest.mod_notes_by_project && Array.isArray(manifest.mod_notes_by_project)) {
+        // New format: use project IDs to find the correct local mod IDs
+        const library = await this.loadLibrary();
+        for (const noteEntry of manifest.mod_notes_by_project) {
+          const matchingMod = library.mods.find(m =>
+            importedModIdSet.has(m.id) && (
+              (noteEntry.cf_project_id && m.cf_project_id === noteEntry.cf_project_id) ||
+              (noteEntry.mr_project_id && m.mr_project_id === noteEntry.mr_project_id)
+            )
+          );
+          if (matchingMod && noteEntry.note) {
+            importedNotes[matchingMod.id] = noteEntry.note;
+          }
+        }
+        console.log(`[Import] Resolved ${Object.keys(importedNotes).length} mod notes from project IDs`);
+      } else if (manifest.mod_notes && typeof manifest.mod_notes === 'object') {
+        // Fallback to old format: filter to only include mods that exist in the import
+        for (const [modId, note] of Object.entries(manifest.mod_notes)) {
+          if (importedModIdSet.has(modId) && typeof note === 'string') {
+            importedNotes[modId] = note;
+          }
+        }
+      }
+
+      modpack.mod_notes = Object.keys(importedNotes).length > 0 ? importedNotes : undefined;
 
       // Import incompatible_mods from manifest (preserve from export)
       if (manifest.incompatible_mods && Array.isArray(manifest.incompatible_mods)) {
@@ -5543,6 +5782,14 @@ ${modLinks}
           }
         } else {
           console.log(`[ImportFromUrl] Using existing mod from library: ${existingMod.name} (id: ${existingMod.id})`);
+
+          // Update content_type if manifest specifies a different type
+          const manifestContentType = modEntry.content_type as "mod" | "resourcepack" | "shader" | undefined;
+          if (manifestContentType && existingMod.content_type !== manifestContentType) {
+            console.log(`[ImportFromUrl] Updating content_type for ${existingMod.name}: ${existingMod.content_type} -> ${manifestContentType}`);
+            await this.updateMod(existingMod.id, { content_type: manifestContentType });
+            existingMod.content_type = manifestContentType;
+          }
         }
 
         if (existingMod) {
@@ -5625,6 +5872,37 @@ ${modLinks}
 
       if (lockedModIds.length > 0) {
         modpack.locked_mod_ids = lockedModIds;
+      }
+
+      // Import mod_notes from manifest
+      let importedNotes: Record<string, string> = {};
+
+      if (manifest.mod_notes_by_project && Array.isArray(manifest.mod_notes_by_project)) {
+        // New format: use project IDs to find the correct local mod IDs
+        const library = await this.loadLibrary();
+        for (const noteEntry of manifest.mod_notes_by_project) {
+          const matchingMod = library.mods.find(m =>
+            importedModIdSet.has(m.id) && (
+              (noteEntry.cf_project_id && m.cf_project_id === noteEntry.cf_project_id) ||
+              (noteEntry.mr_project_id && m.mr_project_id === noteEntry.mr_project_id)
+            )
+          );
+          if (matchingMod && noteEntry.note) {
+            importedNotes[matchingMod.id] = noteEntry.note;
+          }
+        }
+        console.log(`[ImportFromUrl] Resolved ${Object.keys(importedNotes).length} mod notes from project IDs`);
+      } else if (manifest.mod_notes && typeof manifest.mod_notes === 'object') {
+        // Fallback to old format
+        for (const [modId, note] of Object.entries(manifest.mod_notes)) {
+          if (importedModIdSet.has(modId) && typeof note === 'string') {
+            importedNotes[modId] = note;
+          }
+        }
+      }
+
+      if (Object.keys(importedNotes).length > 0) {
+        modpack.mod_notes = importedNotes;
       }
 
       // Import incompatible_mods from manifest (preserve from export)

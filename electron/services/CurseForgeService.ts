@@ -798,10 +798,20 @@ export class CurseForgeService {
       shaders: "shader",
     };
 
-    // Auto-detect content type from mod.classId if not provided
+    // Auto-detect content type from mod.classId (authoritative source)
+    // Only use contentType parameter as fallback if classId is not available
     let detectedContentType = contentType;
-    if (!detectedContentType && mod.classId) {
-      detectedContentType = getContentTypeFromClassId(mod.classId);
+    if (mod.classId) {
+      const classIdContentType = getContentTypeFromClassId(mod.classId);
+      if (classIdContentType !== "mods") {
+        // classId indicates this is a shader/resourcepack, use it
+        detectedContentType = classIdContentType;
+      } else if (!contentType) {
+        // classId says mods and no contentType passed, use mods
+        detectedContentType = "mods";
+      }
+      // If classId says mods but contentType is different, trust classId
+      // This prevents UI filter from overriding the actual mod type
     }
 
     const mappedContentType = detectedContentType ? contentTypeMap[detectedContentType] : "mod";
@@ -928,7 +938,7 @@ export class CurseForgeService {
     const data = await response.json();
     const versions = data.data || [];
     console.log(`[CurseForge] Received ${versions.length} Minecraft versions`);
-    
+
     return versions;
   }
 
@@ -937,7 +947,7 @@ export class CurseForgeService {
    */
   async getLoaderTypes(): Promise<string[]> {
     const loaders = await this.getModLoaders();
-    
+
     // ModLoaderType enum: 0=Any, 1=Forge, 2=Cauldron, 3=LiteLoader, 4=Fabric, 5=Quilt, 6=NeoForge
     const typeMap: Record<number, string> = {
       1: "forge",
@@ -945,14 +955,14 @@ export class CurseForgeService {
       5: "quilt",
       6: "neoforge",
     };
-    
+
     const uniqueTypes = new Set<string>();
     for (const loader of loaders) {
       if (loader.type && typeMap[loader.type]) {
         uniqueTypes.add(typeMap[loader.type]);
       }
     }
-    
+
     // Return in preferred order
     const orderedTypes = ["forge", "fabric", "neoforge", "quilt"];
     return orderedTypes.filter(t => uniqueTypes.has(t));
@@ -991,7 +1001,7 @@ export class CurseForgeService {
     const data = await response.json();
     const loaders = data.data || [];
     console.log(`[CurseForge] Received ${loaders.length} modloaders`);
-    
+
     return loaders;
   }
 

@@ -50,6 +50,7 @@ export interface Modpack {
   mod_ids: string[];
   disabled_mod_ids?: string[];
   locked_mod_ids?: string[];
+  mod_notes?: Record<string, string>;
   remote_source?: {
     url: string;
     auto_check: boolean;
@@ -327,6 +328,11 @@ contextBridge.exposeInMainWorld("api", {
         modsEnabled: Array<{ id: string; name: string }>;
         modsDisabled: Array<{ id: string; name: string }>;
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
+        modsLocked: Array<{ id: string; name: string }>;
+        modsUnlocked: Array<{ id: string; name: string }>;
+        notesAdded: Array<{ id: string; name: string; note: string }>;
+        notesRemoved: Array<{ id: string; name: string; note: string }>;
+        notesChanged: Array<{ id: string; name: string; oldNote: string; newNote: string }>;
         loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{
@@ -782,7 +788,7 @@ contextBridge.exposeInMainWorld("api", {
       isDefault?: boolean;
       icon?: string;
     }>> => ipcRenderer.invoke("minecraft:detectInstallations"),
-    
+
     getInstallations: (): Promise<Array<{
       id: string;
       name: string;
@@ -795,19 +801,19 @@ contextBridge.exposeInMainWorld("api", {
       isDefault?: boolean;
       icon?: string;
     }>> => ipcRenderer.invoke("minecraft:getInstallations"),
-    
+
     addCustom: (name: string, mcPath: string, modsPath?: string): Promise<any> =>
       ipcRenderer.invoke("minecraft:addCustomInstallation", name, mcPath, modsPath),
-    
+
     remove: (id: string): Promise<boolean> =>
       ipcRenderer.invoke("minecraft:removeInstallation", id),
-    
+
     setDefault: (id: string): Promise<boolean> =>
       ipcRenderer.invoke("minecraft:setDefault", id),
-    
+
     getDefault: (): Promise<any> =>
       ipcRenderer.invoke("minecraft:getDefault"),
-    
+
     syncModpack: (
       installationId: string,
       modpackId: string,
@@ -830,22 +836,22 @@ contextBridge.exposeInMainWorld("api", {
       }
       return ipcRenderer.invoke("minecraft:syncModpack", installationId, modpackId, options);
     },
-    
+
     openModsFolder: (installationId: string): Promise<boolean> =>
       ipcRenderer.invoke("minecraft:openModsFolder", installationId),
-    
+
     launch: (installationId?: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke("minecraft:launch", installationId),
-    
+
     selectFolder: (): Promise<string | null> =>
       ipcRenderer.invoke("minecraft:selectFolder"),
-    
+
     selectLauncher: (): Promise<string | null> =>
       ipcRenderer.invoke("minecraft:selectLauncher"),
-    
+
     setLauncherPath: (type: string, launcherPath: string): Promise<boolean> =>
       ipcRenderer.invoke("minecraft:setLauncherPath", type, launcherPath),
-    
+
     getLauncherPaths: (): Promise<Record<string, string>> =>
       ipcRenderer.invoke("minecraft:getLauncherPaths"),
   },
@@ -910,8 +916,8 @@ contextBridge.exposeInMainWorld("api", {
     syncModpack: (
       instanceId: string,
       modpackId: string,
-      options?: { 
-        clearExisting?: boolean; 
+      options?: {
+        clearExisting?: boolean;
         configSyncMode?: "overwrite" | "new_only" | "skip";
         overridesZipPath?: string;
       }
@@ -1058,7 +1064,7 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.on("game:statusChange", handler);
       return () => ipcRenderer.removeListener("game:statusChange", handler);
     },
-    
+
     /** Subscribe to real-time game log lines */
     onLogLine: (callback: (data: {
       instanceId: string;
@@ -1077,13 +1083,13 @@ contextBridge.exposeInMainWorld("api", {
   cache: {
     getImage: (url: string): Promise<string> =>
       ipcRenderer.invoke("cache:getImage", url),
-    
+
     cacheImage: (url: string): Promise<string | null> =>
       ipcRenderer.invoke("cache:cacheImage", url),
-    
+
     prefetch: (urls: string[]): Promise<void> =>
       ipcRenderer.invoke("cache:prefetch", urls),
-    
+
     getStats: (): Promise<{
       totalSize: number;
       entryCount: number;
@@ -1092,7 +1098,7 @@ contextBridge.exposeInMainWorld("api", {
       oldestEntry: number;
       newestEntry: number;
     }> => ipcRenderer.invoke("cache:getStats"),
-    
+
     clear: (): Promise<void> =>
       ipcRenderer.invoke("cache:clear"),
   },
@@ -1105,7 +1111,7 @@ contextBridge.exposeInMainWorld("api", {
       showSyncConfirmation: boolean;
       defaultConfigSyncMode: "overwrite" | "new_only" | "skip";
     }> => ipcRenderer.invoke("settings:getInstanceSync"),
-    
+
     setInstanceSync: (settings: {
       autoSyncBeforeLaunch?: boolean;
       autoImportConfigsAfterGame?: boolean;
@@ -1113,7 +1119,7 @@ contextBridge.exposeInMainWorld("api", {
       defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
     }): Promise<{ success: boolean }> =>
       ipcRenderer.invoke("settings:setInstanceSync", settings),
-    
+
     /** Smart launch with automatic sync if needed */
     smartLaunch: (instanceId: string, modpackId: string, options?: {
       forceSync?: boolean;
@@ -1174,10 +1180,10 @@ contextBridge.exposeInMainWorld("api", {
       configFilesCount: number;
       totalSize?: number;
     } | null> => ipcRenderer.invoke("preview:fromZip", zipPath),
-    
+
     fromCurseForge: (modpackData: any, fileData: any): Promise<any> =>
       ipcRenderer.invoke("preview:fromCurseForge", modpackData, fileData),
-    
+
     analyzeModpack: (modpackId: string): Promise<{
       estimatedRamMin: number;
       estimatedRamRecommended: number;
@@ -1191,7 +1197,7 @@ contextBridge.exposeInMainWorld("api", {
       compatibilityScore: number;
       compatibilityNotes: string[];
     } | null> => ipcRenderer.invoke("preview:analyzeModpack", modpackId),
-    
+
     selectAndPreview: (): Promise<{
       path: string;
       preview: any;

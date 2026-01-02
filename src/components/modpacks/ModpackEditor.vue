@@ -56,6 +56,8 @@ import {
   FileEdit,
   FolderTree,
   FileText,
+  MessageSquare,
+  MessageSquarePlus,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -115,6 +117,7 @@ const currentMods = ref<Mod[]>([]);
 const availableMods = ref<Mod[]>([]);
 const disabledModIds = ref<Set<string>>(new Set());
 const lockedModIds = ref<Set<string>>(new Set());
+const modNotes = ref<Record<string, string>>({});
 const searchQueryInstalled = ref("");
 const searchQueryAvailable = ref("");
 const isLoading = ref(true);
@@ -133,7 +136,7 @@ const isSaving = ref(false);
 // Mod Details Modal state
 const showModDetailsModal = ref(false);
 const modDetailsTarget = ref<Mod | null>(null);
-const modsFilter = ref<"all" | "incompatible" | "warning" | "disabled" | "locked" | "updates" | "recent-updated" | "recent-added">("all");
+const modsFilter = ref<"all" | "incompatible" | "warning" | "disabled" | "locked" | "updates" | "recent-updated" | "recent-added" | "with-notes">("all");
 
 // Changelog Dialog state
 const showChangelogDialog = ref(false);
@@ -144,6 +147,13 @@ const changelogMod = ref<{
   version: string;
   slug?: string;
 } | null>(null);
+
+// Mod Notes Dialog state
+const showModNoteDialog = ref(false);
+const noteDialogMod = ref<Mod | null>(null);
+const noteDialogText = ref("");
+const isSavingNote = ref(false);
+
 const activeTab = ref<
   | "play"
   | "mods"
@@ -234,9 +244,10 @@ async function refreshUnsavedChangesCount() {
       const c = unsavedData.changes;
       const configCount = c.configDetails?.length || (c.configsChanged ? 1 : 0);
       const loaderChange = c.loaderChanged ? 1 : 0;
+      const notesCount = (c.notesAdded?.length || 0) + (c.notesRemoved?.length || 0) + (c.notesChanged?.length || 0);
       versionUnsavedCount.value = c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length +
         c.modsDisabled.length + (c.modsUpdated?.length || 0) + (c.modsLocked?.length || 0) +
-        (c.modsUnlocked?.length || 0) + loaderChange + configCount;
+        (c.modsUnlocked?.length || 0) + loaderChange + configCount + notesCount;
     } else {
       versionUnsavedCount.value = 0;
     }
@@ -719,6 +730,9 @@ const filteredInstalledMods = computed(() => {
     if (modsFilter.value === "recent-added") {
       return recentlyAddedMods.value.has(m.id);
     }
+    if (modsFilter.value === "with-notes") {
+      return !!modNotes.value[m.id];
+    }
     return true;
   });
   mods.sort((a, b) => {
@@ -1193,6 +1207,20 @@ const lockedModCount = computed(() => {
   }).length;
 });
 
+// Count of mods with notes (per tab)
+const modsWithNotesCount = computed(() => {
+  return currentMods.value.filter((m) => {
+    const modContentType = m.content_type || "mod";
+    if (contentTypeTab.value === "mods" && modContentType !== "mod")
+      return false;
+    if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack")
+      return false;
+    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
+      return false;
+    return !!modNotes.value[m.id];
+  }).length;
+});
+
 // Count of recently updated mods (per tab)
 const recentlyUpdatedCount = computed(() => {
   return currentMods.value.filter((m) => {
@@ -1326,6 +1354,7 @@ async function loadData() {
     availableMods.value = allMods;
     disabledModIds.value = new Set(disabled);
     lockedModIds.value = new Set(locked);
+    modNotes.value = pack?.mod_notes || {};
     selectedModIds.value.clear();
     linkedInstanceId.value = linkedInstance?.id || null;
 
@@ -2057,6 +2086,61 @@ async function toggleModLocked(modId: string) {
     console.error("Failed to toggle mod lock:", err);
     toast.error("Lock Failed", (err as Error).message);
   }
+}
+
+// ========== MOD NOTES ==========
+function openModNoteDialog(mod: Mod) {
+  noteDialogMod.value = mod;
+  noteDialogText.value = modNotes.value[mod.id] || "";
+  showModNoteDialog.value = true;
+}
+
+async function saveModNote() {
+  if (!noteDialogMod.value || !modpack.value) return;
+  
+  isSavingNote.value = true;
+  try {
+    const modId = noteDialogMod.value.id;
+    const newNotes = { ...modNotes.value };
+    
+    if (noteDialogText.value.trim()) {
+      newNotes[modId] = noteDialogText.value.trim();
+    } else {
+      delete newNotes[modId];
+    }
+    
+    // Save to database
+    await window.api.modpacks.update(props.modpackId, { mod_notes: newNotes });
+    
+    // Update local state
+    modNotes.value = newNotes;
+    
+    // Refresh unsaved changes count for version history badge
+    await refreshUnsavedChangesCount();
+    
+    toast.success("Note Saved", noteDialogText.value.trim() 
+      ? `Note saved for ${noteDialogMod.value.name}` 
+      : `Note removed from ${noteDialogMod.value.name}`);
+    
+    showModNoteDialog.value = false;
+    noteDialogMod.value = null;
+    noteDialogText.value = "";
+  } catch (err) {
+    console.error("Failed to save mod note:", err);
+    toast.error("Save Failed", (err as Error).message);
+  } finally {
+    isSavingNote.value = false;
+  }
+}
+
+function closeModNoteDialog() {
+  showModNoteDialog.value = false;
+  noteDialogMod.value = null;
+  noteDialogText.value = "";
+}
+
+function getModNote(modId: string): string | undefined {
+  return modNotes.value[modId];
 }
 
 async function removeSelectedMods() {
@@ -4093,6 +4177,14 @@ watch(
                     <Lock class="w-3 h-3" />
                     {{ lockedModCount }}
                   </button>
+                  <button v-if="modsWithNotesCount > 0"
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'with-notes'
+                      ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'with-notes'"
+                    title="Mods with notes">
+                    <MessageSquare class="w-3 h-3" />
+                    {{ modsWithNotesCount }}
+                  </button>
                   <button v-if="updatesAvailableCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
                       ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
@@ -4392,6 +4484,14 @@ watch(
                           — {{ mod.incompatibilityReason }}
                         </span>
                       </div>
+                      
+                      <!-- Note Preview Row -->
+                      <div v-if="getModNote(mod.id)" class="flex items-center gap-1.5 text-[10px] text-blue-400/80 mt-1">
+                        <MessageSquare class="w-3 h-3 shrink-0" />
+                        <span class="truncate italic" :title="getModNote(mod.id)">
+                          {{ getModNote(mod.id) }}
+                        </span>
+                      </div>
                     </div>
 
                     <!-- Right Side Controls -->
@@ -4400,6 +4500,18 @@ watch(
 
                       <!-- Hover-only action buttons -->
                       <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                        <!-- Note Button -->
+                        <button
+                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
+                          :class="getModNote(mod.id)
+                            ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-500/50'
+                            : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-blue-400 border-border/40 hover:border-blue-500/50'"
+                          :title="getModNote(mod.id) ? 'Edit note' : 'Add note'"
+                          @click.stop="openModNoteDialog(mod)">
+                          <MessageSquare v-if="getModNote(mod.id)" class="w-3.5 h-3.5" />
+                          <MessageSquarePlus v-else class="w-3.5 h-3.5" />
+                        </button>
+
                         <!-- Lock/Unlock Button (action) -->
                         <button v-if="!isLinked"
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150" 
@@ -4470,6 +4582,14 @@ watch(
                         <div v-if="lockedModIds.has(mod.id)" class="w-6 h-6 flex items-center justify-center text-amber-500" title="Locked">
                           <Lock class="w-3.5 h-3.5" />
                         </div>
+                        
+                        <!-- Note indicator (always visible when note exists) -->
+                        <button v-if="getModNote(mod.id)" 
+                          class="w-6 h-6 flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors"
+                          :title="getModNote(mod.id)"
+                          @click.stop="openModNoteDialog(mod)">
+                          <MessageSquare class="w-3.5 h-3.5" />
+                        </button>
                       </div>
 
                       <!-- Enable/Disable Toggle (moved to far right) -->
@@ -5126,6 +5246,46 @@ watch(
       :slug="changelogMod.slug"
       @close="showChangelogDialog = false"
     />
+
+    <!-- Mod Note Dialog -->
+    <Dialog :open="showModNoteDialog" @close="closeModNoteDialog" :title="noteDialogMod ? `Note for ${noteDialogMod.name}` : 'Mod Note'" size="md">
+      <div class="space-y-4">
+        <p class="text-sm text-muted-foreground">
+          Add a personal note for this mod in this modpack. Notes are specific to each modpack and can help you remember why you included a mod or any configuration tips.
+        </p>
+        <div class="space-y-2">
+          <label class="text-sm font-medium">Note</label>
+          <textarea
+            v-model="noteDialogText"
+            placeholder="e.g., Required for compatibility with X mod, or: Remember to configure recipe changes..."
+            class="w-full h-32 px-3 py-2 text-sm rounded-lg bg-background border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none resize-none transition-all"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex items-center justify-between w-full">
+          <Button 
+            v-if="noteDialogMod && getModNote(noteDialogMod.id)"
+            variant="ghost" 
+            class="text-destructive hover:text-destructive hover:bg-destructive/10"
+            @click="noteDialogText = ''; saveModNote()"
+            :disabled="isSavingNote"
+          >
+            <Trash2 class="w-4 h-4 mr-2" />
+            Remove Note
+          </Button>
+          <div v-else></div>
+          <div class="flex items-center gap-2">
+            <Button variant="secondary" @click="closeModNoteDialog" :disabled="isSavingNote">Cancel</Button>
+            <Button @click="saveModNote" :disabled="isSavingNote">
+              <Loader2 v-if="isSavingNote" class="w-4 h-4 mr-2 animate-spin" />
+              <Save v-else class="w-4 h-4 mr-2" />
+              Save Note
+            </Button>
+          </div>
+        </div>
+      </template>
+    </Dialog>
 
     <!-- CurseForge Changelog Dialog -->
     <Dialog :open="showCFChangelog" @close="showCFChangelog = false" title="Modpack Changelog" size="lg">

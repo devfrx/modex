@@ -255,6 +255,9 @@ export interface ElectronAPI {
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
         modsLocked: Array<{ id: string; name: string }>;
         modsUnlocked: Array<{ id: string; name: string }>;
+        notesAdded: Array<{ id: string; name: string; note: string }>;
+        notesRemoved: Array<{ id: string; name: string; note: string }>;
+        notesChanged: Array<{ id: string; name: string; oldNote: string; newNote: string }>;
         loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{

@@ -29,6 +29,9 @@ import {
     LockOpen,
     Globe,
     Box,
+    MessageSquare,
+    MessageSquarePlus,
+    MessageSquareDashed,
 } from "lucide-vue-next";
 
 const props = defineProps<{
@@ -70,6 +73,9 @@ const unsavedChanges = ref<{
         modsUpdated: Array<{ id: string; name: string; oldVersion?: string; newVersion?: string }>;
         modsLocked: Array<{ id: string; name: string }>;
         modsUnlocked: Array<{ id: string; name: string }>;
+        notesAdded: Array<{ id: string; name: string; note: string }>;
+        notesRemoved: Array<{ id: string; name: string; note: string }>;
+        notesChanged: Array<{ id: string; name: string; oldNote: string; newNote: string }>;
         loaderChanged: { oldLoader?: string; newLoader?: string; oldVersion?: string; newVersion?: string } | null;
         configsChanged: boolean;
         configDetails?: Array<{
@@ -109,7 +115,8 @@ const unsavedChangeCount = computed(() => {
     if (!unsavedChanges.value?.changes) return 0;
     const c = unsavedChanges.value.changes;
     const loaderChange = c.loaderChanged ? 1 : 0;
-    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + (c.modsLocked?.length || 0) + (c.modsUnlocked?.length || 0) + loaderChange + configChangeCount.value;
+    const notesCount = (c.notesAdded?.length || 0) + (c.notesRemoved?.length || 0) + (c.notesChanged?.length || 0);
+    return c.modsAdded.length + c.modsRemoved.length + c.modsEnabled.length + c.modsDisabled.length + (c.modsUpdated?.length || 0) + (c.modsLocked?.length || 0) + (c.modsUnlocked?.length || 0) + notesCount + loaderChange + configChangeCount.value;
 });
 
 // Helper functions for config display
@@ -786,6 +793,78 @@ watch(() => props.modpackId, () => {
                                         class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                                         @click.stop="toggleChangeSection('configs')">
                                         +{{ unsavedChanges.changes.configDetails.length - 5 }} more
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Notes Added -->
+                            <div v-if="unsavedChanges.changes.notesAdded?.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+                                    @click="toggleChangeSection('notesAdded')">
+                                    <MessageSquarePlus class="w-3.5 h-3.5 text-blue-500" />
+                                    <span>{{ unsavedChanges.changes.notesAdded.length }} note{{ unsavedChanges.changes.notesAdded.length !== 1 ? 's' : '' }} added</span>
+                                    <component :is="expandedChangeSections.has('notesAdded') ? ChevronUp : ChevronDown"
+                                        class="w-3 h-3 ml-auto" />
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('notesAdded') ? unsavedChanges.changes.notesAdded : unsavedChanges.changes.notesAdded.slice(0, 5))"
+                                        :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <button
+                                        v-if="unsavedChanges.changes.notesAdded.length > 5 && !expandedChangeSections.has('notesAdded')"
+                                        class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
+                                        @click.stop="toggleChangeSection('notesAdded')">
+                                        +{{ unsavedChanges.changes.notesAdded.length - 5 }} more
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Notes Removed -->
+                            <div v-if="unsavedChanges.changes.notesRemoved?.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+                                    @click="toggleChangeSection('notesRemoved')">
+                                    <MessageSquareDashed class="w-3.5 h-3.5 text-red-500" />
+                                    <span>{{ unsavedChanges.changes.notesRemoved.length }} note{{ unsavedChanges.changes.notesRemoved.length !== 1 ? 's' : '' }} removed</span>
+                                    <component :is="expandedChangeSections.has('notesRemoved') ? ChevronUp : ChevronDown"
+                                        class="w-3 h-3 ml-auto" />
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('notesRemoved') ? unsavedChanges.changes.notesRemoved : unsavedChanges.changes.notesRemoved.slice(0, 5))"
+                                        :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <button
+                                        v-if="unsavedChanges.changes.notesRemoved.length > 5 && !expandedChangeSections.has('notesRemoved')"
+                                        class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
+                                        @click.stop="toggleChangeSection('notesRemoved')">
+                                        +{{ unsavedChanges.changes.notesRemoved.length - 5 }} more
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Notes Changed -->
+                            <div v-if="unsavedChanges.changes.notesChanged?.length > 0" class="space-y-1">
+                                <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+                                    @click="toggleChangeSection('notesChanged')">
+                                    <MessageSquare class="w-3.5 h-3.5 text-yellow-500" />
+                                    <span>{{ unsavedChanges.changes.notesChanged.length }} note{{ unsavedChanges.changes.notesChanged.length !== 1 ? 's' : '' }} edited</span>
+                                    <component :is="expandedChangeSections.has('notesChanged') ? ChevronUp : ChevronDown"
+                                        class="w-3 h-3 ml-auto" />
+                                </div>
+                                <div class="ml-5 flex flex-wrap gap-1">
+                                    <span
+                                        v-for="mod in (expandedChangeSections.has('notesChanged') ? unsavedChanges.changes.notesChanged : unsavedChanges.changes.notesChanged.slice(0, 5))"
+                                        :key="mod.id"
+                                        class="text-xs px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+                                        {{ mod.name }}
+                                    </span>
+                                    <button
+                                        v-if="unsavedChanges.changes.notesChanged.length > 5 && !expandedChangeSections.has('notesChanged')"
+                                        class="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
+                                        @click.stop="toggleChangeSection('notesChanged')">
+                                        +{{ unsavedChanges.changes.notesChanged.length - 5 }} more
                                     </button>
                                 </div>
                             </div>

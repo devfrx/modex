@@ -176,6 +176,9 @@ export interface Modpack {
   /** Locked mod IDs (mods that cannot be updated, removed, or modified) */
   locked_mod_ids?: string[];
 
+  /** Per-mod notes (maps mod ID to note text) */
+  mod_notes?: Record<string, string>;
+
   /** Remote source configuration for collaboration/updates */
   remote_source?: {
     /** URL to the remote manifest JSON (e.g. GitHub Gist Raw URL) */
@@ -187,14 +190,14 @@ export interface Modpack {
     /** Skip initial auto-check (set after fresh import) */
     skip_initial_check?: boolean;
   };
-  
+
   /** Mods that failed to import due to incompatibility */
   incompatible_mods?: Array<{
     cf_project_id: number;
     name: string;
     reason: string;
   }>;
-  
+
   // CurseForge source tracking for imported modpacks
   /** CurseForge project ID (if imported from CF) */
   cf_project_id?: number;
@@ -270,6 +273,15 @@ export interface ModexManifest {
     mod_count: number;
     disabled_count?: number;
   };
+  /** Mod notes (maps internal mod ID to note text) */
+  mod_notes?: Record<string, string>;
+  /** Mod notes by project ID (stable cross-import identifiers) */
+  mod_notes_by_project?: Array<{
+    cf_project_id?: number;
+    mr_project_id?: string;
+    name: string;
+    note: string;
+  }>;
   /** Version control history (optional, included if modpack has versions) */
   version_history?: ModpackVersionHistory;
 }
@@ -325,7 +337,7 @@ export interface RemoteUpdateResult {
 
 /** A single change in a modpack version */
 export interface ModpackChange {
-  type: "add" | "remove" | "update" | "enable" | "disable" | "lock" | "unlock" | "version_control" | "loader_change";
+  type: "add" | "remove" | "update" | "enable" | "disable" | "lock" | "unlock" | "version_control" | "loader_change" | "note_add" | "note_remove" | "note_change";
   modId: string;
   modName: string;
   /** For updates: previous version string */
@@ -336,6 +348,10 @@ export interface ModpackChange {
   previousFileId?: number;
   /** For updates: new file ID */
   newFileId?: number;
+  /** For note changes: previous note text */
+  previousNote?: string;
+  /** For note changes: new note text */
+  newNote?: string;
 }
 
 /** A snapshot/commit of the modpack state */
@@ -358,6 +374,8 @@ export interface ModpackVersion {
   disabled_mod_ids?: string[];
   /** Snapshot of locked mod IDs at this version */
   locked_mod_ids?: string[];
+  /** Snapshot of mod notes at this version */
+  mod_notes?: Record<string, string>;
   /** Loader type at this version (forge, fabric, etc.) */
   loader?: string;
   /** Loader version at this version */
@@ -540,55 +558,55 @@ export interface LibraryFilters {
 export interface ModexInstance {
   /** Unique instance ID */
   id: string;
-  
+
   /** Display name */
   name: string;
-  
+
   /** Instance description */
   description?: string;
-  
+
   /** Minecraft version (e.g., "1.20.1") */
   minecraftVersion: string;
-  
+
   /** Mod loader (forge, fabric, neoforge, quilt) */
   loader: string;
-  
+
   /** Loader version (e.g., "47.2.0" for Forge) */
   loaderVersion?: string;
-  
+
   /** Path to instance directory */
   path: string;
-  
+
   /** Associated modpack ID (if created from modpack) */
   modpackId?: string;
-  
+
   /** Instance icon (emoji or path) */
   icon?: string;
-  
+
   /** Total mods count */
   modCount?: number;
-  
+
   /** Instance creation date */
   createdAt: string;
-  
+
   /** Last played date */
   lastPlayed?: string;
-  
+
   /** Total play time in minutes */
   playTime?: number;
-  
+
   /** Instance state */
   state: "ready" | "installing" | "error";
-  
+
   /** Memory allocation in MB */
   memory?: {
     min: number;
     max: number;
   };
-  
+
   /** Java arguments */
   javaArgs?: string;
-  
+
   /** CurseForge/Modrinth source info */
   source?: {
     type: "curseforge" | "modrinth" | "local";
@@ -630,7 +648,7 @@ export interface InstanceStats {
 // ==================== CONFIG MANAGEMENT TYPES ====================
 
 /** Config file type based on extension */
-export type ConfigType = 
+export type ConfigType =
   | "toml"       // Most common for Forge mods
   | "json"       // JSON configs
   | "json5"      // JSON5 configs

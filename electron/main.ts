@@ -121,7 +121,7 @@ async function initializeBackend() {
   });
 
   // ========== HELPER: Check if modpack is linked (has remote_source) ==========
-  
+
   /**
    * Helper to check if a modpack is linked to a remote source.
    * Linked modpacks should not be modified directly - changes should come from remote sync.
@@ -329,6 +329,22 @@ async function initializeBackend() {
           console.log(
             `[IPC] Mod cf-${projectId}-${fileId} already exists in library, reusing. (Existing ID: ${existingMod.id})`
           );
+
+          // Verify content_type is correct by checking classId from API
+          const cfMod = await curseforgeService.getMod(projectId);
+          if (cfMod?.classId) {
+            const correctContentType = getContentTypeFromClassId(cfMod.classId);
+            const mappedCorrectType = correctContentType === "resourcepacks" ? "resourcepack"
+              : correctContentType === "shaders" ? "shader"
+                : "mod";
+
+            if (existingMod.content_type !== mappedCorrectType) {
+              console.log(`[IPC] Correcting content_type for ${existingMod.name}: ${existingMod.content_type} -> ${mappedCorrectType}`);
+              await metadataManager.updateMod(existingMod.id, { content_type: mappedCorrectType });
+              existingMod.content_type = mappedCorrectType;
+            }
+          }
+
           return existingMod;
         }
 
@@ -1309,9 +1325,9 @@ async function initializeBackend() {
 
     // Check for API key (required for fetching mod metadata)
     if (!curseforgeService.hasApiKey()) {
-      return { 
-        success: false, 
-        error: "CurseForge API key required. Please add your API key in Settings > General > API Configuration." 
+      return {
+        success: false,
+        error: "CurseForge API key required. Please add your API key in Settings > General > API Configuration."
       };
     }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
@@ -11,8 +12,12 @@ import {
   Check,
   RefreshCw,
   Link,
+  AlertTriangle,
+  Key,
 } from "lucide-vue-next";
 import Input from "@/components/ui/Input.vue";
+
+const router = useRouter();
 
 const props = defineProps<{
   open: boolean;
@@ -26,6 +31,9 @@ const emit = defineEmits<{
 }>();
 
 const toast = useToast();
+
+// API Key state
+const hasApiKey = ref(true);
 
 type Tab = "export" | "import";
 const activeTab = ref<Tab>("export");
@@ -82,6 +90,9 @@ watch(
   () => props.open,
   async (isOpen) => {
     if (isOpen) {
+      // Check for API key
+      hasApiKey.value = await window.api.curseforge.hasApiKey();
+      
       // Reset state
       shareCode.value = null;
       checksum.value = null;
@@ -161,6 +172,16 @@ async function importModex() {
     const result = await window.api.import.modex();
     console.log('[Frontend] Import result:', result);
     if (result) {
+      // Check for API key or other errors
+      const errors = (result as any).errors;
+      if (result.success === false && errors?.length > 0) {
+        toast.error("Import Failed", errors[0]);
+        removeProgressListener();
+        isImporting.value = false;
+        importProgress.value = null;
+        return;
+      }
+      
       // Check if conflicts need resolution
       if (result.requiresResolution && result.conflicts) {
         console.log(`[Frontend] ${result.conflicts.length} conflicts detected, showing dialog`);
@@ -323,6 +344,11 @@ function copyCode() {
   }
 }
 
+function goToSettings() {
+  emit("close");
+  router.push("/settings");
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "Never";
   return new Date(dateStr).toLocaleString();
@@ -433,22 +459,45 @@ function formatBytes(bytes: number): string {
 
       <!-- Import Tab -->
       <div v-if="activeTab === 'import'" class="space-y-4">
+        <!-- API Key Warning -->
+        <div v-if="!hasApiKey" class="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <div class="flex items-start gap-3">
+            <AlertTriangle class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div class="flex-1">
+              <div class="text-sm font-medium text-amber-600 dark:text-amber-400">
+                CurseForge API Key Required
+              </div>
+              <p class="text-xs text-amber-600/80 dark:text-amber-400/80 mt-1">
+                Import functionality requires a CurseForge API key to fetch mod metadata.
+                Please add your API key in Settings.
+              </p>
+              <button 
+                @click="goToSettings"
+                class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 rounded-md transition-colors"
+              >
+                <Key class="w-3.5 h-3.5" />
+                Go to Settings
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Toggle between file import and URL import -->
         <div class="flex gap-2">
           <Button variant="outline" class="flex-1" :class="!urlImportMode ? 'ring-2 ring-primary' : ''"
-            @click="urlImportMode = false">
+            @click="urlImportMode = false" :disabled="!hasApiKey">
             <Download class="w-4 h-4 mr-2" />
             From File
           </Button>
           <Button variant="outline" class="flex-1" :class="urlImportMode ? 'ring-2 ring-primary' : ''"
-            @click="urlImportMode = true">
+            @click="urlImportMode = true" :disabled="!hasApiKey">
             <Link class="w-4 h-4 mr-2" />
             From URL
           </Button>
         </div>
 
         <!-- File Import Section -->
-        <template v-if="!urlImportMode">
+        <template v-if="!urlImportMode && hasApiKey">
           <div class="p-4 rounded-lg bg-muted/50 border border-border">
             <div class="text-sm font-medium mb-1">Import from File</div>
             <div class="text-xs text-muted-foreground">
@@ -465,7 +514,7 @@ function formatBytes(bytes: number): string {
         </template>
 
         <!-- URL Import Section -->
-        <template v-if="urlImportMode">
+        <template v-if="urlImportMode && hasApiKey">
           <div class="p-4 rounded-lg bg-muted/50 border border-border">
             <div class="text-sm font-medium mb-1">Import from URL</div>
             <div class="text-xs text-muted-foreground">

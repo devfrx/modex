@@ -46,6 +46,7 @@ import {
     Cpu,
     MemoryStick,
     Sliders,
+    Trash2,
 } from "lucide-vue-next";
 import { useInstances } from "@/composables/useInstances";
 import { useToast } from "@/composables/useToast";
@@ -1141,25 +1142,52 @@ function handleConfigReverted(event: Event) {
                                             </div>
                                         </div>
 
-                                        <!-- Extra in Instance -->
-                                        <div v-if="syncStatus.extraInInstance.length" class="space-y-1">
-                                            <div class="flex items-center gap-2 text-blue-400">
-                                                <Package class="w-4 h-4" />
-                                                <span class="font-medium">Extra in instance ({{
-                                                    syncStatus.extraInInstance.length }})</span>
+                                        <!-- Extra Mods in Instance (will be REMOVED) -->
+                                        <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length" class="space-y-1">
+                                            <div class="flex items-center gap-2 text-red-400">
+                                                <Trash2 class="w-4 h-4" />
+                                                <span class="font-medium">Mods to remove ({{
+                                                    syncStatus.extraInInstance.filter(i => i.type === 'mod').length }})</span>
+                                            </div>
+                                            <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
+                                                These mods are not in the modpack and will be removed during sync.
                                             </div>
                                             <div class="ml-6 space-y-1 max-h-24 overflow-y-auto">
-                                                <div v-for="item in syncStatus.extraInInstance.slice(0, 5)"
+                                                <div v-for="item in syncStatus.extraInInstance.filter(i => i.type === 'mod').slice(0, 5)"
                                                     :key="item.filename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
-                                                    <Package v-if="item.type === 'mod'" class="w-3 h-3" />
-                                                    <Palette v-else-if="item.type === 'resourcepack'" class="w-3 h-3" />
-                                                    <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
+                                                    <Package class="w-3 h-3" />
                                                     <span class="truncate">{{ item.filename }}</span>
                                                 </div>
-                                                <div v-if="syncStatus.extraInInstance.length > 5"
+                                                <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length > 5"
                                                     class="text-xs text-muted-foreground/70">
-                                                    ... and {{ syncStatus.extraInInstance.length - 5 }} more
+                                                    ... and {{ syncStatus.extraInInstance.filter(i => i.type === 'mod').length - 5 }} more
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Extra Resourcepacks/Shaders (will be preserved) -->
+                                        <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length" class="space-y-1">
+                                            <div class="flex items-center gap-2 text-blue-400">
+                                                <Package class="w-4 h-4" />
+                                                <span class="font-medium">Extra files ({{
+                                                    syncStatus.extraInInstance.filter(i => i.type !== 'mod').length }})</span>
+                                            </div>
+                                            <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
+                                                These files will be preserved.
+                                            </div>
+                                            <div class="ml-6 space-y-1 max-h-24 overflow-y-auto">
+                                                <div v-for="item in syncStatus.extraInInstance.filter(i => i.type !== 'mod').slice(0, 5)"
+                                                    :key="item.filename"
+                                                    class="flex items-center gap-2 text-muted-foreground text-xs">
+                                                    <Palette v-if="item.type === 'resourcepack'" class="w-3 h-3" />
+                                                    <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
+                                                    <Package v-else class="w-3 h-3" />
+                                                    <span class="truncate">{{ item.filename }}</span>
+                                                </div>
+                                                <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 5"
+                                                    class="text-xs text-muted-foreground/70">
+                                                    ... and {{ syncStatus.extraInInstance.filter(i => i.type !== 'mod').length - 5 }} more
                                                 </div>
                                             </div>
                                         </div>

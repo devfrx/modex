@@ -18,58 +18,58 @@ import AdmZip from "adm-zip";
 export interface ModexInstance {
   /** Unique instance ID */
   id: string;
-  
+
   /** Display name */
   name: string;
-  
+
   /** Instance description */
   description?: string;
-  
+
   /** Minecraft version (e.g., "1.20.1") */
   minecraftVersion: string;
-  
+
   /** Mod loader (forge, fabric, neoforge, quilt) */
   loader: string;
-  
+
   /** Loader version (e.g., "47.2.0" for Forge) */
   loaderVersion?: string;
-  
+
   /** Path to instance directory */
   path: string;
-  
+
   /** Associated modpack ID (if created from modpack) */
   modpackId?: string;
-  
+
   /** Instance icon (emoji or path) */
   icon?: string;
-  
+
   /** Total mods count */
   modCount?: number;
-  
+
   /** Instance creation date */
   createdAt: string;
-  
+
   /** Last played date */
   lastPlayed?: string;
-  
+
   /** Total play time in minutes */
   playTime?: number;
-  
+
   /** Instance state */
   state: "ready" | "installing" | "error";
-  
+
   /** Last time the instance was synced with modpack */
   lastSynced?: string;
-  
+
   /** Memory allocation in MB */
   memory?: {
     min: number;
     max: number;
   };
-  
+
   /** Java arguments */
   javaArgs?: string;
-  
+
   /** CurseForge source info */
   source?: {
     type: "curseforge" | "modrinth" | "local";
@@ -137,13 +137,13 @@ export class InstanceService {
   private instancesPath: string;
   private configPath: string;
   private launcherConfig: LauncherConfig;
-  
+
   /** Track running games by instance ID */
   private runningGames: Map<string, RunningGameInfo> = new Map();
-  
+
   /** Callback for game status updates */
   private onGameStatusChange?: (instanceId: string, info: RunningGameInfo) => void;
-  
+
   /** Callback for game log lines (for real-time log console) */
   private onGameLogLine?: (instanceId: string, logLine: { time: string; level: string; message: string; raw: string; source?: string }) => void;
 
@@ -160,7 +160,7 @@ export class InstanceService {
     await fs.ensureDir(this.instancesPath);
     await this.loadConfig();
     await this.loadInstances();
-    
+
     // Scan for already running games on startup
     await this.scanRunningGames();
   }
@@ -170,14 +170,14 @@ export class InstanceService {
    */
   async scanRunningGames(): Promise<void> {
     if (process.platform !== "win32") return;
-    
+
     try {
       const { execSync } = await import("child_process");
       const result = execSync(
         `powershell -Command "Get-CimInstance Win32_Process -Filter \\"Name like '%java%'\\" | Select-Object ProcessId, CommandLine, CreationDate | ConvertTo-Json"`,
         { encoding: "utf-8", timeout: 15000 }
       );
-      
+
       let processes: any[] = [];
       try {
         const parsed = JSON.parse(result);
@@ -185,18 +185,18 @@ export class InstanceService {
       } catch {
         return;
       }
-      
+
       for (const proc of processes) {
         if (!proc || !proc.CommandLine) continue;
-        
+
         const cmdLine = proc.CommandLine as string;
-        
+
         // Find which instance this belongs to
         for (const instance of this.instances) {
           if (cmdLine.includes(instance.path) || cmdLine.includes(instance.path.replace(/\\/g, "/"))) {
             // Found a running game for this instance
             console.log(`[InstanceService] Found running game for instance ${instance.id} (PID: ${proc.ProcessId})`);
-            
+
             const gameInfo: RunningGameInfo = {
               instanceId: instance.id,
               gamePid: proc.ProcessId,
@@ -206,19 +206,19 @@ export class InstanceService {
               totalMods: instance.modCount || 0,
               gameProcessRunning: true
             };
-            
+
             this.runningGames.set(instance.id, gameInfo);
             this.onGameStatusChange?.(instance.id, gameInfo);
-            
+
             // Start monitoring this process
             this.monitorGameProcess(instance);
             this.watchGameLogs(instance);
-            
+
             break;
           }
         }
       }
-      
+
       if (this.runningGames.size > 0) {
         console.log(`[InstanceService] Detected ${this.runningGames.size} running game(s) from previous session`);
       }
@@ -259,7 +259,7 @@ export class InstanceService {
       for (const dir of dirs) {
         const instancePath = path.join(this.instancesPath, dir);
         const metaPath = path.join(instancePath, "instance.json");
-        
+
         if (await fs.pathExists(metaPath)) {
           try {
             const meta = await fs.readJson(metaPath);
@@ -360,10 +360,10 @@ export class InstanceService {
       if (this.runningGames.has(id)) {
         await this.killGame(id);
       }
-      
+
       // Remove directory
       await fs.remove(instance.path);
-      
+
       // Remove from list
       this.instances = this.instances.filter(i => i.id !== id);
       return true;
@@ -495,7 +495,7 @@ export class InstanceService {
       const modsPath = path.join(instance.path, "mods");
       const resourcepacksPath = path.join(instance.path, "resourcepacks");
       const shaderpacksPath = path.join(instance.path, "shaderpacks");
-      
+
       await fs.ensureDir(modsPath);
       await fs.ensureDir(resourcepacksPath);
       await fs.ensureDir(shaderpacksPath);
@@ -503,16 +503,16 @@ export class InstanceService {
       // Clear existing mods if requested
       if (options.clearExisting) {
         options.onProgress?.("Clearing existing content...", 0, 1);
-        
+
         // Clear mods (includes .jar and .zip mods/datapacks)
         const existingMods = await fs.readdir(modsPath);
         for (const file of existingMods) {
           if (file.endsWith(".jar") || file.endsWith(".jar.disabled") ||
-              file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
+            file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
             await fs.remove(path.join(modsPath, file));
           }
         }
-        
+
         // Clear resourcepacks (but not user-added ones - only .zip)
         const existingResourcepacks = await fs.readdir(resourcepacksPath);
         for (const file of existingResourcepacks) {
@@ -520,7 +520,7 @@ export class InstanceService {
             await fs.remove(path.join(resourcepacksPath, file));
           }
         }
-        
+
         // Clear shaderpacks
         const existingShaderpacks = await fs.readdir(shaderpacksPath);
         for (const file of existingShaderpacks) {
@@ -534,7 +534,7 @@ export class InstanceService {
       // Rename .jar → .jar.disabled for disabled mods, and vice versa for enabled mods
       if (modpackData.disabledMods && modpackData.disabledMods.length > 0) {
         options.onProgress?.("Managing disabled mods...", 0, modpackData.disabledMods.length);
-        
+
         for (const disabledMod of modpackData.disabledMods) {
           let targetFolder: string;
           switch (disabledMod.content_type) {
@@ -583,7 +583,7 @@ export class InstanceService {
       // Remove mods from instance that are no longer in the modpack
       if (!options.clearExisting) {
         options.onProgress?.("Removing outdated mods...", 0, 1);
-        
+
         const currentModFilenames = new Set([
           ...modpackData.mods.map(m => m.filename),
           ...(modpackData.disabledMods || []).map(m => m.filename)
@@ -592,8 +592,8 @@ export class InstanceService {
         // Check mods folder (includes .jar and .zip mods/datapacks)
         for (const file of existingModFiles) {
           const baseFilename = file.replace(".disabled", "");
-          const isModFile = file.endsWith(".jar") || file.endsWith(".jar.disabled") || 
-                           file.endsWith(".zip") || file.endsWith(".zip.disabled");
+          const isModFile = file.endsWith(".jar") || file.endsWith(".jar.disabled") ||
+            file.endsWith(".zip") || file.endsWith(".zip.disabled");
           if (isModFile && !currentModFilenames.has(baseFilename)) {
             await fs.remove(path.join(modsPath, file));
             console.log(`[Sync] Removed mod no longer in pack: ${file}`);
@@ -654,14 +654,14 @@ export class InstanceService {
       const totalMods = modpackData.mods.length;
       const PARALLEL_DOWNLOADS = 20; // Number of concurrent downloads
       let completed = 0;
-      
+
       // Log resourcepacks and shaders to sync
       const resourcepacks = modpackData.mods.filter(m => m.content_type === "resourcepack");
       const shaders = modpackData.mods.filter(m => m.content_type === "shader");
       console.log(`[Sync] Resourcepacks to sync: ${resourcepacks.length}`);
       resourcepacks.forEach(r => console.log(`  - ${r.filename} (cf_file_id: ${r.cf_file_id})`));
       console.log(`[Sync] Shaders to sync: ${shaders.length}`);
-      
+
       // Prepare download tasks
       const downloadTasks = modpackData.mods.map(mod => async () => {
         try {
@@ -678,7 +678,7 @@ export class InstanceService {
             default:
               destFolder = modsPath;
           }
-          
+
           const destPath = path.join(destFolder, mod.filename);
           const disabledDestPath = path.join(destFolder, mod.filename + ".disabled");
 
@@ -721,7 +721,7 @@ export class InstanceService {
           const buffer = Buffer.from(await response.arrayBuffer());
           await fs.writeFile(destPath, buffer);
           console.log(`[Sync] Successfully downloaded ${mod.filename} (${buffer.length} bytes) to ${destPath}`);
-          
+
           completed++;
           options.onProgress?.("Downloading content", completed, totalMods, mod.name);
           return { status: "downloaded" as const, mod };
@@ -748,7 +748,7 @@ export class InstanceService {
       for (const rp of rpResults) {
         console.log(`  - ${rp.mod.filename}: ${rp.status}${rp.error ? ` (${rp.error})` : ''}`);
       }
-      
+
       for (const downloadResult of downloadResults) {
         switch (downloadResult.status) {
           case "downloaded":
@@ -772,7 +772,7 @@ export class InstanceService {
       // After download, rename any files that should be disabled
       if (modpackData.disabledMods && modpackData.disabledMods.length > 0) {
         options.onProgress?.("Renaming disabled mods...", 0, modpackData.disabledMods.length);
-        
+
         for (const disabledMod of modpackData.disabledMods) {
           let targetFolder: string;
           switch (disabledMod.content_type) {
@@ -800,7 +800,7 @@ export class InstanceService {
       // Extract overrides (config files, scripts, etc.)
       // Respect configSyncMode: "overwrite" | "new_only" | "skip"
       const configMode = options.configSyncMode || "overwrite";
-      
+
       if (modpackData.overridesZipPath && configMode !== "skip") {
         options.onProgress?.("Extracting configurations...", 0, 1);
         const overridesResult = await this.extractOverrides(
@@ -825,7 +825,7 @@ export class InstanceService {
     } catch (error: any) {
       instance.state = "error";
       await this.saveInstanceMeta(instance);
-      
+
       return {
         ...result,
         success: false,
@@ -862,7 +862,7 @@ export class InstanceService {
 
       // Check if it's a zip file or directory
       const stat = await fs.stat(overridesSource);
-      
+
       if (stat.isDirectory()) {
         // Check if directory has any syncable content
         const foldersToCheck = ["config", "kubejs", "resourcepacks", "shaderpacks", "defaultconfigs", "scripts", "global_packs"];
@@ -873,13 +873,13 @@ export class InstanceService {
             break;
           }
         }
-        
+
         if (!hasContent) {
           console.log(`[InstanceService] overridesSource directory is empty (no config folders found)`);
           result.warnings.push("No configuration files found. For modpacks imported from URL, configs are not included in the remote manifest.");
           return result;
         }
-        
+
         // Direct directory copy
         const copyResult = await this.copyOverridesDir(overridesSource, instancePath, configMode);
         result.filesCopied = copyResult.copied;
@@ -888,10 +888,10 @@ export class InstanceService {
         // Extract from zip
         const zip = new AdmZip(overridesSource);
         const entries = zip.getEntries();
-        
+
         // Find overrides folder in zip
-        const overridesPrefix = entries.find(e => 
-          e.entryName.startsWith("overrides/") || 
+        const overridesPrefix = entries.find(e =>
+          e.entryName.startsWith("overrides/") ||
           e.entryName.includes("/overrides/")
         )?.entryName.split("overrides/")[0] + "overrides/";
 
@@ -900,24 +900,24 @@ export class InstanceService {
           const configPrefix = entries.find(e =>
             e.entryName.includes("/config/") || e.entryName.startsWith("config/")
           )?.entryName.split("config/")[0] || "";
-          
+
           if (configPrefix || entries.some(e => e.entryName.startsWith("config/"))) {
             // Extract relevant folders
             const foldersToExtract = ["config", "kubejs", "resourcepacks", "shaderpacks", "defaultconfigs", "scripts"];
-            
+
             for (const entry of entries) {
               for (const folder of foldersToExtract) {
                 const folderPath = configPrefix + folder + "/";
                 if (entry.entryName.startsWith(folderPath) && !entry.isDirectory) {
                   const relativePath = entry.entryName.substring(configPrefix.length);
                   const destPath = path.join(instancePath, relativePath);
-                  
+
                   // Check if file exists for new_only mode
                   if (configMode === "new_only" && await fs.pathExists(destPath)) {
                     result.filesSkipped++;
                     continue;
                   }
-                  
+
                   await fs.ensureDir(path.dirname(destPath));
                   await fs.writeFile(destPath, entry.getData());
                   result.filesCopied++;
@@ -932,15 +932,15 @@ export class InstanceService {
               const relativePath = entry.entryName.substring(overridesPrefix.length);
               if (relativePath) {
                 const destPath = path.join(instancePath, relativePath);
-                
+
                 // Check if file exists for new_only mode
                 if (configMode === "new_only" && await fs.pathExists(destPath)) {
                   result.filesSkipped++;
                   continue;
                 }
-                
+
                 onProgress?.("Extracting", result.filesCopied, entries.length, relativePath);
-                
+
                 await fs.ensureDir(path.dirname(destPath));
                 await fs.writeFile(destPath, entry.getData());
                 result.filesCopied++;
@@ -959,18 +959,18 @@ export class InstanceService {
   private async copyOverridesDir(sourceDir: string, destDir: string, configMode: ConfigSyncMode): Promise<{ copied: number; skipped: number }> {
     let copied = 0;
     let skipped = 0;
-    
+
     console.log(`[InstanceService] copyOverridesDir: ${sourceDir} -> ${destDir}`);
-    
+
     const foldersToSync = ["config", "kubejs", "resourcepacks", "shaderpacks", "defaultconfigs", "scripts", "global_packs"];
-    
+
     for (const folder of foldersToSync) {
       const sourcePath = path.join(sourceDir, folder);
       const destPath = path.join(destDir, folder);
-      
+
       const exists = await fs.pathExists(sourcePath);
       console.log(`[InstanceService]   ${folder}: ${exists ? 'EXISTS' : 'not found'} at ${sourcePath}`);
-      
+
       if (exists) {
         if (configMode === "new_only") {
           // Copy file by file, skip existing
@@ -984,7 +984,7 @@ export class InstanceService {
         }
       }
     }
-    
+
     return { copied, skipped };
   }
 
@@ -994,14 +994,14 @@ export class InstanceService {
   private async copyDirNewOnly(sourceDir: string, destDir: string): Promise<{ copied: number; skipped: number }> {
     let copied = 0;
     let skipped = 0;
-    
+
     await fs.ensureDir(destDir);
     const entries = await fs.readdir(sourceDir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const srcPath = path.join(sourceDir, entry.name);
       const dstPath = path.join(destDir, entry.name);
-      
+
       if (entry.isDirectory()) {
         const subResult = await this.copyDirNewOnly(srcPath, dstPath);
         copied += subResult.copied;
@@ -1015,14 +1015,14 @@ export class InstanceService {
         }
       }
     }
-    
+
     return { copied, skipped };
   }
 
   private async countFiles(dir: string): Promise<number> {
     let count = 0;
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       if (entry.isDirectory()) {
         count += await this.countFiles(path.join(dir, entry.name));
@@ -1030,7 +1030,7 @@ export class InstanceService {
         count++;
       }
     }
-    
+
     return count;
   }
 
@@ -1049,11 +1049,11 @@ export class InstanceService {
     }
 
     const platform = process.platform;
-    
+
     try {
       // Find vanilla launcher
       let launcherPath: string | null = this.launcherConfig.vanillaPath || null;
-      
+
       if (!launcherPath || !await fs.pathExists(launcherPath)) {
         // Auto-detect launcher
         launcherPath = await this.findVanillaLauncher();
@@ -1087,7 +1087,7 @@ export class InstanceService {
 
       // Create/update launcher profile for this instance
       await this.createOrUpdateLauncherProfile(instance);
-      
+
       onProgress?.("profile", 1, 1, "Profile ready");
 
       console.log(`[InstanceService] Launching: ${launcherPath}`);
@@ -1102,18 +1102,18 @@ export class InstanceService {
       // Capture the launcher process PID for later termination
       let launcherProcess;
       if (platform === "darwin" && launcherPath.endsWith(".app")) {
-        launcherProcess = spawn("open", [launcherPath], { 
-          detached: true, 
-          stdio: "ignore" 
+        launcherProcess = spawn("open", [launcherPath], {
+          detached: true,
+          stdio: "ignore"
         });
       } else {
-        launcherProcess = spawn(launcherPath, [], { 
-          detached: true, 
+        launcherProcess = spawn(launcherPath, [], {
+          detached: true,
           stdio: "ignore",
           cwd: path.dirname(launcherPath)
         });
       }
-      
+
       const launcherPid = launcherProcess.pid;
       launcherProcess.unref();
 
@@ -1144,7 +1144,7 @@ export class InstanceService {
     }
 
     const profilesPath = path.join(minecraftDir, "launcher_profiles.json");
-    
+
     // Read existing profiles
     let profiles: any = { profiles: {} };
     if (await fs.pathExists(profilesPath)) {
@@ -1240,7 +1240,7 @@ export class InstanceService {
     // Build version ID
     let versionId: string;
     const loaderLower = loader.toLowerCase();
-    
+
     if (loaderLower === "fabric") {
       versionId = `fabric-loader-${loaderVersion}-${minecraftVersion}`;
     } else if (loaderLower === "forge") {
@@ -1256,7 +1256,7 @@ export class InstanceService {
     // Check if already installed
     const versionDir = path.join(versionsDir, versionId);
     const versionJsonPath = path.join(versionDir, `${versionId}.json`);
-    
+
     if (await fs.pathExists(versionJsonPath)) {
       console.log(`[InstanceService] Mod loader already installed: ${versionId}`);
       onProgress?.("check", 1, 1, `${loader} ${loaderVersion} already installed`);
@@ -1300,7 +1300,7 @@ export class InstanceService {
       const metaUrl = `https://meta.fabricmc.net/v2/versions/loader/${minecraftVersion}/${loaderVersion}/profile/json`;
       console.log(`[InstanceService] Fetching Fabric profile from: ${metaUrl}`);
       onProgress?.("install", 5, 100, "Fetching Fabric profile...");
-      
+
       const response = await fetch(metaUrl);
       if (!response.ok) {
         return { success: false, error: `Failed to fetch Fabric profile: ${response.statusText}` };
@@ -1321,7 +1321,7 @@ export class InstanceService {
       const libraries = (versionJson.libraries || []).filter((lib: any) => lib.url && lib.name);
       const totalLibs = libraries.length;
       let downloadedLibs = 0;
-      
+
       for (const lib of libraries) {
         const libName = lib.name.split(":")[1] || lib.name;
         onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 80), 100, `Downloading ${libName}...`);
@@ -1353,7 +1353,7 @@ export class InstanceService {
       const metaUrl = `https://meta.quiltmc.org/v3/versions/loader/${minecraftVersion}/${loaderVersion}/profile/json`;
       console.log(`[InstanceService] Fetching Quilt profile from: ${metaUrl}`);
       onProgress?.("install", 5, 100, "Fetching Quilt profile...");
-      
+
       const response = await fetch(metaUrl);
       if (!response.ok) {
         return { success: false, error: `Failed to fetch Quilt profile: ${response.statusText}` };
@@ -1374,7 +1374,7 @@ export class InstanceService {
       const libraries = (versionJson.libraries || []).filter((lib: any) => lib.url && lib.name);
       const totalLibs = libraries.length;
       let downloadedLibs = 0;
-      
+
       for (const lib of libraries) {
         const libName = lib.name.split(":")[1] || lib.name;
         onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 80), 100, `Downloading ${libName}...`);
@@ -1401,13 +1401,13 @@ export class InstanceService {
     onProgress?: (stage: string, current: number, total: number, detail?: string) => void
   ): Promise<{ success: boolean; error?: string }> {
     const { execSync } = await import("child_process");
-    
+
     try {
       // Build installer URL
       // Format: https://maven.minecraftforge.net/net/minecraftforge/forge/MC-FORGE/forge-MC-FORGE-installer.jar
       const forgeVersion = `${minecraftVersion}-${loaderVersion}`;
       const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeVersion}/forge-${forgeVersion}-installer.jar`;
-      
+
       console.log(`[InstanceService] Downloading Forge installer from: ${installerUrl}`);
       onProgress?.("install", 5, 100, "Downloading Forge installer...");
 
@@ -1417,9 +1417,9 @@ export class InstanceService {
         const altUrl = `https://files.minecraftforge.net/maven/net/minecraftforge/forge/${forgeVersion}/forge-${forgeVersion}-installer.jar`;
         const altResponse = await fetch(altUrl);
         if (!altResponse.ok) {
-          return { 
-            success: false, 
-            error: `Failed to download Forge installer. Version ${loaderVersion} may not exist for MC ${minecraftVersion}` 
+          return {
+            success: false,
+            error: `Failed to download Forge installer. Version ${loaderVersion} may not exist for MC ${minecraftVersion}`
           };
         }
         // Use alternative response
@@ -1430,9 +1430,9 @@ export class InstanceService {
 
       const buffer = Buffer.from(await response.arrayBuffer());
       onProgress?.("install", 30, 100, "Running Forge installer...");
-      
+
       await this.runForgeInstaller(buffer, minecraftDir, minecraftVersion, loaderVersion, onProgress);
-      
+
       onProgress?.("install", 100, 100, `Forge ${loaderVersion} installed!`);
       console.log(`[InstanceService] Forge ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
       return { success: true };
@@ -1460,13 +1460,13 @@ export class InstanceService {
       // Save installer to temp
       await fs.ensureDir(tempDir);
       await fs.writeFile(installerPath, installerBuffer);
-      
+
       onProgress?.("install", 40, 100, "Running installer (this may take a while)...");
-      
+
       // Find Java executable
       let javaPath = "java";
       const platform = process.platform;
-      
+
       if (platform === "win32") {
         // Try to find Java in Minecraft's runtime
         const mcJavaPath = path.join(
@@ -1477,7 +1477,7 @@ export class InstanceService {
           "Local",
           "runtime"
         );
-        
+
         if (await fs.pathExists(mcJavaPath)) {
           const runtimes = await fs.readdir(mcJavaPath);
           for (const runtime of runtimes) {
@@ -1488,7 +1488,7 @@ export class InstanceService {
             }
           }
         }
-        
+
         // Fallback to Program Files Java
         if (javaPath === "java") {
           const javaHome = process.env.JAVA_HOME;
@@ -1497,10 +1497,10 @@ export class InstanceService {
           }
         }
       }
-      
+
       console.log(`[InstanceService] Using Java: ${javaPath}`);
       console.log(`[InstanceService] Running Forge installer: ${installerPath}`);
-      
+
       // Run installer in headless mode
       // The --installClient flag tells Forge to install without GUI
       return new Promise((resolve, reject) => {
@@ -1528,15 +1528,15 @@ export class InstanceService {
             }
           }
         });
-        
+
         proc.stderr?.on("data", (data) => {
           output += data.toString();
         });
 
         proc.on("close", (code) => {
           // Clean up installer
-          fs.remove(installerPath).catch(() => {});
-          
+          fs.remove(installerPath).catch(() => { });
+
           if (code === 0) {
             console.log("[InstanceService] Forge installer completed successfully");
             resolve();
@@ -1547,7 +1547,7 @@ export class InstanceService {
         });
 
         proc.on("error", (err) => {
-          fs.remove(installerPath).catch(() => {});
+          fs.remove(installerPath).catch(() => { });
           reject(err);
         });
 
@@ -1559,7 +1559,7 @@ export class InstanceService {
       });
     } catch (error) {
       // Clean up on error
-      await fs.remove(installerPath).catch(() => {});
+      await fs.remove(installerPath).catch(() => { });
       throw error;
     }
   }
@@ -1578,23 +1578,23 @@ export class InstanceService {
       // Build installer URL
       // Format: https://maven.neoforged.net/releases/net/neoforged/neoforge/VERSION/neoforge-VERSION-installer.jar
       const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${loaderVersion}/neoforge-${loaderVersion}-installer.jar`;
-      
+
       console.log(`[InstanceService] Downloading NeoForge installer from: ${installerUrl}`);
       onProgress?.("install", 5, 100, "Downloading NeoForge installer...");
 
       const response = await fetch(installerUrl);
       if (!response.ok) {
-        return { 
-          success: false, 
-          error: `Failed to download NeoForge installer. Version ${loaderVersion} may not exist.` 
+        return {
+          success: false,
+          error: `Failed to download NeoForge installer. Version ${loaderVersion} may not exist.`
         };
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
       onProgress?.("install", 30, 100, "Running NeoForge installer...");
-      
+
       await this.runNeoForgeInstaller(buffer, minecraftDir, loaderVersion, onProgress);
-      
+
       onProgress?.("install", 100, 100, `NeoForge ${loaderVersion} installed!`);
       console.log(`[InstanceService] NeoForge ${loaderVersion} installed successfully`);
       return { success: true };
@@ -1621,13 +1621,13 @@ export class InstanceService {
       // Save installer to temp
       await fs.ensureDir(tempDir);
       await fs.writeFile(installerPath, installerBuffer);
-      
+
       onProgress?.("install", 40, 100, "Running installer (this may take a while)...");
-      
+
       // Find Java executable (same logic as Forge)
       let javaPath = "java";
       const platform = process.platform;
-      
+
       if (platform === "win32") {
         const mcJavaPath = path.join(
           process.env.LOCALAPPDATA || "",
@@ -1637,7 +1637,7 @@ export class InstanceService {
           "Local",
           "runtime"
         );
-        
+
         if (await fs.pathExists(mcJavaPath)) {
           const runtimes = await fs.readdir(mcJavaPath);
           for (const runtime of runtimes) {
@@ -1648,7 +1648,7 @@ export class InstanceService {
             }
           }
         }
-        
+
         if (javaPath === "java") {
           const javaHome = process.env.JAVA_HOME;
           if (javaHome && await fs.pathExists(path.join(javaHome, "bin", "java.exe"))) {
@@ -1656,10 +1656,10 @@ export class InstanceService {
           }
         }
       }
-      
+
       console.log(`[InstanceService] Using Java: ${javaPath}`);
       console.log(`[InstanceService] Running NeoForge installer: ${installerPath}`);
-      
+
       return new Promise((resolve, reject) => {
         const proc = spawn(javaPath, [
           "-jar",
@@ -1685,14 +1685,14 @@ export class InstanceService {
             }
           }
         });
-        
+
         proc.stderr?.on("data", (data) => {
           output += data.toString();
         });
 
         proc.on("close", (code) => {
-          fs.remove(installerPath).catch(() => {});
-          
+          fs.remove(installerPath).catch(() => { });
+
           if (code === 0) {
             console.log("[InstanceService] NeoForge installer completed successfully");
             resolve();
@@ -1703,7 +1703,7 @@ export class InstanceService {
         });
 
         proc.on("error", (err) => {
-          fs.remove(installerPath).catch(() => {});
+          fs.remove(installerPath).catch(() => { });
           reject(err);
         });
 
@@ -1714,7 +1714,7 @@ export class InstanceService {
         }, 300000);
       });
     } catch (error) {
-      await fs.remove(installerPath).catch(() => {});
+      await fs.remove(installerPath).catch(() => { });
       throw error;
     }
   }
@@ -1743,7 +1743,7 @@ export class InstanceService {
 
     // Build download URL
     const downloadUrl = `${lib.url}${groupPath}/${artifact}/${version}/${jarName}`;
-    
+
     try {
       console.log(`[InstanceService] Downloading library: ${lib.name}`);
       const response = await fetch(downloadUrl);
@@ -1753,10 +1753,10 @@ export class InstanceService {
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
-      
+
       // Ensure directory exists
       await fs.ensureDir(path.dirname(libPath));
-      
+
       // Save library
       await fs.writeFile(libPath, buffer);
       console.log(`[InstanceService] Downloaded: ${jarName}`);
@@ -1814,10 +1814,10 @@ export class InstanceService {
     if (!instance) return false;
 
     try {
-      const targetPath = subfolder 
+      const targetPath = subfolder
         ? path.join(instance.path, subfolder)
         : instance.path;
-      
+
       await fs.ensureDir(targetPath);
       await shell.openPath(targetPath);
       return true;
@@ -1951,15 +1951,15 @@ export class InstanceService {
     try {
       const modsPath = path.join(instance.path, "mods");
       const disabledSet = new Set(disabledModIds);
-      
+
       console.log(`[checkSyncStatus] Checking instance ${instance.id} at ${instance.path}`);
       console.log(`[checkSyncStatus] Disabled mod IDs: ${[...disabledSet].join(', ')}`);
       console.log(`[checkSyncStatus] Expected mods count: ${modpackMods.length}`);
-      
+
       // Get all mod files in instance (both enabled and disabled)
       // Mods can be .jar or .zip (datapacks, compat packs)
       const instanceFiles: Map<string, boolean> = new Map(); // filename -> isEnabled
-      
+
       if (await fs.pathExists(modsPath)) {
         const files = await fs.readdir(modsPath);
         console.log(`[checkSyncStatus] Files in mods folder: ${files.length}`);
@@ -1982,11 +1982,11 @@ export class InstanceService {
         // content_type defaults to "mod" if undefined
         const modContentType = mod.content_type || "mod";
         if (!mod.filename || modContentType !== "mod") continue;
-        
+
         const filename = mod.filename;
         expectedFilenames.add(filename);
         const shouldBeDisabled = disabledSet.has(mod.id);
-        
+
         if (!instanceFiles.has(filename)) {
           // Mod is missing entirely
           console.log(`[checkSyncStatus] MISSING: ${filename} (id: ${mod.id}, disabled: ${shouldBeDisabled})`);
@@ -2000,7 +2000,7 @@ export class InstanceService {
           }
         }
       }
-      
+
       console.log(`[checkSyncStatus] Missing in instance: ${result.missingInInstance.length}`);
 
       // Check for extra mods in instance
@@ -2014,13 +2014,13 @@ export class InstanceService {
       for (const contentType of ["resourcepack", "shader"] as const) {
         const folderName = contentType === "resourcepack" ? "resourcepacks" : "shaderpacks";
         const folderPath = path.join(instance.path, folderName);
-        
+
         // Get packs from mods database
         const packMods = modpackMods.filter(m => m.content_type === contentType);
         const expectedPacks = new Set(packMods.map(m => m.filename).filter(Boolean));
-        
+
         console.log(`[checkSyncStatus] Checking ${contentType}s: ${packMods.length} expected`);
-        
+
         // Also include packs from overrides folder (these are not tracked as mods)
         if (overridesPath) {
           const overridesFolderPath = path.join(overridesPath, folderName);
@@ -2033,26 +2033,26 @@ export class InstanceService {
             }
           }
         }
-        
+
         if (await fs.pathExists(folderPath)) {
           const files = await fs.readdir(folderPath);
           // Include both .zip and .zip.disabled files (strip .disabled suffix for matching)
           const zipFiles = files.filter(f => f.endsWith(".zip"));
           const disabledZipFiles = files.filter(f => f.endsWith(".zip.disabled")).map(f => f.replace(".disabled", ""));
           const allZipFiles = [...new Set([...zipFiles, ...disabledZipFiles])];
-          
+
           console.log(`[checkSyncStatus] ${contentType} folder has: ${zipFiles.join(', ')}`);
           console.log(`[checkSyncStatus] ${contentType} disabled: ${disabledZipFiles.join(', ')}`);
-          
+
           // Build case-insensitive map for matching (include disabled files)
           const zipFilesLower = new Map(allZipFiles.map(f => [f.toLowerCase(), f]));
-          
+
           // Check missing from mods database only (overrides are copied during sync)
           for (const mod of packMods) {
             if (mod.filename) {
               const existsExact = allZipFiles.includes(mod.filename);
               const existsCaseInsensitive = zipFilesLower.has(mod.filename.toLowerCase());
-              
+
               if (!existsExact && !existsCaseInsensitive) {
                 console.log(`[checkSyncStatus] MISSING ${contentType}: ${mod.filename}`);
                 result.missingInInstance.push({ filename: mod.filename, type: contentType });
@@ -2061,7 +2061,7 @@ export class InstanceService {
               }
             }
           }
-          
+
           // Check extra (files not in mods OR overrides) - use allZipFiles to include disabled
           for (const file of allZipFiles) {
             if (!expectedPacks.has(file)) {
@@ -2086,10 +2086,10 @@ export class InstanceService {
       // Extra files in instance are NOT counted as requiring sync
       // These are user-added files that should be preserved
       // Only missingInInstance and disabledMismatch require sync action
-      result.totalDifferences = 
-        result.missingInInstance.length + 
+      result.totalDifferences =
+        result.missingInInstance.length +
         result.disabledMismatch.length;
-      
+
       result.needsSync = result.totalDifferences > 0;
 
     } catch (error) {
@@ -2145,7 +2145,7 @@ export class InstanceService {
 
     // Valid config file extensions
     const validConfigExtensions = new Set([
-      'toml', 'json', 'json5', 'properties', 'cfg', 
+      'toml', 'json', 'json5', 'properties', 'cfg',
       'yaml', 'yml', 'txt', 'snbt', 'conf', 'ini', 'xml'
     ]);
 
@@ -2158,29 +2158,29 @@ export class InstanceService {
     // Get all config files from instance
     if (await fs.pathExists(result.instanceConfigPath)) {
       const instanceConfigs = await this.getAllFiles(result.instanceConfigPath, result.instanceConfigPath);
-      
+
       for (const relPath of instanceConfigs) {
         // Skip non-config files (images, binaries, etc.)
         if (!isConfigFile(relPath)) {
           continue;
         }
-        
+
         const instanceFilePath = path.join(result.instanceConfigPath, relPath);
         const stat = await fs.stat(instanceFilePath);
-        
+
         let status: 'modified' | 'new' | 'deleted' = 'new';
         let overridePath: string | undefined;
-        
+
         // Check if file exists in overrides
         if (result.overridesConfigPath) {
           const overrideFilePath = path.join(result.overridesConfigPath, relPath);
           if (await fs.pathExists(overrideFilePath)) {
             overridePath = overrideFilePath;
-            
+
             // Compare content
             const instanceContent = await fs.readFile(instanceFilePath);
             const overrideContent = await fs.readFile(overrideFilePath);
-            
+
             if (!instanceContent.equals(overrideContent)) {
               status = 'modified';
             } else {
@@ -2189,7 +2189,7 @@ export class InstanceService {
             }
           }
         }
-        
+
         result.modifiedConfigs.push({
           relativePath: relPath,
           instancePath: instanceFilePath,
@@ -2204,15 +2204,15 @@ export class InstanceService {
     // Check for deleted configs (in overrides but not in instance)
     if (result.overridesConfigPath && await fs.pathExists(result.overridesConfigPath)) {
       const overrideConfigs = await this.getAllFiles(result.overridesConfigPath, result.overridesConfigPath);
-      
+
       for (const relPath of overrideConfigs) {
         // Skip non-config files (images, binaries, etc.)
         if (!isConfigFile(relPath)) {
           continue;
         }
-        
+
         const instanceFilePath = path.join(result.instanceConfigPath, relPath);
-        
+
         if (!await fs.pathExists(instanceFilePath)) {
           result.modifiedConfigs.push({
             relativePath: relPath,
@@ -2242,8 +2242,8 @@ export class InstanceService {
    * Import config files from instance to modpack overrides
    */
   async importConfigsToModpack(
-    instanceId: string, 
-    overridesPath: string, 
+    instanceId: string,
+    overridesPath: string,
     configPaths: string[] // relative paths to import
   ): Promise<{
     success: boolean;
@@ -2272,7 +2272,7 @@ export class InstanceService {
     }
 
     const instanceConfigPath = path.join(instance.path, 'config');
-    
+
     // Ensure overrides config path exists
     const overridesConfigPath = path.join(overridesPath, 'config');
     await fs.ensureDir(overridesConfigPath);
@@ -2285,9 +2285,12 @@ export class InstanceService {
         if (await fs.pathExists(instanceFilePath)) {
           // Ensure parent directory exists
           await fs.ensureDir(path.dirname(overrideFilePath));
-          
-          // Copy file from instance to overrides
-          await fs.copy(instanceFilePath, overrideFilePath, { overwrite: true });
+
+          // Read instance file and normalize line endings before copying
+          // This ensures consistent comparison later
+          const content = await fs.readFile(instanceFilePath);
+          await fs.writeFile(overrideFilePath, content);
+
           result.imported++;
           console.log(`[ConfigSync] Imported config: ${relPath}`);
         } else {
@@ -2312,14 +2315,14 @@ export class InstanceService {
    */
   private async countConfigDifferences(overridesConfigPath: string, instanceConfigPath: string): Promise<number> {
     let differences = 0;
-    
+
     try {
       const overrideFiles = await this.getAllFiles(overridesConfigPath, overridesConfigPath);
-      
+
       for (const relPath of overrideFiles) {
         const overridePath = path.join(overridesConfigPath, relPath);
         const instancePath = path.join(instanceConfigPath, relPath);
-        
+
         if (!await fs.pathExists(instancePath)) {
           // Config file missing in instance
           differences++;
@@ -2327,7 +2330,7 @@ export class InstanceService {
           // Check if content differs
           const overrideContent = await fs.readFile(overridePath);
           const instanceContent = await fs.readFile(instancePath);
-          
+
           if (!overrideContent.equals(instanceContent)) {
             differences++;
           }
@@ -2336,7 +2339,7 @@ export class InstanceService {
     } catch (error) {
       console.error("[InstanceService] Error counting config differences:", error);
     }
-    
+
     return differences;
   }
 
@@ -2345,14 +2348,14 @@ export class InstanceService {
    */
   private async getAllFiles(dir: string, baseDir: string): Promise<string[]> {
     const files: string[] = [];
-    
+
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         const relativePath = path.relative(baseDir, fullPath);
-        
+
         if (entry.isDirectory()) {
           const subFiles = await this.getAllFiles(fullPath, baseDir);
           files.push(...subFiles);
@@ -2363,16 +2366,16 @@ export class InstanceService {
     } catch {
       // Ignore errors
     }
-    
+
     return files;
   }
 
   private async getDirSize(dir: string): Promise<number> {
     let size = 0;
-    
+
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const entryPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
@@ -2385,7 +2388,7 @@ export class InstanceService {
     } catch {
       // Ignore errors
     }
-    
+
     return size;
   }
 
@@ -2406,7 +2409,7 @@ export class InstanceService {
 
     try {
       const zip = new AdmZip();
-      
+
       // Add mods
       const modsPath = path.join(instance.path, "mods");
       if (await fs.pathExists(modsPath)) {
@@ -2548,7 +2551,7 @@ export class InstanceService {
       try {
         const { execSync } = await import("child_process");
         const platform = process.platform;
-        
+
         if (platform === "win32") {
           // Windows: use PowerShell to find java processes (WMIC is deprecated)
           try {
@@ -2556,7 +2559,7 @@ export class InstanceService {
               `powershell -Command "Get-CimInstance Win32_Process -Filter \\"Name like '%java%'\\" | Select-Object ProcessId, CommandLine | ConvertTo-Json"`,
               { encoding: "utf-8", timeout: 10000 }
             );
-            
+
             // Parse JSON result
             let processes: any[] = [];
             try {
@@ -2566,11 +2569,11 @@ export class InstanceService {
               // No processes found
               return;
             }
-            
+
             // Look for our instance path in the command line
             for (const proc of processes) {
               if (!proc || !proc.CommandLine) continue;
-              
+
               const cmdLine = proc.CommandLine as string;
               // Check if this Java process is running our instance
               if (cmdLine.includes(instance.path) || cmdLine.includes(instance.path.replace(/\\/g, "/"))) {
@@ -2582,7 +2585,7 @@ export class InstanceService {
                   this.onGameStatusChange?.(instance.id, gameInfo);
                   console.log(`[InstanceService] Found game process PID: ${pid}`);
                   clearInterval(checkInterval);
-                  
+
                   // Start monitoring process health
                   this.monitorGameProcess(instance);
                   return;
@@ -2658,7 +2661,7 @@ export class InstanceService {
     let isReading = false; // Prevent concurrent reads
     let pendingRead = false; // Track if a read was requested while reading
     let lineBuffer = ""; // Buffer for incomplete lines
-    
+
     // Initialize position based on existing file
     try {
       if (await fs.pathExists(latestLog)) {
@@ -2674,7 +2677,7 @@ export class InstanceService {
           console.log("[InstanceService] Log file is fresh, reading from start");
         }
       }
-    } catch {}
+    } catch { }
 
     /**
      * Read new content from log file using streams for better performance
@@ -2684,18 +2687,18 @@ export class InstanceService {
         pendingRead = true;
         return;
       }
-      
+
       isReading = true;
-      
+
       try {
         if (!(await fs.pathExists(latestLog))) {
           isReading = false;
           return;
         }
-        
+
         const stats = await fs.stat(latestLog);
         const currentInode = (stats as any).ino || 0;
-        
+
         // Check if file was replaced (new inode) or truncated
         if ((currentInode !== 0 && lastInode !== 0 && currentInode !== lastInode) || stats.size < lastSize) {
           // File was replaced, start from beginning
@@ -2704,7 +2707,7 @@ export class InstanceService {
           lineBuffer = "";
           console.log("[InstanceService] Log file was replaced, reading from start");
         }
-        
+
         if (stats.size === lastSize) {
           isReading = false;
           if (pendingRead) {
@@ -2716,7 +2719,7 @@ export class InstanceService {
 
         // Read only new bytes using a read stream with start position
         const bytesToRead = stats.size - lastSize;
-        
+
         // Use native fs for createReadStream with start position
         const nativeFs = await import("fs");
         const stream = nativeFs.createReadStream(latestLog, {
@@ -2725,9 +2728,9 @@ export class InstanceService {
           encoding: "utf-8",
           highWaterMark: 64 * 1024 // 64KB chunks for better performance
         });
-        
+
         let newContent = "";
-        
+
         await new Promise<void>((resolve, reject) => {
           stream.on("data", (chunk: string) => {
             newContent += chunk;
@@ -2742,22 +2745,22 @@ export class InstanceService {
             }
           });
         });
-        
+
         lastSize = stats.size;
         lastInode = currentInode;
-        
+
         if (newContent) {
           // Handle incomplete lines by buffering
           const fullContent = lineBuffer + newContent;
           const lines = fullContent.split("\n");
-          
+
           // If content doesn't end with newline, last element is incomplete
           if (!newContent.endsWith("\n")) {
             lineBuffer = lines.pop() || "";
           } else {
             lineBuffer = "";
           }
-          
+
           // Process complete lines
           const completeContent = lines.join("\n");
           if (completeContent.trim()) {
@@ -2782,18 +2785,18 @@ export class InstanceService {
     let watcher: import("fs").FSWatcher | null = null;
     try {
       const nativeFs = await import("fs");
-      
+
       // Watch the logs directory for changes
       watcher = nativeFs.watch(logsPath, { persistent: false }, (eventType, filename) => {
         if (filename === "latest.log") {
           readNewContent();
         }
       });
-      
+
       watcher.on("error", (err) => {
         console.warn("[InstanceService] Log watcher error:", err.message);
       });
-      
+
       console.log("[InstanceService] File watcher active for logs");
     } catch (err) {
       console.warn("[InstanceService] Could not set up file watcher, using polling only");
@@ -2802,7 +2805,7 @@ export class InstanceService {
     // Also use fast polling as fallback (fs.watch can be unreliable on some systems)
     // 100ms polling for more responsive log capture
     const logCheckInterval = setInterval(readNewContent, 100);
-    
+
     // Initial read
     readNewContent();
 
@@ -2826,7 +2829,7 @@ export class InstanceService {
     // Try different timestamp formats
     let time: string;
     let timestampEnd = 0;
-    
+
     // Format: [HH:MM:SS]
     const bracketTimeMatch = rawLine.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
     if (bracketTimeMatch) {
@@ -2842,17 +2845,17 @@ export class InstanceService {
         time = new Date().toLocaleTimeString('en-US', { hour12: false }).slice(0, 8);
       }
     }
-    
+
     // Extract level - try multiple patterns
     // Pattern 1: [Thread/LEVEL] or [LEVEL]
     const afterTimestamp = rawLine.slice(timestampEnd);
     const levelBracketMatch = afterTimestamp.match(/\[([^\]]*\/)?(INFO|WARN|WARNING|ERROR|DEBUG|FATAL|TRACE|SEVERE|FINE|FINER|FINEST)\]/i);
     // Pattern 2: Just the word
     const levelWordMatch = afterTimestamp.match(/\b(INFO|WARN|WARNING|ERROR|DEBUG|FATAL|TRACE|SEVERE)\b/i);
-    
+
     let level = "INFO";
     let source: string | undefined;
-    
+
     if (levelBracketMatch) {
       level = levelBracketMatch[2].toUpperCase();
       if (level === "WARNING") level = "WARN";
@@ -2866,7 +2869,7 @@ export class InstanceService {
       if (level === "WARNING") level = "WARN";
       if (level === "SEVERE") level = "ERROR";
     }
-    
+
     // Try to extract source from [Thread/LEVEL] or [Source/LEVEL] format
     if (!source) {
       const sourceMatch = afterTimestamp.match(/\[([^\]\/]+)\/[^\]]+\]/);
@@ -2874,15 +2877,15 @@ export class InstanceService {
         source = sourceMatch[1];
       }
     }
-    
+
     // Extract message - everything after the bracket sections
     let message = rawLine;
-    
+
     // Find the end of all bracket sections
     let lastBracketEnd = 0;
     let depth = 0;
     let inBracket = false;
-    
+
     for (let i = 0; i < rawLine.length; i++) {
       if (rawLine[i] === '[') {
         inBracket = true;
@@ -2898,7 +2901,7 @@ export class InstanceService {
         break;
       }
     }
-    
+
     if (lastBracketEnd > 0 && lastBracketEnd < rawLine.length) {
       message = rawLine.substring(lastBracketEnd).trim();
       // Remove leading colon if present
@@ -2906,7 +2909,7 @@ export class InstanceService {
         message = message.substring(1).trim();
       }
     }
-    
+
     return { time, level, message, raw: rawLine, source };
   }
 
@@ -2919,17 +2922,17 @@ export class InstanceService {
 
     const lines = content.split("\n");
     let hasChanges = false;
-    
+
     for (const line of lines) {
       // Skip empty lines
       if (!line.trim()) continue;
-      
+
       // Send log line to frontend for real-time console
       if (this.onGameLogLine) {
         const parsed = this.parseLogLine(line);
         this.onGameLogLine(instanceId, parsed);
       }
-      
+
       // ========== FABRIC/QUILT MOD LOADING ==========
       // Fabric/Quilt: "Loading X mods:"
       const fabricLoadingMatch = line.match(/Loading\s+(\d+)\s+mods?:/i);
@@ -3080,12 +3083,12 @@ export class InstanceService {
     if ((gameInfo as any).logFileWatcher) {
       try {
         (gameInfo as any).logFileWatcher.close();
-      } catch {}
+      } catch { }
     }
 
     gameInfo.status = "stopped";
     this.onGameStatusChange?.(instanceId, gameInfo);
-    
+
     // Remove from running games after notifying
     setTimeout(() => {
       this.runningGames.delete(instanceId);
@@ -3139,51 +3142,51 @@ export class InstanceService {
             `powershell -Command "Get-CimInstance Win32_Process -Filter \\"Name like '%java%'\\" | Select-Object ProcessId, CommandLine | ConvertTo-Json"`,
             { encoding: "utf-8", timeout: 10000 }
           );
-          
+
           const instance = this.instances.find(i => i.id === instanceId);
           if (instance) {
             let processes: any[] = [];
             try {
               const parsed = JSON.parse(result);
               processes = Array.isArray(parsed) ? parsed : [parsed];
-            } catch {}
-            
+            } catch { }
+
             for (const proc of processes) {
               if (!proc || !proc.CommandLine) continue;
               if (proc.CommandLine.includes(instance.path) || proc.CommandLine.includes(instance.path.replace(/\\/g, "/"))) {
                 try {
                   execSync(`taskkill /F /PID ${proc.ProcessId}`);
                   console.log(`[InstanceService] Killed related java process ${proc.ProcessId}`);
-                } catch {}
+                } catch { }
               }
             }
           }
-        } catch {}
-        
+        } catch { }
+
         // Also try to find and kill Minecraft Launcher processes that might be lingering
         try {
           const launcherResult = execSync(
             `powershell -Command "Get-Process -Name 'MinecraftLauncher','Minecraft Launcher' -ErrorAction SilentlyContinue | Select-Object Id | ConvertTo-Json"`,
             { encoding: "utf-8", timeout: 5000 }
           );
-          
+
           if (launcherResult.trim()) {
             let launcherProcs: any[] = [];
             try {
               const parsed = JSON.parse(launcherResult);
               launcherProcs = Array.isArray(parsed) ? parsed : [parsed];
-            } catch {}
-            
+            } catch { }
+
             for (const proc of launcherProcs) {
               if (proc && proc.Id) {
                 try {
                   execSync(`taskkill /F /T /PID ${proc.Id}`);
                   console.log(`[InstanceService] Killed Minecraft Launcher process ${proc.Id}`);
-                } catch {}
+                } catch { }
               }
             }
           }
-        } catch {}
+        } catch { }
       }
 
       this.stopGameTracking(instanceId);

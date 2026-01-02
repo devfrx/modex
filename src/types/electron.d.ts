@@ -412,6 +412,7 @@ export interface ElectronAPI {
       code: string;
       isUpdate: boolean;
       requiresResolution?: boolean;
+      errors?: string[];
       conflicts?: Array<{
         modName: string;
         existingVersion: string;

@@ -420,13 +420,25 @@ export class MetadataManager {
       id = `unknown-${crypto.randomUUID()}`;
     }
 
-    // Check if already exists - return existing mod without modifying it
+    // Check if already exists
     const existingIndex = library.mods.findIndex((m) => m.id === id);
     if (existingIndex >= 0) {
+      const existingMod = library.mods[existingIndex];
+      
+      // Update content_type if the new data has a more specific type
+      // (e.g., existing mod has "mod" or undefined, but new data specifies "resourcepack" or "shader")
+      if (modData.content_type && modData.content_type !== existingMod.content_type) {
+        console.log(
+          `[MetadataManager] Updating content_type for ${id}: ${existingMod.content_type} -> ${modData.content_type}`
+        );
+        existingMod.content_type = modData.content_type;
+        await this.saveLibrary(library);
+      }
+      
       console.log(
         `[MetadataManager] Mod ${id} already exists in library, reusing existing`
       );
-      return library.mods[existingIndex];
+      return existingMod;
     }
 
     // Create new mod

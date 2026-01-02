@@ -299,15 +299,26 @@ const modifiedConfigs = ref<Array<{
 const showModifiedConfigsDetails = ref(false);
 const selectedConfigsForImport = ref<Set<string>>(new Set());
 const isImportingConfigs = ref(false);
+const showOnlyModifiedConfigs = ref(true); // By default, only show actually modified configs, not new ones
 
 // Computed: Only importable configs (new or modified, not deleted)
+// When showOnlyModifiedConfigs is true, only show 'modified' status (files that exist in both places but differ)
 const importableConfigs = computed(() =>
-  modifiedConfigs.value.filter(c => c.status !== 'deleted')
+  modifiedConfigs.value.filter(c => {
+    if (c.status === 'deleted') return false;
+    if (showOnlyModifiedConfigs.value && c.status === 'new') return false;
+    return true;
+  })
 );
 
 // Computed: Deleted configs (exist in overrides but not in instance)
 const deletedConfigs = computed(() =>
   modifiedConfigs.value.filter(c => c.status === 'deleted')
+);
+
+// Computed: New configs count (for showing toggle)
+const newConfigsCount = computed(() =>
+  modifiedConfigs.value.filter(c => c.status === 'new').length
 );
 
 // Sync Options
@@ -1738,10 +1749,10 @@ async function loadModifiedConfigs() {
     const result = await window.api.instances.getModifiedConfigs(instance.value.id, props.modpackId);
     modifiedConfigs.value = result.modifiedConfigs;
 
-    // Auto-select all modified configs
+    // Auto-select only modified configs (not new ones by default)
     selectedConfigsForImport.value = new Set(
       modifiedConfigs.value
-        .filter(c => c.status !== 'deleted')
+        .filter(c => c.status === 'modified') // Only truly modified, not new
         .map(c => c.relativePath)
     );
   } catch (err) {
@@ -1760,12 +1771,10 @@ function toggleConfigSelection(relativePath: string) {
   selectedConfigsForImport.value = new Set(selectedConfigsForImport.value);
 }
 
-// Select all configs
+// Select all configs (respects current filter)
 function selectAllConfigs() {
   selectedConfigsForImport.value = new Set(
-    modifiedConfigs.value
-      .filter(c => c.status !== 'deleted')
-      .map(c => c.relativePath)
+    importableConfigs.value.map(c => c.relativePath)
   );
 }
 
@@ -1791,9 +1800,17 @@ async function importSelectedConfigs() {
     if (result.success) {
       toast.success("Configs Imported", `${result.imported} config files added to modpack`);
 
+      // Small delay to ensure filesystem is synced before reloading
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Reload modified configs
       await loadModifiedConfigs();
       showModifiedConfigsDetails.value = false;
+      
+      // If no more configs to import, clear selection
+      if (importableConfigs.value.length === 0) {
+        selectedConfigsForImport.value = new Set();
+      }
     } else {
       toast.error("Import Error", result.errors.join(", "));
     }
@@ -3139,6 +3156,37 @@ watch(
                 <p class="text-sm text-muted-foreground mb-3">
                   Browse and edit configuration files for your mods directly from ModEx.
                 </p>
+                
+                <!-- Understanding Config Locations -->
+                <div class="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <h5 class="font-medium text-blue-400 flex items-center gap-1.5 mb-2">
+                    <Info class="w-4 h-4" />
+                    Understanding Config Locations
+                  </h5>
+                  <div class="text-sm text-muted-foreground space-y-2">
+                    <p><strong class="text-foreground">Instance Configs</strong> — Where Minecraft actually runs. When you play, mods read and write configs here. Your in-game changes are saved here.</p>
+                    <p><strong class="text-foreground">Modpack Overrides</strong> — The "official" configs saved in the modpack itself. When you sync or share the modpack, these are used.</p>
+                  </div>
+                </div>
+
+                <!-- Config Changes Banner Explanation -->
+                <div class="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <h5 class="font-medium text-amber-400 flex items-center gap-1.5 mb-2">
+                    <FolderSync class="w-4 h-4" />
+                    "Config Changes Detected" Banner
+                  </h5>
+                  <div class="text-sm text-muted-foreground space-y-2">
+                    <p>This banner appears when your <strong class="text-foreground">instance configs differ from the modpack overrides</strong>. This happens when you change settings while playing.</p>
+                    <p><strong class="text-foreground">Import Selected</strong> — Saves your changes into the modpack. Use this to:</p>
+                    <ul class="list-disc ml-5 space-y-1">
+                      <li>Preserve your keybind customizations</li>
+                      <li>Save mod settings you've configured</li>
+                      <li>Include your config tweaks when sharing the modpack</li>
+                    </ul>
+                    <p class="text-xs text-muted-foreground/70 mt-2">💡 By default, only <em>modified</em> configs are shown. Check "Show new configs" to see files generated by mods that don't exist in the modpack yet.</p>
+                  </div>
+                </div>
+
                 <div class="grid md:grid-cols-2 gap-4 text-sm">
                   <div class="space-y-2">
                     <h5 class="font-medium text-foreground flex items-center gap-1.5">
@@ -3664,18 +3712,38 @@ watch(
                     </div>
                   </div>
 
-                  <!-- Extra in Instance -->
-                  <div v-if="instanceSyncStatus.extraInInstance.length > 0"
+                  <!-- Extra Mods in Instance (will be REMOVED) -->
+                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 0"
+                    class="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <div class="flex items-center gap-2 text-red-400 font-medium text-xs mb-2">
+                      <Trash2 class="w-3.5 h-3.5" />
+                      {{ instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length }} mods to remove
+                    </div>
+                    <p class="text-[11px] text-muted-foreground mb-2">
+                      These mods are not in the modpack and will be removed during sync.
+                    </p>
+                    <div class="space-y-1 max-h-28 overflow-y-auto">
+                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod')" :key="item.filename"
+                        class="text-[11px] text-muted-foreground flex items-center gap-2">
+                        <span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] uppercase">{{
+                          item.type }}</span>
+                        <span class="truncate">{{ item.filename }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Extra Resourcepacks/Shaders in Instance (will be preserved) -->
+                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 0"
                     class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
                     <div class="flex items-center gap-2 text-muted-foreground font-medium text-xs mb-2">
                       <FileWarning class="w-3.5 h-3.5" />
-                      {{ instanceSyncStatus.extraInInstance.length }} additional files
+                      {{ instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length }} additional files
                     </div>
                     <p class="text-[11px] text-muted-foreground mb-2">
                       These files were added manually and will be preserved.
                     </p>
                     <div class="space-y-1 max-h-28 overflow-y-auto">
-                      <div v-for="item in instanceSyncStatus.extraInInstance" :key="item.filename"
+                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod')" :key="item.filename"
                         class="text-[11px] text-muted-foreground flex items-center gap-2">
                         <span class="px-1.5 py-0.5 rounded bg-zinc-500/20 text-zinc-400 text-[10px] uppercase">{{
                           item.type }}</span>
@@ -3881,8 +3949,17 @@ watch(
                 <!-- Details -->
                 <div v-if="showModifiedConfigsDetails" class="px-4 pb-4 border-t border-primary/20 pt-3">
                   <div class="flex items-center justify-between mb-3">
-                    <div class="text-xs text-muted-foreground">
-                      Select configs to import to modpack overrides
+                    <div class="flex items-center gap-3">
+                      <div class="text-xs text-muted-foreground">
+                        Select configs to import to modpack overrides
+                      </div>
+                      <!-- Toggle to show new configs -->
+                      <label v-if="newConfigsCount > 0" class="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input type="checkbox" v-model="showOnlyModifiedConfigs" 
+                          class="w-3 h-3 rounded border-primary/30 text-primary focus:ring-primary/30" 
+                          :true-value="false" :false-value="true" />
+                        <span class="text-muted-foreground">Show {{ newConfigsCount }} new configs</span>
+                      </label>
                     </div>
                     <div class="flex gap-2">
                       <button @click="selectAllConfigs" class="text-xs text-primary hover:underline">Select All</button>

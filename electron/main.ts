@@ -1307,6 +1307,14 @@ async function initializeBackend() {
   ipcMain.handle("remote:importFromUrl", async (_, url: string) => {
     if (!win) return { success: false, error: "Window not available" };
 
+    // Check for API key (required for fetching mod metadata)
+    if (!curseforgeService.hasApiKey()) {
+      return { 
+        success: false, 
+        error: "CurseForge API key required. Please add your API key in Settings > General > API Configuration." 
+      };
+    }
+
     try {
       // Send progress
       win.webContents.send("import:progress", {
@@ -1393,6 +1401,85 @@ async function initializeBackend() {
         curseforgeService,
         onProgress
       );
+
+      // Auto-create instance for the imported modpack (similar to CF import)
+      if (importResult.success && importResult.modpackId && !importResult.alreadyExists) {
+        try {
+          win.webContents.send("import:progress", {
+            current: 96,
+            total: 100,
+            modName: "Creating game instance...",
+          });
+
+          const modpack = await metadataManager.getModpackById(importResult.modpackId);
+          if (modpack) {
+            // Create instance
+            const instance = await instanceService.createInstance({
+              name: modpack.name,
+              minecraftVersion: modpack.minecraft_version || "1.20.1",
+              loader: modpack.loader || "forge",
+              loaderVersion: modpack.loader_version,
+              modpackId: modpack.id,
+              description: modpack.description,
+              source: modpack.cf_project_id ? {
+                type: "curseforge",
+                projectId: modpack.cf_project_id,
+                fileId: modpack.cf_file_id,
+                name: modpack.name,
+                version: modpack.version
+              } : undefined
+            });
+
+            win.webContents.send("import:progress", {
+              current: 97,
+              total: 100,
+              modName: "Syncing mods to instance...",
+            });
+
+            // Get mods and sync to instance (include ALL mods, disabled ones will be renamed)
+            const mods = await metadataManager.getModsInModpack(importResult.modpackId);
+            const disabledModIds = new Set(modpack.disabled_mod_ids || []);
+            const modsToSync = mods.map(m => ({
+              id: m.id,
+              name: m.name,
+              filename: m.filename,
+              cf_project_id: m.cf_project_id,
+              cf_file_id: m.cf_file_id,
+              content_type: m.content_type || "mod"
+            }));
+            const disabledModsToSync = mods
+              .filter(m => disabledModIds.has(m.id))
+              .map(m => ({
+                id: m.id,
+                filename: m.filename,
+                content_type: m.content_type || "mod" as "mod" | "resourcepack" | "shader"
+              }));
+
+            // Note: Gist imports don't have overrides (configs), only mod references
+            await instanceService.syncModpackToInstance(instance.id, {
+              mods: modsToSync,
+              disabledMods: disabledModsToSync,
+            }, {
+              onProgress: (stage, current, total, item) => {
+                if (win) {
+                  win.webContents.send("instance:syncProgress", { stage, current, total, item });
+                }
+              }
+            });
+
+            win.webContents.send("import:progress", {
+              current: 99,
+              total: 100,
+              modName: "Finalizing...",
+            });
+
+            console.log(`[Gist Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+          }
+        } catch (autoFlowError) {
+          console.error(`[Gist Import] Auto-flow failed (non-fatal):`, autoFlowError);
+          // Non-fatal: modpack was still imported successfully
+        }
+      }
 
       win.webContents.send("import:progress", {
         current: 100,
@@ -1552,6 +1639,16 @@ async function initializeBackend() {
 
   ipcMain.handle("import:curseforge", async () => {
     if (!win) return null;
+
+    // Check for API key
+    if (!curseforgeService.hasApiKey()) {
+      return {
+        success: false,
+        modsImported: 0,
+        modsSkipped: 0,
+        errors: ["CurseForge API key required. Please add your API key in Settings > General > API Configuration."],
+      };
+    }
 
     const result = await dialog.showOpenDialog(win, {
       filters: [{ name: "CurseForge Modpack", extensions: ["zip"] }],
@@ -1849,6 +1946,16 @@ async function initializeBackend() {
         };
       }
 
+      // Check for API key
+      if (!curseforgeService.hasApiKey()) {
+        return {
+          success: false,
+          modsImported: 0,
+          modsSkipped: 0,
+          errors: ["CurseForge API key required. Please add your API key in Settings > General > API Configuration."],
+        };
+      }
+
       try {
         const fs = await import("fs-extra");
         const path = await import("path");
@@ -2126,6 +2233,17 @@ async function initializeBackend() {
   ipcMain.handle("import:modex", async () => {
     if (!win) return null;
 
+    // Check for API key (required for fetching mod metadata)
+    if (!curseforgeService.hasApiKey()) {
+      return {
+        success: false,
+        modsImported: 0,
+        modsSkipped: 0,
+        errors: ["CurseForge API key required. Please add your API key in Settings > General > API Configuration."],
+        requiresResolution: false,
+      };
+    }
+
     const result = await dialog.showOpenDialog(win, {
       filters: [{ name: "MODEX Package", extensions: ["modex"] }],
       properties: ["openFile"],
@@ -2309,6 +2427,11 @@ async function initializeBackend() {
     "import:modex:manifest",
     async (_, manifest: any, modpackId?: string) => {
       if (!win) return null;
+
+      // Check for API key (required for fetching mod metadata)
+      if (!curseforgeService.hasApiKey()) {
+        throw new Error("CurseForge API key required. Please add your API key in Settings > General > API Configuration.");
+      }
 
       try {
         // Progress callback that sends events to renderer

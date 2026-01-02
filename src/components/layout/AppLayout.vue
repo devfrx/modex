@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import Sidebar from "./Sidebar.vue";
 import Toast from "@/components/ui/Toast.vue";
+import ApiKeyBanner from "@/components/ui/ApiKeyBanner.vue";
 import { useToast } from "@/composables/useToast";
 import { useSidebar } from "@/composables/useSidebar";
 import { Menu } from "lucide-vue-next";
@@ -41,8 +42,14 @@ function closeSidebar() {
       <Sidebar :is-open="sidebarOpen" @close="closeSidebar" />
     </div>
 
-    <main class="flex-1 overflow-auto sm:ml-0">
-      <slot />
+    <main class="flex-1 overflow-auto sm:ml-0 flex flex-col">
+      <!-- Global API Key Warning Banner -->
+      <ApiKeyBanner />
+      
+      <!-- Main content -->
+      <div class="flex-1 overflow-auto">
+        <slot />
+      </div>
     </main>
     <Toast :messages="messages" @remove="remove" />
   </div>

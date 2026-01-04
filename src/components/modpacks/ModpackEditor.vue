@@ -164,6 +164,9 @@ const activeTab = ref<
   | "remote"
   | "configs"
 >("mods");
+
+// Error state for graceful degradation (prevents white screen)
+const loadError = ref<string | null>(null);
 const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
 
 // Help Guide State
@@ -391,6 +394,17 @@ const dependencyImpact = ref<{
   warnings: string[];
 } | null>(null);
 const pendingModAction = ref<{ modId: string; action: "remove" | "disable" } | null>(null);
+
+// Bulk Dependency Impact Dialog
+const showBulkDependencyImpactDialog = ref(false);
+const bulkDependencyImpact = ref<{
+  action: "remove" | "disable";
+  modsToAffect: Array<{ id: string; name: string }>;
+  allDependentMods: Array<{ id: string; name: string; dependsOn: string[] }>;
+  allOrphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
+  warnings: string[];
+} | null>(null);
+const pendingBulkModIds = ref<string[]>([]);
 
 // Editable form fields
 const editForm = ref({
@@ -2156,6 +2170,64 @@ async function removeSelectedMods() {
     return;
   }
 
+  // Check dependency impact for all mods being removed
+  try {
+    const modsToAffect: Array<{ id: string; name: string }> = [];
+    const allDependentMods = new Map<string, { id: string; name: string; dependsOn: string[] }>();
+    const allOrphanedDeps = new Map<string, { id: string; name: string; usedByOthers: boolean }>();
+    const modIdSet = new Set(idsToRemove);
+
+    for (const modId of idsToRemove) {
+      const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "remove");
+      if (impact.modToAffect) {
+        modsToAffect.push(impact.modToAffect);
+      }
+      
+      // Collect dependent mods (excluding those we're also removing)
+      for (const dep of impact.dependentMods.filter(d => d.willBreak)) {
+        if (!modIdSet.has(dep.id)) {
+          if (allDependentMods.has(dep.id)) {
+            allDependentMods.get(dep.id)!.dependsOn.push(impact.modToAffect?.name || modId);
+          } else {
+            allDependentMods.set(dep.id, { 
+              id: dep.id, 
+              name: dep.name, 
+              dependsOn: [impact.modToAffect?.name || modId] 
+            });
+          }
+        }
+      }
+
+      // Collect orphaned dependencies
+      for (const orphan of impact.orphanedDependencies.filter(d => !d.usedByOthers)) {
+        if (!modIdSet.has(orphan.id) && !allOrphanedDeps.has(orphan.id)) {
+          allOrphanedDeps.set(orphan.id, orphan);
+        }
+      }
+    }
+
+    // If there are dependent mods or orphaned dependencies, show the dialog
+    if (allDependentMods.size > 0 || allOrphanedDeps.size > 0) {
+      bulkDependencyImpact.value = {
+        action: "remove",
+        modsToAffect,
+        allDependentMods: Array.from(allDependentMods.values()),
+        allOrphanedDependencies: Array.from(allOrphanedDeps.values()),
+        warnings: []
+      };
+      pendingBulkModIds.value = idsToRemove;
+      showBulkDependencyImpactDialog.value = true;
+      return;
+    }
+  } catch (err) {
+    console.error("Failed to check bulk dependency impact:", err);
+  }
+
+  // No impact, proceed with removal
+  await executeBulkRemove(idsToRemove);
+}
+
+async function executeBulkRemove(idsToRemove: string[]) {
   try {
     for (const id of idsToRemove) {
       await window.api.modpacks.removeMod(props.modpackId, id);
@@ -2163,8 +2235,10 @@ async function removeSelectedMods() {
     selectedModIds.value = new Set();
     await loadData();
     emit("update");
+    toast.success("Mods Removed", `Removed ${idsToRemove.length} mod(s) from modpack`);
   } catch (err) {
     console.error("Failed to remove mods:", err);
+    toast.error("Remove Failed", (err as Error).message);
   }
 }
 
@@ -2181,6 +2255,72 @@ function toggleSelect(modId: string) {
 function selectAll() {
   const newSet = new Set(selectedModIds.value);
   for (const mod of filteredInstalledMods.value) {
+    newSet.add(mod.id!);
+  }
+  selectedModIds.value = newSet;
+}
+
+// Select all enabled mods (excludes disabled and locked)
+function selectAllEnabled() {
+  const enabledUnlockedMods = filteredInstalledMods.value.filter(
+    mod => !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+  );
+  
+  const newSet = new Set<string>();
+  for (const mod of enabledUnlockedMods) {
+    newSet.add(mod.id!);
+  }
+  selectedModIds.value = newSet;
+}
+
+// Select half of enabled mods (excludes disabled and locked)
+function selectHalfEnabled() {
+  const enabledUnlockedMods = filteredInstalledMods.value.filter(
+    mod => !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+  );
+  
+  if (enabledUnlockedMods.length === 0) {
+    return;
+  }
+  
+  const halfCount = Math.ceil(enabledUnlockedMods.length / 2);
+  const modsToSelect = enabledUnlockedMods.slice(0, halfCount);
+  
+  const newSet = new Set<string>();
+  for (const mod of modsToSelect) {
+    newSet.add(mod.id!);
+  }
+  selectedModIds.value = newSet;
+}
+
+// Select all disabled mods (excludes locked)
+function selectAllDisabled() {
+  const disabledUnlockedMods = filteredInstalledMods.value.filter(
+    mod => disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+  );
+  
+  const newSet = new Set<string>();
+  for (const mod of disabledUnlockedMods) {
+    newSet.add(mod.id!);
+  }
+  selectedModIds.value = newSet;
+}
+
+// Select half of disabled mods (excludes locked)
+function selectHalfDisabled() {
+  const disabledUnlockedMods = filteredInstalledMods.value.filter(
+    mod => disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+  );
+  
+  if (disabledUnlockedMods.length === 0) {
+    return;
+  }
+  
+  const halfCount = Math.ceil(disabledUnlockedMods.length / 2);
+  const modsToSelect = disabledUnlockedMods.slice(0, halfCount);
+  
+  const newSet = new Set<string>();
+  for (const mod of modsToSelect) {
     newSet.add(mod.id!);
   }
   selectedModIds.value = newSet;
@@ -2254,6 +2394,57 @@ async function bulkDisableSelected() {
     return;
   }
 
+  // Check dependency impact for all mods being disabled
+  try {
+    const modsToAffect: Array<{ id: string; name: string }> = [];
+    const allDependentMods = new Map<string, { id: string; name: string; dependsOn: string[] }>();
+    const allOrphanedDeps = new Map<string, { id: string; name: string; usedByOthers: boolean }>();
+    const modIdSet = new Set(modsToDisable);
+
+    for (const modId of modsToDisable) {
+      const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "disable");
+      if (impact.modToAffect) {
+        modsToAffect.push(impact.modToAffect);
+      }
+      
+      // Collect dependent mods (excluding those we're also disabling)
+      for (const dep of impact.dependentMods.filter(d => d.willBreak)) {
+        if (!modIdSet.has(dep.id)) {
+          if (allDependentMods.has(dep.id)) {
+            allDependentMods.get(dep.id)!.dependsOn.push(impact.modToAffect?.name || modId);
+          } else {
+            allDependentMods.set(dep.id, { 
+              id: dep.id, 
+              name: dep.name, 
+              dependsOn: [impact.modToAffect?.name || modId] 
+            });
+          }
+        }
+      }
+    }
+
+    // If there are dependent mods, show the dialog
+    if (allDependentMods.size > 0) {
+      bulkDependencyImpact.value = {
+        action: "disable",
+        modsToAffect,
+        allDependentMods: Array.from(allDependentMods.values()),
+        allOrphanedDependencies: Array.from(allOrphanedDeps.values()),
+        warnings: []
+      };
+      pendingBulkModIds.value = modsToDisable;
+      showBulkDependencyImpactDialog.value = true;
+      return;
+    }
+  } catch (err) {
+    console.error("Failed to check bulk dependency impact:", err);
+  }
+
+  // No impact, proceed with disabling
+  await executeBulkDisable(modsToDisable, skippedLocked);
+}
+
+async function executeBulkDisable(modsToDisable: string[], skippedLocked: number = 0) {
   let successCount = 0;
   let failCount = 0;
   for (const modId of modsToDisable) {
@@ -2413,6 +2604,101 @@ function cancelDependencyImpactAction() {
   showDependencyImpactDialog.value = false;
   pendingModAction.value = null;
   dependencyImpact.value = null;
+}
+
+// Confirm action and also affect dependents
+async function confirmDependencyImpactWithDependents() {
+  showDependencyImpactDialog.value = false;
+
+  if (!pendingModAction.value || !dependencyImpact.value) return;
+
+  const { modId, action } = pendingModAction.value;
+  const { dependentMods, orphanedDependencies } = dependencyImpact.value;
+
+  // Collect all mods to process
+  const allModIds = new Set<string>([modId]);
+  
+  // Add dependent mods
+  for (const dep of dependentMods.filter(d => d.willBreak)) {
+    allModIds.add(dep.id);
+  }
+  
+  // For remove action, also include orphaned dependencies
+  if (action === "remove") {
+    for (const orphan of orphanedDependencies.filter(d => !d.usedByOthers)) {
+      allModIds.add(orphan.id);
+    }
+  }
+
+  const modsToProcess = Array.from(allModIds).filter(id => !lockedModIds.value.has(id));
+
+  if (action === "remove") {
+    await executeBulkRemove(modsToProcess);
+  } else {
+    await executeBulkDisable(modsToProcess);
+  }
+
+  pendingModAction.value = null;
+  dependencyImpact.value = null;
+}
+
+// Bulk dependency impact action handlers
+async function confirmBulkDependencyImpactAction() {
+  showBulkDependencyImpactDialog.value = false;
+
+  if (pendingBulkModIds.value.length === 0 || !bulkDependencyImpact.value) return;
+
+  const { action } = bulkDependencyImpact.value;
+  const modsToProcess = [...pendingBulkModIds.value];
+
+  if (action === "remove") {
+    await executeBulkRemove(modsToProcess);
+  } else {
+    await executeBulkDisable(modsToProcess);
+  }
+
+  pendingBulkModIds.value = [];
+  bulkDependencyImpact.value = null;
+}
+
+async function confirmBulkDependencyWithDependents() {
+  showBulkDependencyImpactDialog.value = false;
+
+  if (pendingBulkModIds.value.length === 0 || !bulkDependencyImpact.value) return;
+
+  const { action, allDependentMods, allOrphanedDependencies } = bulkDependencyImpact.value;
+  
+  // Combine the original mods with their dependents
+  const allModIds = new Set(pendingBulkModIds.value);
+  
+  // Add dependent mods
+  for (const dep of allDependentMods) {
+    allModIds.add(dep.id);
+  }
+  
+  // For remove action, also include orphaned dependencies
+  if (action === "remove") {
+    for (const orphan of allOrphanedDependencies) {
+      allModIds.add(orphan.id);
+    }
+  }
+
+  const modsToProcess = Array.from(allModIds).filter(id => !lockedModIds.value.has(id));
+
+  if (action === "remove") {
+    await executeBulkRemove(modsToProcess);
+  } else {
+    await executeBulkDisable(modsToProcess);
+  }
+
+  pendingBulkModIds.value = [];
+  bulkDependencyImpact.value = null;
+}
+
+function cancelBulkDependencyImpactAction() {
+  showBulkDependencyImpactDialog.value = false;
+  pendingBulkModIds.value = [];
+  bulkDependencyImpact.value = null;
 }
 
 function toggleSort(field: "name" | "version" | "date") {
@@ -2944,6 +3230,7 @@ watch(
   async (newVal) => {
     if (newVal) {
       hasCheckedUpdatesOnOpen.value = false;
+      loadError.value = null; // Reset error state on open
 
       // Set initial tab if provided
       if (props.initialTab) {
@@ -2954,17 +3241,22 @@ watch(
       fetchMinecraftVersions();
       fetchLoaderTypes();
 
-      await loadData();
-      await loadInstance();
-      await loadSyncSettings();
-      await loadModifiedConfigs();
+      try {
+        await loadData();
+        await loadInstance();
+        await loadSyncSettings();
+        await loadModifiedConfigs();
+      } catch (err) {
+        console.error("[ModpackEditor] Error during initial load:", err);
+        loadError.value = (err as Error).message || "Failed to load modpack data";
+      }
 
       // Pre-fetch loader versions for settings tab
       if (editForm.value.minecraft_version && editForm.value.loader) {
         fetchLoaderVersions();
       }
 
-      // Set up game log listener
+      // Set up game log listener (wrapped to prevent crashes)
       removeLogListener = onGameLogLine((instanceId, logLine) => {
         if (instance.value && instanceId === instance.value.id) {
           gameLogs.value.push({
@@ -3003,8 +3295,13 @@ watch(
   async () => {
     if (props.isOpen) {
       hasCheckedUpdatesOnOpen.value = false;
-      await loadData();
-      await loadInstance();
+      try {
+        await loadData();
+        await loadInstance();
+      } catch (err) {
+        console.error("[ModpackEditor] Error loading modpack on ID change:", err);
+        loadError.value = (err as Error).message || "Failed to load modpack";
+      }
 
       // Check for mod updates only on modpack change
       setTimeout(() => {
@@ -3016,6 +3313,14 @@ watch(
     }
   }
 );
+
+// Cleanup listener when component is destroyed (prevents memory leaks and white screen)
+onUnmounted(() => {
+  if (removeLogListener) {
+    removeLogListener();
+    removeLogListener = null;
+  }
+});
 </script>
 
 <template>
@@ -3024,7 +3329,31 @@ watch(
     :class="fullScreen
       ? 'h-full flex flex-col bg-background overflow-hidden'
       : 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6 animate-in fade-in duration-150'">
-    <div
+
+    <!-- Error State - Prevents white screen -->
+    <div v-if="loadError && !isLoading" 
+      class="bg-background border border-border/50 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col items-center gap-4">
+      <div class="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+        <AlertCircle class="w-8 h-8 text-destructive" />
+      </div>
+      <div class="text-center">
+        <h3 class="text-lg font-semibold text-foreground mb-2">Errore di Caricamento</h3>
+        <p class="text-sm text-muted-foreground mb-4">{{ loadError }}</p>
+      </div>
+      <div class="flex gap-3">
+        <Button variant="outline" @click="$emit('close')">
+          <X class="w-4 h-4 mr-2" />
+          Chiudi
+        </Button>
+        <Button @click="loadError = null; loadData()">
+          <RefreshCw class="w-4 h-4 mr-2" />
+          Riprova
+        </Button>
+      </div>
+    </div>
+
+    <!-- Main Content (only show if no error) -->
+    <div v-else
       :class="fullScreen
         ? 'flex-1 flex flex-col overflow-hidden'
         : 'bg-background border border-border/50 rounded-lg sm:rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150'">
@@ -4360,11 +4689,23 @@ watch(
                       Version
                     </button>
                   </div>
-                  <!-- Select All / Clear -->
-                  <div v-if="currentMods.length > 0 && !isLinked" class="flex items-center gap-1 text-[10px]">
-                    <button class="text-muted-foreground hover:text-foreground transition-colors"
-                      @click="selectAll">All</button>
-                    <span class="text-muted-foreground/50">|</span>
+                  <!-- Select Enabled / Disabled / Clear -->
+                  <div v-if="currentMods.length > 0 && !isLinked" class="flex items-center gap-1.5 text-[10px]">
+                    <span class="text-muted-foreground/70">Select:</span>
+                    <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                      <button class="text-primary hover:text-primary/80 transition-colors"
+                        @click="selectAllEnabled" title="Select all enabled mods (excludes disabled and locked)">All</button>
+                      <span class="text-primary/40">·</span>
+                      <button class="text-primary hover:text-primary/80 transition-colors"
+                        @click="selectHalfEnabled" title="Select half of enabled mods (excludes disabled and locked)">½</button>
+                    </div>
+                    <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                      <button class="text-amber-500 hover:text-amber-400 transition-colors"
+                        @click="selectAllDisabled" title="Select all disabled mods (excludes locked)">All</button>
+                      <span class="text-amber-500/40">·</span>
+                      <button class="text-amber-500 hover:text-amber-400 transition-colors"
+                        @click="selectHalfDisabled" title="Select half of disabled mods (excludes locked)">½</button>
+                    </div>
                     <button class="text-muted-foreground hover:text-foreground transition-colors"
                       @click="clearSelection">None</button>
                   </div>
@@ -5196,16 +5537,90 @@ watch(
         </div>
 
         <p class="text-sm text-muted-foreground">
-          Do you want to continue?
+          What would you like to do?
         </p>
       </div>
 
       <template #footer>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2 justify-end">
           <Button variant="secondary" @click="cancelDependencyImpactAction">Cancel</Button>
           <Button :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'outline'"
             @click="confirmDependencyImpactAction">
             {{ dependencyImpact?.action === 'remove' ? 'Remove Anyway' : 'Disable Anyway' }}
+          </Button>
+          <Button 
+            v-if="dependencyImpact?.dependentMods.filter(d => d.willBreak).length || (dependencyImpact?.action === 'remove' && dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length)"
+            :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'outline'"
+            @click="confirmDependencyImpactWithDependents">
+            {{ dependencyImpact?.action === 'remove' 
+              ? `Remove All (${1 + (dependencyImpact?.dependentMods.filter(d => d.willBreak).length || 0) + (dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length || 0)} mods)` 
+              : `Disable All (${1 + (dependencyImpact?.dependentMods.filter(d => d.willBreak).length || 0)} mods)` }}
+          </Button>
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- Bulk Dependency Impact Warning Dialog -->
+    <Dialog :open="showBulkDependencyImpactDialog" @close="cancelBulkDependencyImpactAction"
+      :title="bulkDependencyImpact?.action === 'remove' ? 'Dependency Warning - Bulk Remove' : 'Dependency Warning - Bulk Disable'"
+      size="lg">
+      <div class="space-y-4 max-h-[60vh] overflow-y-auto">
+        <p class="text-sm text-muted-foreground">
+          {{ bulkDependencyImpact?.action === 'remove' ? 'Removing' : 'Disabling' }}
+          <strong>{{ bulkDependencyImpact?.modsToAffect?.length }} mod(s)</strong> may affect other mods:
+        </p>
+
+        <!-- Dependent Mods -->
+        <div v-if="bulkDependencyImpact?.allDependentMods.length"
+          class="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
+          <div class="flex items-center gap-2 text-destructive font-medium mb-2">
+            <AlertTriangle class="w-4 h-4" />
+            <span>These mods depend on the selected mods and may not work:</span>
+          </div>
+          <ul class="text-sm space-y-1.5 ml-6 list-disc">
+            <li v-for="mod in bulkDependencyImpact?.allDependentMods" :key="mod.id">
+              <strong>{{ mod.name }}</strong>
+              <span class="text-muted-foreground text-xs ml-1">
+                (depends on: {{ mod.dependsOn.join(', ') }})
+              </span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Orphaned Dependencies (only for remove) -->
+        <div
+          v-if="bulkDependencyImpact?.action === 'remove' && bulkDependencyImpact?.allOrphanedDependencies.length"
+          class="bg-warning/10 border border-warning/30 rounded-lg p-3">
+          <div class="flex items-center gap-2 text-warning font-medium mb-2">
+            <Info class="w-4 h-4" />
+            <span>These dependencies may no longer be needed:</span>
+          </div>
+          <ul class="text-sm space-y-1 ml-6 list-disc">
+            <li v-for="mod in bulkDependencyImpact?.allOrphanedDependencies" :key="mod.id">
+              {{ mod.name }}
+            </li>
+          </ul>
+        </div>
+
+        <p class="text-sm text-muted-foreground">
+          What would you like to do?
+        </p>
+      </div>
+
+      <template #footer>
+        <div class="flex flex-wrap gap-2 justify-end">
+          <Button variant="secondary" @click="cancelBulkDependencyImpactAction">Cancel</Button>
+          <Button :variant="bulkDependencyImpact?.action === 'remove' ? 'destructive' : 'outline'"
+            @click="confirmBulkDependencyImpactAction">
+            {{ bulkDependencyImpact?.action === 'remove' ? 'Remove Anyway' : 'Disable Anyway' }}
+          </Button>
+          <Button 
+            v-if="bulkDependencyImpact?.allDependentMods.length || (bulkDependencyImpact?.action === 'remove' && bulkDependencyImpact?.allOrphanedDependencies.length)"
+            :variant="bulkDependencyImpact?.action === 'remove' ? 'destructive' : 'outline'"
+            @click="confirmBulkDependencyWithDependents">
+            {{ bulkDependencyImpact?.action === 'remove' 
+              ? `Remove All (${pendingBulkModIds.length + (bulkDependencyImpact?.allDependentMods.length || 0) + (bulkDependencyImpact?.allOrphanedDependencies.length || 0)} mods)` 
+              : `Disable All (${pendingBulkModIds.length + (bulkDependencyImpact?.allDependentMods.length || 0)} mods)` }}
           </Button>
         </div>
       </template>

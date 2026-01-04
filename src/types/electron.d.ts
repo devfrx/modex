@@ -165,7 +165,7 @@ export interface ElectronAPI {
       action: "remove" | "disable"
     ) => Promise<{
       modToAffect: { id: string; name: string } | null;
-      dependentMods: Array<{ id: string; name: string; willBreak: boolean }>;
+      dependentMods: Array<{ id: string; name: string; willBreak: boolean; depth?: number }>;
       orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
       warnings: string[];
     }>;
@@ -313,6 +313,12 @@ export interface ElectronAPI {
       notFound: number;
       added: string[];
       stillIncompatible: string[];
+    }>;
+    /** Refresh dependencies for all mods in a modpack from CurseForge API */
+    refreshDependencies: (modpackId: string) => Promise<{
+      updated: number;
+      skipped: number;
+      errors: string[];
     }>;
   };
 

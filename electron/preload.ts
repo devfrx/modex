@@ -216,10 +216,15 @@ contextBridge.exposeInMainWorld("api", {
       action: "remove" | "disable"
     ): Promise<{
       modToAffect: { id: string; name: string } | null;
-      dependentMods: Array<{ id: string; name: string; willBreak: boolean }>;
+      dependentMods: Array<{ id: string; name: string; willBreak: boolean; depth?: number }>;
       orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
       warnings: string[];
     }> => ipcRenderer.invoke("modpacks:analyzeModRemovalImpact", modpackId, modId, action),
+    refreshDependencies: (modpackId: string): Promise<{
+      updated: number;
+      skipped: number;
+      errors: string[];
+    }> => ipcRenderer.invoke("modpacks:refreshDependencies", modpackId),
     removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
     toggleMod: (

@@ -389,7 +389,7 @@ const showDependencyImpactDialog = ref(false);
 const dependencyImpact = ref<{
   action: "remove" | "disable";
   modToAffect: { id: string; name: string } | null;
-  dependentMods: Array<{ id: string; name: string; willBreak: boolean }>;
+  dependentMods: Array<{ id: string; name: string; willBreak: boolean; depth?: number }>;
   orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
   warnings: string[];
 } | null>(null);
@@ -5514,9 +5514,18 @@ onUnmounted(() => {
             <AlertTriangle class="w-4 h-4" />
             <span>These mods depend on it and may not work:</span>
           </div>
-          <ul class="text-sm space-y-1 ml-6">
-            <li v-for="mod in dependencyImpact?.dependentMods.filter(d => d.willBreak)" :key="mod.id">
-              {{ mod.name }}
+          <ul class="text-sm space-y-1.5 ml-6">
+            <li v-for="mod in dependencyImpact?.dependentMods.filter(d => d.willBreak)" :key="mod.id"
+              class="flex items-center gap-2">
+              <span>{{ mod.name }}</span>
+              <span v-if="mod.depth === 1" 
+                class="text-[10px] px-1.5 py-0.5 rounded bg-destructive/20 text-destructive font-medium">
+                Diretto
+              </span>
+              <span v-else-if="mod.depth && mod.depth > 1" 
+                class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-medium">
+                Indiretto (livello {{ mod.depth }})
+              </span>
             </li>
           </ul>
         </div>

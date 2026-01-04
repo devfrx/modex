@@ -358,6 +358,40 @@ async function installAllDependencies() {
   }
 }
 
+// Refresh dependencies from CurseForge API
+const isRefreshingDeps = ref(false);
+
+async function refreshDependencies() {
+  if (isRefreshingDeps.value) return;
+  
+  isRefreshingDeps.value = true;
+  try {
+    const result = await window.api.modpacks.refreshDependencies(props.modpackId);
+    
+    if (result.updated > 0) {
+      toast.success(
+        "Dependencies Updated",
+        `Updated ${result.updated} mods with latest dependency data${result.skipped > 0 ? ` (${result.skipped} skipped)` : ''}`
+      );
+      // Re-run analysis to detect any new missing dependencies
+      await runAnalysis();
+    } else if (result.skipped > 0) {
+      toast.info("No Updates Needed", `All ${result.skipped} mods already have current dependency data`);
+    } else {
+      toast.info("No Mods", "No mods with CurseForge data found to update");
+    }
+    
+    if (result.errors.length > 0) {
+      console.warn("Dependency refresh errors:", result.errors);
+    }
+  } catch (err) {
+    console.error("Failed to refresh dependencies:", err);
+    toast.error("Refresh Failed", (err as Error).message);
+  } finally {
+    isRefreshingDeps.value = false;
+  }
+}
+
 function toggleSection(section: keyof typeof expandedSections.value) {
   expandedSections.value[section] = !expandedSections.value[section];
 }
@@ -521,11 +555,18 @@ watch(
             </div>
           </div>
 
-          <!-- Refresh Button -->
-          <Button variant="outline" size="sm" class="gap-1.5 shrink-0" @click="runAnalysis">
-            <RefreshCw class="w-4 h-4" />
-            Re-analyze
-          </Button>
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" class="gap-1.5" @click="refreshDependencies" :disabled="isRefreshingDeps" title="Fetch latest dependency data from CurseForge for all mods">
+              <Loader2 v-if="isRefreshingDeps" class="w-4 h-4 animate-spin" />
+              <GitBranch v-else class="w-4 h-4" />
+              Sync Deps
+            </Button>
+            <Button variant="outline" size="sm" class="gap-1.5" @click="runAnalysis">
+              <RefreshCw class="w-4 h-4" />
+              Re-analyze
+            </Button>
+          </div>
         </div>
       </div>
 

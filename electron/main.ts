@@ -482,6 +482,18 @@ async function initializeBackend() {
   );
 
   ipcMain.handle(
+    "modpacks:refreshDependencies",
+    async (_, modpackId: string) => {
+      const onProgress = (current: number, total: number, modName: string) => {
+        if (win) {
+          win.webContents.send("modpacks:refreshDependenciesProgress", { current, total, modName });
+        }
+      };
+      return metadataManager.refreshModpackDependencies(modpackId, curseforgeService, onProgress);
+    }
+  );
+
+  ipcMain.handle(
     "modpacks:removeMod",
     async (_, modpackId: string, modId: string) => {
       await guardLinkedModpack(modpackId, "remove mod");

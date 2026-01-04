@@ -428,6 +428,7 @@ export class MetadataManager {
     const existingIndex = library.mods.findIndex((m) => m.id === id);
     if (existingIndex >= 0) {
       const existingMod = library.mods[existingIndex];
+      let needsSave = false;
 
       // Update content_type if the new data has a more specific type
       // (e.g., existing mod has "mod" or undefined, but new data specifies "resourcepack" or "shader")
@@ -436,6 +437,29 @@ export class MetadataManager {
           `[MetadataManager] Updating content_type for ${id}: ${existingMod.content_type} -> ${modData.content_type}`
         );
         existingMod.content_type = modData.content_type;
+        needsSave = true;
+      }
+
+      // IMPORTANT: Update dependencies if the new data has them but existing doesn't
+      // This ensures mods added before dependency tracking still get their dependencies
+      if (modData.dependencies && modData.dependencies.length > 0) {
+        if (!existingMod.dependencies || existingMod.dependencies.length === 0) {
+          console.log(
+            `[MetadataManager] Adding ${modData.dependencies.length} dependencies to ${id}`
+          );
+          existingMod.dependencies = modData.dependencies;
+          needsSave = true;
+        } else if (JSON.stringify(existingMod.dependencies) !== JSON.stringify(modData.dependencies)) {
+          // Dependencies changed - update them
+          console.log(
+            `[MetadataManager] Updating dependencies for ${id}: ${existingMod.dependencies.length} -> ${modData.dependencies.length}`
+          );
+          existingMod.dependencies = modData.dependencies;
+          needsSave = true;
+        }
+      }
+
+      if (needsSave) {
         await this.saveLibrary(library);
       }
 
@@ -491,6 +515,11 @@ export class MetadataManager {
       if (existingIds.has(id)) {
         const existingMod = library.mods.find((m) => m.id === id);
         if (existingMod) {
+          // Update dependencies if new data has them but existing doesn't
+          if (modData.dependencies && modData.dependencies.length > 0 &&
+            (!existingMod.dependencies || existingMod.dependencies.length === 0)) {
+            existingMod.dependencies = modData.dependencies;
+          }
           results.push(existingMod);
           continue;
         }
@@ -526,6 +555,77 @@ export class MetadataManager {
     library.mods[index] = { ...library.mods[index], ...updates };
     await this.saveLibrary(library);
     return true;
+  }
+
+  /**
+   * Refresh dependencies for mods in a modpack using CurseForge API
+   * This is useful for updating old mods that were added before dependency tracking
+   */
+  async refreshModpackDependencies(
+    modpackId: string,
+    cfService: any,
+    onProgress?: (current: number, total: number, modName: string) => void
+  ): Promise<{ updated: number; skipped: number; errors: string[] }> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) {
+      return { updated: 0, skipped: 0, errors: ["Modpack not found"] };
+    }
+
+    const mods = await this.getModsInModpack(modpackId);
+    const library = await this.loadLibrary();
+
+    let updated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < mods.length; i++) {
+      const mod = mods[i];
+      onProgress?.(i + 1, mods.length, mod.name);
+
+      // Only process CurseForge mods
+      if (mod.source !== "curseforge" || !mod.cf_project_id || !mod.cf_file_id) {
+        skipped++;
+        continue;
+      }
+
+      // Skip if already has dependencies
+      if (mod.dependencies && mod.dependencies.length > 0) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const cfFile = await cfService.getFile(mod.cf_project_id, mod.cf_file_id);
+        if (cfFile && cfFile.dependencies && cfFile.dependencies.length > 0) {
+          const dependencies = cfFile.dependencies.map((d: any) => ({
+            modId: d.modId,
+            type: d.relationType === 3 ? "required" :
+              d.relationType === 2 ? "optional" :
+                d.relationType === 1 ? "embedded" : "unknown"
+          }));
+
+          // Update in library
+          const libIndex = library.mods.findIndex(m => m.id === mod.id);
+          if (libIndex >= 0) {
+            library.mods[libIndex].dependencies = dependencies;
+            updated++;
+            console.log(`[RefreshDeps] Updated ${mod.name} with ${dependencies.length} dependencies`);
+          }
+        } else {
+          skipped++;
+        }
+      } catch (err) {
+        errors.push(`${mod.name}: ${(err as Error).message}`);
+      }
+    }
+
+    // Save library once at the end
+    if (updated > 0) {
+      await this.saveLibrary(library);
+    }
+
+    console.log(`[RefreshDeps] Complete: ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
+    return { updated, skipped, errors };
   }
 
   async deleteMod(id: string): Promise<boolean> {
@@ -2080,8 +2180,148 @@ export class MetadataManager {
   }
 
   /**
+   * Helper: Check if a dependency matches a mod by project ID
+   * Handles both number and string comparisons robustly
+   */
+  private dependencyMatchesMod(dep: { modId: number | string; type: string }, mod: Mod): boolean {
+    const depId = dep.modId;
+
+    // Check CurseForge project ID
+    if (mod.cf_project_id) {
+      if (typeof depId === 'number' && depId === mod.cf_project_id) return true;
+      if (typeof depId === 'string' && parseInt(depId, 10) === mod.cf_project_id) return true;
+      if (String(depId) === String(mod.cf_project_id)) return true;
+    }
+
+    // Check Modrinth project ID
+    if (mod.mr_project_id) {
+      if (String(depId) === String(mod.mr_project_id)) return true;
+    }
+
+    // Check by slug as fallback (some mods use slug as dependency ID)
+    if (mod.slug && String(depId).toLowerCase() === mod.slug.toLowerCase()) return true;
+
+    return false;
+  }
+
+  /**
+   * Build a complete dependency graph for a modpack
+   * Returns maps for quick lookups: mod -> its dependencies, mod -> mods that depend on it
+   */
+  private async buildDependencyGraph(modpackId: string): Promise<{
+    modMap: Map<string, Mod>;
+    dependsOn: Map<string, Set<string>>; // modId -> set of modIds it depends on (required)
+    dependedBy: Map<string, Set<string>>; // modId -> set of modIds that depend on it
+    projectToModId: Map<string, string>; // "cf-{projectId}" or "mr-{projectId}" -> modId
+  }> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) {
+      return {
+        modMap: new Map(),
+        dependsOn: new Map(),
+        dependedBy: new Map(),
+        projectToModId: new Map()
+      };
+    }
+
+    const library = await this.loadLibrary();
+    const packModIds = new Set(modpack.mod_ids);
+
+    const modMap = new Map<string, Mod>();
+    const dependsOn = new Map<string, Set<string>>();
+    const dependedBy = new Map<string, Set<string>>();
+    const projectToModId = new Map<string, string>();
+
+    // Build mod map and project ID lookup
+    for (const modId of packModIds) {
+      const mod = library.mods.find(m => m.id === modId);
+      if (mod) {
+        modMap.set(modId, mod);
+        if (mod.cf_project_id) {
+          projectToModId.set(`cf-${mod.cf_project_id}`, modId);
+        }
+        if (mod.mr_project_id) {
+          projectToModId.set(`mr-${mod.mr_project_id}`, modId);
+        }
+        // Also index by slug for fallback matching
+        if (mod.slug) {
+          projectToModId.set(`slug-${mod.slug.toLowerCase()}`, modId);
+        }
+      }
+    }
+
+    // Build dependency relationships
+    for (const [modId, mod] of modMap) {
+      if (!mod.dependencies) continue;
+
+      const deps = new Set<string>();
+
+      for (const dep of mod.dependencies) {
+        if (dep.type !== 'required') continue;
+
+        // Find which mod in the pack this dependency refers to
+        for (const [otherId, otherMod] of modMap) {
+          if (otherId === modId) continue;
+
+          if (this.dependencyMatchesMod(dep, otherMod)) {
+            deps.add(otherId);
+
+            // Also add to the reverse map
+            if (!dependedBy.has(otherId)) {
+              dependedBy.set(otherId, new Set());
+            }
+            dependedBy.get(otherId)!.add(modId);
+            break;
+          }
+        }
+      }
+
+      if (deps.size > 0) {
+        dependsOn.set(modId, deps);
+      }
+    }
+
+    return { modMap, dependsOn, dependedBy, projectToModId };
+  }
+
+  /**
+   * Find all mods that would be affected by removing/disabling a mod (recursive)
+   * Returns mods in order of dependency chain depth
+   */
+  private findAllAffectedMods(
+    modId: string,
+    dependedBy: Map<string, Set<string>>,
+    disabledModIds: Set<string>,
+    visited: Set<string> = new Set()
+  ): Array<{ id: string; depth: number }> {
+    if (visited.has(modId)) return [];
+    visited.add(modId);
+
+    const affected: Array<{ id: string; depth: number }> = [];
+    const directDependents = dependedBy.get(modId);
+
+    if (!directDependents) return [];
+
+    for (const depId of directDependents) {
+      // Only count as affected if the dependent mod is not disabled
+      if (!disabledModIds.has(depId)) {
+        affected.push({ id: depId, depth: 1 });
+
+        // Recursively find mods that depend on this dependent
+        const indirect = this.findAllAffectedMods(depId, dependedBy, disabledModIds, visited);
+        for (const ind of indirect) {
+          affected.push({ id: ind.id, depth: ind.depth + 1 });
+        }
+      }
+    }
+
+    return affected;
+  }
+
+  /**
    * Analyze the full impact of removing or disabling a mod
    * Returns both mods that depend on this one AND any dependencies that will be orphaned
+   * Uses recursive analysis and robust dependency matching
    */
   async analyzeModRemovalImpact(
     modpackId: string,
@@ -2089,7 +2329,7 @@ export class MetadataManager {
     action: "remove" | "disable"
   ): Promise<{
     modToAffect: { id: string; name: string } | null;
-    dependentMods: Array<{ id: string; name: string; willBreak: boolean }>;
+    dependentMods: Array<{ id: string; name: string; willBreak: boolean; depth?: number }>;
     orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
     warnings: string[];
   }> {
@@ -2103,90 +2343,89 @@ export class MetadataManager {
       return { modToAffect: null, dependentMods: [], orphanedDependencies: [], warnings: ["Mod not found"] };
     }
 
-    const library = await this.loadLibrary();
-    const packModIds = new Set(modpack.mod_ids);
     const disabledModIds = new Set(modpack.disabled_mod_ids || []);
+    const { modMap, dependsOn, dependedBy } = await this.buildDependencyGraph(modpackId);
 
-    const dependentMods: Array<{ id: string; name: string; willBreak: boolean }> = [];
+    const dependentMods: Array<{ id: string; name: string; willBreak: boolean; depth?: number }> = [];
     const orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }> = [];
     const warnings: string[] = [];
 
-    // 1. Find mods that depend on this mod (will break if removed/disabled)
-    for (const packModId of packModIds) {
-      if (packModId === modId) continue;
+    // 1. Find ALL mods that depend on this mod (recursively)
+    const allAffected = this.findAllAffectedMods(modId, dependedBy, disabledModIds);
 
-      const mod = library.mods.find(m => m.id === packModId);
-      if (!mod || !mod.dependencies) continue;
-
-      for (const dep of mod.dependencies) {
-        const depMatches =
-          (modToAffect.cf_project_id && dep.modId === modToAffect.cf_project_id) ||
-          (modToAffect.mr_project_id && dep.modId === modToAffect.mr_project_id);
-
-        if (depMatches && dep.type === "required") {
-          const isModDisabled = disabledModIds.has(mod.id);
-          dependentMods.push({
-            id: mod.id,
-            name: mod.name,
-            // Will break only if the dependent mod is currently enabled
-            willBreak: !isModDisabled
-          });
-          break;
-        }
+    // Deduplicate and keep the shortest depth
+    const affectedMap = new Map<string, number>();
+    for (const a of allAffected) {
+      if (!affectedMap.has(a.id) || affectedMap.get(a.id)! > a.depth) {
+        affectedMap.set(a.id, a.depth);
       }
     }
+
+    // Build the result array
+    for (const [affectedId, depth] of affectedMap) {
+      const mod = modMap.get(affectedId);
+      if (mod) {
+        const isDisabled = disabledModIds.has(affectedId);
+        dependentMods.push({
+          id: affectedId,
+          name: mod.name,
+          willBreak: !isDisabled,
+          depth
+        });
+      }
+    }
+
+    // Sort by depth (direct dependencies first)
+    dependentMods.sort((a, b) => (a.depth || 1) - (b.depth || 1));
 
     // 2. Find dependencies of the mod being removed that might become orphaned
-    if (modToAffect.dependencies) {
-      for (const dep of modToAffect.dependencies) {
-        if (dep.type !== "required") continue;
+    const modDeps = dependsOn.get(modId);
+    if (modDeps && action === "remove") {
+      for (const depId of modDeps) {
+        const depMod = modMap.get(depId);
+        if (!depMod) continue;
 
-        // Find the dependency mod in the pack
-        const depMod = library.mods.find(m =>
-          packModIds.has(m.id) &&
-          (m.cf_project_id === dep.modId || m.mr_project_id === dep.modId)
-        );
+        // Check if any OTHER enabled mod in the pack uses this dependency
+        let usedByOthers = false;
+        for (const [otherModId, otherDeps] of dependsOn) {
+          if (otherModId === modId) continue;
+          if (disabledModIds.has(otherModId)) continue; // Skip disabled mods
 
-        if (depMod) {
-          // Check if any other mod in the pack uses this dependency
-          let usedByOthers = false;
-          for (const otherModId of packModIds) {
-            if (otherModId === modId || otherModId === depMod.id) continue;
-
-            const otherMod = library.mods.find(m => m.id === otherModId);
-            if (otherMod?.dependencies) {
-              for (const otherDep of otherMod.dependencies) {
-                if (otherDep.modId === dep.modId && otherDep.type === "required") {
-                  usedByOthers = true;
-                  break;
-                }
-              }
-            }
-            if (usedByOthers) break;
+          if (otherDeps.has(depId)) {
+            usedByOthers = true;
+            break;
           }
-
-          orphanedDependencies.push({
-            id: depMod.id,
-            name: depMod.name,
-            usedByOthers
-          });
         }
+
+        orphanedDependencies.push({
+          id: depId,
+          name: depMod.name,
+          usedByOthers
+        });
       }
     }
 
-    // Generate warnings
-    if (dependentMods.filter(d => d.willBreak).length > 0) {
-      warnings.push(
-        `${dependentMods.filter(d => d.willBreak).length} mod(s) depend on this mod and may not work correctly`
-      );
+    // 3. Generate detailed warnings
+    const breakingMods = dependentMods.filter(d => d.willBreak);
+    if (breakingMods.length > 0) {
+      const directCount = breakingMods.filter(d => (d.depth || 1) === 1).length;
+      const indirectCount = breakingMods.length - directCount;
+
+      let warningMsg = `${breakingMods.length} mod(s) depend on "${modToAffect.name}"`;
+      if (indirectCount > 0) {
+        warningMsg += ` (${directCount} direct, ${indirectCount} indirect)`;
+      }
+      warnings.push(warningMsg);
     }
 
     const orphanedNotUsed = orphanedDependencies.filter(d => !d.usedByOthers);
     if (orphanedNotUsed.length > 0 && action === "remove") {
       warnings.push(
-        `${orphanedNotUsed.length} dependency mod(s) may no longer be needed`
+        `${orphanedNotUsed.length} dependency mod(s) may no longer be needed: ${orphanedNotUsed.map(d => d.name).join(", ")}`
       );
     }
+
+    console.log(`[DependencyAnalysis] Analyzed ${modToAffect.name}: ${breakingMods.length} breaking, ${orphanedNotUsed.length} orphaned`);
 
     return {
       modToAffect: { id: modToAffect.id, name: modToAffect.name },

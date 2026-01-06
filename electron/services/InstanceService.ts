@@ -1051,8 +1051,24 @@ export class InstanceService {
     const platform = process.platform;
 
     try {
-      // Find vanilla launcher
+      // Find vanilla launcher - check multiple sources
       let launcherPath: string | null = this.launcherConfig.vanillaPath || null;
+
+      // Also check launcher-paths.json (used by MinecraftService/Settings UI)
+      if (!launcherPath || !await fs.pathExists(launcherPath)) {
+        const launcherPathsFile = path.join(path.dirname(this.configPath), "launcher-paths.json");
+        if (await fs.pathExists(launcherPathsFile)) {
+          try {
+            const launcherPaths = await fs.readJson(launcherPathsFile);
+            if (launcherPaths.vanilla && await fs.pathExists(launcherPaths.vanilla)) {
+              launcherPath = launcherPaths.vanilla;
+              console.log(`[InstanceService] Using launcher path from settings: ${launcherPath}`);
+            }
+          } catch (e) {
+            console.warn("[InstanceService] Could not read launcher-paths.json:", e);
+          }
+        }
+      }
 
       if (!launcherPath || !await fs.pathExists(launcherPath)) {
         // Auto-detect launcher

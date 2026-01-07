@@ -555,6 +555,17 @@ export interface ElectronAPI {
 
   // ========== UPDATES ==========
   updates: {
+    checkAppUpdate: () => Promise<{
+      hasUpdate: boolean;
+      currentVersion?: string;
+      latestVersion?: string;
+      releaseUrl?: string;
+      releaseName?: string;
+      releaseNotes?: string;
+      publishedAt?: string;
+      noReleases?: boolean;
+      error?: string;
+    }>;
     setApiKey: (apiKey: string) => Promise<{ success: boolean }>;
     getApiKey: () => Promise<string>;
     checkMod: (

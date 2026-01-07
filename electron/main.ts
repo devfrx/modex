@@ -2595,6 +2595,78 @@ async function initializeBackend() {
 
   // ========== UPDATES IPC HANDLERS ==========
 
+  // Check for app updates from GitHub releases
+  ipcMain.handle("updates:checkAppUpdate", async () => {
+    try {
+      // Use /releases instead of /releases/latest to include pre-releases and drafts
+      const response = await fetch(
+        "https://api.github.com/repos/devfrx/modex/releases",
+        {
+          headers: {
+            "User-Agent": "ModEx-App",
+            Accept: "application/vnd.github.v3+json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          const currentVersion = app.getVersion();
+          return {
+            hasUpdate: false,
+            currentVersion,
+            latestVersion: currentVersion,
+            noReleases: true,
+          };
+        }
+        throw new Error(`GitHub API returned ${response.status}`);
+      }
+
+      const releases = await response.json();
+      
+      // No releases found
+      if (!Array.isArray(releases) || releases.length === 0) {
+        const currentVersion = app.getVersion();
+        return {
+          hasUpdate: false,
+          currentVersion,
+          latestVersion: currentVersion,
+          noReleases: true,
+        };
+      }
+
+      // Get the first non-draft release (can be pre-release)
+      const release = releases.find((r: any) => !r.draft) || releases[0];
+      const latestVersion = release.tag_name?.replace(/^v/, "") || "";
+      const currentVersion = app.getVersion();
+
+      console.log(`[Updates] Current: ${currentVersion}, Latest: ${latestVersion}`);
+
+      // Simple version comparison (works for semver)
+      const isNewer = latestVersion.localeCompare(currentVersion, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }) > 0;
+
+      return {
+        hasUpdate: isNewer,
+        currentVersion,
+        latestVersion,
+        releaseUrl: release.html_url || `https://github.com/devfrx/modex/releases/tag/${release.tag_name}`,
+        releaseName: release.name || `v${latestVersion}`,
+        releaseNotes: release.body || "",
+        publishedAt: release.published_at,
+        isPrerelease: release.prerelease || false,
+      };
+    } catch (error: any) {
+      console.error("[Updates] Failed to check for app updates:", error);
+      return {
+        hasUpdate: false,
+        error: error.message || "Failed to check for updates",
+      };
+    }
+  });
+
   ipcMain.handle(
     "updates:setApiKey",
     async (_, apiKey: string) => {

@@ -672,6 +672,16 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== UPDATES ==========
   updates: {
+    checkAppUpdate: (): Promise<{
+      hasUpdate: boolean;
+      currentVersion?: string;
+      latestVersion?: string;
+      releaseUrl?: string;
+      releaseName?: string;
+      releaseNotes?: string;
+      publishedAt?: string;
+      error?: string;
+    }> => ipcRenderer.invoke("updates:checkAppUpdate"),
     setApiKey: (apiKey: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke("updates:setApiKey", apiKey),
     getApiKey: (): Promise<string> =>

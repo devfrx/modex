@@ -191,11 +191,29 @@ async function saveCfApiKey() {
 
 async function checkForAppUpdates() {
   isCheckingUpdate.value = true;
-  // Mock update check for now
-  setTimeout(() => {
+  try {
+    const result = await window.api.updates.checkAppUpdate();
+    
+    if (result.error) {
+      toast.error("Update check failed", result.error);
+    } else if (result.hasUpdate) {
+      toast.info(
+        `Update available: ${result.releaseName}`,
+        `A new version (${result.latestVersion}) is available.`,
+        10000
+      );
+      // Open the release page
+      window.open(result.releaseUrl, "_blank");
+    } else if (result.noReleases) {
+      toast.success("You're up to date", `Running v${result.currentVersion} (development build).`);
+    } else {
+      toast.success("You're up to date", `Running the latest version (v${result.currentVersion}).`);
+    }
+  } catch (error: any) {
+    toast.error("Update check failed", error.message || "Could not connect to GitHub.");
+  } finally {
     isCheckingUpdate.value = false;
-    toast.success("You're up to date", "Running the latest version of ModEx.");
-  }, 1500);
+  }
 }
 
 async function applyAccentColor(color: (typeof accentColors)[0]) {

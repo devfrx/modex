@@ -326,7 +326,7 @@ function create() {
 </script>
 
 <template>
-  <Dialog :open="open" title="Create Modpack">
+  <Dialog :open="open" title="New Pack">
     <div class="space-y-4 py-4">
       <p v-if="initialModsCount" class="text-sm text-muted-foreground">
         Creating a modpack with {{ initialModsCount }} selected mods.
@@ -334,7 +334,8 @@ function create() {
 
       <!-- Image Picker -->
       <div class="space-y-2">
-        <label class="text-sm font-medium">Cover Image (Optional)</label>
+        <label class="text-sm font-medium">Cover <span
+            class="text-muted-foreground font-normal">(optional)</span></label>
         <div v-if="!form.image_path"
           class="flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
           @click="selectImage">
@@ -355,14 +356,15 @@ function create() {
 
       <div class="space-y-2">
         <label class="text-sm font-medium">Name</label>
-        <Input v-model="form.name" placeholder="My Awesome Modpack" autofocus
+        <Input v-model="form.name" placeholder="My First Pack" autofocus
           :class="nameError ? 'border-red-500 focus-visible:ring-red-500' : ''" @input="nameError = ''" />
         <p v-if="nameError" class="text-xs text-red-500">{{ nameError }}</p>
       </div>
 
       <div class="space-y-2">
-        <label class="text-sm font-medium">Modpack Version</label>
+        <label class="text-sm font-medium">Pack Version</label>
         <Input v-model="form.version" placeholder="1.0.0" />
+        <p class="text-xs text-muted-foreground">Your version number, like 1.0</p>
       </div>
 
       <!-- Minecraft Version -->
@@ -385,7 +387,7 @@ function create() {
       <!-- Loader -->
       <div class="space-y-2">
         <label class="text-sm font-medium flex items-center gap-2">
-          Mod Loader
+          Loader
           <Lock v-if="isLoaderLocked" class="w-3 h-3 text-muted-foreground" />
         </label>
         <select v-model="form.loader" :disabled="isLoaderLocked"
@@ -415,7 +417,7 @@ function create() {
           </option>
         </select>
         <p class="text-xs text-muted-foreground">
-          Select the version of {{loaders.find(l => l.value === form.loader)?.label || 'the loader'}} to use
+          Recommended: latest stable version
         </p>
       </div>
 
@@ -429,7 +431,7 @@ function create() {
 
     <template #footer>
       <Button variant="outline" @click="$emit('close')">Cancel</Button>
-      <Button @click="create" :disabled="!form.name.trim()">Create</Button>
+      <Button @click="create" :disabled="!form.name.trim()">Create Pack</Button>
     </template>
   </Dialog>
 </template>

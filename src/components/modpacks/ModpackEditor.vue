@@ -58,6 +58,7 @@ import {
   FileText,
   MessageSquare,
   MessageSquarePlus,
+  MoreHorizontal,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -171,6 +172,14 @@ const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
 
 // Help Guide State
 const showHelp = ref(false);
+
+// More Menu State (for secondary tabs)
+const showMoreMenu = ref(false);
+const secondaryTabs = ['discover', 'health', 'versions', 'remote'] as const;
+const isSecondaryTab = computed(() => secondaryTabs.includes(activeTab.value as any));
+
+// Mods Filter overflow menu
+const showModsFilterMenu = ref(false);
 
 // Linked instance (for config sync in version control)
 const linkedInstanceId = ref<string | null>(null);
@@ -865,7 +874,7 @@ async function handleCFModAdded(mod: Mod | null, addedIds?: string[]) {
     setTimeout(() => {
       recentlyAddedMods.value.delete(mod.id);
     }, RECENT_THRESHOLD_MS);
-    toast.success("Added to modpack", `${mod.name} has been added`);
+    toast.success("Added ✓", `${mod.name} is now in your pack`);
   } else if (addedIds && addedIds.length > 0) {
     // Bulk add - mark all added mods as new
     for (const modId of addedIds) {
@@ -937,13 +946,13 @@ async function updateMod(mod: Mod) {
     if (result.success) {
       delete updateAvailable.value[mod.id];
       emit("update");
-      toast.success(`Updated ${mod.name} to version ${latest.displayName}`);
+      toast.success(`${mod.name} updated to ${latest.displayName} ✓`);
     } else {
-      toast.error(`Failed to update ${mod.name}: ${result.error}`);
+      toast.error(`Couldn't update ${mod.name}: ${result.error}`);
     }
   } catch (err) {
     console.error("Update failed:", err);
-    toast.error("Failed to update mod");
+    toast.error("Couldn't update mod");
   }
 }
 
@@ -954,8 +963,8 @@ function openVersionPicker(mod: Mod) {
   // Check if mod is locked
   if (lockedModIds.value.has(mod.id)) {
     toast.error(
-      "Mod Locked",
-      "This mod is locked and cannot be changed. Unlock it first."
+      "Mod is locked",
+      "Unlock it first to change the version."
     );
     return;
   }
@@ -994,13 +1003,13 @@ async function handleVersionSelected(fileId: number) {
       }
       await loadData();
       emit("update");
-      toast.success(`${versionPickerMod.value.name} version changed`);
+      toast.success(`${versionPickerMod.value.name} updated ✓`);
     } else {
-      toast.error(`Failed to change version: ${result.error || 'Unknown error'}`);
+      toast.error(`Couldn't change version: ${result.error || 'Unknown error'}`);
     }
   } catch (err: any) {
     console.error("Version change failed:", err);
-    toast.error(`Failed to change mod version: ${err?.message || 'Unknown error'}`);
+    toast.error(`Couldn't change version: ${err?.message || 'Unknown error'}`);
   }
 
   showVersionPickerDialog.value = false;
@@ -1044,14 +1053,14 @@ async function handleModDetailsVersionChange(fileId: number) {
       }
       await loadData();
       emit("update");
-      toast.success(`${modDetailsTarget.value.name} version changed`);
+      toast.success(`${modDetailsTarget.value.name} updated ✓`);
       closeModDetails();
     } else {
-      toast.error(`Failed to change version: ${result.error || 'Unknown error'}`);
+      toast.error(`Couldn't change version: ${result.error || 'Unknown error'}`);
     }
   } catch (err: any) {
     console.error("Version change failed:", err);
-    toast.error(`Failed to change mod version: ${err?.message || 'Unknown error'}`);
+    toast.error(`Couldn't change version: ${err?.message || 'Unknown error'}`);
   }
 }
 
@@ -1079,8 +1088,8 @@ async function quickUpdateMod(mod: Mod) {
   // Check if mod is locked
   if (lockedModIds.value.has(mod.id)) {
     toast.error(
-      "Mod Locked",
-      "This mod is locked and cannot be updated. Unlock it first."
+      "Mod is locked",
+      "Unlock it first to update."
     );
     return;
   }
@@ -1101,13 +1110,13 @@ async function quickUpdateMod(mod: Mod) {
       delete updateAvailable.value[mod.id];
       await loadData();
       emit("update");
-      toast.success(`Updated ${mod.name}`);
+      toast.success(`${mod.name} updated ✓`);
     } else {
-      toast.error(`Failed to update ${mod.name}: ${result.error}`);
+      toast.error(`Couldn't update ${mod.name}: ${result.error}`);
     }
   } catch (err) {
     console.error("Update failed:", err);
-    toast.error(`Failed to update ${mod.name}`);
+    toast.error(`Couldn't update ${mod.name}`);
   } finally {
     checkingUpdates.value[mod.id] = false;
   }
@@ -1134,7 +1143,7 @@ async function updateAllMods() {
     updateAvailable.value[m.id] && !lockedModIds.value.has(m.id)
   );
   if (modsToUpdate.length === 0) {
-    toast.info("No Updates", "All mods are up to date or locked.");
+    toast.info("All up to date", "Your mods are on their latest versions.");
     return;
   }
 
@@ -1164,9 +1173,9 @@ async function updateAllMods() {
   emit("update");
 
   if (failCount === 0) {
-    toast.success(`Updated ${successCount} mods`);
+    toast.success(`${successCount} mods updated ✓`);
   } else {
-    toast.warning(`Updated ${successCount} mods, ${failCount} failed`);
+    toast.warning(`${successCount} updated, ${failCount} couldn't update`);
   }
 }
 
@@ -1421,7 +1430,7 @@ async function loadData() {
     console.error("Failed to load modpack data:", err);
     // Only show error toast if this is still the current request
     if (currentRequestId === loadRequestId) {
-      toast.error("Failed to load modpack", "Please try again or reload the page");
+      toast.error("Couldn't load pack", "Try again or refresh the page.");
     }
   } finally {
     // Only clear loading state if this is still the current request
@@ -1504,7 +1513,7 @@ async function handleCreateInstance() {
       syncResult.value = result.syncResult;
 
       if (result.syncResult.success) {
-        toast.success("Instance Ready!", `Downloaded ${result.syncResult.modsDownloaded} mods`);
+        toast.success("Ready to play ✓", `Downloaded ${result.syncResult.modsDownloaded} mods`);
 
         const stats = await getInstanceStats(result.instance.id);
         if (stats) {
@@ -1515,11 +1524,11 @@ async function handleCreateInstance() {
           };
         }
       } else {
-        toast.error("Instance created with issues", `${result.syncResult.errors.length} errors`);
+        toast.error("Created with issues", `${result.syncResult.errors.length} items need attention`);
       }
     }
   } catch (err: any) {
-    toast.error("Failed to create instance", err.message);
+    toast.error("Couldn't create instance", err.message);
   } finally {
     isCreatingInstance.value = false;
   }
@@ -1580,7 +1589,7 @@ async function handleSyncInstance() {
     syncResult.value = result;
 
     if (result.success) {
-      toast.success("Sync Complete", `${result.modsDownloaded} mods updated`);
+      toast.success("Synced ✓", `${result.modsDownloaded} mods updated`);
 
       // Refresh instance data (loader version may have been updated)
       await loadInstance();
@@ -1600,10 +1609,10 @@ async function handleSyncInstance() {
       }
       showSyncDetails.value = false; // Collapse details after sync
     } else {
-      toast.error("Sync had errors", result.errors.join(", "));
+      toast.error("Sync had issues", result.errors.join(", "));
     }
   } catch (err: any) {
-    toast.error("Sync failed", err.message);
+    toast.error("Couldn't sync", err.message);
   } finally {
     isSyncingInstance.value = false;
   }
@@ -1657,18 +1666,18 @@ async function handleLaunch(options?: { forceSync?: boolean; skipSync?: boolean 
       gameLoadingMessage.value = "Launching Minecraft...";
 
       if (result.syncPerformed && instance.value) {
-        toast.success("Synced & Launched", "Instance synced, Minecraft loading...");
+        toast.success("Launching ✓", "Synced and starting Minecraft...");
         instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
       } else {
-        toast.success("Minecraft Launcher Started", "Game is loading...");
+        toast.success("Launching ✓", "Starting Minecraft...");
       }
 
       emit("launched", instance.value);
     } else {
-      toast.error("Launch failed", result.error || "Unknown error");
+      toast.error("Couldn't launch", result.error || "Unknown error");
     }
   } catch (err: any) {
-    toast.error("Launch failed", err.message);
+    toast.error("Couldn't launch", err.message);
   } finally {
     removeProgressListener();
     isLaunching.value = false;
@@ -1696,13 +1705,13 @@ async function handleKillGame() {
   try {
     const result = await killGame(instance.value.id);
     if (result) {
-      toast.success("Game Stopped", "Minecraft has been terminated.");
+      toast.success("Stopped ✓", "Minecraft has been closed.");
       gameLaunched.value = false;
     } else {
-      toast.error("Failed to stop game", "Could not terminate the process.");
+      toast.error("Couldn't stop game", "The process may have already ended.");
     }
   } catch (err: any) {
-    toast.error("Error stopping game", err.message);
+    toast.error("Couldn't stop game", err.message);
   }
 }
 
@@ -1715,12 +1724,12 @@ async function handleOpenInstanceFolder(subfolder?: string) {
 // Open instance settings dialog with current values
 function openInstanceSettings() {
   if (!instance.value) return;
-  
+
   // Load current values from instance
   memoryMin.value = instance.value.memory?.min || 2048;
   memoryMax.value = instance.value.memory?.max || 4096;
   customJavaArgs.value = instance.value.javaArgs || "";
-  
+
   showInstanceSettings.value = true;
 }
 
@@ -1733,18 +1742,18 @@ async function saveInstanceSettings() {
       memory: { min: memoryMin.value, max: memoryMax.value },
       javaArgs: customJavaArgs.value || undefined
     });
-    
+
     // Update local instance state with new values
     instance.value = {
       ...instance.value,
       memory: { min: memoryMin.value, max: memoryMax.value },
       javaArgs: customJavaArgs.value || undefined
     };
-    
-    toast.success("Settings Saved", "Memory and JVM arguments updated");
+
+    toast.success("Saved ✓", "Memory and JVM settings updated.");
     showInstanceSettings.value = false;
   } catch (err: any) {
-    toast.error("Failed to save", err.message);
+    toast.error("Couldn't save", err.message);
   }
 }
 
@@ -1756,15 +1765,15 @@ async function handleDeleteInstance() {
   try {
     const success = await window.api.instances.delete(instance.value.id);
     if (success) {
-      toast.success("Instance Deleted", "You can recreate it from the Play tab");
+      toast.success("Deleted ✓", "You can recreate it anytime from Play.");
       instance.value = null;
       instanceStats.value = null;
       instanceSyncStatus.value = null;
     } else {
-      toast.error("Failed to delete instance");
+      toast.error("Couldn't delete instance");
     }
   } catch (err: any) {
-    toast.error("Failed to delete", err.message);
+    toast.error("Couldn't delete", err.message);
   } finally {
     isDeletingInstance.value = false;
     showDeleteInstanceDialog.value = false;
@@ -1841,24 +1850,24 @@ async function importSelectedConfigs() {
     );
 
     if (result.success) {
-      toast.success("Configs Imported", `${result.imported} config files added to modpack`);
+      toast.success("Imported ✓", `${result.imported} config files added.`);
 
       // Small delay to ensure filesystem is synced before reloading
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // Reload modified configs
       await loadModifiedConfigs();
       showModifiedConfigsDetails.value = false;
-      
+
       // If no more configs to import, clear selection
       if (importableConfigs.value.length === 0) {
         selectedConfigsForImport.value = new Set();
       }
     } else {
-      toast.error("Import Error", result.errors.join(", "));
+      toast.error("Couldn't import some files", result.errors.join(", "));
     }
   } catch (err: any) {
-    toast.error("Import Failed", err.message);
+    toast.error("Couldn't import", err.message);
   } finally {
     isImportingConfigs.value = false;
   }
@@ -1926,10 +1935,10 @@ async function saveModpackInfo() {
     }
 
     emit("update");
-    toast.success("Saved", "Modpack settings updated");
+    toast.success("Saved ✓", "Pack settings updated.");
   } catch (err) {
     console.error("Failed to save modpack info:", err);
-    toast.error("Save Failed", (err as Error).message);
+    toast.error("Couldn't save", (err as Error).message);
   } finally {
     isSaving.value = false;
   }
@@ -2111,31 +2120,31 @@ function openModNoteDialog(mod: Mod) {
 
 async function saveModNote() {
   if (!noteDialogMod.value || !modpack.value) return;
-  
+
   isSavingNote.value = true;
   try {
     const modId = noteDialogMod.value.id;
     const newNotes = { ...modNotes.value };
-    
+
     if (noteDialogText.value.trim()) {
       newNotes[modId] = noteDialogText.value.trim();
     } else {
       delete newNotes[modId];
     }
-    
+
     // Save to database
     await window.api.modpacks.update(props.modpackId, { mod_notes: newNotes });
-    
+
     // Update local state
     modNotes.value = newNotes;
-    
+
     // Refresh unsaved changes count for version history badge
     await refreshUnsavedChangesCount();
-    
-    toast.success("Note Saved", noteDialogText.value.trim() 
-      ? `Note saved for ${noteDialogMod.value.name}` 
+
+    toast.success("Note Saved", noteDialogText.value.trim()
+      ? `Note saved for ${noteDialogMod.value.name}`
       : `Note removed from ${noteDialogMod.value.name}`);
-    
+
     showModNoteDialog.value = false;
     noteDialogMod.value = null;
     noteDialogText.value = "";
@@ -2182,17 +2191,17 @@ async function removeSelectedMods() {
       if (impact.modToAffect) {
         modsToAffect.push(impact.modToAffect);
       }
-      
+
       // Collect dependent mods (excluding those we're also removing)
       for (const dep of impact.dependentMods.filter(d => d.willBreak)) {
         if (!modIdSet.has(dep.id)) {
           if (allDependentMods.has(dep.id)) {
             allDependentMods.get(dep.id)!.dependsOn.push(impact.modToAffect?.name || modId);
           } else {
-            allDependentMods.set(dep.id, { 
-              id: dep.id, 
-              name: dep.name, 
-              dependsOn: [impact.modToAffect?.name || modId] 
+            allDependentMods.set(dep.id, {
+              id: dep.id,
+              name: dep.name,
+              dependsOn: [impact.modToAffect?.name || modId]
             });
           }
         }
@@ -2265,7 +2274,7 @@ function selectAllEnabled() {
   const enabledUnlockedMods = filteredInstalledMods.value.filter(
     mod => !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
   );
-  
+
   const newSet = new Set<string>();
   for (const mod of enabledUnlockedMods) {
     newSet.add(mod.id!);
@@ -2278,14 +2287,14 @@ function selectHalfEnabled() {
   const enabledUnlockedMods = filteredInstalledMods.value.filter(
     mod => !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
   );
-  
+
   if (enabledUnlockedMods.length === 0) {
     return;
   }
-  
+
   const halfCount = Math.ceil(enabledUnlockedMods.length / 2);
   const modsToSelect = enabledUnlockedMods.slice(0, halfCount);
-  
+
   const newSet = new Set<string>();
   for (const mod of modsToSelect) {
     newSet.add(mod.id!);
@@ -2298,7 +2307,7 @@ function selectAllDisabled() {
   const disabledUnlockedMods = filteredInstalledMods.value.filter(
     mod => disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
   );
-  
+
   const newSet = new Set<string>();
   for (const mod of disabledUnlockedMods) {
     newSet.add(mod.id!);
@@ -2311,14 +2320,14 @@ function selectHalfDisabled() {
   const disabledUnlockedMods = filteredInstalledMods.value.filter(
     mod => disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
   );
-  
+
   if (disabledUnlockedMods.length === 0) {
     return;
   }
-  
+
   const halfCount = Math.ceil(disabledUnlockedMods.length / 2);
   const modsToSelect = disabledUnlockedMods.slice(0, halfCount);
-  
+
   const newSet = new Set<string>();
   for (const mod of modsToSelect) {
     newSet.add(mod.id!);
@@ -2406,17 +2415,17 @@ async function bulkDisableSelected() {
       if (impact.modToAffect) {
         modsToAffect.push(impact.modToAffect);
       }
-      
+
       // Collect dependent mods (excluding those we're also disabling)
       for (const dep of impact.dependentMods.filter(d => d.willBreak)) {
         if (!modIdSet.has(dep.id)) {
           if (allDependentMods.has(dep.id)) {
             allDependentMods.get(dep.id)!.dependsOn.push(impact.modToAffect?.name || modId);
           } else {
-            allDependentMods.set(dep.id, { 
-              id: dep.id, 
-              name: dep.name, 
-              dependsOn: [impact.modToAffect?.name || modId] 
+            allDependentMods.set(dep.id, {
+              id: dep.id,
+              name: dep.name,
+              dependsOn: [impact.modToAffect?.name || modId]
             });
           }
         }
@@ -2617,12 +2626,12 @@ async function confirmDependencyImpactWithDependents() {
 
   // Collect all mods to process
   const allModIds = new Set<string>([modId]);
-  
+
   // Add dependent mods
   for (const dep of dependentMods.filter(d => d.willBreak)) {
     allModIds.add(dep.id);
   }
-  
+
   // For remove action, also include orphaned dependencies
   if (action === "remove") {
     for (const orphan of orphanedDependencies.filter(d => !d.usedByOthers)) {
@@ -2667,15 +2676,15 @@ async function confirmBulkDependencyWithDependents() {
   if (pendingBulkModIds.value.length === 0 || !bulkDependencyImpact.value) return;
 
   const { action, allDependentMods, allOrphanedDependencies } = bulkDependencyImpact.value;
-  
+
   // Combine the original mods with their dependents
   const allModIds = new Set(pendingBulkModIds.value);
-  
+
   // Add dependent mods
   for (const dep of allDependentMods) {
     allModIds.add(dep.id);
   }
-  
+
   // For remove action, also include orphaned dependencies
   if (action === "remove") {
     for (const orphan of allOrphanedDependencies) {
@@ -3331,7 +3340,7 @@ onUnmounted(() => {
       : 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6 animate-in fade-in duration-150'">
 
     <!-- Error State - Prevents white screen -->
-    <div v-if="loadError && !isLoading" 
+    <div v-if="loadError && !isLoading"
       class="bg-background border border-border/50 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col items-center gap-4">
       <div class="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
         <AlertCircle class="w-8 h-8 text-destructive" />
@@ -3448,57 +3457,86 @@ onUnmounted(() => {
             " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
         </div>
 
-        <!-- Tab Navigation - Scrollable on mobile -->
-        <div class="px-3 sm:px-6 pb-3 sm:pb-4 overflow-x-auto scrollbar-hide">
-          <div
-            class="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border/30 w-fit min-w-full sm:min-w-0">
-            <!-- Play Tab - Primary action -->
+        <!-- Tab Navigation - Centered with More dropdown -->
+        <div class="px-3 sm:px-6 pb-3 sm:pb-4 flex justify-center">
+          <div class="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border/30">
+            <!-- Primary Tabs -->
             <button class="tab-pill"
               :class="activeTab === 'play' ? 'tab-pill-active tab-pill-play' : 'tab-pill-inactive'"
               @click="activeTab = 'play'">
               <Play class="w-3.5 h-3.5" />
-              <span class="hidden xs:inline">Play</span>
+              <span>Play</span>
               <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
             </button>
             <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
               @click="activeTab = 'mods'">
               <Layers class="w-3.5 h-3.5" />
-              <span class="hidden xs:inline">Resources</span>
-            </button>
-            <button class="tab-pill" :class="activeTab === 'discover' ? 'tab-pill-active' : 'tab-pill-inactive'"
-              @click="activeTab = 'discover'">
-              <Sparkles class="w-3.5 h-3.5" />
-              <span class="hidden sm:inline">Discover</span>
+              <span>Mods</span>
             </button>
             <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
               @click="activeTab = 'configs'">
               <FileCode class="w-3.5 h-3.5" />
-              <span class="hidden sm:inline">Configs</span>
-            </button>
-            <button class="tab-pill" :class="activeTab === 'health' ? 'tab-pill-active' : 'tab-pill-inactive'"
-              @click="activeTab = 'health'">
-              <AlertCircle class="w-3.5 h-3.5" />
-              <span class="hidden md:inline">Health</span>
-            </button>
-            <button class="tab-pill" :class="activeTab === 'versions' ? 'tab-pill-active' : 'tab-pill-inactive'"
-              @click="activeTab = 'versions'">
-              <GitBranch class="w-3.5 h-3.5" />
-              <span class="hidden md:inline">History</span>
-              <span v-if="versionUnsavedCount > 0"
-                class="ml-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                {{ versionUnsavedCount }}
-              </span>
-            </button>
-            <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
-              @click="activeTab = 'remote'">
-              <Globe class="w-3.5 h-3.5" />
-              <span class="hidden lg:inline">Remote</span>
+              <span>Configs</span>
             </button>
             <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
               @click="activeTab = 'settings'">
               <Settings class="w-3.5 h-3.5" />
-              <span class="hidden lg:inline">Settings</span>
+              <span>Details</span>
             </button>
+
+            <!-- More dropdown for secondary tabs -->
+            <div class="relative">
+              <button class="tab-pill" :class="isSecondaryTab ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="showMoreMenu = !showMoreMenu">
+                <MoreHorizontal class="w-3.5 h-3.5" />
+                <span class="hidden sm:inline">More</span>
+                <span v-if="versionUnsavedCount > 0 && !isSecondaryTab"
+                  class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <ChevronDown class="w-3 h-3 transition-transform" :class="showMoreMenu ? 'rotate-180' : ''" />
+              </button>
+
+              <!-- Dropdown menu - higher z-index -->
+              <Transition name="fade">
+                <div v-if="showMoreMenu"
+                  class="absolute top-full right-0 mt-1 w-44 bg-popover border border-border rounded-lg shadow-xl z-[100] py-1 overflow-hidden">
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    :class="activeTab === 'discover' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                    @click="activeTab = 'discover'; showMoreMenu = false">
+                    <Sparkles class="w-4 h-4" />
+                    Add Mods
+                  </button>
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    :class="activeTab === 'health' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                    @click="activeTab = 'health'; showMoreMenu = false">
+                    <AlertCircle class="w-4 h-4" />
+                    Compatibility
+                  </button>
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    :class="activeTab === 'versions' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                    @click="activeTab = 'versions'; showMoreMenu = false">
+                    <GitBranch class="w-4 h-4" />
+                    History
+                    <span v-if="versionUnsavedCount > 0"
+                      class="ml-auto px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      {{ versionUnsavedCount }}
+                    </span>
+                  </button>
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    :class="activeTab === 'remote' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                    @click="activeTab = 'remote'; showMoreMenu = false">
+                    <Globe class="w-4 h-4" />
+                    Cloud Sync
+                  </button>
+                </div>
+              </Transition>
+
+              <!-- Backdrop to close dropdown -->
+              <div v-if="showMoreMenu" class="fixed inset-0 z-[99]" @click="showMoreMenu = false"></div>
+            </div>
           </div>
         </div>
 
@@ -3569,7 +3607,7 @@ onUnmounted(() => {
                 <p class="text-sm text-muted-foreground mb-3">
                   Browse and edit configuration files for your mods directly from ModEx.
                 </p>
-                
+
                 <!-- Understanding Config Locations -->
                 <div class="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                   <h5 class="font-medium text-blue-400 flex items-center gap-1.5 mb-2">
@@ -3577,8 +3615,10 @@ onUnmounted(() => {
                     Understanding Config Locations
                   </h5>
                   <div class="text-sm text-muted-foreground space-y-2">
-                    <p><strong class="text-foreground">Instance Configs</strong> — Where Minecraft actually runs. When you play, mods read and write configs here. Your in-game changes are saved here.</p>
-                    <p><strong class="text-foreground">Modpack Overrides</strong> — The "official" configs saved in the modpack itself. When you sync or share the modpack, these are used.</p>
+                    <p><strong class="text-foreground">Instance Configs</strong> — Where Minecraft actually runs. When
+                      you play, mods read and write configs here. Your in-game changes are saved here.</p>
+                    <p><strong class="text-foreground">Modpack Overrides</strong> — The "official" configs saved in the
+                      modpack itself. When you sync or share the modpack, these are used.</p>
                   </div>
                 </div>
 
@@ -3589,14 +3629,18 @@ onUnmounted(() => {
                     "Config Changes Detected" Banner
                   </h5>
                   <div class="text-sm text-muted-foreground space-y-2">
-                    <p>This banner appears when your <strong class="text-foreground">instance configs differ from the modpack overrides</strong>. This happens when you change settings while playing.</p>
-                    <p><strong class="text-foreground">Import Selected</strong> — Saves your changes into the modpack. Use this to:</p>
+                    <p>This banner appears when your <strong class="text-foreground">instance configs differ from the
+                        modpack overrides</strong>. This happens when you change settings while playing.</p>
+                    <p><strong class="text-foreground">Import Selected</strong> — Saves your changes into the modpack.
+                      Use this to:</p>
                     <ul class="list-disc ml-5 space-y-1">
                       <li>Preserve your keybind customizations</li>
                       <li>Save mod settings you've configured</li>
                       <li>Include your config tweaks when sharing the modpack</li>
                     </ul>
-                    <p class="text-xs text-muted-foreground/70 mt-2">💡 By default, only <em>modified</em> configs are shown. Check "Show new configs" to see files generated by mods that don't exist in the modpack yet.</p>
+                    <p class="text-xs text-muted-foreground/70 mt-2">💡 By default, only <em>modified</em> configs are
+                      shown. Check "Show new configs" to see files generated by mods that don't exist in the modpack
+                      yet.</p>
                   </div>
                 </div>
 
@@ -3932,15 +3976,15 @@ onUnmounted(() => {
                 <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-muted/50 flex items-center justify-center">
                   <Rocket class="w-6 h-6 text-muted-foreground" />
                 </div>
-                <h3 class="text-base font-semibold mb-1.5">Create Instance</h3>
+                <h3 class="text-base font-semibold mb-1.5">Set up to play</h3>
                 <p class="text-sm text-muted-foreground mb-4">
-                  Create an isolated game instance for this modpack with synced mods and configs.
+                  Create an isolated game instance for this pack with synced mods and configs.
                 </p>
                 <button @click="handleCreateInstance" :disabled="isCreatingInstance"
                   class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium inline-flex items-center gap-2 transition-colors">
                   <Loader2 v-if="isCreatingInstance" class="w-4 h-4 animate-spin" />
                   <Play v-else class="w-4 h-4" />
-                  {{ isCreatingInstance ? 'Creating...' : 'Create Instance' }}
+                  {{ isCreatingInstance ? 'Setting up...' : 'Set Up & Play' }}
                 </button>
               </div>
             </div>
@@ -4089,9 +4133,10 @@ onUnmounted(() => {
                 <div class="p-3 flex items-center gap-3">
                   <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
                   <div class="flex-1 min-w-0">
-                    <span class="text-sm font-medium">Instance Out of Sync</span>
+                    <span class="text-sm font-medium">Changes not synced</span>
                     <span class="text-xs text-muted-foreground ml-2">
-                      {{ instanceSyncStatus.totalDifferences }} differences detected
+                      {{ instanceSyncStatus.totalDifferences }} difference{{ instanceSyncStatus.totalDifferences > 1 ?
+                        's' : '' }}
                     </span>
                   </div>
                   <button @click="showSyncDetails = !showSyncDetails"
@@ -4102,7 +4147,7 @@ onUnmounted(() => {
                     class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium flex items-center gap-1.5 transition-colors">
                     <Loader2 v-if="isSyncingInstance" class="w-3 h-3 animate-spin" />
                     <RefreshCw v-else class="w-3 h-3" />
-                    {{ isSyncingInstance ? 'Syncing...' : 'Sync Now' }}
+                    {{ isSyncingInstance ? 'Syncing...' : 'Sync' }}
                   </button>
                 </div>
 
@@ -4130,14 +4175,14 @@ onUnmounted(() => {
                     class="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
                     <div class="flex items-center gap-2 text-red-400 font-medium text-xs mb-2">
                       <Trash2 class="w-3.5 h-3.5" />
-                      {{ instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length }} mods to remove
+                      {{instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length}} mods to remove
                     </div>
                     <p class="text-[11px] text-muted-foreground mb-2">
                       These mods are not in the modpack and will be removed during sync.
                     </p>
                     <div class="space-y-1 max-h-28 overflow-y-auto">
-                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod')" :key="item.filename"
-                        class="text-[11px] text-muted-foreground flex items-center gap-2">
+                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod')"
+                        :key="item.filename" class="text-[11px] text-muted-foreground flex items-center gap-2">
                         <span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] uppercase">{{
                           item.type }}</span>
                         <span class="truncate">{{ item.filename }}</span>
@@ -4150,14 +4195,14 @@ onUnmounted(() => {
                     class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
                     <div class="flex items-center gap-2 text-muted-foreground font-medium text-xs mb-2">
                       <FileWarning class="w-3.5 h-3.5" />
-                      {{ instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length }} additional files
+                      {{instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length}} additional files
                     </div>
                     <p class="text-[11px] text-muted-foreground mb-2">
                       These files were added manually and will be preserved.
                     </p>
                     <div class="space-y-1 max-h-28 overflow-y-auto">
-                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod')" :key="item.filename"
-                        class="text-[11px] text-muted-foreground flex items-center gap-2">
+                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod')"
+                        :key="item.filename" class="text-[11px] text-muted-foreground flex items-center gap-2">
                         <span class="px-1.5 py-0.5 rounded bg-zinc-500/20 text-zinc-400 text-[10px] uppercase">{{
                           item.type }}</span>
                         <span class="truncate">{{ item.filename }}</span>
@@ -4174,7 +4219,7 @@ onUnmounted(() => {
                     </div>
                     <div class="text-[11px] text-muted-foreground space-y-0.5">
                       <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
-                      }}</span></p>
+                          }}</span></p>
                       <p>Modpack: <span class="text-blue-400 font-medium">{{
                         extractLoaderVersion(modpack?.loader_version ||
                           'unknown') }}</span></p>
@@ -4368,8 +4413,8 @@ onUnmounted(() => {
                       </div>
                       <!-- Toggle to show new configs -->
                       <label v-if="newConfigsCount > 0" class="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <input type="checkbox" v-model="showOnlyModifiedConfigs" 
-                          class="w-3 h-3 rounded border-primary/30 text-primary focus:ring-primary/30" 
+                        <input type="checkbox" v-model="showOnlyModifiedConfigs"
+                          class="w-3 h-3 rounded border-primary/30 text-primary focus:ring-primary/30"
                           :true-value="false" :false-value="true" />
                         <span class="text-muted-foreground">Show {{ newConfigsCount }} new configs</span>
                       </label>
@@ -4466,87 +4511,98 @@ onUnmounted(() => {
 
               <!-- Right: Actions -->
               <div class="flex items-center gap-2">
-                <!-- Quick Filters -->
+                <!-- Quick Filters (simplified - show only actionable items) -->
                 <div class="flex items-center gap-1 p-1 bg-muted/30 rounded-lg">
                   <button class="px-2.5 py-1 text-[10px] rounded-md transition-all" :class="modsFilter === 'all'
                     ? 'bg-background text-foreground ring-1 ring-border/50'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'all'">
                     All
                   </button>
+                  <!-- Issues: incompatible + warnings combined visually -->
                   <button v-if="incompatibleModCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'incompatible'
                       ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/40'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'incompatible'">
+                    @click="modsFilter = 'incompatible'" title="Incompatible mods">
                     <AlertCircle class="w-3 h-3" />
                     {{ incompatibleModCount }}
                   </button>
-                  <button v-if="warningModCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'warning'
-                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'warning'"
-                    title="Mods with different loader (may work with compatibility mods)">
-                    <AlertTriangle class="w-3 h-3" />
-                    {{ warningModCount }}
-                  </button>
-                  <button v-if="disabledModCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'disabled'
-                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'disabled'">
-                    <ToggleLeft class="w-3 h-3" />
-                    {{ disabledModCount }}
-                  </button>
-                  <button v-if="lockedModCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'locked'
-                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'locked'"
-                    title="Locked mods (protected from changes)">
-                    <Lock class="w-3 h-3" />
-                    {{ lockedModCount }}
-                  </button>
-                  <button v-if="modsWithNotesCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'with-notes'
-                      ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'with-notes'"
-                    title="Mods with notes">
-                    <MessageSquare class="w-3 h-3" />
-                    {{ modsWithNotesCount }}
-                  </button>
+                  <!-- Updates available (most actionable) -->
                   <button v-if="updatesAvailableCount > 0"
                     class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
                       ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'updates'">
+                    @click="modsFilter = 'updates'" title="Updates available">
                     <ArrowUpCircle class="w-3 h-3" />
                     {{ updatesAvailableCount }}
                   </button>
-                  <button v-if="recentlyUpdatedCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-updated'
-                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                  <!-- Disabled mods -->
+                  <button v-if="disabledModCount > 0"
+                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'disabled'
+                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'recent-updated'">
-                    <Check class="w-3 h-3" />
-                    {{ recentlyUpdatedCount }}
+                    @click="modsFilter = 'disabled'" title="Disabled mods">
+                    <ToggleLeft class="w-3 h-3" />
+                    {{ disabledModCount }}
                   </button>
-                  <button v-if="recentlyAddedCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'recent-added'
-                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'recent-added'">
-                    <Plus class="w-3 h-3" />
-                    {{ recentlyAddedCount }}
-                  </button>
+                  <!-- Overflow: Less common filters in dropdown -->
+                  <div
+                    v-if="warningModCount > 0 || lockedModCount > 0 || modsWithNotesCount > 0 || recentlyUpdatedCount > 0 || recentlyAddedCount > 0"
+                    class="relative">
+                    <button
+                      class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      @click="showModsFilterMenu = !showModsFilterMenu">
+                      <MoreHorizontal class="w-3 h-3" />
+                    </button>
+                    <div v-if="showModsFilterMenu"
+                      class="absolute top-full right-0 mt-1 w-36 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 overflow-hidden">
+                      <button v-if="warningModCount > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'warning' ? 'bg-amber-500/10 text-amber-400' : 'text-foreground'"
+                        @click="modsFilter = 'warning'; showModsFilterMenu = false">
+                        <AlertTriangle class="w-3 h-3" />
+                        Warnings ({{ warningModCount }})
+                      </button>
+                      <button v-if="lockedModCount > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'locked' ? 'bg-amber-500/10 text-amber-400' : 'text-foreground'"
+                        @click="modsFilter = 'locked'; showModsFilterMenu = false">
+                        <Lock class="w-3 h-3" />
+                        Locked ({{ lockedModCount }})
+                      </button>
+                      <button v-if="modsWithNotesCount > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'with-notes' ? 'bg-blue-500/10 text-blue-400' : 'text-foreground'"
+                        @click="modsFilter = 'with-notes'; showModsFilterMenu = false">
+                        <MessageSquare class="w-3 h-3" />
+                        With Notes ({{ modsWithNotesCount }})
+                      </button>
+                      <div
+                        v-if="(warningModCount > 0 || lockedModCount > 0 || modsWithNotesCount > 0) && (recentlyUpdatedCount > 0 || recentlyAddedCount > 0)"
+                        class="h-px bg-border my-1"></div>
+                      <button v-if="recentlyUpdatedCount > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'recent-updated' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                        @click="modsFilter = 'recent-updated'; showModsFilterMenu = false">
+                        <Check class="w-3 h-3" />
+                        Just Updated ({{ recentlyUpdatedCount }})
+                      </button>
+                      <button v-if="recentlyAddedCount > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'recent-added' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                        @click="modsFilter = 'recent-added'; showModsFilterMenu = false">
+                        <Plus class="w-3 h-3" />
+                        Just Added ({{ recentlyAddedCount }})
+                      </button>
+                    </div>
+                    <div v-if="showModsFilterMenu" class="fixed inset-0 z-40" @click="showModsFilterMenu = false"></div>
+                  </div>
                 </div>
 
                 <!-- Check Updates Button - For all content types with CurseForge support -->
-                <button 
-                  @click="checkAllUpdates"
-                  :disabled="isCheckingAllUpdates"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all"
-                  :class="isCheckingAllUpdates 
-                    ? 'bg-primary/20 text-primary cursor-wait' 
+                <button @click="checkAllUpdates" :disabled="isCheckingAllUpdates"
+                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="isCheckingAllUpdates
+                    ? 'bg-primary/20 text-primary cursor-wait'
                     : 'bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary'"
                   :title="isCheckingAllUpdates ? 'Checking for updates...' : 'Check all resources for updates'">
                   <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isCheckingAllUpdates }" />
@@ -4648,17 +4704,12 @@ onUnmounted(() => {
                   <!-- Center: Search Bar -->
                   <div class="flex-1 max-w-xs">
                     <div class="relative group">
-                      <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors" />
-                      <input 
-                        v-model="searchQueryInstalled" 
-                        placeholder="Search resources..."
-                        class="w-full h-8 pl-9 pr-8 text-sm rounded-lg bg-background/80 border border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:text-muted-foreground/50" 
-                      />
-                      <button 
-                        v-if="searchQueryInstalled" 
-                        @click="searchQueryInstalled = ''"
-                        class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      >
+                      <Search
+                        class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors" />
+                      <input v-model="searchQueryInstalled" placeholder="Search resources..."
+                        class="w-full h-8 pl-9 pr-8 text-sm rounded-lg bg-background/80 border border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:text-muted-foreground/50" />
+                      <button v-if="searchQueryInstalled" @click="searchQueryInstalled = ''"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                         <X class="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -4666,49 +4717,51 @@ onUnmounted(() => {
 
                   <!-- Right: Sort & Select -->
                   <div class="flex items-center gap-2 shrink-0">
-                  <!-- Sort buttons -->
-                  <div class="flex rounded-md border border-border/40 overflow-hidden bg-muted/20">
-                    <button class="h-6 text-[10px] px-2.5 transition-colors font-medium" :class="sortBy === 'name'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'hover:bg-muted/50 text-muted-foreground'
-                      " @click="toggleSort('name')">
-                      Name
-                    </button>
-                    <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
-                      :class="sortBy === 'date'
+                    <!-- Sort buttons -->
+                    <div class="flex rounded-md border border-border/40 overflow-hidden bg-muted/20">
+                      <button class="h-6 text-[10px] px-2.5 transition-colors font-medium" :class="sortBy === 'name'
                         ? 'bg-background text-foreground shadow-sm'
                         : 'hover:bg-muted/50 text-muted-foreground'
-                        " @click="toggleSort('date')">
-                      Date
-                    </button>
-                    <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
-                      :class="sortBy === 'version'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'hover:bg-muted/50 text-muted-foreground'
-                        " @click="toggleSort('version')">
-                      Version
-                    </button>
-                  </div>
-                  <!-- Select Enabled / Disabled / Clear -->
-                  <div v-if="currentMods.length > 0 && !isLinked" class="flex items-center gap-1.5 text-[10px]">
-                    <span class="text-muted-foreground/70">Select:</span>
-                    <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
-                      <button class="text-primary hover:text-primary/80 transition-colors"
-                        @click="selectAllEnabled" title="Select all enabled mods (excludes disabled and locked)">All</button>
-                      <span class="text-primary/40">·</span>
-                      <button class="text-primary hover:text-primary/80 transition-colors"
-                        @click="selectHalfEnabled" title="Select half of enabled mods (excludes disabled and locked)">½</button>
+                        " @click="toggleSort('name')">
+                        Name
+                      </button>
+                      <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
+                        :class="sortBy === 'date'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'hover:bg-muted/50 text-muted-foreground'
+                          " @click="toggleSort('date')">
+                        Date
+                      </button>
+                      <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
+                        :class="sortBy === 'version'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'hover:bg-muted/50 text-muted-foreground'
+                          " @click="toggleSort('version')">
+                        Version
+                      </button>
                     </div>
-                    <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
-                      <button class="text-amber-500 hover:text-amber-400 transition-colors"
-                        @click="selectAllDisabled" title="Select all disabled mods (excludes locked)">All</button>
-                      <span class="text-amber-500/40">·</span>
-                      <button class="text-amber-500 hover:text-amber-400 transition-colors"
-                        @click="selectHalfDisabled" title="Select half of disabled mods (excludes locked)">½</button>
+                    <!-- Select Enabled / Disabled / Clear -->
+                    <div v-if="currentMods.length > 0 && !isLinked" class="flex items-center gap-1.5 text-[10px]">
+                      <span class="text-muted-foreground/70">Select:</span>
+                      <div
+                        class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                        <button class="text-primary hover:text-primary/80 transition-colors" @click="selectAllEnabled"
+                          title="Select all enabled mods (excludes disabled and locked)">All</button>
+                        <span class="text-primary/40">·</span>
+                        <button class="text-primary hover:text-primary/80 transition-colors" @click="selectHalfEnabled"
+                          title="Select half of enabled mods (excludes disabled and locked)">½</button>
+                      </div>
+                      <div
+                        class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                        <button class="text-amber-500 hover:text-amber-400 transition-colors" @click="selectAllDisabled"
+                          title="Select all disabled mods (excludes locked)">All</button>
+                        <span class="text-amber-500/40">·</span>
+                        <button class="text-amber-500 hover:text-amber-400 transition-colors"
+                          @click="selectHalfDisabled" title="Select half of disabled mods (excludes locked)">½</button>
+                      </div>
+                      <button class="text-muted-foreground hover:text-foreground transition-colors"
+                        @click="clearSelection">None</button>
                     </div>
-                    <button class="text-muted-foreground hover:text-foreground transition-colors"
-                      @click="clearSelection">None</button>
-                  </div>
                   </div>
                 </div>
               </div>
@@ -4825,9 +4878,10 @@ onUnmounted(() => {
                           — {{ mod.incompatibilityReason }}
                         </span>
                       </div>
-                      
+
                       <!-- Note Preview Row -->
-                      <div v-if="getModNote(mod.id)" class="flex items-center gap-1.5 text-[10px] text-blue-400/80 mt-1">
+                      <div v-if="getModNote(mod.id)"
+                        class="flex items-center gap-1.5 text-[10px] text-blue-400/80 mt-1">
                         <MessageSquare class="w-3 h-3 shrink-0" />
                         <span class="truncate italic" :title="getModNote(mod.id)">
                           {{ getModNote(mod.id) }}
@@ -4840,22 +4894,22 @@ onUnmounted(() => {
                       <!-- (buttons will be shown near lock-state) -->
 
                       <!-- Hover-only action buttons -->
-                      <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                      <div
+                        class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                         <!-- Note Button -->
                         <button
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
                           :class="getModNote(mod.id)
                             ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-500/50'
                             : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-blue-400 border-border/40 hover:border-blue-500/50'"
-                          :title="getModNote(mod.id) ? 'Edit note' : 'Add note'"
-                          @click.stop="openModNoteDialog(mod)">
+                          :title="getModNote(mod.id) ? 'Edit note' : 'Add note'" @click.stop="openModNoteDialog(mod)">
                           <MessageSquare v-if="getModNote(mod.id)" class="w-3.5 h-3.5" />
                           <MessageSquarePlus v-else class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Lock/Unlock Button (action) -->
                         <button v-if="!isLinked"
-                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150" 
+                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
                           :class="lockedModIds.has(mod.id)
                             ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 hover:border-amber-500/50'
                             : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-amber-500 border-border/40 hover:border-amber-500/50'"
@@ -4867,8 +4921,8 @@ onUnmounted(() => {
                         <!-- Change Version Button -->
                         <button v-if="!isLinked && mod.cf_project_id"
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="lockedModIds.has(mod.id) 
-                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20' 
+                          :class="lockedModIds.has(mod.id)
+                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
                             : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-primary border-border/40 hover:border-primary/50'"
                           :disabled="lockedModIds.has(mod.id)"
                           :title="lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
@@ -4879,8 +4933,8 @@ onUnmounted(() => {
                         <!-- Remove Button -->
                         <button v-if="!isLinked"
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="lockedModIds.has(mod.id) 
-                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20' 
+                          :class="lockedModIds.has(mod.id)
+                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
                             : 'bg-muted/60 hover:bg-destructive/15 text-muted-foreground hover:text-destructive border-border/40 hover:border-destructive/50'"
                           :disabled="lockedModIds.has(mod.id)"
                           :title="lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
@@ -4889,7 +4943,8 @@ onUnmounted(() => {
                         </button>
 
                         <!-- Managed indicator -->
-                        <div v-if="isLinked" class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/30 text-muted-foreground/40 border border-border/20"
+                        <div v-if="isLinked"
+                          class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/30 text-muted-foreground/40 border border-border/20"
                           title="Remote managed">
                           <Lock class="w-3.5 h-3.5" />
                         </div>
@@ -4920,32 +4975,33 @@ onUnmounted(() => {
                         </button>
 
                         <!-- Lock state icon (indicator only) -->
-                        <div v-if="lockedModIds.has(mod.id)" class="w-6 h-6 flex items-center justify-center text-amber-500" title="Locked">
+                        <div v-if="lockedModIds.has(mod.id)"
+                          class="w-6 h-6 flex items-center justify-center text-amber-500" title="Locked">
                           <Lock class="w-3.5 h-3.5" />
                         </div>
-                        
+
                         <!-- Note indicator (always visible when note exists) -->
-                        <button v-if="getModNote(mod.id)" 
+                        <button v-if="getModNote(mod.id)"
                           class="w-6 h-6 flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors"
-                          :title="getModNote(mod.id)"
-                          @click.stop="openModNoteDialog(mod)">
+                          :title="getModNote(mod.id)" @click.stop="openModNoteDialog(mod)">
                           <MessageSquare class="w-3.5 h-3.5" />
                         </button>
                       </div>
 
                       <!-- Enable/Disable Toggle (moved to far right) -->
-                      <button class="w-8 h-5 rounded-full relative shrink-0 transition-all duration-200 shadow-inner" :class="[
-                        disabledModIds.has(mod.id)
-                          ? 'bg-muted-foreground/20'
-                          : 'bg-primary shadow-primary/20',
-                        (isLinked || lockedModIds.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90',
-                      ]" @click.stop="!(isLinked || lockedModIds.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
-                        ? 'Managed by remote source'
-                        : lockedModIds.has(mod.id)
-                          ? 'Unlock mod to change state'
-                          : disabledModIds.has(mod.id)
-                            ? 'Click to enable mod'
-                            : 'Click to disable mod'" :disabled="isLinked || lockedModIds.has(mod.id)">
+                      <button class="w-8 h-5 rounded-full relative shrink-0 transition-all duration-200 shadow-inner"
+                        :class="[
+                          disabledModIds.has(mod.id)
+                            ? 'bg-muted-foreground/20'
+                            : 'bg-primary shadow-primary/20',
+                          (isLinked || lockedModIds.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90',
+                        ]" @click.stop="!(isLinked || lockedModIds.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
+                          ? 'Managed by remote source'
+                          : lockedModIds.has(mod.id)
+                            ? 'Unlock mod to change state'
+                            : disabledModIds.has(mod.id)
+                              ? 'Click to enable mod'
+                              : 'Click to disable mod'" :disabled="isLinked || lockedModIds.has(mod.id)">
                         <span
                           class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200"
                           :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[14px]'" />
@@ -5518,11 +5574,11 @@ onUnmounted(() => {
             <li v-for="mod in dependencyImpact?.dependentMods.filter(d => d.willBreak)" :key="mod.id"
               class="flex items-center gap-2">
               <span>{{ mod.name }}</span>
-              <span v-if="mod.depth === 1" 
+              <span v-if="mod.depth === 1"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-destructive/20 text-destructive font-medium">
                 Diretto
               </span>
-              <span v-else-if="mod.depth && mod.depth > 1" 
+              <span v-else-if="mod.depth && mod.depth > 1"
                 class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-medium">
                 Indiretto (livello {{ mod.depth }})
               </span>
@@ -5557,13 +5613,14 @@ onUnmounted(() => {
             @click="confirmDependencyImpactAction">
             {{ dependencyImpact?.action === 'remove' ? 'Remove Anyway' : 'Disable Anyway' }}
           </Button>
-          <Button 
+          <Button
             v-if="dependencyImpact?.dependentMods.filter(d => d.willBreak).length || (dependencyImpact?.action === 'remove' && dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length)"
             :variant="dependencyImpact?.action === 'remove' ? 'destructive' : 'outline'"
             @click="confirmDependencyImpactWithDependents">
-            {{ dependencyImpact?.action === 'remove' 
-              ? `Remove All (${1 + (dependencyImpact?.dependentMods.filter(d => d.willBreak).length || 0) + (dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length || 0)} mods)` 
-              : `Disable All (${1 + (dependencyImpact?.dependentMods.filter(d => d.willBreak).length || 0)} mods)` }}
+            {{dependencyImpact?.action === 'remove'
+              ? `Remove All (${1 + (dependencyImpact?.dependentMods.filter(d => d.willBreak).length || 0) +
+              (dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length || 0)} mods)`
+              : `Disable All (${1 + (dependencyImpact?.dependentMods.filter(d => d.willBreak).length || 0)} mods)`}}
           </Button>
         </div>
       </template>
@@ -5597,8 +5654,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Orphaned Dependencies (only for remove) -->
-        <div
-          v-if="bulkDependencyImpact?.action === 'remove' && bulkDependencyImpact?.allOrphanedDependencies.length"
+        <div v-if="bulkDependencyImpact?.action === 'remove' && bulkDependencyImpact?.allOrphanedDependencies.length"
           class="bg-warning/10 border border-warning/30 rounded-lg p-3">
           <div class="flex items-center gap-2 text-warning font-medium mb-2">
             <Info class="w-4 h-4" />
@@ -5623,12 +5679,13 @@ onUnmounted(() => {
             @click="confirmBulkDependencyImpactAction">
             {{ bulkDependencyImpact?.action === 'remove' ? 'Remove Anyway' : 'Disable Anyway' }}
           </Button>
-          <Button 
+          <Button
             v-if="bulkDependencyImpact?.allDependentMods.length || (bulkDependencyImpact?.action === 'remove' && bulkDependencyImpact?.allOrphanedDependencies.length)"
             :variant="bulkDependencyImpact?.action === 'remove' ? 'destructive' : 'outline'"
             @click="confirmBulkDependencyWithDependents">
-            {{ bulkDependencyImpact?.action === 'remove' 
-              ? `Remove All (${pendingBulkModIds.length + (bulkDependencyImpact?.allDependentMods.length || 0) + (bulkDependencyImpact?.allOrphanedDependencies.length || 0)} mods)` 
+            {{ bulkDependencyImpact?.action === 'remove'
+              ? `Remove All (${pendingBulkModIds.length + (bulkDependencyImpact?.allDependentMods.length || 0) +
+              (bulkDependencyImpact?.allOrphanedDependencies.length || 0)} mods)`
               : `Disable All (${pendingBulkModIds.length + (bulkDependencyImpact?.allDependentMods.length || 0)} mods)` }}
           </Button>
         </div>
@@ -5660,41 +5717,31 @@ onUnmounted(() => {
       @version-changed="handleModDetailsVersionChange" />
 
     <!-- Mod Update Changelog Dialog -->
-    <ChangelogDialog
-      v-if="changelogMod"
-      :open="showChangelogDialog"
-      :mod-id="changelogMod.id"
-      :file-id="changelogMod.fileId"
-      :mod-name="changelogMod.name"
-      :version="changelogMod.version"
-      :slug="changelogMod.slug"
-      @close="showChangelogDialog = false"
-    />
+    <ChangelogDialog v-if="changelogMod" :open="showChangelogDialog" :mod-id="changelogMod.id"
+      :file-id="changelogMod.fileId" :mod-name="changelogMod.name" :version="changelogMod.version"
+      :slug="changelogMod.slug" @close="showChangelogDialog = false" />
 
     <!-- Mod Note Dialog -->
-    <Dialog :open="showModNoteDialog" @close="closeModNoteDialog" :title="noteDialogMod ? `Note for ${noteDialogMod.name}` : 'Mod Note'" size="md">
+    <Dialog :open="showModNoteDialog" @close="closeModNoteDialog"
+      :title="noteDialogMod ? `Note for ${noteDialogMod.name}` : 'Mod Note'" size="md">
       <div class="space-y-4">
         <p class="text-sm text-muted-foreground">
-          Add a personal note for this mod in this modpack. Notes are specific to each modpack and can help you remember why you included a mod or any configuration tips.
+          Add a personal note for this mod in this modpack. Notes are specific to each modpack and can help you remember
+          why
+          you included a mod or any configuration tips.
         </p>
         <div class="space-y-2">
           <label class="text-sm font-medium">Note</label>
-          <textarea
-            v-model="noteDialogText"
+          <textarea v-model="noteDialogText"
             placeholder="e.g., Required for compatibility with X mod, or: Remember to configure recipe changes..."
-            class="w-full h-32 px-3 py-2 text-sm rounded-lg bg-background border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none resize-none transition-all"
-          />
+            class="w-full h-32 px-3 py-2 text-sm rounded-lg bg-background border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none resize-none transition-all" />
         </div>
       </div>
       <template #footer>
         <div class="flex items-center justify-between w-full">
-          <Button 
-            v-if="noteDialogMod && getModNote(noteDialogMod.id)"
-            variant="ghost" 
+          <Button v-if="noteDialogMod && getModNote(noteDialogMod.id)" variant="ghost"
             class="text-destructive hover:text-destructive hover:bg-destructive/10"
-            @click="noteDialogText = ''; saveModNote()"
-            :disabled="isSavingNote"
-          >
+            @click="noteDialogText = ''; saveModNote()" :disabled="isSavingNote">
             <Trash2 class="w-4 h-4 mr-2" />
             Remove Note
           </Button>
@@ -5873,17 +5920,10 @@ onUnmounted(() => {
     </Dialog>
 
     <!-- Delete Instance Confirmation Dialog -->
-    <ConfirmDialog
-      :open="showDeleteInstanceDialog"
-      title="Delete Instance"
-      :message="`This will delete the game instance and all its data (mods, configs, saves). The modpack itself will not be affected. You can recreate the instance from the Play tab.`"
-      confirm-text="Delete Instance"
-      cancel-text="Cancel"
-      variant="danger"
-      :loading="isDeletingInstance"
-      @confirm="handleDeleteInstance"
-      @cancel="showDeleteInstanceDialog = false"
-    />
+    <ConfirmDialog :open="showDeleteInstanceDialog" title="Delete this instance?"
+      :message="`This removes the game instance and all its data (mods, configs, saves). Your pack won't be affected — you can set it up again anytime.`"
+      confirm-text="Yes, delete" cancel-text="Keep it" variant="danger" :loading="isDeletingInstance"
+      @confirm="handleDeleteInstance" @cancel="showDeleteInstanceDialog = false" />
 
     <!-- Sync Confirmation Dialog -->
     <div v-if="showSyncConfirmDialog"
@@ -5896,16 +5936,17 @@ onUnmounted(() => {
               <AlertCircle class="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h3 class="font-semibold text-foreground">Sync Before Launch?</h3>
-              <p class="text-sm text-muted-foreground">Instance is out of sync</p>
+              <h3 class="font-semibold text-foreground">Sync before playing?</h3>
+              <p class="text-sm text-muted-foreground">Your instance has changes</p>
             </div>
           </div>
         </div>
 
         <div class="px-5 py-4 space-y-3">
           <p class="text-sm text-muted-foreground">
-            <span class="font-medium text-foreground">{{ pendingLaunchData?.differences || 0 }} differences</span>
-            detected between modpack and instance.
+            <span class="font-medium text-foreground">{{ pendingLaunchData?.differences || 0 }} change{{
+              (pendingLaunchData?.differences || 0) !== 1 ? 's' : '' }}</span>
+            between your pack and the game instance.
           </p>
 
           <div v-if="pendingLaunchData?.lastSynced" class="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -5917,15 +5958,15 @@ onUnmounted(() => {
             <div class="flex items-start gap-2">
               <Download class="w-4 h-4 text-primary mt-0.5 shrink-0" />
               <div class="text-sm">
-                <span class="text-foreground font-medium">Sync</span>
-                <span class="text-muted-foreground"> - Update mods before launching</span>
+                <span class="text-foreground font-medium">Sync & Play</span>
+                <span class="text-muted-foreground"> — Update mods first</span>
               </div>
             </div>
             <div class="flex items-start gap-2">
               <Play class="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
               <div class="text-sm">
-                <span class="text-foreground font-medium">Launch Anyway</span>
-                <span class="text-muted-foreground"> - Play with current mods</span>
+                <span class="text-foreground font-medium">Play now</span>
+                <span class="text-muted-foreground"> — Use current mods</span>
               </div>
             </div>
           </div>
@@ -5939,12 +5980,12 @@ onUnmounted(() => {
           <button @click="handleSyncConfirmation('skip')"
             class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors duration-150 flex items-center justify-center gap-2">
             <Play class="w-4 h-4" />
-            Launch
+            Play now
           </button>
           <button @click="handleSyncConfirmation('sync')"
             class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-primary/20 hover:bg-primary/30 text-primary transition-colors duration-150 flex items-center justify-center gap-2">
             <Download class="w-4 h-4" />
-            Sync & Launch
+            Sync & Play
           </button>
         </div>
       </div>
@@ -5993,19 +6034,19 @@ onUnmounted(() => {
 
 /* Modern Tab Pill Styles */
 .tab-pill {
-  @apply px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-all duration-150 whitespace-nowrap;
+  @apply px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors duration-150 whitespace-nowrap;
 }
 
 .tab-pill-active {
-  @apply bg-primary text-primary-foreground shadow-sm shadow-primary/20;
+  @apply bg-muted text-foreground font-medium;
 }
 
 .tab-pill-play {
-  @apply bg-primary shadow-primary/20;
+  @apply bg-primary text-primary-foreground;
 }
 
 .tab-pill-inactive {
-  @apply text-muted-foreground hover:text-foreground hover:bg-muted/40;
+  @apply text-muted-foreground hover:text-foreground hover:bg-muted/50;
 }
 
 /* Sub-tab Styles */

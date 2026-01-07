@@ -98,9 +98,9 @@ async function handleSetLauncherPath(type: string) {
     const success = await setLauncherPath(type, path);
     if (success) {
       launcherPaths.value[type] = path;
-      toast.success("Launcher Set", `${type} launcher path saved`);
+      toast.success("Saved ✓", `${type} launcher path set.`);
     } else {
-      toast.error("Error", "Failed to save launcher path");
+      toast.error("Couldn't save", "Launcher path wasn't saved.");
     }
   }
 }
@@ -108,7 +108,7 @@ async function handleSetLauncherPath(type: string) {
 async function handleClearLauncherPath(type: string) {
   // Setting empty path clears it - but we'd need to update the service
   delete launcherPaths.value[type];
-  toast.info("Cleared", `${type} launcher path removed. Will use auto-detection.`);
+  toast.info("Cleared", `${type} path removed. Using auto-detection.`);
 }
 
 // Icon mapping for installation types
@@ -177,12 +177,12 @@ async function handleAddInstallation() {
 }
 
 async function handleLaunch(installation: MinecraftInstallation) {
-  toast.info("Launching", `Opening ${getTypeName(installation.type)}...`);
+  toast.info("Starting...", `Opening ${getTypeName(installation.type)}`);
   const result = await launchGame(installation.id);
   if (result.success) {
-    toast.success("Launched!", `${getTypeName(installation.type)} is starting`);
+    toast.success("Launched ✓", `${getTypeName(installation.type)} is starting.`);
   } else if (result.error) {
-    toast.warning("Launch Info", result.error);
+    toast.warning("Heads up", result.error);
   }
 }
 </script>

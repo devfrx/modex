@@ -11,6 +11,15 @@ export default {
       },
     },
     extend: {
+      fontSize: {
+        'display': ['2.25rem', { lineHeight: '1.1', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'h1': ['1.75rem', { lineHeight: '1.2', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'h2': ['1.375rem', { lineHeight: '1.3', fontWeight: '600' }],
+        'h3': ['1.125rem', { lineHeight: '1.4', fontWeight: '600' }],
+        'body': ['0.875rem', { lineHeight: '1.5' }],
+        'caption': ['0.75rem', { lineHeight: '1.4', letterSpacing: '0.01em', fontWeight: '500' }],
+        'micro': ['0.6875rem', { lineHeight: '1.3', letterSpacing: '0.02em', fontWeight: '500' }],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

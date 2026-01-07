@@ -528,7 +528,7 @@ const moveDialogDescription = computed(() => {
                 <h1 class="text-base sm:text-lg font-semibold tracking-tight">
                   Organize
                 </h1>
-                <p class="text-[10px] sm:text-xs text-muted-foreground">
+                <p class="text-caption sm:text-xs text-muted-foreground">
                   {{ folders.length }} folders • {{ organizedMods }}/{{ totalMods }} organized
                 </p>
               </div>
@@ -539,7 +539,7 @@ const moveDialogDescription = computed(() => {
 
             <!-- Content Type Pills -->
             <div class="flex items-center gap-1 p-0.5 bg-muted/30 rounded-lg overflow-x-auto">
-              <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all whitespace-nowrap"
+              <button class="px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
                 :class="selectedContentType === 'all'
                   ? 'bg-background text-foreground ring-1 ring-border/50'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
@@ -547,7 +547,7 @@ const moveDialogDescription = computed(() => {
                 All
               </button>
               <button
-                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all whitespace-nowrap"
+                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
                 :class="selectedContentType === 'mod'
                   ? 'bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
@@ -556,7 +556,7 @@ const moveDialogDescription = computed(() => {
                 <span class="hidden xs:inline">{{ contentTypeCounts.mod }}</span>
               </button>
               <button
-                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all whitespace-nowrap"
+                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
                 :class="selectedContentType === 'resourcepack'
                   ? 'bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
@@ -565,7 +565,7 @@ const moveDialogDescription = computed(() => {
                 <span class="hidden xs:inline">{{ contentTypeCounts.resourcepack }}</span>
               </button>
               <button
-                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all whitespace-nowrap"
+                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
                 :class="selectedContentType === 'shader'
                   ? 'bg-pink-500/15 text-pink-500 ring-1 ring-pink-500/30'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
@@ -722,7 +722,7 @@ const moveDialogDescription = computed(() => {
               <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <FolderOpen class="w-3.5 h-3.5" />
                 Folders
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-muted">{{ folders.length }}</span>
+                <span class="text-caption px-1.5 py-0.5 rounded-full bg-muted">{{ folders.length }}</span>
               </h3>
             </div>
             <div class="space-y-1 bg-card/50 rounded-xl border border-border p-2">
@@ -740,7 +740,7 @@ const moveDialogDescription = computed(() => {
               <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Package class="w-3.5 h-3.5" />
                 Unorganized
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500">
+                <span class="text-caption px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500">
                   {{ unorganizedMods.length }}
                 </span>
               </h3>
@@ -788,10 +788,10 @@ const moveDialogDescription = computed(() => {
                     {{ mod.name }}
                   </div>
                   <div class="flex items-center gap-2 mt-0.5">
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    <span class="text-caption px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                       {{ mod.version }}
                     </span>
-                    <span v-if="mod.loader" class="text-[10px] text-muted-foreground">
+                    <span v-if="mod.loader" class="text-caption text-muted-foreground">
                       {{ mod.loader }}
                     </span>
                   </div>
@@ -826,7 +826,7 @@ const moveDialogDescription = computed(() => {
             class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 px-1 flex items-center gap-2">
             <Folder class="w-3.5 h-3.5" />
             Folders
-            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-muted">{{ currentFolderSubfolders.length }}</span>
+            <span class="text-caption px-1.5 py-0.5 rounded-full bg-muted">{{ currentFolderSubfolders.length }}</span>
           </h3>
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             <button v-for="folder in currentFolderSubfolders" :key="folder.id"
@@ -840,7 +840,7 @@ const moveDialogDescription = computed(() => {
               <span class="text-sm font-medium text-foreground group-hover:text-foreground truncate w-full text-center">
                 {{ folder.name }}
               </span>
-              <span class="text-[10px] text-muted-foreground mt-1">
+              <span class="text-caption text-muted-foreground mt-1">
                 {{mods.filter(m => getModFolder(m.id) === folder.id).length}} items
               </span>
             </button>
@@ -863,7 +863,7 @@ const moveDialogDescription = computed(() => {
             class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 px-1 flex items-center gap-2">
             <Package class="w-3.5 h-3.5" />
             Mods in this folder
-            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-muted">{{ currentFolderMods.length }}</span>
+            <span class="text-caption px-1.5 py-0.5 rounded-full bg-muted">{{ currentFolderMods.length }}</span>
           </h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             <div v-for="mod in currentFolderMods" :key="mod.id"
@@ -903,11 +903,11 @@ const moveDialogDescription = computed(() => {
                     {{ mod.name }}
                   </h4>
                   <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                    <span class="text-caption px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
                       {{ mod.version }}
                     </span>
                     <span v-if="mod.loader"
-                      class="text-[10px] px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
+                      class="text-caption px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
                       {{ mod.loader }}
                     </span>
                   </div>
@@ -1054,7 +1054,7 @@ const moveDialogDescription = computed(() => {
           </div>
           <div class="flex-1">
             <span class="text-sm font-medium">Library Root</span>
-            <p class="text-[10px] text-muted-foreground">No folder - top level</p>
+            <p class="text-caption text-muted-foreground">No folder - top level</p>
           </div>
           <Check v-if="moveTargetFolderId === null" class="w-5 h-5 text-indigo-500" />
         </button>
@@ -1072,7 +1072,7 @@ const moveDialogDescription = computed(() => {
             </div>
             <div class="flex-1">
               <span class="text-sm font-medium">{{ folder.name }}</span>
-              <p class="text-[10px] text-muted-foreground">
+              <p class="text-caption text-muted-foreground">
                 {{mods.filter(m => getModFolder(m.id) === folder.id).length}} items
               </p>
             </div>

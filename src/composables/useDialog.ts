@@ -103,7 +103,7 @@ export function useDialog() {
     return new Promise((resolve) => {
       dialogType.value = 'confirm';
       dialogOptions.value = {
-        confirmText: 'Confirm',
+        confirmText: 'Continue',
         cancelText: 'Cancel',
         variant: 'default',
         icon: 'question',
@@ -170,11 +170,12 @@ export function useDialog() {
   // Convenience methods for common dialogs
   const confirmDelete = (itemName: string, itemCount: number = 1): Promise<boolean> => {
     return confirm({
-      title: itemCount > 1 ? `Delete ${itemCount} Items` : 'Delete Item',
+      title: itemCount > 1 ? `Delete ${itemCount} items?` : 'Delete this item?',
       message: itemCount > 1 
-        ? `Are you sure you want to delete ${itemCount} ${itemName}? This action cannot be undone.`
-        : `Are you sure you want to delete this ${itemName}? This action cannot be undone.`,
-      confirmText: 'Delete',
+        ? `You're about to delete ${itemCount} ${itemName}. This can't be undone.`
+        : `You're about to delete this ${itemName}. This can't be undone.`,
+      confirmText: 'Yes, delete',
+      cancelText: 'Keep it',
       variant: 'danger',
       icon: 'trash',
     });

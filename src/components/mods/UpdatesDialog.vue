@@ -118,7 +118,7 @@ async function checkForUpdates() {
     }
   } catch (err) {
     console.error("Failed to check updates:", err);
-    toast.error("Update Check Failed", (err as Error).message);
+    toast.error("Couldn't check updates", (err as Error).message);
   } finally {
     cleanupProgressListener();
     isLoading.value = false;
@@ -128,8 +128,8 @@ async function checkForUpdates() {
 async function applyUpdate(update: ModUpdateInfo) {
   if (!update.newFileId) {
     toast.info(
-      "Not Available",
-      "Aggiornamento non disponibile. Visita la pagina della mod per informazioni."
+      "Not available",
+      "Visit the mod's page for more info."
     );
     return;
   }
@@ -148,10 +148,10 @@ async function applyUpdate(update: ModUpdateInfo) {
       updates.value = updates.value.filter((u) => u.modId !== update.modId);
       emit("updated");
     } else {
-      toast.error("Update Failed", result.error || "Unknown error");
+      toast.error("Couldn't update", result.error || "Unknown error");
     }
   } catch (err) {
-    toast.error("Error", (err as Error).message);
+    toast.error("Couldn't update", (err as Error).message);
   } finally {
     updatingMods.value.delete(update.modId);
   }
@@ -204,7 +204,7 @@ async function applyAllUpdates() {
     );
     emit("updated");
   } catch (err) {
-    toast.error("Error", (err as Error).message);
+    toast.error("Couldn't update all", (err as Error).message);
   }
 }
 
@@ -214,11 +214,11 @@ async function saveApiKey() {
     await window.api.updates.setApiKey(curseforgeApiKey.value);
     showSettings.value = false;
     toast.success(
-      "API Key Saved",
-      "CurseForge API key has been saved successfully."
+      "Saved ✓",
+      "CurseForge API key saved."
     );
   } catch (err) {
-    toast.error("Save Failed", (err as Error).message);
+    toast.error("Couldn't save", (err as Error).message);
   } finally {
     savingKey.value = false;
   }

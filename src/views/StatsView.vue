@@ -349,7 +349,7 @@ onMounted(() => {
               </div>
               <div>
                 <h1 class="text-base sm:text-lg font-semibold tracking-tight">Statistics</h1>
-                <p class="text-[10px] sm:text-xs text-muted-foreground">
+                <p class="text-caption sm:text-xs text-muted-foreground">
                   Library analytics and insights
                 </p>
               </div>

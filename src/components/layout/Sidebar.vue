@@ -158,7 +158,7 @@ onUnmounted(() => {
           <h1 class="text-base font-semibold tracking-tight text-foreground">
             ModEx
           </h1>
-          <p class="text-[10px] text-muted-foreground font-medium">
+          <p class="text-caption text-muted-foreground">
             Mod Manager
           </p>
         </div>
@@ -175,15 +175,15 @@ onUnmounted(() => {
 
     <nav class="flex-1 p-2 space-y-0.5 overflow-auto" :class="settings.collapsed ? 'px-2' : 'px-3'">
       <RouterLink v-for="item in enabledItems" :key="item.id" :to="item.route"
-        class="group flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium" :class="[
+        class="group flex items-center gap-3 rounded-md transition-colors duration-150 text-sm font-medium" :class="[
           settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2',
           'text-muted-foreground hover:bg-muted hover:text-foreground',
-        ]" active-class="!bg-primary/10 !text-primary" @click="handleNavClick"
-        :title="settings.collapsed ? item.name : undefined">
+        ]" active-class="!bg-primary/10 !text-primary !font-medium !border-l-2 !border-primary !rounded-l-none"
+        @click="handleNavClick" :title="settings.collapsed ? item.name : undefined">
         <component :is="getIcon(item.icon)" class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed" class="flex-1">{{ item.name }}</span>
         <span v-if="!settings.collapsed && getItemCount(item.id)"
-          class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
+          class="text-caption bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
           {{ getItemCount(item.id) }}
         </span>
       </RouterLink>
@@ -198,8 +198,8 @@ onUnmounted(() => {
         <Search class="w-3.5 h-3.5 shrink-0" />
         <template v-if="!settings.collapsed">
           <span class="flex-1 text-left text-xs">Search...</span>
-          <span class="flex items-center gap-0.5 text-[10px] text-muted-foreground/70">
-            <kbd class="px-1 py-0.5 bg-background/50 rounded text-[9px] border border-border/50 font-mono">⌘K</kbd>
+          <span class="flex items-center gap-0.5 text-micro text-muted-foreground">
+            <kbd class="px-1 py-0.5 bg-background/50 rounded text-micro border border-border/50 font-mono">⌘K</kbd>
           </span>
         </template>
       </button>
@@ -209,10 +209,10 @@ onUnmounted(() => {
     <div class="p-2 border-t border-border/30 space-y-0.5" :class="settings.collapsed ? 'px-2' : 'px-3'">
       <!-- Dev Playground link (only in dev mode) -->
       <RouterLink v-if="isDev" to="/dev"
-        class="group flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium" :class="[
+        class="group flex items-center gap-3 rounded-md transition-colors duration-150 text-sm font-medium" :class="[
           settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2',
-          'text-amber-500 hover:bg-amber-500/10 hover:text-amber-400',
-        ]" active-class="!bg-amber-500/15 !text-amber-400" @click="handleNavClick"
+          'text-warning hover:bg-warning/10 hover:text-warning',
+        ]" active-class="!bg-warning/10 !text-warning" @click="handleNavClick"
         :title="settings.collapsed ? 'Dev Playground' : undefined">
         <Zap class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed">Dev</span>
@@ -222,17 +222,17 @@ onUnmounted(() => {
       <button @click="toggleCollapsed"
         class="w-full flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         :class="settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2'"
-        :title="settings.collapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+        :title="settings.collapsed ? 'Expand' : 'Minimize'">
         <component :is="settings.collapsed ? PanelLeft : PanelLeftClose" class="w-4 h-4 shrink-0" />
-        <span v-if="!settings.collapsed" class="text-sm">Collapse</span>
+        <span v-if="!settings.collapsed" class="text-sm">Minimize</span>
       </button>
 
       <RouterLink to="/settings"
-        class="group flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium" :class="[
+        class="group flex items-center gap-3 rounded-md transition-colors duration-150 text-sm font-medium" :class="[
           settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2',
           'text-muted-foreground hover:bg-muted hover:text-foreground',
-        ]" active-class="!bg-primary/10 !text-primary" @click="handleNavClick"
-        :title="settings.collapsed ? 'Settings' : undefined">
+        ]" active-class="!bg-primary/10 !text-primary !font-medium !border-l-2 !border-primary !rounded-l-none"
+        @click="handleNavClick" :title="settings.collapsed ? 'Settings' : undefined">
         <Settings class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed">Settings</span>
       </RouterLink>

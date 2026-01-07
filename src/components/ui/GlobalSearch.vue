@@ -333,21 +333,21 @@ async function handleContextAction(action: string) {
                     // Use smart launch for modpacks
                     const pack = modpacks.value.find(p => p.id === actualId);
                     if (pack) {
-                        toast.info("Launching...", `Starting ${pack.name}`);
+                        toast.info("Starting...", `Launching ${pack.name}`);
                         close();
                         // Navigate to modpack with play tab
                         router.push(`/modpacks?id=${actualId}&tab=play&autolaunch=true`);
                     }
                 } catch (err) {
-                    toast.error("Failed to launch");
+                    toast.error("Couldn't launch");
                 }
             } else if (type === "instance" && data) {
                 try {
-                    toast.info("Launching...", `Starting ${data.name}`);
+                    toast.info("Starting...", `Launching ${data.name}`);
                     close();
                     await launchInstance(data.id);
                 } catch (err) {
-                    toast.error("Failed to launch instance");
+                    toast.error("Couldn't launch instance");
                 }
             }
             break;
@@ -365,10 +365,10 @@ async function handleContextAction(action: string) {
                 const favSet = new Set(favorites);
                 if (favSet.has(actualId)) {
                     favSet.delete(actualId);
-                    toast.success("Removed from favorites");
+                    toast.success("Unfavorited");
                 } else {
                     favSet.add(actualId);
-                    toast.success("Added to favorites");
+                    toast.success("Favorited ✓");
                 }
                 localStorage.setItem("modex:favorites:mods", JSON.stringify([...favSet]));
             }
@@ -378,7 +378,7 @@ async function handleContextAction(action: string) {
             const result = searchResults.value.find((r) => r.id === id);
             if (result) {
                 await navigator.clipboard.writeText(result.name);
-                toast.success("Name copied to clipboard");
+                toast.success("Copied ✓");
             }
             break;
 
@@ -391,7 +391,7 @@ async function handleContextAction(action: string) {
                 } else if (data.mr_project_id) {
                     window.open(`https://modrinth.com/mod/${data.slug || data.mr_project_id}`, "_blank");
                 } else {
-                    toast.error("Source URL not available");
+                    toast.error("No source URL", "This mod doesn't have a linked website.");
                 }
             }
             break;
@@ -401,13 +401,13 @@ async function handleContextAction(action: string) {
                 try {
                     await window.api.modpacks.openFolder(actualId);
                 } catch (err) {
-                    toast.error("Failed to open folder");
+                    toast.error("Couldn't open folder");
                 }
             } else if (type === "instance") {
                 try {
                     await openInstanceFolder(actualId);
                 } catch (err) {
-                    toast.error("Failed to open folder");
+                    toast.error("Couldn't open folder");
                 }
             }
             break;
@@ -418,11 +418,11 @@ async function handleContextAction(action: string) {
                     const pack = modpacks.value.find((p) => p.id === actualId);
                     if (pack) {
                         await window.api.modpacks.clone(actualId, `${pack.name} (Copy)`);
-                        toast.success("Modpack cloned");
+                        toast.success("Duplicated ✓");
                         loadData();
                     }
                 } catch (err) {
-                    toast.error("Failed to clone modpack");
+                    toast.error("Couldn't duplicate pack");
                 }
             }
             break;
@@ -439,26 +439,26 @@ async function handleContextAction(action: string) {
             if (type === "mod" && window.api) {
                 try {
                     await window.api.mods.delete(actualId);
-                    toast.success("Mod deleted");
+                    toast.success("Deleted ✓");
                     loadData();
                 } catch (err) {
-                    toast.error("Failed to delete mod");
+                    toast.error("Couldn't delete mod");
                 }
             } else if (type === "modpack" && window.api) {
                 try {
                     await window.api.modpacks.delete(actualId);
-                    toast.success("Modpack deleted");
+                    toast.success("Deleted ✓");
                     loadData();
                 } catch (err) {
-                    toast.error("Failed to delete modpack");
+                    toast.error("Couldn't delete pack");
                 }
             } else if (type === "instance" && window.api) {
                 try {
                     await window.api.instances.delete(actualId);
-                    toast.success("Instance deleted");
+                    toast.success("Deleted ✓");
                     loadData();
                 } catch (err) {
-                    toast.error("Failed to delete instance");
+                    toast.error("Couldn't delete instance");
                 }
             }
             break;
@@ -490,7 +490,7 @@ async function handleSelect(result: (typeof searchResults.value)[0]) {
         if (result.data.modpackId) {
             router.push(`/modpacks?id=${result.data.modpackId}&tab=play`);
         } else {
-            toast.info("Instance has no linked modpack");
+            toast.info("No linked pack", "This instance isn't connected to a modpack.");
         }
         close();
         return;
@@ -567,7 +567,7 @@ defineExpose({ open, close });
                             @keydown="handleKeydown" />
                         <div class="flex items-center gap-1 text-xs text-muted-foreground">
                             <kbd
-                                class="px-1.5 py-0.5 bg-muted/50 rounded text-[10px] font-mono border border-border/50">ESC</kbd>
+                                class="px-1.5 py-0.5 bg-muted/50 rounded text-caption font-mono border border-border/50">ESC</kbd>
                         </div>
                         <button @click="close"
                             class="ml-2 p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
@@ -586,18 +586,18 @@ defineExpose({ open, close });
                             <!-- Section headers when no search query -->
                             <template v-if="!searchQuery">
                                 <div
-                                    class="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
+                                    class="px-3 py-1.5 text-caption uppercase tracking-wider text-muted-foreground/70 font-medium">
                                     Quick Actions
                                 </div>
-                                
+
                                 <!-- Quick actions -->
-                                <div v-for="(result, index) in searchResults.slice(0, quickActions.length)" :key="result.id"
+                                <div v-for="(result, index) in searchResults.slice(0, quickActions.length)"
+                                    :key="result.id"
                                     class="group w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
                                     :class="selectedIndex === index
                                         ? 'bg-primary/10 text-primary'
                                         : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
-                                    @mouseenter="selectedIndex = index"
-                                    style="width: calc(100% - 12px)">
+                                    @mouseenter="selectedIndex = index" style="width: calc(100% - 12px)">
                                     <div class="p-1.5 rounded-md shrink-0 bg-amber-500/10 text-amber-400">
                                         <component :is="result.icon" class="w-3.5 h-3.5" />
                                     </div>
@@ -609,12 +609,13 @@ defineExpose({ open, close });
                                 </div>
 
                                 <div
-                                    class="px-3 py-1.5 mt-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
+                                    class="px-3 py-1.5 mt-2 text-caption uppercase tracking-wider text-muted-foreground/70 font-medium">
                                     Navigation
                                 </div>
-                                
+
                                 <!-- Navigation items -->
-                                <div v-for="(result, index) in searchResults.slice(quickActions.length)" :key="result.id"
+                                <div v-for="(result, index) in searchResults.slice(quickActions.length)"
+                                    :key="result.id"
                                     class="group w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
                                     :class="selectedIndex === (index + quickActions.length)
                                         ? 'bg-primary/10 text-primary'
@@ -635,53 +636,54 @@ defineExpose({ open, close });
                             <!-- Search results with mixed content -->
                             <template v-else>
 
-                            <div v-for="(result, index) in searchResults" :key="result.id"
-                                class="group w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
-                                :class="selectedIndex === index
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
-                                @mouseenter="selectedIndex = index" @contextmenu="openContextMenu($event, result)"
-                                style="width: calc(100% - 12px)">
-                                <div class="p-1.5 rounded-md shrink-0" :class="getColorClassForType(result.type as ResultType, result.contentType)">
-                                    <component :is="result.icon" class="w-3.5 h-3.5" />
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-sm font-medium truncate">{{ result.name }}</div>
-                                    <div v-if="result.subtitle" class="text-[11px] text-muted-foreground truncate">
-                                        {{ result.subtitle }}
+                                <div v-for="(result, index) in searchResults" :key="result.id"
+                                    class="group w-full flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-left transition-colors cursor-pointer"
+                                    :class="selectedIndex === index
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
+                                    @mouseenter="selectedIndex = index" @contextmenu="openContextMenu($event, result)"
+                                    style="width: calc(100% - 12px)">
+                                    <div class="p-1.5 rounded-md shrink-0"
+                                        :class="getColorClassForType(result.type as ResultType, result.contentType)">
+                                        <component :is="result.icon" class="w-3.5 h-3.5" />
                                     </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-medium truncate">{{ result.name }}</div>
+                                        <div v-if="result.subtitle" class="text-micro text-muted-foreground truncate">
+                                            {{ result.subtitle }}
+                                        </div>
+                                    </div>
+                                    <!-- Type badge -->
+                                    <span v-if="result.type === 'instance'"
+                                        class="px-1.5 py-0.5 rounded text-micro font-medium uppercase bg-green-500/10 text-green-400">
+                                        Instance
+                                    </span>
+                                    <!-- Action button for contextual items -->
+                                    <button v-if="result.type !== 'nav' && result.type !== 'action'"
+                                        @click.stop="openContextMenu($event, result)"
+                                        class="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
+                                        :class="{ 'opacity-100': selectedIndex === index }">
+                                        <MoreHorizontal class="w-3.5 h-3.5" />
+                                    </button>
+                                    <ArrowRight v-else-if="selectedIndex === index"
+                                        class="w-3.5 h-3.5 text-primary shrink-0" />
                                 </div>
-                                <!-- Type badge -->
-                                <span v-if="result.type === 'instance'" 
-                                    class="px-1.5 py-0.5 rounded text-[9px] font-medium uppercase bg-green-500/10 text-green-400">
-                                    Instance
-                                </span>
-                                <!-- Action button for contextual items -->
-                                <button v-if="result.type !== 'nav' && result.type !== 'action'" 
-                                    @click.stop="openContextMenu($event, result)"
-                                    class="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
-                                    :class="{ 'opacity-100': selectedIndex === index }">
-                                    <MoreHorizontal class="w-3.5 h-3.5" />
-                                </button>
-                                <ArrowRight v-else-if="selectedIndex === index"
-                                    class="w-3.5 h-3.5 text-primary shrink-0" />
-                            </div>
                             </template>
                         </div>
                     </div>
 
                     <!-- Footer -->
                     <div
-                        class="px-4 py-2 border-t border-border/50 bg-muted/20 flex items-center justify-between text-[11px] text-muted-foreground/70">
+                        class="px-4 py-2 border-t border-border/50 bg-muted/20 flex items-center justify-between text-micro text-muted-foreground/70">
                         <div class="flex items-center gap-3">
                             <span class="flex items-center gap-1">
                                 <kbd
-                                    class="px-1 py-0.5 bg-muted/50 rounded text-[9px] font-mono border border-border/30">↑↓</kbd>
+                                    class="px-1 py-0.5 bg-muted/50 rounded text-micro font-mono border border-border/30">↑↓</kbd>
                                 navigate
                             </span>
                             <span class="flex items-center gap-1">
                                 <kbd
-                                    class="px-1 py-0.5 bg-muted/50 rounded text-[9px] font-mono border border-border/30">↵</kbd>
+                                    class="px-1 py-0.5 bg-muted/50 rounded text-micro font-mono border border-border/30">↵</kbd>
                                 select
                             </span>
                         </div>

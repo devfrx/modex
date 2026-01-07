@@ -41,17 +41,17 @@ const variantClasses = computed(() => {
             };
         case "warning":
             return {
-                bg: "bg-yellow-500/10",
-                border: "border-yellow-500/30",
-                text: "text-yellow-500",
-                button: "bg-yellow-500 text-white hover:bg-yellow-600",
+                bg: "bg-warning/10",
+                border: "border-warning/30",
+                text: "text-warning",
+                button: "bg-warning text-warning-foreground hover:bg-warning/90",
             };
         case "info":
             return {
-                bg: "bg-blue-500/10",
-                border: "border-blue-500/30",
-                text: "text-blue-500",
-                button: "bg-blue-500 text-white hover:bg-blue-600",
+                bg: "bg-info/10",
+                border: "border-info/30",
+                text: "text-info",
+                button: "bg-info text-white hover:bg-info/90",
             };
         default:
             return {

@@ -93,7 +93,7 @@ onMounted(loadData);
         <div v-else class="flex-1 overflow-auto">
             <!-- Hero Section -->
             <section class="relative min-h-[70vh] flex items-center justify-center overflow-hidden">
-                <!-- Animated Background - Supabase style -->
+                <!-- Simplified Background -->
                 <div class="absolute inset-0">
                     <!-- Base gradient -->
                     <div class="absolute inset-0 bg-gradient-to-b from-background via-background to-card" />
@@ -102,17 +102,9 @@ onMounted(loadData);
                     <div
                         class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
 
-                    <!-- Primary glow - top -->
+                    <!-- Single primary glow - simplified -->
                     <div
-                        class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-primary/10 rounded-full blur-[120px]" />
-
-                    <!-- Secondary glows -->
-                    <div class="absolute top-40 right-[10%] w-64 h-64 bg-primary/5 rounded-full blur-[100px]" />
-                    <div class="absolute bottom-20 left-[15%] w-72 h-72 bg-cyan-500/5 rounded-full blur-[100px]" />
-
-                    <!-- Radial fade -->
-                    <div
-                        class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,hsl(var(--background))_70%)]" />
+                        class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-primary/8 rounded-full blur-[100px]" />
                 </div>
 
                 <!-- Hero Content -->
@@ -120,8 +112,6 @@ onMounted(loadData);
                     <!-- Logo/Brand -->
                     <div class="mb-8 flex justify-center">
                         <div class="relative group">
-                            <div
-                                class="absolute inset-0 bg-primary/30 rounded-2xl blur-xl opacity-60 group-hover:opacity-80 transition-opacity" />
                             <div class="relative p-4 rounded-2xl bg-card/80 border border-primary/20 backdrop-blur-xl">
                                 <Box class="w-10 h-10 text-primary" />
                             </div>
@@ -129,52 +119,51 @@ onMounted(loadData);
                     </div>
 
                     <!-- Headline -->
-                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-5">
+                    <h1 class="text-display sm:text-5xl lg:text-6xl tracking-tight mb-5">
                         <span class="text-foreground">
-                            Welcome to
+                            Your Mods,
                         </span>
                         <br />
                         <span class="text-primary">
-                            ModEx
+                            Organized
                         </span>
                     </h1>
 
                     <!-- Subtitle -->
-                    <p class="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
-                        The ultimate Minecraft mod manager. Organize, discover, and play with your modpacks like never
-                        before.
+                    <p class="text-body sm:text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
+                        Build modpacks, track updates, play instantly.
                     </p>
 
                     <!-- CTA Buttons -->
                     <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-14 px-4">
-                        <Button size="lg" @click="navigate('/modpacks')"
-                            class="gap-2 px-6 h-11 text-sm w-full sm:w-auto shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all">
-                            <Play class="w-4 h-4" />
-                            Get Started
-                        </Button>
-                        <Button variant="outline" size="lg" @click="navigate('/modpacks?create=true')"
+                        <Button size="lg" @click="navigate('/modpacks?create=true')"
                             class="gap-2 px-6 h-11 text-sm w-full sm:w-auto">
                             <Plus class="w-4 h-4" />
-                            Create Modpack
+                            Create Your First Pack
+                        </Button>
+                        <Button variant="outline" size="lg" @click="navigate('/library')"
+                            class="gap-2 px-6 h-11 text-sm w-full sm:w-auto">
+                            <Compass class="w-4 h-4" />
+                            Browse Mods
                         </Button>
                     </div>
 
                     <!-- Stats Row -->
                     <div class="flex items-center justify-center gap-8 md:gap-12">
                         <div class="text-center">
-                            <p class="text-2xl sm:text-3xl font-semibold text-foreground">{{ modpacks.length }}</p>
-                            <p class="text-xs text-muted-foreground mt-1">Modpacks</p>
+                            <p class="text-h1 text-foreground">{{ modpacks.length }}</p>
+                            <p class="text-caption text-muted-foreground mt-1">Packs</p>
                         </div>
                         <div class="w-px h-10 bg-border/50" />
                         <div class="text-center">
-                            <p class="text-2xl sm:text-3xl font-semibold text-foreground">{{ totalMods }}</p>
-                            <p class="text-xs text-muted-foreground mt-1">Total Mods</p>
+                            <p class="text-h1 text-foreground">{{ totalMods }}</p>
+                            <p class="text-caption text-muted-foreground mt-1">Mods</p>
                         </div>
                         <div class="w-px h-10 bg-border/50" />
                         <div class="text-center">
-                            <p class="text-2xl sm:text-3xl font-semibold text-foreground">{{ formatSize(totalSize) }}
+                            <p class="text-h1 text-foreground">{{ formatSize(totalSize) }}
                             </p>
-                            <p class="text-xs text-muted-foreground mt-1">Library</p>
+                            <p class="text-caption text-muted-foreground mt-1">Saved</p>
                         </div>
                     </div>
                 </div>
@@ -227,10 +216,10 @@ onMounted(loadData);
                                 class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
                                 <Folder class="w-5 h-5 text-primary" />
                             </div>
-                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">Mod
-                                Library</h3>
+                            <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">My
+                                Mods</h3>
                             <p class="text-xs text-muted-foreground leading-relaxed">
-                                Your central hub for all mods. Search, filter, and organize your collection.
+                                All your mods in one place. Search, filter, organize.
                             </p>
                         </div>
 
@@ -242,9 +231,9 @@ onMounted(loadData);
                                 <Compass class="w-5 h-5 text-primary" />
                             </div>
                             <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">
-                                Dependency Sandbox</h3>
+                                Visualize</h3>
                             <p class="text-xs text-muted-foreground leading-relaxed">
-                                Visualize mod relationships and dependencies interactively.
+                                See how your mods connect. Spot conflicts instantly.
                             </p>
                         </div>
 
@@ -256,9 +245,9 @@ onMounted(loadData);
                                 <BarChart3 class="w-5 h-5 text-primary" />
                             </div>
                             <h3 class="text-sm font-semibold mb-1.5 group-hover:text-primary transition-colors">
-                                Statistics</h3>
+                                Insights</h3>
                             <p class="text-xs text-muted-foreground leading-relaxed">
-                                Deep insights into your mod collection with beautiful charts.
+                                Understand your collection with beautiful charts.
                             </p>
                         </div>
 
@@ -326,7 +315,7 @@ onMounted(loadData);
                                             class="text-sm font-medium truncate group-hover:text-primary transition-colors">
                                             {{ pack.name }}
                                         </h4>
-                                        <p class="text-[11px] text-muted-foreground mt-0.5">
+                                        <p class="text-micro text-muted-foreground mt-0.5">
                                             {{ pack.minecraft_version }} • {{ pack.loader }}
                                         </p>
                                     </div>
@@ -385,7 +374,7 @@ onMounted(loadData);
 
             <!-- Footer -->
             <footer class="py-6 px-6 border-t border-border/20 text-center bg-background">
-                <p class="text-[11px] text-muted-foreground/70">
+                <p class="text-micro text-muted-foreground/70">
                     ModEx — Your Minecraft Modding Companion
                 </p>
             </footer>

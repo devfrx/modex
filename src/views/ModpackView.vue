@@ -38,6 +38,8 @@ import {
   Filter,
   X,
   Flame,
+  MoreHorizontal,
+  ChevronDown,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
 
@@ -59,6 +61,9 @@ const error = ref<string | null>(null);
 
 // Selection State
 const selectedModpackIds = ref<Set<string>>(new Set());
+
+// Actions menu state
+const showActionsMenu = ref(false);
 
 // Favorites
 const favoriteModpacks = ref<Set<string>>(new Set());
@@ -268,9 +273,9 @@ async function duplicateSelectedModpacks() {
     }
     await loadModpacks();
     clearSelection();
-    toast.success("Success", `Duplicated ${count} modpacks`);
+    toast.success("Duplicated ✓", `${count} packs copied`);
   } catch (err) {
-    toast.error("Duplicate Failed", (err as Error).message);
+    toast.error("Couldn't duplicate", (err as Error).message);
   } finally {
     showProgress.value = false;
   }
@@ -297,11 +302,11 @@ async function exportSelectedModpacks() {
     }
     clearSelection();
     toast.success(
-      "Export Complete",
-      `Exported ${successCount} of ${ids.length} modpacks`
+      "Export ready ✓",
+      `Exported ${successCount} of ${ids.length} packs`
     );
   } catch (err) {
-    toast.error("Export Failed", (err as Error).message);
+    toast.error("Couldn't export", (err as Error).message);
   } finally {
     showProgress.value = false;
   }
@@ -600,13 +605,13 @@ async function importCurseForgeModpack() {
           message += `\n... and ${result.errors.length - 5} more errors`;
         }
       }
-      toast.success("Import Successful", message, 7000);
+      toast.success("Import complete!", message, 7000);
       await loadModpacks();
     } else {
-      toast.error("Import Failed", result.errors[0] || "Unknown error", 7000);
+      toast.error("Couldn't import", result.errors[0] || "Unknown error", 7000);
     }
   } catch (err) {
-    toast.error("Import Error", (err as Error).message, 7000);
+    toast.error("Import error", (err as Error).message, 7000);
   } finally {
     removeProgressListener();
     showProgress.value = false;
@@ -654,14 +659,14 @@ async function resolveCFConflicts() {
       if (result.errors.length > 0) {
         message += `\n\nErrors:\n${result.errors.slice(0, 3).join("\n")}`;
       }
-      toast.success("Import Successful", message, 7000);
+      toast.success("Import complete!", message, 7000);
       await loadModpacks();
     } else {
-      toast.error("Import Failed", result.errors[0] || "Unknown error");
+      toast.error("Couldn't import", result.errors[0] || "Unknown error");
     }
   } catch (err) {
     console.error("[CF Conflicts] Resolution failed:", err);
-    toast.error("Resolution Failed", (err as Error).message);
+    toast.error("Couldn't resolve conflicts", (err as Error).message);
   } finally {
     showProgress.value = false;
   }
@@ -725,7 +730,7 @@ function closeConvertDialog() {
 async function handleConvertSuccess() {
   await loadModpacks();
   closeConvertDialog();
-  toast.success("Conversion Complete", "Your converted modpack is ready!");
+  toast.success("Converted ✓", "Your converted pack is ready!");
 }
 
 // Drag & Drop support for ZIP files
@@ -987,7 +992,7 @@ watch(
 );
 
 function handleSyncComplete() {
-  toast.success("Ready to Play", "Instance is ready!");
+  toast.success("Ready to play ✓", "Instance is ready!");
 }
 
 onMounted(() => {
@@ -1024,9 +1029,9 @@ onMounted(() => {
               </div>
               <div>
                 <h1 class="text-base sm:text-lg font-semibold tracking-tight">
-                  Modpacks
+                  My Packs
                 </h1>
-                <p class="text-[10px] sm:text-xs text-muted-foreground">
+                <p class="text-caption sm:text-xs text-muted-foreground">
                   {{ modpacks.length }} packs • {{ totalMods }} mods
                 </p>
               </div>
@@ -1037,7 +1042,7 @@ onMounted(() => {
 
             <!-- Quick Filters -->
             <div class="flex items-center gap-1 sm:gap-1.5">
-              <button class="px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
+              <button class="px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 " @click="
@@ -1047,7 +1052,7 @@ onMounted(() => {
                 All
               </button>
               <button
-                class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs rounded-md transition-all"
+                class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all"
                 :class="quickFilter === 'favorites'
                   ? 'bg-rose-500/20 text-rose-400 shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -1065,7 +1070,7 @@ onMounted(() => {
           <div class="hidden md:flex items-center gap-2 flex-1 max-w-md mx-auto">
             <div class="relative flex-1">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <input v-model="searchQuery" placeholder="Search packs..."
+              <input v-model="searchQuery" placeholder="Find a pack..."
                 class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
             </div>
 
@@ -1128,49 +1133,64 @@ onMounted(() => {
 
           <!-- Right: Actions -->
           <div class="flex items-center gap-1.5 sm:gap-2">
-            <!-- Primary Actions -->
+            <!-- Primary Action -->
             <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
               class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-medium">
               <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden xs:inline">Create</span>
-            </Button>
-            <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
-              class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs">
-              <Download class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden xs:inline">Import</span>
+              <span class="hidden xs:inline">New Pack</span>
             </Button>
 
-            <!-- Separator -->
-            <div class="hidden sm:block h-4 w-px bg-border" />
-
-            <!-- Secondary Actions -->
-            <Button @click="router.push('/modpacks/browse')" :disabled="!isElectron()" variant="outline" size="sm"
-              class="gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs hidden sm:flex">
-              <Globe class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span class="hidden lg:inline">Browse</span>
-            </Button>
-            <Button @click="openShareImport" :disabled="!isElectron()" variant="ghost" size="sm"
-              class="gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 sm:px-3 hidden sm:flex"
-              title="Import/Export .modex packages">
-              <Share2 class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </Button>
-            <Button @click="showCompare = true" :disabled="modpacks.length < 2" variant="ghost" size="sm"
-              class="gap-1.5 text-muted-foreground hover:text-foreground h-7 sm:h-8 px-2 hidden sm:flex"
-              title="Compare modpacks">
-              <ArrowLeftRight class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </Button>
-
-            <!-- Selection Actions (Desktop) -->
-            <div class="hidden lg:flex items-center gap-1 border-l border-border pl-2 ml-1">
-              <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                @click="selectAll" :disabled="modpacks.length === 0">
-                Select All
+            <!-- Actions Dropdown (consolidates secondary actions) -->
+            <div class="relative hidden sm:block">
+              <Button @click="showActionsMenu = !showActionsMenu" :disabled="!isElectron()" variant="outline" size="sm"
+                class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs">
+                <MoreHorizontal class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span class="hidden sm:inline">Actions</span>
+                <ChevronDown class="w-3 h-3 transition-transform" :class="showActionsMenu ? 'rotate-180' : ''" />
               </Button>
-              <Button variant="ghost" size="sm" class="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                @click="clearSelection" :disabled="selectedModpackIds.size === 0">
-                Clear
-              </Button>
+
+              <!-- Dropdown menu -->
+              <Transition name="fade">
+                <div v-if="showActionsMenu"
+                  class="absolute top-full right-0 mt-1 w-48 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 overflow-hidden">
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
+                    @click="importCurseForgeModpack(); showActionsMenu = false">
+                    <Download class="w-4 h-4" />
+                    Import ZIP
+                  </button>
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
+                    @click="router.push('/modpacks/browse'); showActionsMenu = false">
+                    <Globe class="w-4 h-4" />
+                    Browse CurseForge
+                  </button>
+                  <div class="h-px bg-border my-1"></div>
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
+                    @click="openShareImport(); showActionsMenu = false">
+                    <Share2 class="w-4 h-4" />
+                    Share / Import .modex
+                  </button>
+                  <button
+                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
+                    :disabled="modpacks.length < 2" :class="modpacks.length < 2 ? 'opacity-50 cursor-not-allowed' : ''"
+                    @click="showCompare = true; showActionsMenu = false">
+                    <ArrowLeftRight class="w-4 h-4" />
+                    Compare Packs
+                  </button>
+                </div>
+              </Transition>
+
+              <!-- Backdrop to close dropdown -->
+              <div v-if="showActionsMenu" class="fixed inset-0 z-40" @click="showActionsMenu = false"></div>
             </div>
+
+            <!-- Mobile: Simple import button -->
+            <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
+              class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs sm:hidden">
+              <Download class="w-3.5 h-3.5" />
+            </Button>
           </div>
         </div>
 
@@ -1188,7 +1208,7 @@ onMounted(() => {
                 : 'bg-muted/50 text-muted-foreground'">
               <Filter class="w-4 h-4" />
               <span v-if="activeFilterCount > 0"
-                class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-caption flex items-center justify-center">
                 {{ activeFilterCount }}
               </span>
             </button>
@@ -1227,40 +1247,36 @@ onMounted(() => {
           <Package class="w-8 h-8 text-muted-foreground" />
         </div>
 
-        <h3 class="text-xl font-bold mb-2">No Modpacks</h3>
-        <p class="text-muted-foreground mb-8 text-sm max-w-xs mx-auto leading-relaxed">
-          Create your first custom modpack or import one from CurseForge to get
-          started.
+        <h3 class="text-xl font-bold mb-2">No packs yet</h3>
+        <p class="text-muted-foreground mb-6 text-sm max-w-xs mx-auto leading-relaxed">
+          Organize your mods into packs for easy management.
         </p>
 
-        <div class="flex justify-center gap-3">
-          <Button @click="router.push('/modpacks/browse')" variant="outline" size="lg" class="gap-2 h-11 px-5">
-            <Globe class="w-5 h-5" />
-            Browse CF
-          </Button>
-          <Button @click="importCurseForgeModpack" variant="secondary" size="lg" class="gap-2 h-11 px-5">
-            <Download class="w-5 h-5" />
-            Import ZIP
-          </Button>
-          <Button @click="showCreateDialog = true" size="lg"
-            class="gap-2 h-11 px-5 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
-            <PackagePlus class="w-5 h-5" />
-            Create
-          </Button>
-        </div>
+        <!-- Single primary CTA -->
+        <Button @click="showCreateDialog = true" size="lg"
+          class="gap-2 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all mb-4">
+          <PackagePlus class="w-5 h-5" />
+          Create Your First Pack
+        </Button>
+
+        <!-- Secondary option as text link -->
+        <p class="text-sm text-muted-foreground">
+          or <button @click="importCurseForgeModpack" class="text-primary hover:underline">import a ZIP</button>
+          from CurseForge
+        </p>
       </div>
     </div>
 
     <div v-else class="flex-1 flex overflow-hidden bg-background">
       <!-- Filter Sidebar / Mobile Overlay -->
       <Transition name="slide">
-        <div v-if="showFilters" class="fixed md:relative inset-0 md:inset-auto z-40 md:z-auto md:w-64 shrink-0">
+        <div v-if="showFilters" class="fixed md:relative inset-0 md:inset-auto z-40 md:z-auto md:w-64 shrink-0 h-full">
           <!-- Mobile Backdrop -->
           <div class="absolute inset-0 bg-black/50 md:hidden" @click="showFilters = false"></div>
 
           <!-- Filter Panel -->
           <div
-            class="absolute md:relative right-0 top-0 bottom-0 w-72 md:w-full border-l md:border-l-0 md:border-r border-border bg-card p-4 overflow-y-auto">
+            class="absolute md:relative right-0 top-0 bottom-0 w-72 md:w-full h-full border-l md:border-l-0 md:border-r border-border bg-card p-4 overflow-y-auto flex flex-col">
             <div class="flex items-center justify-between mb-4">
               <h3 class="font-semibold text-sm flex items-center gap-2">
                 <Filter class="w-4 h-4" />
@@ -1392,8 +1408,8 @@ onMounted(() => {
         <div v-if="sortedModpacks.length === 0 && modpacks.length > 0"
           class="flex flex-col items-center justify-center py-16 text-center">
           <Filter class="w-12 h-12 text-muted-foreground/30 mb-4" />
-          <h3 class="text-lg font-medium mb-2">No matching modpacks</h3>
-          <p class="text-sm text-muted-foreground mb-4">Try adjusting your filters or search query</p>
+          <h3 class="text-lg font-medium mb-2">No matches</h3>
+          <p class="text-sm text-muted-foreground mb-4">Try a different search or clear filters</p>
           <Button variant="outline" size="sm" @click="clearFilters">
             Clear Filters
           </Button>

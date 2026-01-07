@@ -133,7 +133,7 @@ function closeMoreActions() {
     <div class="absolute top-2.5 left-2.5 right-2.5 z-20 flex items-center justify-between">
       <!-- Running Badge or Favorite Button -->
       <div v-if="isRunning"
-        class="px-2 py-0.5 rounded-full bg-primary/90 text-primary-foreground text-[10px] font-semibold flex items-center gap-1 shadow-md">
+        class="px-2 py-0.5 rounded-full bg-primary/90 text-primary-foreground text-caption font-semibold flex items-center gap-1 shadow-md">
         <span class="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse"></span>
         RUNNING
       </div>
@@ -171,7 +171,7 @@ function closeMoreActions() {
           <h3 class="font-semibold text-sm line-clamp-1 group-hover:text-primary transition-colors">
             {{ modpack.name }}
           </h3>
-          <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
+          <div class="flex items-center gap-1.5 mt-0.5 text-caption text-muted-foreground">
             <Clock class="w-3 h-3" />
             <span>{{
               formatDate(modpack.updated_at || modpack.created_at)
@@ -188,7 +188,7 @@ function closeMoreActions() {
       <!-- Tags Row -->
       <div class="flex items-center gap-1 flex-wrap mb-3">
         <!-- Mod count -->
-        <div class="flex items-center gap-1 text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded text-[10px]">
+        <div class="flex items-center gap-1 text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded text-caption">
           <span class="w-1 h-1 rounded-full bg-primary" />
           <span class="text-foreground font-medium">{{
             modpack.modCount
@@ -198,40 +198,40 @@ function closeMoreActions() {
 
         <!-- MC Version -->
         <span v-if="modpack.minecraft_version"
-          class="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-medium">
+          class="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-caption font-medium">
           {{ modpack.minecraft_version }}
         </span>
 
         <!-- Loader -->
         <span v-if="modpack.loader"
-          class="px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground text-[10px] font-medium capitalize">
+          class="px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground text-caption font-medium capitalize">
           {{ modpack.loader }}
         </span>
 
         <!-- CurseForge source -->
         <span v-if="modpack.cf_project_id"
-          class="px-1 py-0.5 rounded bg-orange-500/10 text-orange-500 text-[10px] flex items-center gap-0.5"
+          class="px-1 py-0.5 rounded bg-orange-500/10 text-orange-500 text-caption flex items-center gap-0.5"
           title="Imported from CurseForge">
           <Flame class="w-2.5 h-2.5" />
         </span>
 
         <!-- Linked with Gist -->
         <span v-if="modpack.remote_source?.url"
-          class="px-1 py-0.5 rounded bg-purple-500/10 text-purple-500 text-[10px] flex items-center gap-0.5"
+          class="px-1 py-0.5 rounded bg-purple-500/10 text-purple-500 text-caption flex items-center gap-0.5"
           title="Linked with remote Gist - receives updates">
           <Link2 class="w-2.5 h-2.5" />
         </span>
 
         <!-- Shareable -->
         <span v-else-if="modpack.share_code"
-          class="px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-500 text-[10px] flex items-center gap-0.5"
+          class="px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-500 text-caption flex items-center gap-0.5"
           title="Has share code - can be shared via Gist">
           <Globe class="w-2.5 h-2.5" />
         </span>
 
         <!-- Unsaved Changes -->
         <span v-if="modpack.hasUnsavedChanges"
-          class="px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-500 text-[10px] flex items-center gap-0.5"
+          class="px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-500 text-caption flex items-center gap-0.5"
           title="Unsaved config changes - commit a new version to save">
           <CircleDot class="w-2.5 h-2.5" />
         </span>

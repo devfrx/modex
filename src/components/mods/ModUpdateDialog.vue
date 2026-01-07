@@ -101,7 +101,7 @@ async function checkUpdate() {
     }
   } catch (err) {
     console.error("Failed to check update:", err);
-    toast.error("Check Failed", (err as Error).message);
+    toast.error("Couldn't check", (err as Error).message);
   } finally {
     isLoading.value = false;
     updateChecked.value = true;
@@ -118,14 +118,14 @@ async function applyUpdate() {
       updateInfo.value.newFileId
     );
     if (result.success) {
-      toast.success("Updated", `${props.mod.name} updated successfully`);
+      toast.success("Updated ✓", `${props.mod.name} is now up to date.`);
       emit("updated", updateInfo.value.newFileId);
       emit("close");
     } else {
-      toast.error("Update Failed", result.error || "Unknown error");
+      toast.error("Couldn't update", result.error || "Unknown error");
     }
   } catch (err) {
-    toast.error("Error", (err as Error).message);
+    toast.error("Couldn't update", (err as Error).message);
   } finally {
     isUpdating.value = false;
   }

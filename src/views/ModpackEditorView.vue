@@ -29,10 +29,10 @@ async function handleExport() {
     try {
         const result = await window.api.export.curseforge(modpackId.value);
         if (result) {
-            toast.success("Exported", `Modpack exported to ${result.path}`);
+            toast.success("Export ready ✓", `Saved to ${result.path}`);
         }
     } catch (err) {
-        toast.error("Export Failed", String(err));
+        toast.error("Couldn't export", String(err));
     }
 }
 

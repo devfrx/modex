@@ -16,7 +16,7 @@
     --secondary: 220 13% 12%;
     --secondary-foreground: 210 20% 98%;
     --muted: 220 13% 14%;
-    --muted-foreground: 220 10% 55%;
+    --muted-foreground: 220 10% 60%;
     --accent: 220 13% 14%;
     --accent-foreground: 210 20% 98%;
     --destructive: 0 72% 51%;
@@ -39,6 +39,37 @@
     --primary-sat: 60%;
     --glow-primary: 0 0 20px hsla(153, 60%, 53%, 0.3);
     --glow-strong: 0 0 40px hsla(153, 60%, 53%, 0.4);
+    
+    /* ========== DESIGN TOKENS ========== */
+    
+    /* Typography Scale */
+    --font-display: 2.25rem;
+    --font-h1: 1.75rem;
+    --font-h2: 1.375rem;
+    --font-h3: 1.125rem;
+    --font-body: 0.875rem;
+    --font-caption: 0.75rem;
+    --font-micro: 0.6875rem;
+    
+    /* Spacing Scale (8px base) */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-12: 3rem;
+    
+    /* Transition Durations */
+    --duration-fast: 100ms;
+    --duration-normal: 150ms;
+    --duration-slow: 250ms;
+    
+    /* Elevation (Shadows) */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
   }
 
   [data-theme="light"] {
@@ -254,14 +285,9 @@
   background: hsl(var(--muted-foreground) / 0.4);
 }
 
-/* Glassmorphism Utilities - Modern */
+/* Glassmorphism Utility */
 .glass {
   @apply bg-background/80 backdrop-blur-xl border border-border/50;
-}
-
-.glass-card {
-  @apply bg-card/60 backdrop-blur-xl border border-border/50 hover:border-primary/40 transition-all duration-300;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
 }
 
 /* Range Slider Styling */
@@ -352,70 +378,13 @@ input[type="range"]::-moz-range-thumb {
 /* Smooth page transitions */
 .page-enter-active,
 .page-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .page-enter-from,
 .page-leave-to {
   opacity: 0;
-  transform: translateY(10px);
-}
-
-/* Card hover effects */
-.card-hover {
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.2);
-}
-
-/* Glow effects for buttons */
-.glow-primary {
-  position: relative;
-}
-
-.glow-primary::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  background: hsl(var(--primary));
-  border-radius: inherit;
-  opacity: 0;
-  filter: blur(16px);
-  transition: opacity 0.3s ease;
-  z-index: -1;
-}
-
-.glow-primary:hover::before {
-  opacity: 0.25;
-}
-
-/* Supabase-style glow on hover */
-.glow-hover {
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.glow-hover::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, hsl(var(--primary) / 0.15), transparent);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
-.glow-hover:hover::before {
-  opacity: 1;
-}
-
-.glow-hover:hover {
-  box-shadow: var(--glow-primary);
-  border-color: hsl(var(--primary) / 0.5);
+  transform: translateY(8px);
 }
 
 /* Gradient text utility */
@@ -612,25 +581,25 @@ button:active:not(:disabled),
   box-shadow: var(--glow-primary);
 }
 
-/* Card styles - Supabase inspired */
-.card-modern {
-  @apply bg-card border border-border/50 rounded-lg transition-all duration-200;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+/* Card styles - Unified System */
+.card-base {
+  @apply bg-card border border-border/50 rounded-xl p-4 transition-colors duration-150;
 }
 
-.card-modern:hover {
-  @apply border-primary/30;
-  box-shadow: var(--glow-primary), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-}
-
-/* Interactive card */
 .card-interactive {
-  @apply bg-card/80 border border-border/40 rounded-lg backdrop-blur-sm transition-all duration-200 cursor-pointer;
+  @apply bg-card border border-border/50 rounded-xl p-4 transition-colors duration-150 cursor-pointer;
 }
 
 .card-interactive:hover {
-  @apply bg-card border-primary/40 -translate-y-0.5;
-  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.3), var(--glow-primary);
+  @apply border-primary/30 bg-card/80;
+}
+
+.card-elevated {
+  @apply bg-card border border-border/50 rounded-xl p-4 shadow-lg;
+}
+
+.card-inset {
+  @apply bg-muted/30 rounded-lg p-3;
 }
 
 /* Surface levels for depth */
@@ -654,5 +623,29 @@ button:active:not(:disabled),
 ::selection {
   background: hsl(var(--primary) / 0.3);
   color: hsl(var(--foreground));
+}
+
+/* Vue Transition: Fade for dropdowns */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* Vue Transition: Slide for sidebars */
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform var(--duration-normal) ease, opacity var(--duration-normal) ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  opacity: 0;
+  transform: translateX(100%);
 }
 

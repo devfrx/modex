@@ -21,11 +21,11 @@ const STORAGE_KEY = "modex:sidebar-settings";
 
 const defaultItems: SidebarNavItem[] = [
   { id: "home", name: "Home", route: "/home", icon: "Home", enabled: true, order: 0 },
-  { id: "library", name: "Library", route: "/library", icon: "Library", enabled: true, order: 1 },
-  { id: "modpacks", name: "Modpacks", route: "/modpacks", icon: "Package", enabled: true, order: 2 },
-  { id: "organize", name: "Organize", route: "/organize", icon: "FolderTree", enabled: true, order: 3 },
-  { id: "stats", name: "Statistics", route: "/stats", icon: "BarChart3", enabled: true, order: 4 },
-  { id: "sandbox", name: "Sandbox", route: "/sandbox", icon: "LayoutGrid", enabled: true, order: 5 },
+  { id: "library", name: "My Mods", route: "/library", icon: "Library", enabled: true, order: 1 },
+  { id: "modpacks", name: "My Packs", route: "/modpacks", icon: "Package", enabled: true, order: 2 },
+  { id: "organize", name: "Folders", route: "/organize", icon: "FolderTree", enabled: true, order: 3 },
+  { id: "stats", name: "Insights", route: "/stats", icon: "BarChart3", enabled: true, order: 4 },
+  { id: "sandbox", name: "Visualize", route: "/sandbox", icon: "LayoutGrid", enabled: true, order: 5 },
   { id: "guide", name: "Guide", route: "/guide", icon: "BookOpen", enabled: true, order: 6 },
 ];
 

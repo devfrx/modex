@@ -663,7 +663,7 @@ async function executeBulkAdd() {
     emit("added", null, addedModIds);
   } catch (e) {
     console.error(e);
-    toast.error("Error", (e as Error).message);
+    toast.error("Couldn't add", (e as Error).message);
   } finally {
     isAddingBulk.value = false;
     selectedModIds.value.clear();
@@ -902,13 +902,13 @@ async function addFileToLibrary(mod: CFMod, file: CFFile) {
             (p) => p.id === targetModpackId.value
           );
           toast.success(
-            "Added to Modpack",
-            `${mod.name} added to ${pack?.name || "modpack"}`
+            "Added ✓",
+            `${mod.name} is now in ${pack?.name || "your pack"}.`
           );
         } catch (err) {
           toast.error(
-            "Modpack Error",
-            `Could not add to modpack: ${(err as Error).message}`
+            "Couldn't add to pack",
+            (err as Error).message
           );
         }
       }
@@ -917,7 +917,7 @@ async function addFileToLibrary(mod: CFMod, file: CFFile) {
     }
   } catch (err) {
     console.error(err);
-    toast.error("Error", (err as Error).message);
+    toast.error("Couldn't add", (err as Error).message);
   } finally {
     isAddingMod.value = null;
   }
@@ -978,13 +978,13 @@ async function quickDownload(mod: CFMod) {
             (p) => p.id === targetModpackId.value
           );
           toast.success(
-            "Added to Modpack",
-            `${mod.name} added to ${pack?.name || "modpack"}`
+            "Added ✓",
+            `${mod.name} is now in ${pack?.name || "your pack"}.`
           );
         } catch (err) {
           toast.error(
-            "Modpack Error",
-            `Could not add to modpack: ${(err as Error).message}`
+            "Couldn't add to pack",
+            (err as Error).message
           );
         }
       }
@@ -993,7 +993,7 @@ async function quickDownload(mod: CFMod) {
     }
   } catch (err) {
     console.error(err);
-    toast.error("Error", (err as Error).message);
+    toast.error("Couldn't add", (err as Error).message);
   } finally {
     isAddingMod.value = null;
   }
@@ -1441,7 +1441,7 @@ function getReleaseColor(type: number) {
                     <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
                         formatDownloads(mod.downloadCount)
-                      }}</span>
+                          }}</span>
                         downloads</span>
                       <span class="w-1 h-1 rounded-full bg-border"></span>
                       <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>

@@ -63,26 +63,26 @@ const variantClasses = computed(() => {
     switch (variant) {
         case 'danger':
             return {
-                iconBg: 'bg-red-500/10',
-                iconText: 'text-red-500',
+                iconBg: 'bg-destructive/10',
+                iconText: 'text-destructive',
                 confirmBtn: 'destructive' as const,
             };
         case 'warning':
             return {
-                iconBg: 'bg-yellow-500/10',
-                iconText: 'text-yellow-500',
+                iconBg: 'bg-warning/10',
+                iconText: 'text-warning',
                 confirmBtn: 'default' as const,
             };
         case 'success':
             return {
-                iconBg: 'bg-green-500/10',
-                iconText: 'text-green-500',
+                iconBg: 'bg-success/10',
+                iconText: 'text-success',
                 confirmBtn: 'default' as const,
             };
         case 'info':
             return {
-                iconBg: 'bg-blue-500/10',
-                iconText: 'text-blue-500',
+                iconBg: 'bg-info/10',
+                iconText: 'text-info',
                 confirmBtn: 'default' as const,
             };
         default:
@@ -131,8 +131,8 @@ function handleInputKeydown(e: KeyboardEvent) {
             <div v-if="dialogType === 'input'" class="space-y-2">
                 <input ref="inputRef" v-model="inputValue" :type="inputType" :placeholder="placeholder"
                     class="w-full h-10 px-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                    :class="{ 'border-red-500': inputError }" @keydown="handleInputKeydown" />
-                <p v-if="inputError" class="text-xs text-red-500">{{ inputError }}</p>
+                    :class="{ 'border-destructive': inputError }" @keydown="handleInputKeydown" />
+                <p v-if="inputError" class="text-xs text-destructive">{{ inputError }}</p>
             </div>
 
             <!-- Select field for select dialog -->

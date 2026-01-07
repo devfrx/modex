@@ -193,7 +193,7 @@ async function checkForAppUpdates() {
   isCheckingUpdate.value = true;
   try {
     const result = await window.api.updates.checkAppUpdate();
-    
+
     if (result.error) {
       toast.error("Update check failed", result.error);
     } else if (result.hasUpdate) {

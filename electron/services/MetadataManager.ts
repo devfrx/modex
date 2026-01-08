@@ -559,12 +559,14 @@ export class MetadataManager {
 
   /**
    * Refresh dependencies for mods in a modpack using CurseForge API
-   * This is useful for updating old mods that were added before dependency tracking
+   * This fetches the latest dependency information from CurseForge
+   * @param force - If true, refresh all mods even if they already have dependencies
    */
   async refreshModpackDependencies(
     modpackId: string,
     cfService: any,
-    onProgress?: (current: number, total: number, modName: string) => void
+    onProgress?: (current: number, total: number, modName: string) => void,
+    force: boolean = false
   ): Promise<{ updated: number; skipped: number; errors: string[] }> {
     const modpack = await this.getModpackById(modpackId);
     if (!modpack) {
@@ -577,45 +579,64 @@ export class MetadataManager {
     let updated = 0;
     let skipped = 0;
     const errors: string[] = [];
+    
+    // Collect all CurseForge mod IDs to batch fetch
+    const cfMods = mods.filter(m => m.source === "curseforge" && m.cf_project_id && m.cf_file_id);
+    
+    if (cfMods.length === 0) {
+      return { updated: 0, skipped: mods.length, errors: [] };
+    }
 
-    for (let i = 0; i < mods.length; i++) {
-      const mod = mods[i];
-      onProgress?.(i + 1, mods.length, mod.name);
+    for (let i = 0; i < cfMods.length; i++) {
+      const mod = cfMods[i];
+      onProgress?.(i + 1, cfMods.length, mod.name);
 
-      // Only process CurseForge mods
-      if (mod.source !== "curseforge" || !mod.cf_project_id || !mod.cf_file_id) {
-        skipped++;
-        continue;
-      }
-
-      // Skip if already has dependencies
-      if (mod.dependencies && mod.dependencies.length > 0) {
+      // Skip if already has dependencies and force is false
+      if (!force && mod.dependencies && mod.dependencies.length > 0) {
         skipped++;
         continue;
       }
 
       try {
         const cfFile = await cfService.getFile(mod.cf_project_id, mod.cf_file_id);
-        if (cfFile && cfFile.dependencies && cfFile.dependencies.length > 0) {
-          const dependencies = cfFile.dependencies.map((d: any) => ({
-            modId: d.modId,
-            type: d.relationType === 3 ? "required" :
-              d.relationType === 2 ? "optional" :
-                d.relationType === 1 ? "embedded" : "unknown"
-          }));
+        if (cfFile && cfFile.dependencies) {
+          // Map all dependency types, not just required/optional
+          const dependencies = cfFile.dependencies
+            .filter((d: any) => d.relationType !== 5) // Exclude incompatible
+            .map((d: any) => ({
+              modId: d.modId,
+              type: d.relationType === 3 ? "required" :
+                d.relationType === 2 ? "optional" :
+                  d.relationType === 1 ? "embedded" :
+                    d.relationType === 6 ? "include" :
+                      d.relationType === 4 ? "tool" : "unknown"
+            }));
 
           // Update in library
           const libIndex = library.mods.findIndex(m => m.id === mod.id);
           if (libIndex >= 0) {
-            library.mods[libIndex].dependencies = dependencies;
-            updated++;
-            console.log(`[RefreshDeps] Updated ${mod.name} with ${dependencies.length} dependencies`);
+            const existingDeps = library.mods[libIndex].dependencies || [];
+            const newDepsCount = dependencies.length;
+            
+            // Only count as updated if something changed
+            if (JSON.stringify(existingDeps) !== JSON.stringify(dependencies)) {
+              library.mods[libIndex].dependencies = dependencies;
+              updated++;
+              console.log(`[RefreshDeps] Updated ${mod.name}: ${existingDeps.length} -> ${newDepsCount} dependencies`);
+            } else {
+              skipped++;
+            }
           }
         } else {
           skipped++;
         }
       } catch (err) {
         errors.push(`${mod.name}: ${(err as Error).message}`);
+      }
+      
+      // Small delay to avoid rate limiting
+      if (i < cfMods.length - 1) {
+        await new Promise(r => setTimeout(r, 50));
       }
     }
 

@@ -1015,115 +1015,82 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Compact Header -->
-    <div class="shrink-0 relative border-b border-border z-20">
-      <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
-        <!-- Mobile: Stack vertically, Desktop: Row -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
-          <!-- Left: Title & Stats -->
-          <div class="flex items-center gap-3 sm:gap-4">
-            <div class="flex items-center gap-2 sm:gap-3">
-              <div
-                class="p-2 sm:p-2.5 bg-gradient-to-br from-blue-500/20 to-violet-500/10 rounded-xl border border-blue-500/20">
-                <Package class="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
-              </div>
-              <div>
-                <h1 class="text-base sm:text-lg font-semibold tracking-tight">
-                  My Packs
-                </h1>
-                <p class="text-caption sm:text-xs text-muted-foreground">
-                  {{ modpacks.length }} packs • {{ totalMods }} mods
-                </p>
-              </div>
+    <!-- Unified Header -->
+    <header class="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-sm z-20">
+      <div class="px-4 sm:px-6 py-3">
+        <div class="flex items-center gap-4">
+          <!-- Title Section -->
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+              <Package class="w-5 h-5" />
             </div>
-
-            <!-- Separator - hidden on mobile -->
-            <div class="hidden sm:block h-8 w-px bg-border" />
-
-            <!-- Quick Filters -->
-            <div class="flex items-center gap-1 sm:gap-1.5">
-              <button class="px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all" :class="quickFilter === 'all'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                " @click="
-                  quickFilter = 'all';
-                router.push('/modpacks');
-                ">
-                All
-              </button>
-              <button
-                class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all"
-                :class="quickFilter === 'favorites'
-                  ? 'bg-rose-500/20 text-rose-400 shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  " @click="
-                    quickFilter = 'favorites';
-                  router.push('/modpacks?filter=favorites');
-                  ">
-                <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
-                <span v-if="favoriteModpacks.size > 0" class="hidden xs:inline">({{ favoriteModpacks.size }})</span>
-              </button>
+            <div>
+              <h1 class="text-lg font-semibold">Modpacks</h1>
+              <p class="text-xs text-muted-foreground">{{ modpacks.length }} packs • {{ totalMods }} mods</p>
             </div>
           </div>
 
-          <!-- Search & Sort -->
-          <div class="hidden md:flex items-center gap-2 flex-1 max-w-md mx-auto">
+          <div class="hidden sm:block h-8 w-px bg-border/50" />
+
+          <!-- Quick Filters -->
+          <div class="hidden sm:flex items-center gap-1 p-0.5 bg-muted/40 rounded-lg">
+            <button class="px-3 py-1.5 text-xs rounded-md transition-all"
+              :class="quickFilter === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              @click="quickFilter = 'all'; router.push('/modpacks');">
+              All
+            </button>
+            <button class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all"
+              :class="quickFilter === 'favorites' ? 'bg-rose-500/15 text-rose-400' : 'text-muted-foreground hover:text-foreground'"
+              @click="quickFilter = 'favorites'; router.push('/modpacks?filter=favorites');">
+              <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
+              <span v-if="favoriteModpacks.size > 0">({{ favoriteModpacks.size }})</span>
+            </button>
+          </div>
+
+          <!-- Center: Search & Controls -->
+          <div class="hidden md:flex items-center gap-2 flex-1 justify-center max-w-md">
             <div class="relative flex-1">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Search
+                class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <input v-model="searchQuery" placeholder="Find a pack..."
-                class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all focus:bg-muted" />
+                class="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-muted/40 border border-border/50 focus:border-primary/50 focus:ring-0 outline-none transition-colors" />
             </div>
 
-            <!-- Filter Button -->
-            <button @click="showFilters = !showFilters"
-              class="relative flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="showFilters || activeFilterCount > 0
-                ? 'bg-primary/20 text-primary'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'">
-              <Filter class="w-3.5 h-3.5" />
-              <span class="hidden lg:inline">Filters</span>
+            <button @click="showFilters = !showFilters" class="relative p-2 rounded-lg transition-colors"
+              :class="showFilters || activeFilterCount > 0 ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'">
+              <Filter class="w-4 h-4" />
               <span v-if="activeFilterCount > 0"
                 class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
                 {{ activeFilterCount }}
               </span>
             </button>
 
-            <!-- View Mode Toggle -->
-            <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-              <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                title="Grid View">
+            <div class="flex items-center p-0.5 bg-muted/40 rounded-lg">
+              <button @click="viewMode = 'grid'" class="p-1.5 rounded-md transition-colors"
+                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
                 <LayoutGrid class="w-3.5 h-3.5" />
               </button>
-              <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                title="List View">
+              <button @click="viewMode = 'list'" class="p-1.5 rounded-md transition-colors"
+                :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
                 <List class="w-3.5 h-3.5" />
               </button>
-              <button @click="viewMode = 'compact'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                title="Compact View">
+              <button @click="viewMode = 'compact'" class="p-1.5 rounded-md transition-colors"
+                :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
                 <LayoutList class="w-3.5 h-3.5" />
               </button>
             </div>
 
             <select v-model="sortBy"
-              class="text-xs bg-muted/50 border-none rounded-md py-1.5 pl-2 pr-8 focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:bg-muted transition-colors appearance-none"
-              style="
-              background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
-              background-repeat: no-repeat;
-              background-position: right 0.5rem center;
-              background-size: 0.65em auto;
-            ">
+              class="text-xs bg-muted/40 border border-border/50 rounded-lg py-1.5 pl-2 pr-7 focus:ring-0 focus:border-primary/50 outline-none cursor-pointer transition-colors appearance-none"
+              style="background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 0.4rem center; background-size: 0.6em auto;">
               <option value="name">Name</option>
               <option value="updated">Updated</option>
               <option value="created">Created</option>
               <option value="mods">Mod Count</option>
             </select>
 
-            <!-- Sort Direction -->
             <button @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
-              class="p-1.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
-              :title="sortDir === 'asc' ? 'Ascending' : 'Descending'">
+              class="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
               <svg class="w-3.5 h-3.5 transition-transform" :class="{ 'rotate-180': sortDir === 'desc' }"
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 5v14M5 12l7-7 7 7" />
@@ -1131,21 +1098,18 @@ onMounted(() => {
             </button>
           </div>
 
-          <!-- Right: Actions -->
-          <div class="flex items-center gap-1.5 sm:gap-2">
-            <!-- Primary Action -->
+          <!-- Actions -->
+          <div class="flex items-center gap-2 ml-auto shrink-0">
             <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
-              class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-medium">
-              <PackagePlus class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              class="gap-1.5 h-8 px-3 text-xs">
+              <PackagePlus class="w-4 h-4" />
               <span class="hidden xs:inline">New Pack</span>
             </Button>
 
-            <!-- Actions Dropdown (consolidates secondary actions) -->
             <div class="relative hidden sm:block">
               <Button @click="showActionsMenu = !showActionsMenu" :disabled="!isElectron()" variant="outline" size="sm"
-                class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs">
-                <MoreHorizontal class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span class="hidden sm:inline">Actions</span>
+                class="gap-1.5 h-8 px-2.5">
+                <MoreHorizontal class="w-4 h-4" />
                 <ChevronDown class="w-3 h-3 transition-transform" :class="showActionsMenu ? 'rotate-180' : ''" />
               </Button>
 
@@ -1227,7 +1191,7 @@ onMounted(() => {
           </div>
         </div>
       </div>
-    </div>
+    </header>
 
     <!-- Content -->
     <div v-if="error" class="flex items-center justify-center flex-1 bg-background">

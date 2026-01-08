@@ -143,9 +143,24 @@ const totalIssues = computed(() => {
   return analysis.value.missingDependencies.length + analysis.value.conflicts.length;
 });
 
-async function runAnalysis() {
+// Track if we've synced dependencies in this session
+const hasSyncedDeps = ref(false);
+
+async function runAnalysis(syncDepsFirst: boolean = false) {
   isLoading.value = true;
   try {
+    // If requested, sync dependencies first to ensure we have latest data
+    if (syncDepsFirst && !hasSyncedDeps.value) {
+      console.log('[Analysis] Syncing dependencies before analysis...');
+      try {
+        await window.api.modpacks.refreshDependencies(props.modpackId);
+        hasSyncedDeps.value = true;
+      } catch (syncErr) {
+        console.warn('[Analysis] Failed to sync dependencies:', syncErr);
+        // Continue with analysis anyway
+      }
+    }
+
     // Run both analyses in parallel
     const [analysisResult, ramResult] = await Promise.all([
       window.api.analyzer.analyzeModpack(props.modpackId),
@@ -363,11 +378,11 @@ const isRefreshingDeps = ref(false);
 
 async function refreshDependencies() {
   if (isRefreshingDeps.value) return;
-  
+
   isRefreshingDeps.value = true;
   try {
     const result = await window.api.modpacks.refreshDependencies(props.modpackId);
-    
+
     if (result.updated > 0) {
       toast.success(
         "Dependencies Updated",
@@ -380,7 +395,7 @@ async function refreshDependencies() {
     } else {
       toast.info("No Mods", "No mods with CurseForge data found to update");
     }
-    
+
     if (result.errors.length > 0) {
       console.warn("Dependency refresh errors:", result.errors);
     }
@@ -484,11 +499,14 @@ watch(
           </div>
         </div>
 
-        <!-- CTA Button -->
-        <Button variant="default" size="lg" class="gap-2 px-8 shadow-lg shadow-primary/20" @click="runAnalysis">
+        <!-- CTA Button - Syncs dependencies first for thorough analysis -->
+        <Button variant="default" size="lg" class="gap-2 px-8 shadow-lg shadow-primary/20" @click="runAnalysis(true)">
           <Zap class="w-5 h-5" />
           Start Analysis
         </Button>
+        <p class="text-xs text-muted-foreground mt-3">
+          Fetches latest dependency data automatically
+        </p>
       </div>
     </div>
 
@@ -500,7 +518,7 @@ watch(
       </div>
       <h3 class="font-semibold text-lg mt-6 mb-2">Analyzing Modpack</h3>
       <p class="text-sm text-muted-foreground text-center max-w-xs">
-        Checking dependencies, detecting conflicts, and calculating performance metrics...
+        Syncing dependency data, detecting conflicts, and calculating performance metrics...
       </p>
     </div>
 
@@ -557,7 +575,8 @@ watch(
 
           <!-- Action Buttons -->
           <div class="flex items-center gap-2 shrink-0">
-            <Button variant="outline" size="sm" class="gap-1.5" @click="refreshDependencies" :disabled="isRefreshingDeps" title="Fetch latest dependency data from CurseForge for all mods">
+            <Button variant="outline" size="sm" class="gap-1.5" @click="refreshDependencies"
+              :disabled="isRefreshingDeps" title="Fetch latest dependency data from CurseForge for all mods">
               <Loader2 v-if="isRefreshingDeps" class="w-4 h-4 animate-spin" />
               <GitBranch v-else class="w-4 h-4" />
               Sync Deps

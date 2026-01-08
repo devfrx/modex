@@ -315,7 +315,7 @@ export interface ElectronAPI {
       stillIncompatible: string[];
     }>;
     /** Refresh dependencies for all mods in a modpack from CurseForge API */
-    refreshDependencies: (modpackId: string) => Promise<{
+    refreshDependencies: (modpackId: string, force?: boolean) => Promise<{
       updated: number;
       skipped: number;
       errors: string[];

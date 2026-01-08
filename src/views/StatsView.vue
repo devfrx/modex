@@ -338,39 +338,38 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex flex-col bg-background overflow-hidden">
-    <!-- Compact Header -->
-    <div class="shrink-0 relative border-b border-border z-20">
-      <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
-          <div class="flex items-center gap-3 sm:gap-4">
-            <div class="flex items-center gap-2 sm:gap-3">
-              <div class="p-2 sm:p-2.5 bg-purple-500/10 rounded-xl border border-purple-500/20">
-                <BarChart3 class="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
-              </div>
-              <div>
-                <h1 class="text-base sm:text-lg font-semibold tracking-tight">Statistics</h1>
-                <p class="text-caption sm:text-xs text-muted-foreground">
-                  Library analytics and insights
-                </p>
-              </div>
+    <!-- Unified Header -->
+    <header class="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-sm z-20">
+      <div class="px-4 sm:px-6 py-3">
+        <div class="flex items-center gap-4">
+          <!-- Title Section -->
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
+              <BarChart3 class="w-5 h-5" />
+            </div>
+            <div>
+              <h1 class="text-lg font-semibold">Statistics</h1>
+              <p class="text-xs text-muted-foreground">Library analytics and insights</p>
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
-            <!-- Color Picker -->
+          <div class="hidden sm:block h-8 w-px bg-border/50" />
+
+          <!-- Center Spacer -->
+          <div class="flex-1" />
+
+          <!-- Actions -->
+          <div class="flex items-center gap-2 shrink-0">
             <ColorPicker v-model="customColors" />
 
-            <!-- Settings Button -->
             <button @click="showSettings = !showSettings"
-              class="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-all" :class="showSettings
-                ? 'bg-primary/20 text-primary'
-                : 'bg-muted/50 border border-border hover:bg-muted'">
+              class="flex items-center gap-1.5 h-8 px-3 text-xs rounded-lg transition-all"
+              :class="showSettings ? 'bg-purple-500/15 text-purple-500' : 'bg-muted/40 text-muted-foreground hover:text-foreground'">
               <Settings class="w-4 h-4" />
               <span class="hidden sm:inline">Charts</span>
             </button>
 
-            <Button variant="outline" size="sm" @click="loadData" :disabled="isLoading"
-              class="h-7 sm:h-8 px-2 sm:px-3 text-xs">
+            <Button variant="outline" size="sm" @click="loadData" :disabled="isLoading" class="h-8 px-3 text-xs">
               <RefreshCw class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': isLoading }" />
               <span class="hidden sm:inline">Refresh</span>
             </Button>
@@ -379,7 +378,7 @@ onMounted(() => {
 
         <!-- Settings Panel -->
         <Transition name="slide-down">
-          <div v-if="showSettings" class="mt-4 p-4 rounded-lg border border-border bg-card/50">
+          <div v-if="showSettings" class="mt-3 p-4 rounded-xl border border-border/50 bg-muted/20">
             <div class="flex items-center justify-between mb-3">
               <h4 class="text-sm font-medium">Visible Charts</h4>
               <button @click="resetSettings"
@@ -390,9 +389,9 @@ onMounted(() => {
             </div>
             <div class="flex flex-wrap gap-2">
               <button v-for="(visible, key) in chartVisibility" :key="key" @click="chartVisibility[key] = !visible"
-                class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md border transition-all" :class="visible
-                  ? 'bg-primary/20 border-primary/30 text-primary'
-                  : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted'">
+                class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border transition-all" :class="visible
+                  ? 'bg-purple-500/15 border-purple-500/30 text-purple-500'
+                  : 'bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground'">
                 <Eye v-if="visible" class="w-3.5 h-3.5" />
                 <EyeOff v-else class="w-3.5 h-3.5" />
                 {{ key === 'loader' ? 'Loaders' :
@@ -405,7 +404,7 @@ onMounted(() => {
           </div>
         </Transition>
       </div>
-    </div>
+    </header>
 
     <!-- Loading State -->
     <div v-if="isLoading" class="flex-1 flex items-center justify-center">

@@ -483,13 +483,13 @@ async function initializeBackend() {
 
   ipcMain.handle(
     "modpacks:refreshDependencies",
-    async (_, modpackId: string) => {
+    async (_, modpackId: string, force?: boolean) => {
       const onProgress = (current: number, total: number, modName: string) => {
         if (win) {
           win.webContents.send("modpacks:refreshDependenciesProgress", { current, total, modName });
         }
       };
-      return metadataManager.refreshModpackDependencies(modpackId, curseforgeService, onProgress);
+      return metadataManager.refreshModpackDependencies(modpackId, curseforgeService, onProgress, force);
     }
   );
 

@@ -707,15 +707,64 @@ export class ModAnalyzerService {
 
   /**
    * Find the best file for a mod matching loader and game version
+   * Uses flexible version matching (1.20 matches 1.20.1, etc.)
    */
   private findBestFile(mod: CFMod, loader: string, gameVersion: string): CFFile | null {
-    const loaderVariants = [loader, loader.charAt(0).toUpperCase() + loader.slice(1)];
+    const loaderVariants = [
+      loader.toLowerCase(), 
+      loader.charAt(0).toUpperCase() + loader.slice(1).toLowerCase(),
+      loader.toUpperCase()
+    ];
+    
+    // Parse the game version for flexible matching
+    const versionParts = gameVersion.split('.');
+    const majorMinor = versionParts.slice(0, 2).join('.'); // e.g., "1.20"
+    
+    // Sort files by release type (release > beta > alpha) and date
+    const sortedFiles = [...mod.latestFiles].sort((a, b) => {
+      // Prefer release > beta > alpha
+      if (a.releaseType !== b.releaseType) {
+        return a.releaseType - b.releaseType;
+      }
+      // Then by date (newer first)
+      return new Date(b.fileDate || 0).getTime() - new Date(a.fileDate || 0).getTime();
+    });
 
-    // First, try to find exact match
-    for (const file of mod.latestFiles) {
-      const hasLoader = loaderVariants.some(l => file.gameVersions.includes(l));
-      const hasVersion = file.gameVersions.includes(gameVersion);
-      if (hasLoader && hasVersion) {
+    // First pass: exact version match
+    for (const file of sortedFiles) {
+      const hasLoader = loaderVariants.some(l => 
+        file.gameVersions.some(v => v.toLowerCase() === l.toLowerCase())
+      );
+      const hasExactVersion = file.gameVersions.includes(gameVersion);
+      if (hasLoader && hasExactVersion) {
+        return file;
+      }
+    }
+    
+    // Second pass: major.minor match (e.g., 1.20 matches 1.20.1)
+    for (const file of sortedFiles) {
+      const hasLoader = loaderVariants.some(l => 
+        file.gameVersions.some(v => v.toLowerCase() === l.toLowerCase())
+      );
+      const hasVersionMatch = file.gameVersions.some(v => {
+        // Check if version starts with our majorMinor
+        return v.startsWith(majorMinor + '.') || v === majorMinor;
+      });
+      if (hasLoader && hasVersionMatch) {
+        return file;
+      }
+    }
+    
+    // Third pass: just loader match with any reasonably close version
+    for (const file of sortedFiles) {
+      const hasLoader = loaderVariants.some(l => 
+        file.gameVersions.some(v => v.toLowerCase() === l.toLowerCase())
+      );
+      // Check for same major version (1.x)
+      const hasSameMajor = file.gameVersions.some(v => 
+        v.startsWith(versionParts[0] + '.')
+      );
+      if (hasLoader && hasSameMajor) {
         return file;
       }
     }

@@ -59,6 +59,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
   MoreHorizontal,
+  Stethoscope,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -3462,11 +3463,11 @@ onUnmounted(() => {
           <div class="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border/30">
             <!-- Primary Tabs -->
             <button class="tab-pill"
-              :class="activeTab === 'play' ? 'tab-pill-active tab-pill-play' : 'tab-pill-inactive'"
+              :class="activeTab === 'play' ? 'tab-pill-active tab-pill-game' : 'tab-pill-inactive'"
               @click="activeTab = 'play'">
-              <Play class="w-3.5 h-3.5" />
-              <span>Play</span>
-              <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+              <Gamepad2 class="w-3.5 h-3.5" />
+              <span>Game</span>
+              <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
             </button>
             <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
               @click="activeTab = 'mods'">
@@ -3510,8 +3511,8 @@ onUnmounted(() => {
                     class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
                     :class="activeTab === 'health' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'health'; showMoreMenu = false">
-                    <AlertCircle class="w-4 h-4" />
-                    Compatibility
+                    <Stethoscope class="w-4 h-4" />
+                    Diagnostics
                   </button>
                   <button
                     class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
@@ -3756,44 +3757,45 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Health Tab Help -->
+          <!-- Diagnostics Tab Help -->
           <div v-else-if="activeTab === 'health'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen class="w-4 h-4 text-primary" />
+                <Stethoscope class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1">
-                <h4 class="font-semibold text-foreground mb-2">Health - Diagnose Modpack Issues</h4>
+                <h4 class="font-semibold text-foreground mb-2">Diagnostics - Find & Fix Issues</h4>
                 <p class="text-sm text-muted-foreground mb-3">
-                  Analyze your modpack for problems like missing dependencies, conflicts, and performance issues.
+                  Scan your modpack for missing dependencies, conflicts, and get performance recommendations.
                 </p>
 
                 <div class="grid md:grid-cols-2 gap-4 text-sm">
                   <div class="space-y-2">
-                    <h5 class="font-medium text-foreground">What it checks:</h5>
+                    <h5 class="font-medium text-foreground">What it detects:</h5>
                     <ul class="space-y-1 text-muted-foreground list-disc ml-4">
-                      <li><b>Missing dependencies:</b> Mods that require other mods you don't have</li>
-                      <li><b>Conflicts:</b> Mods that are known to cause issues together</li>
-                      <li><b>Performance:</b> Estimates RAM needs and performance impact</li>
-                      <li><b>Dependency tree:</b> Visual map of which mods depend on which</li>
+                      <li><b>Missing dependencies:</b> Required mods that aren't installed</li>
+                      <li><b>Conflicts:</b> Incompatible mod combinations</li>
+                      <li><b>RAM estimate:</b> Memory requirements for your modpack</li>
+                      <li><b>Optimizations:</b> Suggestions to improve performance</li>
                     </ul>
                   </div>
 
                   <div class="space-y-2">
-                    <h5 class="font-medium text-foreground">How to use:</h5>
+                    <h5 class="font-medium text-foreground">Quick actions:</h5>
                     <ul class="space-y-1 text-muted-foreground list-disc ml-4">
-                      <li>Click <b>"Analyze"</b> to run a full check</li>
-                      <li>Review any <b>red warnings</b> for critical issues</li>
-                      <li>Use <b>"Add"</b> buttons to fix missing dependencies</li>
-                      <li>Check the <b>RAM estimate</b> to adjust your game settings</li>
+                      <li>Click <b>"Sync Deps"</b> to fetch latest dependency data</li>
+                      <li>Use <b>"Install All"</b> to add all missing dependencies</li>
+                      <li>Review <b>warnings</b> for potential issues</li>
+                      <li>Check <b>RAM estimate</b> before launching</li>
                     </ul>
                   </div>
                 </div>
 
                 <div
-                  class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
+                  class="mt-3 p-2 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary flex items-start gap-2">
                   <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
-                  <span><b>Tip:</b> Run an analysis after adding several mods to catch any issues early!</span>
+                  <span><b>Tip:</b> Click "Sync Deps" first to get the most accurate dependency information from
+                    CurseForge!</span>
                 </div>
               </div>
             </div>
@@ -3924,190 +3926,150 @@ onUnmounted(() => {
       <div class="flex-1 flex flex-col overflow-hidden">
         <!-- PLAY TAB -->
         <template v-if="activeTab === 'play'">
-          <!-- Header Bar (consistent with Mods tab style) -->
-          <div class="shrink-0 px-4 py-3 border-b border-border/30 bg-muted/10">
-            <div class="flex items-center justify-between gap-4">
-              <!-- Left: Status -->
-              <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2">
-                  <div class="w-2 h-2 rounded-full"
-                    :class="isGameRunning ? 'bg-green-500 animate-pulse' : instance ? 'bg-primary' : 'bg-muted-foreground'">
-                  </div>
-                  <span class="text-sm font-medium">
-                    {{ isGameRunning
-                      ? (runningGame?.gameProcessRunning ? 'Game Running' : 'Launching...')
-                      : instance
-                        ? 'Ready'
-                        : 'No Instance' }}
+          <!-- Play Tab - Clean Minimal Design -->
+          <div class="flex-1 overflow-y-auto">
+            <!-- No Instance State -->
+            <div v-if="!instance" class="flex items-center justify-center h-full p-6">
+              <div class="text-center max-w-sm">
+                <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-muted/50 flex items-center justify-center">
+                  <Gamepad2 class="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 class="text-lg font-semibold mb-2">Create Game Instance</h3>
+                <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
+                  Set up an isolated game environment to play this modpack with {{ modpackMods.length }} mods.
+                </p>
+
+                <!-- Quick Info -->
+                <div class="flex items-center justify-center gap-4 mb-6 text-xs text-muted-foreground">
+                  <span class="flex items-center gap-1.5">
+                    <Package class="w-3.5 h-3.5" />
+                    {{ modpack?.minecraft_version }}
+                  </span>
+                  <span class="flex items-center gap-1.5 capitalize">
+                    <Sparkles class="w-3.5 h-3.5" />
+                    {{ modpack?.loader }}
+                  </span>
+                  <span class="flex items-center gap-1.5">
+                    <Layers class="w-3.5 h-3.5" />
+                    {{ modpackMods.length }} mods
                   </span>
                 </div>
-                <span v-if="instance" class="text-xs text-muted-foreground">
-                  {{ instanceStats?.modCount || 0 }} mods • {{ modpack?.loader }} {{ modpack?.minecraft_version }}
-                </span>
-              </div>
 
-              <!-- Right: Actions -->
-              <div class="flex items-center gap-2">
-                <template v-if="instance">
-                  <button @click="openInstanceSettings()"
-                    class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Settings">
-                    <Sliders class="w-4 h-4" />
-                  </button>
-                  <button @click="handleOpenInstanceFolder()"
-                    class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Open Folder">
-                    <FolderOpen class="w-4 h-4" />
-                  </button>
-                  <button @click="showDeleteInstanceDialog = true"
-                    class="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                    title="Delete Instance">
-                    <Trash2 class="w-4 h-4" />
-                  </button>
-                </template>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex-1 overflow-y-auto p-4">
-            <!-- No Instance State -->
-            <div v-if="!instance" class="flex flex-col items-center justify-center h-full">
-              <div class="text-center max-w-sm">
-                <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-muted/50 flex items-center justify-center">
-                  <Rocket class="w-6 h-6 text-muted-foreground" />
-                </div>
-                <h3 class="text-base font-semibold mb-1.5">Set up to play</h3>
-                <p class="text-sm text-muted-foreground mb-4">
-                  Create an isolated game instance for this pack with synced mods and configs.
-                </p>
                 <button @click="handleCreateInstance" :disabled="isCreatingInstance"
-                  class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium inline-flex items-center gap-2 transition-colors">
+                  class="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
                   <Loader2 v-if="isCreatingInstance" class="w-4 h-4 animate-spin" />
                   <Play v-else class="w-4 h-4" />
-                  {{ isCreatingInstance ? 'Setting up...' : 'Set Up & Play' }}
+                  {{ isCreatingInstance ? 'Creating...' : 'Create Instance' }}
                 </button>
               </div>
             </div>
 
             <!-- Instance Ready State -->
-            <div v-else class="space-y-4">
-              <!-- Play Section -->
-              <div class="rounded-lg border border-border/50 bg-card/30 overflow-hidden">
-                <div class="p-4">
-                  <div class="flex items-start gap-4">
-                    <!-- Play Button -->
-                    <button @click="handleLaunch()"
-                      :disabled="instance.state !== 'ready' || isLaunching || isGameRunning"
-                      class="w-14 h-14 rounded-xl flex items-center justify-center transition-all shrink-0" :class="isGameRunning
-                        ? 'bg-green-500/15 text-green-500 border border-green-500/30'
-                        : instance.state === 'ready' && !isLaunching
-                          ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                          : 'bg-muted text-muted-foreground cursor-not-allowed'">
-                      <Loader2 v-if="isLaunching" class="w-6 h-6 animate-spin" />
-                      <Gamepad2 v-else-if="isGameRunning" class="w-6 h-6" />
-                      <Play v-else class="w-6 h-6" />
-                    </button>
+            <div v-else class="p-4 space-y-4">
+              <!-- Main Launch Section -->
+              <div class="rounded-xl border border-border/50 bg-card/50 overflow-hidden">
+                <div class="p-5 flex items-center gap-5">
+                  <!-- Play Button -->
+                  <button @click="handleLaunch()" :disabled="instance.state !== 'ready' || isLaunching || isGameRunning"
+                    class="play-button" :class="{ 'play-button-active': isGameRunning }">
+                    <Loader2 v-if="isLaunching" class="w-7 h-7 animate-spin" />
+                    <Gamepad2 v-else-if="isGameRunning" class="w-7 h-7" />
+                    <Play v-else class="w-7 h-7" />
+                  </button>
 
-                    <!-- Status & Actions -->
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2 mb-1">
-                        <h3 class="font-semibold">
-                          {{ isGameRunning
-                            ? (runningGame?.gameProcessRunning
-                              ? (runningGame?.status === 'loading_mods' ? 'Loading Mods...' : 'Game Running')
-                              : 'Launching...')
-                            : isLaunching
-                              ? 'Starting...'
-                              : 'Play' }}
-                        </h3>
-                        <span v-if="isGameRunning && runningGame?.gameProcessRunning"
-                          class="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-500 font-medium">
-                          LIVE
-                        </span>
-                      </div>
-
-                      <p class="text-sm text-muted-foreground">
-                        {{ instance.name }}
-                      </p>
-
-                      <!-- First launch info -->
-                      <div v-if="!isGameRunning && !isLaunching && !instance?.lastPlayed"
-                        class="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-                        <Info class="w-3 h-3" />
-                        <span>{{ modpack?.loader }} will be installed on first launch</span>
-                      </div>
-
-                      <!-- Loader Progress -->
-                      <div v-if="loaderProgress && isLaunching" class="mt-3">
-                        <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span>{{ loaderProgress.stage }}</span>
-                          <span v-if="loaderProgress.total > 0" class="text-foreground font-medium">
-                            {{ loaderProgress.current }}/{{ loaderProgress.total }}
-                          </span>
-                        </div>
-                        <div v-if="loaderProgress.detail" class="text-xs text-muted-foreground truncate mt-0.5">
-                          {{ loaderProgress.detail }}
-                        </div>
-                      </div>
-
-                      <!-- Game Running Actions -->
-                      <div v-if="isGameRunning" class="flex items-center gap-2 mt-3">
-                        <button @click="handleKillGame"
-                          class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
-                          :class="runningGame?.gameProcessRunning
-                            ? 'bg-red-500/15 hover:bg-red-500/20 text-red-400'
-                            : 'bg-amber-500/15 hover:bg-amber-500/20 text-amber-400'">
-                          <X class="w-3.5 h-3.5" />
-                          {{ runningGame?.gameProcessRunning ? 'Stop' : 'Cancel' }}
-                        </button>
-                        <button v-if="runningGame?.gameProcessRunning" @click="showLogConsole = !showLogConsole"
-                          class="px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted text-xs font-medium flex items-center gap-1.5 transition-colors">
-                          <Terminal class="w-3.5 h-3.5" />
-                          {{ showLogConsole ? 'Hide Logs' : 'Logs' }}
-                        </button>
-                      </div>
+                  <!-- Status -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                      <h3 class="font-semibold">
+                        {{ isGameRunning
+                          ? (runningGame?.gameProcessRunning ? 'Game Running' : 'Launching...')
+                          : isLaunching ? 'Starting...' : 'Ready to Play' }}
+                      </h3>
+                      <span v-if="isGameRunning && runningGame?.gameProcessRunning"
+                        class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse"></span>
+                        LIVE
+                      </span>
                     </div>
+                    <div class="flex items-center gap-3 text-sm text-muted-foreground">
+                      <span>{{ instanceStats?.modCount || 0 }} mods</span>
+                      <span>•</span>
+                      <span>{{ modpack?.loader }} {{ modpack?.minecraft_version }}</span>
+                    </div>
+
+                    <!-- First Launch Notice -->
+                    <div v-if="!isGameRunning && !isLaunching && !instance?.lastPlayed"
+                      class="mt-2 text-xs text-primary flex items-center gap-1.5">
+                      <Info class="w-3.5 h-3.5" />
+                      {{ modpack?.loader }} will be installed on first launch
+                    </div>
+
+                    <!-- Launch Progress -->
+                    <div v-if="loaderProgress && isLaunching" class="mt-2 text-xs text-muted-foreground">
+                      <span>{{ loaderProgress.stage }}</span>
+                      <span v-if="loaderProgress.total > 0" class="text-foreground ml-1">
+                        {{ loaderProgress.current }}/{{ loaderProgress.total }}
+                      </span>
+                    </div>
+
+                    <!-- Running Actions -->
+                    <div v-if="isGameRunning" class="flex items-center gap-2 mt-3">
+                      <button @click="handleKillGame"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors">
+                        <X class="w-3.5 h-3.5" />
+                        {{ runningGame?.gameProcessRunning ? 'Stop' : 'Cancel' }}
+                      </button>
+                      <button v-if="runningGame?.gameProcessRunning" @click="showLogConsole = !showLogConsole"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-muted hover:bg-muted/80 transition-colors">
+                        <Terminal class="w-3.5 h-3.5" />
+                        {{ showLogConsole ? 'Hide' : 'Logs' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Quick Actions -->
+                  <div class="flex items-center gap-1">
+                    <button @click="openInstanceSettings()"
+                      class="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title="Settings">
+                      <Sliders class="w-4 h-4" />
+                    </button>
+                    <button @click="handleOpenInstanceFolder()"
+                      class="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title="Open Folder">
+                      <FolderOpen class="w-4 h-4" />
+                    </button>
+                    <button @click="showDeleteInstanceDialog = true"
+                      class="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      title="Delete Instance">
+                      <Trash2 class="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
                 <!-- Log Console -->
-                <div v-if="showLogConsole && isGameRunning" class="border-t border-border/30">
+                <div v-if="showLogConsole && isGameRunning" class="border-t border-border/50">
                   <div class="px-4 py-2 bg-muted/30 flex items-center justify-between">
                     <div class="flex items-center gap-2">
                       <Terminal class="w-3.5 h-3.5 text-muted-foreground" />
                       <span class="text-xs font-medium">Console</span>
-                      <!-- Log Level Filters -->
                       <div class="flex items-center gap-0.5 ml-2">
                         <button @click="logLevelFilter = 'all'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'all'
-                            ? 'bg-muted text-foreground'
-                            : 'text-muted-foreground hover:text-foreground'">
-                          All
-                        </button>
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
+                          :class="logLevelFilter === 'all' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'">All</button>
                         <button @click="logLevelFilter = 'info'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'info'
-                            ? 'bg-blue-500/20 text-blue-400'
-                            : 'text-muted-foreground hover:text-foreground'">
-                          Info{{ logLevelCounts.info > 0 ? ` (${logLevelCounts.info})` : '' }}
-                        </button>
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
+                          :class="logLevelFilter === 'info' ? 'bg-blue-500/20 text-blue-400' : 'text-muted-foreground hover:text-foreground'">Info</button>
                         <button @click="logLevelFilter = 'warn'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'warn'
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'text-muted-foreground hover:text-foreground'">
-                          Warn{{ logLevelCounts.warn > 0 ? ` (${logLevelCounts.warn})` : '' }}
-                        </button>
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
+                          :class="logLevelFilter === 'warn' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:text-foreground'">Warn</button>
                         <button @click="logLevelFilter = 'error'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors" :class="logLevelFilter === 'error'
-                            ? 'bg-red-500/20 text-red-400'
-                            : 'text-muted-foreground hover:text-foreground'">
-                          Error{{ logLevelCounts.error > 0 ? ` (${logLevelCounts.error})` : '' }}
-                        </button>
+                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
+                          :class="logLevelFilter === 'error' ? 'bg-red-500/20 text-red-400' : 'text-muted-foreground hover:text-foreground'">Error</button>
                       </div>
                     </div>
                     <button @click="gameLogs = []; logLevelFilter = 'all'"
-                      class="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-                      Clear
-                    </button>
+                      class="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
                   </div>
                   <div ref="logScrollRef" class="h-40 overflow-y-auto bg-black/40 p-2 font-mono text-[11px] space-y-px">
                     <div v-if="filteredGameLogs.length === 0" class="text-muted-foreground text-center py-4 text-xs">
@@ -4129,18 +4091,18 @@ onUnmounted(() => {
 
               <!-- Sync Status -->
               <div v-if="instanceSyncStatus?.needsSync"
-                class="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
-                <div class="p-3 flex items-center gap-3">
+                class="rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+                <div class="p-4 flex items-center gap-3">
                   <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
                   <div class="flex-1 min-w-0">
                     <span class="text-sm font-medium">Changes not synced</span>
                     <span class="text-xs text-muted-foreground ml-2">
                       {{ instanceSyncStatus.totalDifferences }} difference{{ instanceSyncStatus.totalDifferences > 1 ?
-                        's' : '' }}
+                      's' : '' }}
                     </span>
                   </div>
                   <button @click="showSyncDetails = !showSyncDetails"
-                    class="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground transition-colors">
+                    class="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground">
                     <ChevronDown class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showSyncDetails }" />
                   </button>
                   <button @click="handleSyncInstance" :disabled="isSyncingInstance"
@@ -4152,7 +4114,7 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Sync Details -->
-                <div v-if="showSyncDetails" class="px-3 pb-3 space-y-3 border-t border-amber-500/20 pt-3">
+                <div v-if="showSyncDetails" class="px-4 pb-4 space-y-3 border-t border-amber-500/20 pt-3">
                   <!-- Missing in Instance -->
                   <div v-if="instanceSyncStatus.missingInInstance.length > 0"
                     class="p-2.5 rounded-lg bg-primary/5 border border-primary/20">
@@ -4272,7 +4234,7 @@ onUnmounted(() => {
 
               <!-- In Sync Badge -->
               <div v-else-if="instanceSyncStatus && !instanceSyncStatus.needsSync"
-                class="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-3">
+                class="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center gap-3">
                 <Check class="w-4 h-4 text-primary" />
                 <div class="flex-1">
                   <span class="text-sm font-medium text-primary">Instance In Sync</span>
@@ -4282,41 +4244,41 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Quick Access -->
+              <!-- Quick Access Grid -->
               <div class="grid grid-cols-4 gap-2">
                 <button @click="handleOpenInstanceFolder('mods')"
-                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
                   <Layers
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
                   <div class="text-xs font-medium">Mods</div>
                   <div class="text-[10px] text-muted-foreground">{{ instanceStats?.modCount || 0 }}</div>
                 </button>
                 <button @click="handleOpenInstanceFolder('config')"
-                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
                   <FileCode
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
                   <div class="text-xs font-medium">Config</div>
                   <div class="text-[10px] text-muted-foreground">Settings</div>
                 </button>
                 <button @click="handleOpenInstanceFolder('resourcepacks')"
-                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
                   <Image
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
                   <div class="text-xs font-medium">Packs</div>
                   <div class="text-[10px] text-muted-foreground">Textures</div>
                 </button>
                 <button @click="handleOpenInstanceFolder('saves')"
-                  class="group p-3 rounded-lg bg-card/30 hover:bg-card/50 border border-border/30 hover:border-border/50 text-center transition-colors">
+                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
                   <Save
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
                   <div class="text-xs font-medium">Saves</div>
                   <div class="text-[10px] text-muted-foreground">Worlds</div>
                 </button>
               </div>
 
-              <!-- Instance Info -->
-              <div class="rounded-lg border border-border/30 bg-card/30 p-4 space-y-4">
-                <div class="flex items-center gap-3">
+              <!-- Instance Details Card -->
+              <div class="rounded-xl border border-border/50 bg-card/50 p-4">
+                <div class="flex items-center gap-3 mb-4">
                   <div class="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center">
                     <Gamepad2 class="w-5 h-5 text-muted-foreground" />
                   </div>
@@ -4336,9 +4298,9 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Settings -->
-                <div class="border-t border-border/30 pt-4 space-y-3">
+                <div class="space-y-3 pt-4 border-t border-border/50">
                   <div class="flex items-center justify-between">
-                    <div class="text-sm">Auto-sync before launch</div>
+                    <span class="text-sm">Auto-sync before launch</span>
                     <button @click="toggleAutoSync" class="relative w-9 h-5 rounded-full transition-colors"
                       :class="syncSettings.autoSyncEnabled ? 'bg-primary' : 'bg-muted'">
                       <span
@@ -4347,7 +4309,7 @@ onUnmounted(() => {
                     </button>
                   </div>
                   <div class="flex items-center justify-between">
-                    <div class="text-sm">Confirm before sync</div>
+                    <span class="text-sm">Confirm before sync</span>
                     <button @click="toggleSyncConfirmation" class="relative w-9 h-5 rounded-full transition-colors"
                       :class="syncSettings.showConfirmation ? 'bg-primary' : 'bg-muted'">
                       <span
@@ -6041,8 +6003,8 @@ onUnmounted(() => {
   @apply bg-muted text-foreground font-medium;
 }
 
-.tab-pill-play {
-  @apply bg-primary text-primary-foreground;
+.tab-pill-game {
+  @apply bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/20;
 }
 
 .tab-pill-inactive {
@@ -6101,5 +6063,27 @@ onUnmounted(() => {
 
 .help-content b {
   @apply text-foreground;
+}
+
+/* Play Button */
+.play-button {
+  @apply w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 transition-all;
+  @apply bg-primary text-primary-foreground;
+  box-shadow: 0 4px 15px -3px hsl(var(--primary) / 0.4);
+}
+
+.play-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px -3px hsl(var(--primary) / 0.5);
+}
+
+.play-button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+  transform: none;
+}
+
+.play-button-active {
+  @apply bg-primary/15 text-primary border-2 border-primary/40;
+  box-shadow: none;
 }
 </style>

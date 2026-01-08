@@ -512,120 +512,100 @@ const moveDialogDescription = computed(() => {
 
 <template>
   <div class="h-full flex flex-col bg-background overflow-hidden">
-    <!-- Compact Header - Consistent with Library/Modpacks -->
-    <div class="shrink-0 relative border-b border-border z-20">
-      <div class="relative px-3 sm:px-6 py-3 sm:py-4 bg-background/80 backdrop-blur-sm">
-        <!-- Mobile: Stack vertically, Desktop: Row -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-          <!-- Left: Title & Stats -->
-          <div class="flex items-center gap-3 sm:gap-4">
-            <div class="flex items-center gap-2 sm:gap-3">
-              <div
-                class="p-2 sm:p-2.5 bg-gradient-to-br from-indigo-500/20 to-purple-500/10 rounded-xl border border-indigo-500/20">
-                <FolderTree class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500" />
-              </div>
-              <div>
-                <h1 class="text-base sm:text-lg font-semibold tracking-tight">
-                  Organize
-                </h1>
-                <p class="text-caption sm:text-xs text-muted-foreground">
-                  {{ folders.length }} folders • {{ organizedMods }}/{{ totalMods }} organized
-                </p>
-              </div>
+    <!-- Unified Header -->
+    <header class="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-sm z-20">
+      <div class="px-4 sm:px-6 py-3">
+        <div class="flex items-center gap-4">
+          <!-- Title Section -->
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="w-9 h-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+              <FolderTree class="w-5 h-5" />
             </div>
-
-            <!-- Separator - hidden on mobile -->
-            <div class="hidden sm:block h-8 w-px bg-border" />
-
-            <!-- Content Type Pills -->
-            <div class="flex items-center gap-1 p-0.5 bg-muted/30 rounded-lg overflow-x-auto">
-              <button class="px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
-                :class="selectedContentType === 'all'
-                  ? 'bg-background text-foreground ring-1 ring-border/50'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                @click="selectedContentType = 'all'">
-                All
-              </button>
-              <button
-                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
-                :class="selectedContentType === 'mod'
-                  ? 'bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                @click="selectedContentType = 'mod'">
-                <Layers class="w-3 h-3" />
-                <span class="hidden xs:inline">{{ contentTypeCounts.mod }}</span>
-              </button>
-              <button
-                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
-                :class="selectedContentType === 'resourcepack'
-                  ? 'bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                @click="selectedContentType = 'resourcepack'">
-                <Image class="w-3 h-3" />
-                <span class="hidden xs:inline">{{ contentTypeCounts.resourcepack }}</span>
-              </button>
-              <button
-                class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-caption sm:text-xs rounded-md transition-all whitespace-nowrap"
-                :class="selectedContentType === 'shader'
-                  ? 'bg-pink-500/15 text-pink-500 ring-1 ring-pink-500/30'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                @click="selectedContentType = 'shader'">
-                <Sparkles class="w-3 h-3" />
-                <span class="hidden xs:inline">{{ contentTypeCounts.shader }}</span>
-              </button>
+            <div>
+              <h1 class="text-lg font-semibold">Organize</h1>
+              <p class="text-xs text-muted-foreground">{{ folders.length }} folders • {{ organizedMods }}/{{ totalMods
+                }} organized</p>
             </div>
           </div>
 
-          <!-- Right: Search & Actions -->
-          <div class="flex items-center gap-2">
-            <!-- Search - hidden on very small screens -->
-            <div class="hidden sm:block relative flex-1 min-w-[180px] max-w-[240px]">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <div class="hidden sm:block h-8 w-px bg-border/50" />
+
+          <!-- Content Type Pills -->
+          <div class="hidden sm:flex items-center gap-1 p-0.5 bg-muted/40 rounded-lg">
+            <button class="px-2.5 py-1.5 text-xs rounded-md transition-all"
+              :class="selectedContentType === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'all'">
+              All
+            </button>
+            <button class="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition-all"
+              :class="selectedContentType === 'mod' ? 'bg-emerald-500/15 text-emerald-500' : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'mod'">
+              <Layers class="w-3 h-3" />
+              <span>{{ contentTypeCounts.mod }}</span>
+            </button>
+            <button class="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition-all"
+              :class="selectedContentType === 'resourcepack' ? 'bg-blue-500/15 text-blue-500' : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'resourcepack'">
+              <Image class="w-3 h-3" />
+              <span>{{ contentTypeCounts.resourcepack }}</span>
+            </button>
+            <button class="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition-all"
+              :class="selectedContentType === 'shader' ? 'bg-pink-500/15 text-pink-500' : 'text-muted-foreground hover:text-foreground'"
+              @click="selectedContentType = 'shader'">
+              <Sparkles class="w-3 h-3" />
+              <span>{{ contentTypeCounts.shader }}</span>
+            </button>
+          </div>
+
+          <!-- Center: Search & Controls -->
+          <div class="hidden md:flex items-center gap-2 flex-1 justify-center max-w-sm">
+            <div class="relative flex-1">
+              <Search
+                class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <Input v-model="searchQuery" placeholder="Search..."
-                class="pl-8 h-8 text-xs bg-muted/50 border-border focus:ring-1 focus:ring-indigo-500/30" />
+                class="pl-8 h-8 text-xs bg-muted/40 border-border/50 focus:border-indigo-500/50 focus:ring-0" />
             </div>
 
-            <!-- View Toggle -->
-            <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-              <button @click="viewMode = 'tree'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'tree' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                title="Tree View">
+            <div class="flex items-center p-0.5 bg-muted/40 rounded-lg">
+              <button @click="viewMode = 'tree'" class="p-1.5 rounded-md transition-colors"
+                :class="viewMode === 'tree' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
                 <FolderTree class="w-3.5 h-3.5" />
               </button>
-              <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
-                title="Grid View">
+              <button @click="viewMode = 'grid'" class="p-1.5 rounded-md transition-colors"
+                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
                 <LayoutGrid class="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <!-- Selection Mode -->
-            <Button variant="ghost" size="sm" class="h-8 px-2 sm:px-3 text-xs"
+            <Button variant="ghost" size="sm" class="h-8 px-2.5"
               :class="isSelectionMode ? 'bg-indigo-500/10 text-indigo-500' : 'text-muted-foreground'"
               @click="toggleSelectionMode">
-              <Check class="w-3.5 h-3.5 sm:mr-1.5" />
-              <span class="hidden sm:inline">{{ isSelectionMode ? `${selectedModIds.size}` : 'Select' }}</span>
+              <Check class="w-3.5 h-3.5 mr-1.5" />
+              {{ isSelectionMode ? `${selectedModIds.size}` : 'Select' }}
             </Button>
+          </div>
 
-            <!-- New Folder -->
-            <Button size="sm" class="h-8 px-2 sm:px-3 text-xs gap-1.5"
-              @click="editingFolderId = null; showCreateFolderDialog = true;">
-              <FolderPlus class="w-3.5 h-3.5" />
-              <span class="hidden sm:inline">New</span>
+          <!-- Actions -->
+          <div class="flex items-center gap-2 ml-auto shrink-0">
+            <Button @click="startCreateFolder" size="sm"
+              class="gap-1.5 h-8 px-3 text-xs bg-indigo-500 hover:bg-indigo-600">
+              <FolderPlus class="w-4 h-4" />
+              <span class="hidden sm:inline">New Folder</span>
             </Button>
           </div>
         </div>
 
-        <!-- Mobile Search -->
+        <!-- Mobile Search Row -->
         <div class="sm:hidden mt-3">
           <div class="relative">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Search
+              class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <Input v-model="searchQuery" placeholder="Search mods and folders..."
-              class="pl-8 h-9 text-sm bg-muted/50 border-border" />
+              class="pl-8 h-9 text-sm bg-muted/40 border-border/50" />
           </div>
         </div>
       </div>
-    </div>
+    </header>
 
     <!-- Breadcrumbs (Grid View) -->
     <div v-if="viewMode === 'grid'" class="shrink-0 px-3 sm:px-6 py-2 border-b border-border/50 bg-muted/10">

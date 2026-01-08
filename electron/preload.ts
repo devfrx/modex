@@ -220,11 +220,11 @@ contextBridge.exposeInMainWorld("api", {
       orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
       warnings: string[];
     }> => ipcRenderer.invoke("modpacks:analyzeModRemovalImpact", modpackId, modId, action),
-    refreshDependencies: (modpackId: string): Promise<{
+    refreshDependencies: (modpackId: string, force?: boolean): Promise<{
       updated: number;
       skipped: number;
       errors: string[];
-    }> => ipcRenderer.invoke("modpacks:refreshDependencies", modpackId),
+    }> => ipcRenderer.invoke("modpacks:refreshDependencies", modpackId, force),
     removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
     toggleMod: (

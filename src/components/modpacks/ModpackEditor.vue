@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, toRef } from "vue";
 import { useToast } from "@/composables/useToast";
 import { useInstances } from "@/composables/useInstances";
+import { useModpackCompatibility } from "@/composables/useModpackCompatibility";
+import { useModpackFiltering } from "@/composables/useModpackFiltering";
+import { useModpackSelection } from "@/composables/useModpackSelection";
+import { useModpackMods } from "@/composables/useModpackMods";
+import { useModpackUpdates, type UpdateInfo } from "@/composables/useModpackUpdates";
+import { useModpackInstance } from "@/composables/useModpackInstance";
+import { useModpackGameLogs } from "@/composables/useModpackGameLogs";
+import { useModpackConfigSync } from "@/composables/useModpackConfigSync";
 import {
   X,
   Plus,
@@ -98,20 +106,13 @@ const emit = defineEmits<{
 
 const toast = useToast();
 
-// Instance composable for play functionality
+// Create a ref from the prop for composable compatibility
+const modpackIdRef = toRef(props, 'modpackId');
+
+// Note: Most useInstances functionality is now accessed through useModpackInstance composable
+// Only keeping getInstanceByModpack for version history linking
 const {
-  syncProgress,
-  runningGames,
   getInstanceByModpack,
-  createFromModpack,
-  syncModpackToInstance,
-  launchInstance,
-  openInstanceFolder,
-  getInstanceStats,
-  killGame,
-  onGameLogLine,
-  updateInstance,
-  smartLaunch,
 } = useInstances();
 
 const modpack = ref<Modpack | null>(null);
@@ -120,41 +121,32 @@ const availableMods = ref<Mod[]>([]);
 const disabledModIds = ref<Set<string>>(new Set());
 const lockedModIds = ref<Set<string>>(new Set());
 const modNotes = ref<Record<string, string>>({});
-const searchQueryInstalled = ref("");
 const searchQueryAvailable = ref("");
 const isLoading = ref(true);
 // Race condition protection: track current load requests
 let loadRequestId = 0;
-let instanceRequestId = 0;
-const sortBy = ref<"name" | "version" | "date">("name");
-const sortDir = ref<"asc" | "desc">("asc");
-const selectedModIds = ref<Set<string>>(new Set());
-const showSingleModUpdateDialog = ref(false);
-const selectedUpdateMod = ref<any>(null);
-const showVersionPickerDialog = ref(false);
-const versionPickerMod = ref<any>(null);
+// instanceRequestId no longer needed - race condition protection is now handled by useModpackInstance composable
+// selectedModIds is now provided by useModpackSelection composable
+// showSingleModUpdateDialog, selectedUpdateMod, showVersionPickerDialog, versionPickerMod
+// are now provided by useModpackUpdates composable
 const isSaving = ref(false);
+
+// Update Checking state - shared between useModpackFiltering and useModpackUpdates
+const checkingUpdates = ref<Record<string, boolean>>({});
+const updateAvailable = ref<Record<string, UpdateInfo | null>>({});
+const isCheckingAllUpdates = ref(false);
+// recentlyUpdatedMods and recentlyAddedMods are shared with useModpackMods
+const recentlyUpdatedMods = ref<Set<string>>(new Set()); // Mod IDs updated in last 5 min
+const recentlyAddedMods = ref<Set<string>>(new Set()); // Mod IDs added in last 5 min
 
 // Mod Details Modal state
 const showModDetailsModal = ref(false);
 const modDetailsTarget = ref<Mod | null>(null);
-const modsFilter = ref<"all" | "incompatible" | "warning" | "disabled" | "locked" | "updates" | "recent-updated" | "recent-added" | "with-notes">("all");
 
-// Changelog Dialog state
-const showChangelogDialog = ref(false);
-const changelogMod = ref<{
-  id: number;
-  fileId: number;
-  name: string;
-  version: string;
-  slug?: string;
-} | null>(null);
+// Changelog Dialog state - showChangelogDialog, changelogMod are now from useModpackUpdates
 
-// Mod Notes Dialog state
-const showModNoteDialog = ref(false);
-const noteDialogMod = ref<Mod | null>(null);
-const noteDialogText = ref("");
-const isSavingNote = ref(false);
+// Mod Notes Dialog state - now provided by useModpackMods composable
+// showModNoteDialog, noteDialogMod, noteDialogText, isSavingNote are from composable
 
 const activeTab = ref<
   | "play"
@@ -171,6 +163,262 @@ const activeTab = ref<
 const loadError = ref<string | null>(null);
 const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
 
+// ========== DEFERRED CALLBACKS ==========
+// These will be assigned to actual functions later in the file
+// This pattern allows composables to reference functions defined after them
+const deferredCallbacks = {
+  loadData: async () => { },
+  refreshSyncStatus: async () => { },
+  refreshUnsavedChangesCount: async () => { },
+  onUpdate: () => emit("update"),
+};
+
+// ========== COMPOSABLE INTEGRATIONS ==========
+// Compatibility checking composable
+const {
+  isModCompatible,
+  incompatibleModCount,
+  warningModCount,
+} = useModpackCompatibility({
+  modpack,
+  currentMods,
+  contentTypeTab,
+});
+
+// Filtering composable - destructure with original names for template compatibility
+const {
+  searchQueryInstalled,
+  modsFilter,
+  sortBy,
+  sortDir,
+  contentTypeCounts,
+  filteredInstalledMods,
+  toggleSort,
+  clearFilters,
+} = useModpackFiltering({
+  currentMods,
+  disabledModIds,
+  lockedModIds,
+  modNotes,
+  updateAvailable,
+  recentlyUpdatedMods,
+  recentlyAddedMods,
+  isModCompatible,
+  contentTypeTab,
+});
+
+// Selection composable - destructure with original names for template compatibility
+const {
+  selectedModIds,
+  selectedCount,
+  selectedModIdsArray,
+  enabledUnlockedCount,
+  disabledUnlockedCount,
+  toggleSelect,
+  selectAll,
+  selectAllEnabled,
+  selectHalfEnabled,
+  selectAllDisabled,
+  selectHalfDisabled,
+  clearSelection,
+  isSelected,
+} = useModpackSelection({
+  filteredMods: filteredInstalledMods,
+  disabledModIds,
+  lockedModIds,
+  contentTypeTab,
+});
+
+// Mod CRUD composable - uses deferred callbacks for functions defined later
+const {
+  // State refs
+  showDependencyImpactDialog,
+  dependencyImpact,
+  pendingModAction,
+  showModNoteDialog,
+  noteDialogMod,
+  noteDialogText,
+  isSavingNote,
+  // Methods
+  addMod,
+  removeMod,
+  executeModRemoval,
+  toggleModEnabled,
+  executeModToggle,
+  toggleModLocked,
+  openModNoteDialog,
+  saveModNote,
+  closeModNoteDialog,
+  getModNote,
+  markAsRecentlyUpdated,
+  markAsRecentlyAdded,
+  confirmDependencyImpactAction,
+  cancelDependencyImpactAction,
+} = useModpackMods({
+  modpackId: modpackIdRef,
+  modpack,
+  currentMods,
+  disabledModIds,
+  lockedModIds,
+  modNotes,
+  isLinked: computed(() => !!modpack.value?.remote_source?.url),
+  modsFilter,
+  refreshSyncStatus: () => deferredCallbacks.refreshSyncStatus(),
+  refreshUnsavedChangesCount: () => deferredCallbacks.refreshUnsavedChangesCount(),
+  loadData: () => deferredCallbacks.loadData(),
+  onUpdate: () => deferredCallbacks.onUpdate(),
+  recentlyAddedMods,
+  recentlyUpdatedMods,
+});
+
+// Updates composable - handles mod update checking and application
+// Note: checkingUpdates, updateAvailable, isCheckingAllUpdates are passed in as external refs
+const {
+  showSingleModUpdateDialog,
+  selectedUpdateMod,
+  showVersionPickerDialog,
+  versionPickerMod,
+  showChangelogDialog,
+  changelogMod,
+  updatesAvailableCount,
+  checkModUpdate,
+  updateMod,
+  checkAllUpdates,
+  quickUpdateMod,
+  updateAllMods,
+  openVersionPicker,
+  handleVersionSelected,
+  openSingleModUpdate,
+  handleSingleModUpdated,
+  viewModChangelog,
+} = useModpackUpdates({
+  modpackId: modpackIdRef,
+  modpack,
+  currentMods,
+  lockedModIds,
+  contentTypeTab,
+  recentlyUpdatedMods,
+  loadData: () => deferredCallbacks.loadData(),
+  onUpdate: () => deferredCallbacks.onUpdate(),
+  // Pass shared refs
+  checkingUpdates,
+  updateAvailable,
+  isCheckingAllUpdates,
+});
+
+// Instance composable - handles instance lifecycle, launch, sync, settings
+const {
+  instance,
+  instanceStats,
+  instanceSyncStatus,
+  isLoadingInstance,
+  isCreatingInstance,
+  isSyncingInstance,
+  syncResult,
+  showSyncDetails,
+  selectedSyncMode,
+  clearExistingMods,
+  syncSettings,
+  isLaunching,
+  gameLaunched,
+  gameLoadingMessage,
+  loaderProgress,
+  showSyncConfirmDialog,
+  pendingLaunchData,
+  showInstanceSettings,
+  showDeleteInstanceDialog,
+  isDeletingInstance,
+  memoryMin,
+  memoryMax,
+  customJavaArgs,
+  systemMemory,
+  runningGame,
+  isGameRunning,
+  maxAllowedRam,
+  loadInstance,
+  loadSyncSettings,
+  handleCreateInstance,
+  toggleAutoSync,
+  toggleSyncConfirmation,
+  handleSyncInstance,
+  handleLaunch,
+  handleSyncConfirmation,
+  handleKillGame,
+  handleOpenInstanceFolder,
+  openInstanceSettings,
+  saveInstanceSettings,
+  handleDeleteInstance,
+  refreshSyncStatus,
+  formatPlayDate,
+  formatFileSize,
+} = useModpackInstance({
+  modpackId: modpackIdRef,
+  modpack,
+  toast,
+  emit: (event: string, ...args: unknown[]) => {
+    // Type-safe emit wrapper for composable compatibility
+    switch (event) {
+      case 'close': emit('close'); break;
+      case 'update': emit('update'); break;
+      case 'export': emit('export'); break;
+      case 'updated': emit('updated'); break;
+      case 'launched': emit('launched', args[0] as ModexInstance); break;
+    }
+  },
+});
+
+// Game Logs composable - handles live log streaming and filtering
+const {
+  gameLogs,
+  showLogConsole,
+  logLevelFilter,
+  logScrollRef,
+  filteredGameLogs,
+  logLevelCounts,
+  totalLogCount,
+  hasErrors,
+  hasWarnings,
+  setupLogListener,
+  cleanupLogListener,
+  clearLogs,
+  toggleLogConsole,
+  setLogLevelFilter,
+  scrollToBottom,
+  getLogLevelClass,
+} = useModpackGameLogs({
+  instance,
+  maxLogLines: 200,
+});
+
+// Config Sync composable - handles bidirectional config synchronization
+const {
+  modifiedConfigs,
+  showModifiedConfigsDetails,
+  selectedConfigsForImport,
+  isImportingConfigs,
+  showOnlyModifiedConfigs,
+  importableConfigs,
+  deletedConfigs,
+  newConfigsCount,
+  selectedConfigsCount,
+  allConfigsSelected,
+  someConfigsSelected,
+  loadModifiedConfigs,
+  toggleConfigSelection,
+  selectAllConfigs,
+  deselectAllConfigs,
+  toggleSelectAllConfigs,
+  importSelectedConfigs,
+  isConfigSelected,
+  toggleShowOnlyModified,
+  toggleModifiedConfigsDetails,
+  formatFileSize: formatFileSizeConfig, // Renamed to avoid conflict
+} = useModpackConfigSync({
+  modpackId: modpackIdRef,
+  instance,
+  toast,
+});
+
 // Help Guide State
 const showHelp = ref(false);
 
@@ -186,65 +434,19 @@ const showModsFilterMenu = ref(false);
 const linkedInstanceId = ref<string | null>(null);
 
 // ========== PLAY/INSTANCE STATE ==========
-const instance = ref<ModexInstance | null>(null);
-const instanceStats = ref<{ modCount: number; configCount: number; totalSize: string } | null>(null);
-const isInstanceLoading = ref(false);
-const isCreatingInstance = ref(false);
-const isSyncingInstance = ref(false);
-const isLaunching = ref(false);
-const syncResult = ref<InstanceSyncResult | null>(null);
+// instance, instanceStats, instanceSyncStatus, isLoadingInstance, isCreatingInstance,
+// isSyncingInstance, syncResult, showSyncDetails, selectedSyncMode, clearExistingMods,
+// syncSettings, isLaunching, gameLaunched, gameLoadingMessage, loaderProgress,
+// showSyncConfirmDialog, pendingLaunchData, showInstanceSettings, showDeleteInstanceDialog,
+// isDeletingInstance, memoryMin, memoryMax, customJavaArgs, systemMemory, runningGame,
+// isGameRunning, maxAllowedRam are now provided by useModpackInstance composable
 
-// Sync Status for instance
-const instanceSyncStatus = ref<{
-  needsSync: boolean;
-  missingInInstance: Array<{ filename: string; type: string }>;
-  extraInInstance: Array<{ filename: string; type: string }>;
-  disabledMismatch: Array<{ filename: string; issue: string }>;
-  configDifferences: number;
-  totalDifferences: number;
-  loaderVersionMismatch?: boolean;
-} | null>(null);
+// gameLogs, showLogConsole, logLevelFilter, logScrollRef, filteredGameLogs, logLevelCounts,
+// totalLogCount, hasErrors, hasWarnings are now provided by useModpackGameLogs composable
 
-// Sync UI State
-const showSyncDetails = ref(false);
-const selectedSyncMode = ref<'overwrite' | 'new_only' | 'skip'>('new_only');
-const syncSettings = ref({
-  autoSyncEnabled: true,
-  showConfirmation: true
-});
-
-// Loader Installation Progress
-const loaderProgress = ref<{
-  stage: string;
-  current: number;
-  total: number;
-  detail: string;
-} | null>(null);
-
-// Game Launch State
-const gameLaunched = ref(false);
-const gameLoadingMessage = ref("");
-
-// Instance Settings (RAM & JVM Args)
-const showInstanceSettings = ref(false);
-const showDeleteInstanceDialog = ref(false);
-const isDeletingInstance = ref(false);
-const memoryMin = ref(2048);
-const memoryMax = ref(4096);
-const customJavaArgs = ref("");
-const systemMemory = ref<{ total: number; suggestedMax: number } | null>(null);
-
-// Computed max RAM based on system
-const maxAllowedRam = computed(() => {
-  if (systemMemory.value) {
-    return systemMemory.value.suggestedMax;
-  }
-  return 32768; // fallback
-});
-
-// Live Log State
-const gameLogs = ref<Array<{ time: string; level: string; message: string }>>([]);
-const showLogConsole = ref(false);
+// modifiedConfigs, showModifiedConfigsDetails, selectedConfigsForImport, isImportingConfigs,
+// showOnlyModifiedConfigs, importableConfigs, deletedConfigs, newConfigsCount,
+// selectedConfigsCount, allConfigsSelected, someConfigsSelected are now provided by useModpackConfigSync composable
 
 // Version History unsaved changes count
 const versionUnsavedCount = ref(0);
@@ -268,93 +470,11 @@ async function refreshUnsavedChangesCount() {
     console.error("Failed to refresh unsaved changes count:", err);
   }
 }
-const logScrollRef = ref<HTMLDivElement | null>(null);
-const maxLogLines = 200;
-const logLevelFilter = ref<"all" | "info" | "warn" | "error">("all");
-
-// Filtered logs based on level
-const filteredGameLogs = computed(() => {
-  if (logLevelFilter.value === "all") return gameLogs.value;
-  const filterMap: Record<string, string[]> = {
-    "info": ["INFO"],
-    "warn": ["WARN", "WARNING"],
-    "error": ["ERROR", "FATAL", "SEVERE"]
-  };
-  const allowedLevels = filterMap[logLevelFilter.value] || [];
-  return gameLogs.value.filter(log => allowedLevels.includes(log.level.toUpperCase()));
-});
-
-// Log level counts for badges
-const logLevelCounts = computed(() => {
-  const counts = { info: 0, warn: 0, error: 0 };
-  for (const log of gameLogs.value) {
-    const level = log.level.toUpperCase();
-    if (level === "INFO") counts.info++;
-    else if (level === "WARN" || level === "WARNING") counts.warn++;
-    else if (level === "ERROR" || level === "FATAL" || level === "SEVERE") counts.error++;
-  }
-  return counts;
-});
-
-// Running game computed
-const runningGame = computed(() => {
-  if (!instance.value) return null;
-  return runningGames.value.get(instance.value.id) || null;
-});
-
-const isGameRunning = computed(() => {
-  return runningGame.value !== null && runningGame.value.status !== "stopped";
-});
 
 // Config Editor State
 const showStructuredEditor = ref(false);
 const structuredEditorFile = ref<ConfigFile | null>(null);
 const configRefreshKey = ref(0);
-
-// Bidirectional Config Sync State
-const modifiedConfigs = ref<Array<{
-  relativePath: string;
-  instancePath: string;
-  overridePath?: string;
-  status: 'modified' | 'new' | 'deleted';
-  lastModified: Date;
-  size: number;
-}>>([]);
-const showModifiedConfigsDetails = ref(false);
-const selectedConfigsForImport = ref<Set<string>>(new Set());
-const isImportingConfigs = ref(false);
-const showOnlyModifiedConfigs = ref(true); // By default, only show actually modified configs, not new ones
-
-// Computed: Only importable configs (new or modified, not deleted)
-// When showOnlyModifiedConfigs is true, only show 'modified' status (files that exist in both places but differ)
-const importableConfigs = computed(() =>
-  modifiedConfigs.value.filter(c => {
-    if (c.status === 'deleted') return false;
-    if (showOnlyModifiedConfigs.value && c.status === 'new') return false;
-    return true;
-  })
-);
-
-// Computed: Deleted configs (exist in overrides but not in instance)
-const deletedConfigs = computed(() =>
-  modifiedConfigs.value.filter(c => c.status === 'deleted')
-);
-
-// Computed: New configs count (for showing toggle)
-const newConfigsCount = computed(() =>
-  modifiedConfigs.value.filter(c => c.status === 'new').length
-);
-
-// Sync Options
-const clearExistingMods = ref(false);
-
-// Smart Launch Confirmation
-const showSyncConfirmDialog = ref(false);
-const pendingLaunchData = ref<{
-  needsSync: boolean;
-  differences: number;
-  lastSynced?: string;
-} | null>(null);
 
 // ========== END PLAY/INSTANCE STATE ==========
 
@@ -394,16 +514,8 @@ const cfUpdateProgress = ref({ current: 0, total: 0, currentMod: "" });
 const isReSearching = ref(false);
 const reSearchProgress = ref({ current: 0, total: 0, currentMod: "" });
 
-// Dependency Impact Dialog
-const showDependencyImpactDialog = ref(false);
-const dependencyImpact = ref<{
-  action: "remove" | "disable";
-  modToAffect: { id: string; name: string } | null;
-  dependentMods: Array<{ id: string; name: string; willBreak: boolean; depth?: number }>;
-  orphanedDependencies: Array<{ id: string; name: string; usedByOthers: boolean }>;
-  warnings: string[];
-} | null>(null);
-const pendingModAction = ref<{ modId: string; action: "remove" | "disable" } | null>(null);
+// Dependency Impact Dialog - showDependencyImpactDialog, dependencyImpact, pendingModAction
+// are now provided by useModpackMods composable
 
 // Bulk Dependency Impact Dialog
 const showBulkDependencyImpactDialog = ref(false);
@@ -637,155 +749,7 @@ const isLinked = computed(() => {
   return !!modpack.value?.remote_source?.url;
 });
 
-// Check mod compatibility with modpack
-// Returns: compatible (green), warning (amber - loader mismatch but might work), incompatible (red - version mismatch)
-function isModCompatible(mod: Mod): { compatible: boolean; warning?: boolean; reason?: string } {
-  if (!modpack.value) return { compatible: true };
-
-  const modContentType = mod.content_type || "mod";
-  const packVersion = modpack.value.minecraft_version;
-  const modVersion = mod.game_version;
-
-  // Track loader mismatch separately - it's a warning, not a hard incompatibility
-  // Modpack creators sometimes include mods from other loaders that work via compatibility layers
-  // (e.g., Sinytra Connector for Fabric mods on Forge, or mods that genuinely work across loaders)
-  let loaderWarning: string | undefined;
-
-  if (modContentType === "mod") {
-    const packLoader = modpack.value.loader?.toLowerCase();
-    const modLoader = mod.loader?.toLowerCase();
-
-    if (packLoader && modLoader && modLoader !== "unknown") {
-      const isNeoForgeForgeCompat =
-        (packLoader === "neoforge" && modLoader === "forge") ||
-        (packLoader === "forge" && modLoader === "neoforge");
-
-      if (modLoader !== packLoader && !isNeoForgeForgeCompat) {
-        loaderWarning = `${modLoader} mod in ${packLoader} pack`;
-      }
-    }
-  }
-
-  // Check MC version compatibility
-  if (packVersion && modVersion && modVersion !== "unknown") {
-    // Check game_versions array first (works for ALL content types including mods)
-    // Many mods support multiple MC versions in a single file
-    if (mod.game_versions && mod.game_versions.length > 0) {
-      const isVersionCompatible = mod.game_versions.some(
-        (gv) =>
-          gv === packVersion ||
-          gv.startsWith(packVersion) ||
-          packVersion.startsWith(gv)
-      );
-      if (!isVersionCompatible) {
-        // Version mismatch is a hard incompatibility
-        return {
-          compatible: false,
-          reason: `Supports MC ${mod.game_versions.slice(0, 3).join(", ")}${mod.game_versions.length > 3 ? "..." : ""
-            }, modpack is ${packVersion}`,
-        };
-      }
-    } else {
-      // Fallback: Standard single version check for items without game_versions array
-      const versionsMatch =
-        modVersion === packVersion ||
-        modVersion.startsWith(packVersion) ||
-        packVersion.startsWith(modVersion) ||
-        modVersion.includes(packVersion);
-
-      if (!versionsMatch) {
-        return {
-          compatible: false,
-          reason: `For MC ${modVersion}, modpack is ${packVersion}`,
-        };
-      }
-    }
-  }
-
-  // If we get here, version is compatible - but we might have a loader warning
-  if (loaderWarning) {
-    return { compatible: true, warning: true, reason: loaderWarning };
-  }
-
-  return { compatible: true };
-}
-
-// Filtered & Sorted Mods with compatibility info
-const filteredInstalledMods = computed(() => {
-  let mods = currentMods.value.filter((m) => {
-    // Content type filter
-    const modContentType = m.content_type || "mod";
-    if (contentTypeTab.value === "mods" && modContentType !== "mod")
-      return false;
-    if (
-      contentTypeTab.value === "resourcepacks" &&
-      modContentType !== "resourcepack"
-    )
-      return false;
-    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
-      return false;
-
-    // Search filter
-    const matchesSearch = m.name
-      .toLowerCase()
-      .includes(searchQueryInstalled.value.toLowerCase());
-    if (!matchesSearch) return false;
-
-    // Quick filter
-    if (modsFilter.value === "incompatible") {
-      return !isModCompatible(m).compatible;
-    }
-    if (modsFilter.value === "warning") {
-      const compat = isModCompatible(m);
-      return compat.compatible && compat.warning;
-    }
-    if (modsFilter.value === "disabled") {
-      return disabledModIds.value.has(m.id);
-    }
-    if (modsFilter.value === "locked") {
-      return lockedModIds.value.has(m.id);
-    }
-    if (modsFilter.value === "updates") {
-      return !!updateAvailable.value[m.id];
-    }
-    if (modsFilter.value === "recent-updated") {
-      return recentlyUpdatedMods.value.has(m.id);
-    }
-    if (modsFilter.value === "recent-added") {
-      return recentlyAddedMods.value.has(m.id);
-    }
-    if (modsFilter.value === "with-notes") {
-      return !!modNotes.value[m.id];
-    }
-    return true;
-  });
-  mods.sort((a, b) => {
-    if (sortBy.value === "date") {
-      const aDate = new Date(a.created_at || 0).getTime();
-      const bDate = new Date(b.created_at || 0).getTime();
-      return sortDir.value === "asc" ? aDate - bDate : bDate - aDate;
-    }
-    const aVal = a[sortBy.value] || "";
-    const bVal = b[sortBy.value] || "";
-    const cmp = aVal.localeCompare(bVal);
-    return sortDir.value === "asc" ? cmp : -cmp;
-  });
-  return mods;
-});
-
-// Content type counts
-const contentTypeCounts = computed(() => {
-  const counts = { mods: 0, resourcepacks: 0, shaders: 0 };
-  for (const m of currentMods.value) {
-    const ct = m.content_type || "mod";
-    if (ct === "mod") counts.mods++;
-    else if (ct === "resourcepack") counts.resourcepacks++;
-    else if (ct === "shader") counts.shaders++;
-  }
-  return counts;
-});
-
-// Installed mods with compatibility check
+// Installed mods with compatibility check (uses filteredInstalledMods from composable)
 const installedModsWithCompatibility = computed(() => {
   return filteredInstalledMods.value.map((mod) => {
     const compatibility = isModCompatible(mod);
@@ -797,48 +761,6 @@ const installedModsWithCompatibility = computed(() => {
     };
   });
 });
-
-// Count of incompatible mods (per tab)
-const incompatibleModCount = computed(() => {
-  return currentMods.value.filter((m) => {
-    const modContentType = m.content_type || "mod";
-    if (contentTypeTab.value === "mods" && modContentType !== "mod")
-      return false;
-    if (
-      contentTypeTab.value === "resourcepacks" &&
-      modContentType !== "resourcepack"
-    )
-      return false;
-    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
-      return false;
-    return !isModCompatible(m).compatible;
-  }).length;
-});
-
-// Count of warning mods (different loader but version compatible)
-const warningModCount = computed(() => {
-  return currentMods.value.filter((m) => {
-    const modContentType = m.content_type || "mod";
-    if (contentTypeTab.value === "mods" && modContentType !== "mod")
-      return false;
-    if (
-      contentTypeTab.value === "resourcepacks" &&
-      modContentType !== "resourcepack"
-    )
-      return false;
-    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
-      return false;
-    const compat = isModCompatible(m);
-    return compat.compatible && compat.warning;
-  }).length;
-});
-
-// Update Checking
-const checkingUpdates = ref<Record<string, boolean>>({});
-const updateAvailable = ref<Record<string, any>>({});
-const isCheckingAllUpdates = ref(false);
-const recentlyUpdatedMods = ref<Set<string>>(new Set()); // Mod IDs updated in last 5 min
-const recentlyAddedMods = ref<Set<string>>(new Set()); // Mod IDs added in last 5 min
 
 // Installed project files map for CurseForge browse (prevents re-installing same versions)
 const installedProjectFiles = computed(() => {
@@ -887,135 +809,9 @@ async function handleCFModAdded(mod: Mod | null, addedIds?: string[]) {
   }
 }
 
-function openSingleModUpdate(mod: Mod) {
-  selectedUpdateMod.value = mod;
-  showSingleModUpdateDialog.value = true;
-}
-
-function handleSingleModUpdated() {
-  // Mark as recently updated
-  if (selectedUpdateMod.value) {
-    recentlyUpdatedMods.value.add(selectedUpdateMod.value.id);
-    // Clear after 5 minutes
-    setTimeout(() => {
-      recentlyUpdatedMods.value.delete(selectedUpdateMod.value?.id);
-    }, RECENT_THRESHOLD_MS);
-
-    if (updateAvailable.value[selectedUpdateMod.value.id]) {
-      delete updateAvailable.value[selectedUpdateMod.value.id];
-    }
-  }
-  loadData();
-  emit("update");
-}
-
-async function checkModUpdate(mod: Mod) {
-  if (!mod.cf_project_id || !mod.cf_file_id || checkingUpdates.value[mod.id])
-    return;
-
-  checkingUpdates.value[mod.id] = true;
-  try {
-    const latestFile = await window.api.updates.checkMod(
-      mod.cf_project_id,
-      modpack.value?.minecraft_version || "1.20.1",
-      modpack.value?.loader || "forge",
-      (mod.content_type || "mod") as "mod" | "resourcepack" | "shader"
-    );
-
-    if (
-      latestFile &&
-      latestFile.id !== mod.cf_file_id &&
-      latestFile.id > mod.cf_file_id
-    ) {
-      updateAvailable.value[mod.id] = latestFile;
-    } else {
-      updateAvailable.value[mod.id] = null; // Checked, no update
-    }
-  } catch (err) {
-    console.error(`Failed to check update for ${mod.name}:`, err);
-  } finally {
-    checkingUpdates.value[mod.id] = false;
-  }
-}
-
-async function updateMod(mod: Mod) {
-  const latest = updateAvailable.value[mod.id];
-  if (!latest) return;
-
-  try {
-    const result = await window.api.updates.applyUpdate(mod.id, latest.id, props.modpackId);
-    if (result.success) {
-      delete updateAvailable.value[mod.id];
-      emit("update");
-      toast.success(`${mod.name} updated to ${latest.displayName} ✓`);
-    } else {
-      toast.error(`Couldn't update ${mod.name}: ${result.error}`);
-    }
-  } catch (err) {
-    console.error("Update failed:", err);
-    toast.error("Couldn't update mod");
-  }
-}
-
-// Version picker for changing mod version
-function openVersionPicker(mod: Mod) {
-  if (!mod.cf_project_id) return;
-
-  // Check if mod is locked
-  if (lockedModIds.value.has(mod.id)) {
-    toast.error(
-      "Mod is locked",
-      "Unlock it first to change the version."
-    );
-    return;
-  }
-
-  versionPickerMod.value = {
-    id: mod.cf_project_id,
-    name: mod.name,
-    slug: mod.slug,
-    logo: mod.thumbnail_url ? { thumbnailUrl: mod.thumbnail_url } : undefined,
-    libraryModId: mod.id,
-    currentFileId: mod.cf_file_id,
-    content_type: mod.content_type || "mod"
-  };
-  showVersionPickerDialog.value = true;
-}
-
-async function handleVersionSelected(fileId: number) {
-  if (!versionPickerMod.value) return;
-
-  try {
-    const result = await window.api.updates.applyUpdate(
-      versionPickerMod.value.libraryModId,
-      fileId,
-      props.modpackId
-    );
-    if (result.success) {
-      // Mark as recently updated
-      recentlyUpdatedMods.value.add(versionPickerMod.value.libraryModId);
-      setTimeout(() => {
-        recentlyUpdatedMods.value.delete(versionPickerMod.value?.libraryModId);
-      }, RECENT_THRESHOLD_MS);
-
-      // Clear any cached update status
-      if (updateAvailable.value[versionPickerMod.value.libraryModId]) {
-        delete updateAvailable.value[versionPickerMod.value.libraryModId];
-      }
-      await loadData();
-      emit("update");
-      toast.success(`${versionPickerMod.value.name} updated ✓`);
-    } else {
-      toast.error(`Couldn't change version: ${result.error || 'Unknown error'}`);
-    }
-  } catch (err: any) {
-    console.error("Version change failed:", err);
-    toast.error(`Couldn't change version: ${err?.message || 'Unknown error'}`);
-  }
-
-  showVersionPickerDialog.value = false;
-  versionPickerMod.value = null;
-}
+// Update functions (openSingleModUpdate, handleSingleModUpdated, checkModUpdate, updateMod,
+// openVersionPicker, handleVersionSelected, checkAllUpdates, quickUpdateMod, viewModChangelog,
+// updateAllMods, updatesAvailableCount) are now provided by useModpackUpdates composable
 
 // Mod Details Modal - open with full mod details
 function openModDetails(mod: Mod) {
@@ -1064,138 +860,6 @@ async function handleModDetailsVersionChange(fileId: number) {
     toast.error(`Couldn't change version: ${err?.message || 'Unknown error'}`);
   }
 }
-
-// Check all mods for updates (auto-triggered on load)
-async function checkAllUpdates() {
-  if (isCheckingAllUpdates.value) return;
-
-  const cfMods = currentMods.value.filter(m => m.cf_project_id && m.cf_file_id);
-  if (cfMods.length === 0) return;
-
-  isCheckingAllUpdates.value = true;
-
-  // Process in parallel batches
-  const BATCH_SIZE = 5;
-  for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
-    const batch = cfMods.slice(i, i + BATCH_SIZE);
-    await Promise.all(batch.map(mod => checkModUpdate(mod)));
-  }
-
-  isCheckingAllUpdates.value = false;
-}
-
-// Quick update a single mod to latest
-async function quickUpdateMod(mod: Mod) {
-  // Check if mod is locked
-  if (lockedModIds.value.has(mod.id)) {
-    toast.error(
-      "Mod is locked",
-      "Unlock it first to update."
-    );
-    return;
-  }
-
-  const latest = updateAvailable.value[mod.id];
-  if (!latest) return;
-
-  checkingUpdates.value[mod.id] = true;
-  try {
-    const result = await window.api.updates.applyUpdate(mod.id, latest.id, props.modpackId);
-    if (result.success) {
-      // Mark as recently updated
-      recentlyUpdatedMods.value.add(mod.id);
-      setTimeout(() => {
-        recentlyUpdatedMods.value.delete(mod.id);
-      }, RECENT_THRESHOLD_MS);
-
-      delete updateAvailable.value[mod.id];
-      await loadData();
-      emit("update");
-      toast.success(`${mod.name} updated ✓`);
-    } else {
-      toast.error(`Couldn't update ${mod.name}: ${result.error}`);
-    }
-  } catch (err) {
-    console.error("Update failed:", err);
-    toast.error(`Couldn't update ${mod.name}`);
-  } finally {
-    checkingUpdates.value[mod.id] = false;
-  }
-}
-
-// View changelog for a mod update
-function viewModChangelog(mod: Mod) {
-  const update = updateAvailable.value[mod.id];
-  if (!mod.cf_project_id || !update) return;
-
-  changelogMod.value = {
-    id: mod.cf_project_id,
-    fileId: update.id,
-    name: mod.name,
-    version: update.displayName || update.fileName,
-    slug: mod.slug,
-  };
-  showChangelogDialog.value = true;
-}
-
-// Update all mods with available updates (excluding locked mods)
-async function updateAllMods() {
-  const modsToUpdate = currentMods.value.filter(m =>
-    updateAvailable.value[m.id] && !lockedModIds.value.has(m.id)
-  );
-  if (modsToUpdate.length === 0) {
-    toast.info("All up to date", "Your mods are on their latest versions.");
-    return;
-  }
-
-  let successCount = 0;
-  let failCount = 0;
-
-  for (const mod of modsToUpdate) {
-    try {
-      const latest = updateAvailable.value[mod.id];
-      const result = await window.api.updates.applyUpdate(mod.id, latest.id, props.modpackId);
-      if (result.success) {
-        recentlyUpdatedMods.value.add(mod.id);
-        setTimeout(() => {
-          recentlyUpdatedMods.value.delete(mod.id);
-        }, RECENT_THRESHOLD_MS);
-        delete updateAvailable.value[mod.id];
-        successCount++;
-      } else {
-        failCount++;
-      }
-    } catch {
-      failCount++;
-    }
-  }
-
-  await loadData();
-  emit("update");
-
-  if (failCount === 0) {
-    toast.success(`${successCount} mods updated ✓`);
-  } else {
-    toast.warning(`${successCount} updated, ${failCount} couldn't update`);
-  }
-}
-
-// Count of mods with updates available (per tab)
-const updatesAvailableCount = computed(() => {
-  return currentMods.value.filter((m) => {
-    const modContentType = m.content_type || "mod";
-    if (contentTypeTab.value === "mods" && modContentType !== "mod")
-      return false;
-    if (
-      contentTypeTab.value === "resourcepacks" &&
-      modContentType !== "resourcepack"
-    )
-      return false;
-    if (contentTypeTab.value === "shaders" && modContentType !== "shader")
-      return false;
-    return updateAvailable.value[m.id];
-  }).length;
-});
 
 // Count of disabled mods (per tab)
 const disabledModCount = computed(() => {
@@ -1328,18 +992,7 @@ const enabledModCount = computed(() => {
     .length;
 });
 
-// Lightweight refresh of just the sync status (without full data reload)
-async function refreshSyncStatus() {
-  if (!instance.value) {
-    instanceSyncStatus.value = null;
-    return;
-  }
-  try {
-    instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
-  } catch (err) {
-    console.error("Failed to refresh sync status:", err);
-  }
-}
+// refreshSyncStatus is now provided by useModpackInstance composable
 
 // Refresh data and notify parent to update modpack list (e.g., for unsaved changes icon)
 async function refreshAndNotify() {
@@ -1441,347 +1094,20 @@ async function loadData() {
   }
 }
 
+// ========== ASSIGN DEFERRED CALLBACKS ==========
+// Now that the functions are defined, assign them to the deferred callbacks object
+// This enables composables initialized earlier to call these functions
+deferredCallbacks.loadData = loadData;
+deferredCallbacks.refreshSyncStatus = refreshSyncStatus;
+deferredCallbacks.refreshUnsavedChangesCount = refreshUnsavedChangesCount;
+
 // ========== INSTANCE/PLAY FUNCTIONS ==========
+// loadInstance, loadSyncSettings, handleCreateInstance, toggleAutoSync, toggleSyncConfirmation,
+// handleSyncInstance, handleLaunch, handleSyncConfirmation, handleKillGame, handleOpenInstanceFolder,
+// openInstanceSettings, saveInstanceSettings, handleDeleteInstance, refreshSyncStatus,
+// formatPlayDate, formatFileSize are now provided by useModpackInstance composable
 
-// Load system memory info
-async function loadSystemInfo() {
-  try {
-    systemMemory.value = await window.api.system.getMemoryInfo();
-  } catch (err) {
-    console.error("Failed to get system memory info:", err);
-  }
-}
-
-// Load instance for this modpack
-async function loadInstance() {
-  if (!props.modpackId) return;
-
-  // Race condition protection
-  const currentInstanceRequestId = ++instanceRequestId;
-
-  isInstanceLoading.value = true;
-
-  // Load system info in parallel
-  loadSystemInfo();
-
-  try {
-    instance.value = await getInstanceByModpack(props.modpackId);
-
-    // Check for stale request
-    if (currentInstanceRequestId !== instanceRequestId) {
-      console.log(`[loadInstance] Discarding stale result`);
-      return;
-    }
-
-    if (instance.value) {
-      const stats = await getInstanceStats(instance.value.id);
-      if (stats) {
-        instanceStats.value = {
-          modCount: stats.modCount,
-          configCount: stats.configCount,
-          totalSize: stats.totalSize,
-        };
-      }
-
-      // Load instance settings
-      memoryMin.value = instance.value.memory?.min || 2048;
-      memoryMax.value = instance.value.memory?.max || 4096;
-      customJavaArgs.value = instance.value.javaArgs || "";
-
-      // Check sync status
-      try {
-        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
-      } catch (err) {
-        console.error("Failed to check sync status:", err);
-      }
-    }
-  } finally {
-    if (currentInstanceRequestId === instanceRequestId) {
-      isInstanceLoading.value = false;
-    }
-  }
-}
-
-// Create instance for modpack
-async function handleCreateInstance() {
-  isCreatingInstance.value = true;
-  syncResult.value = null;
-
-  try {
-    const result = await createFromModpack(props.modpackId);
-    if (result) {
-      instance.value = result.instance;
-      syncResult.value = result.syncResult;
-
-      if (result.syncResult.success) {
-        toast.success("Ready to play ✓", `Downloaded ${result.syncResult.modsDownloaded} mods`);
-
-        const stats = await getInstanceStats(result.instance.id);
-        if (stats) {
-          instanceStats.value = {
-            modCount: stats.modCount,
-            configCount: stats.configCount,
-            totalSize: stats.totalSize,
-          };
-        }
-      } else {
-        toast.error("Created with issues", `${result.syncResult.errors.length} items need attention`);
-      }
-    }
-  } catch (err: any) {
-    toast.error("Couldn't create instance", err.message);
-  } finally {
-    isCreatingInstance.value = false;
-  }
-}
-
-// Load sync settings
-async function loadSyncSettings() {
-  try {
-    const settings = await window.api.settings.getInstanceSync();
-    syncSettings.value = {
-      autoSyncEnabled: settings.autoSyncBeforeLaunch ?? true,
-      showConfirmation: settings.showSyncConfirmation ?? true
-    };
-  } catch (err) {
-    console.error("Failed to load sync settings:", err);
-  }
-}
-
-// Toggle auto-sync setting
-async function toggleAutoSync() {
-  const newValue = !syncSettings.value.autoSyncEnabled;
-  syncSettings.value.autoSyncEnabled = newValue;
-  try {
-    await window.api.settings.setInstanceSync({
-      autoSyncBeforeLaunch: newValue
-    });
-  } catch (err) {
-    console.error("Failed to save sync setting:", err);
-  }
-}
-
-// Toggle sync confirmation setting
-async function toggleSyncConfirmation() {
-  const newValue = !syncSettings.value.showConfirmation;
-  syncSettings.value.showConfirmation = newValue;
-  try {
-    await window.api.settings.setInstanceSync({
-      showSyncConfirmation: newValue
-    });
-  } catch (err) {
-    console.error("Failed to save sync setting:", err);
-  }
-}
-
-// Sync instance with modpack
-async function handleSyncInstance() {
-  if (!instance.value) return;
-
-  isSyncingInstance.value = true;
-  syncResult.value = null;
-
-  try {
-    const result = await syncModpackToInstance(instance.value.id, props.modpackId, {
-      clearExisting: clearExistingMods.value,
-      configSyncMode: selectedSyncMode.value
-    });
-
-    syncResult.value = result;
-
-    if (result.success) {
-      toast.success("Synced ✓", `${result.modsDownloaded} mods updated`);
-
-      // Refresh instance data (loader version may have been updated)
-      await loadInstance();
-
-      // Instance may have been updated by loadInstance - re-check
-      if (instance.value) {
-        const stats = await getInstanceStats(instance.value.id);
-        if (stats) {
-          instanceStats.value = {
-            modCount: stats.modCount,
-            configCount: stats.configCount,
-            totalSize: stats.totalSize,
-          };
-        }
-
-        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
-      }
-      showSyncDetails.value = false; // Collapse details after sync
-    } else {
-      toast.error("Sync had issues", result.errors.join(", "));
-    }
-  } catch (err: any) {
-    toast.error("Couldn't sync", err.message);
-  } finally {
-    isSyncingInstance.value = false;
-  }
-}
-
-// Launch instance
-async function handleLaunch(options?: { forceSync?: boolean; skipSync?: boolean }) {
-  if (!instance.value) return;
-
-  isLaunching.value = true;
-  loaderProgress.value = null;
-  gameLaunched.value = false;
-  gameLoadingMessage.value = "";
-
-  const removeProgressListener = window.api.on("loader:installProgress", (data: {
-    stage: string;
-    current: number;
-    total: number;
-    detail?: string;
-  }) => {
-    loaderProgress.value = {
-      stage: data.stage,
-      current: data.current,
-      total: data.total,
-      detail: data.detail || ""
-    };
-  });
-
-  try {
-    const result = await smartLaunch(instance.value.id, props.modpackId, {
-      forceSync: options?.forceSync,
-      skipSync: options?.skipSync
-      // Note: Auto-sync always uses new_only mode (hardcoded in backend)
-      // selectedSyncMode is only for manual sync from the banner
-    });
-
-    if (result.requiresConfirmation && result.syncStatus) {
-      pendingLaunchData.value = {
-        needsSync: result.syncStatus.needsSync,
-        differences: result.syncStatus.differences,
-        lastSynced: result.syncStatus.lastSynced
-      };
-      showSyncConfirmDialog.value = true;
-      isLaunching.value = false;
-      removeProgressListener();
-      return;
-    }
-
-    if (result.success) {
-      gameLaunched.value = true;
-      gameLoadingMessage.value = "Launching Minecraft...";
-
-      if (result.syncPerformed && instance.value) {
-        toast.success("Launching ✓", "Synced and starting Minecraft...");
-        instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
-      } else {
-        toast.success("Launching ✓", "Starting Minecraft...");
-      }
-
-      emit("launched", instance.value);
-    } else {
-      toast.error("Couldn't launch", result.error || "Unknown error");
-    }
-  } catch (err: any) {
-    toast.error("Couldn't launch", err.message);
-  } finally {
-    removeProgressListener();
-    isLaunching.value = false;
-    loaderProgress.value = null;
-  }
-}
-
-// Handle sync confirmation
-function handleSyncConfirmation(action: "sync" | "skip" | "cancel") {
-  showSyncConfirmDialog.value = false;
-  pendingLaunchData.value = null;
-
-  if (action === "cancel") return;
-
-  handleLaunch({
-    forceSync: action === "sync",
-    skipSync: action === "skip"
-  });
-}
-
-// Kill running game
-async function handleKillGame() {
-  if (!instance.value) return;
-
-  try {
-    const result = await killGame(instance.value.id);
-    if (result) {
-      toast.success("Stopped ✓", "Minecraft has been closed.");
-      gameLaunched.value = false;
-    } else {
-      toast.error("Couldn't stop game", "The process may have already ended.");
-    }
-  } catch (err: any) {
-    toast.error("Couldn't stop game", err.message);
-  }
-}
-
-// Open instance folder
-async function handleOpenInstanceFolder(subfolder?: string) {
-  if (!instance.value) return;
-  await openInstanceFolder(instance.value.id, subfolder);
-}
-
-// Open instance settings dialog with current values
-function openInstanceSettings() {
-  if (!instance.value) return;
-
-  // Load current values from instance
-  memoryMin.value = instance.value.memory?.min || 2048;
-  memoryMax.value = instance.value.memory?.max || 4096;
-  customJavaArgs.value = instance.value.javaArgs || "";
-
-  showInstanceSettings.value = true;
-}
-
-// Save instance settings
-async function saveInstanceSettings() {
-  if (!instance.value) return;
-
-  try {
-    await updateInstance(instance.value.id, {
-      memory: { min: memoryMin.value, max: memoryMax.value },
-      javaArgs: customJavaArgs.value || undefined
-    });
-
-    // Update local instance state with new values
-    instance.value = {
-      ...instance.value,
-      memory: { min: memoryMin.value, max: memoryMax.value },
-      javaArgs: customJavaArgs.value || undefined
-    };
-
-    toast.success("Saved ✓", "Memory and JVM settings updated.");
-    showInstanceSettings.value = false;
-  } catch (err: any) {
-    toast.error("Couldn't save", err.message);
-  }
-}
-
-// Delete instance
-async function handleDeleteInstance() {
-  if (!instance.value) return;
-
-  isDeletingInstance.value = true;
-  try {
-    const success = await window.api.instances.delete(instance.value.id);
-    if (success) {
-      toast.success("Deleted ✓", "You can recreate it anytime from Play.");
-      instance.value = null;
-      instanceStats.value = null;
-      instanceSyncStatus.value = null;
-    } else {
-      toast.error("Couldn't delete instance");
-    }
-  } catch (err: any) {
-    toast.error("Couldn't delete", err.message);
-  } finally {
-    isDeletingInstance.value = false;
-    showDeleteInstanceDialog.value = false;
-  }
-}
-
-// Open config file
+// Open config file (local - not in composable)
 function handleOpenStructuredEditor(file: ConfigFile) {
   structuredEditorFile.value = file;
   showStructuredEditor.value = true;
@@ -1793,115 +1119,8 @@ function handleCloseStructuredEditor() {
 }
 
 // ========== BIDIRECTIONAL CONFIG SYNC ==========
-
-// Load modified configs from instance
-async function loadModifiedConfigs() {
-  if (!instance.value) return;
-
-  try {
-    const result = await window.api.instances.getModifiedConfigs(instance.value.id, props.modpackId);
-    modifiedConfigs.value = result.modifiedConfigs;
-
-    // Auto-select only modified configs (not new ones by default)
-    selectedConfigsForImport.value = new Set(
-      modifiedConfigs.value
-        .filter(c => c.status === 'modified') // Only truly modified, not new
-        .map(c => c.relativePath)
-    );
-  } catch (err) {
-    console.error("Failed to load modified configs:", err);
-  }
-}
-
-// Toggle config selection for import
-function toggleConfigSelection(relativePath: string) {
-  if (selectedConfigsForImport.value.has(relativePath)) {
-    selectedConfigsForImport.value.delete(relativePath);
-  } else {
-    selectedConfigsForImport.value.add(relativePath);
-  }
-  // Trigger reactivity
-  selectedConfigsForImport.value = new Set(selectedConfigsForImport.value);
-}
-
-// Select all configs (respects current filter)
-function selectAllConfigs() {
-  selectedConfigsForImport.value = new Set(
-    importableConfigs.value.map(c => c.relativePath)
-  );
-}
-
-// Deselect all configs
-function deselectAllConfigs() {
-  selectedConfigsForImport.value = new Set();
-}
-
-// Import selected configs to modpack
-async function importSelectedConfigs() {
-  if (!instance.value || selectedConfigsForImport.value.size === 0) return;
-
-  isImportingConfigs.value = true;
-
-  try {
-    const configPaths = Array.from(selectedConfigsForImport.value);
-    const result = await window.api.instances.importConfigs(
-      instance.value.id,
-      props.modpackId,
-      configPaths
-    );
-
-    if (result.success) {
-      toast.success("Imported ✓", `${result.imported} config files added.`);
-
-      // Small delay to ensure filesystem is synced before reloading
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Reload modified configs
-      await loadModifiedConfigs();
-      showModifiedConfigsDetails.value = false;
-
-      // If no more configs to import, clear selection
-      if (importableConfigs.value.length === 0) {
-        selectedConfigsForImport.value = new Set();
-      }
-    } else {
-      toast.error("Couldn't import some files", result.errors.join(", "));
-    }
-  } catch (err: any) {
-    toast.error("Couldn't import", err.message);
-  } finally {
-    isImportingConfigs.value = false;
-  }
-}
-
-// Format file size
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// ========== END BIDIRECTIONAL CONFIG SYNC ==========
-
-// Format date helper
-function formatPlayDate(dateString?: string): string {
-  if (!dateString) return "Never";
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-
-  return date.toLocaleDateString();
-}
+// loadModifiedConfigs, toggleConfigSelection, selectAllConfigs, deselectAllConfigs,
+// importSelectedConfigs are now provided by useModpackConfigSync composable
 
 // ========== END INSTANCE/PLAY FUNCTIONS ==========
 
@@ -1945,227 +1164,11 @@ async function saveModpackInfo() {
   }
 }
 
-async function addMod(modId: string) {
-  if (isLinked.value) {
-    toast.error(
-      "Action Restricted",
-      "Cannot add mods to a linked modpack. Manage mods from the remote source."
-    );
-    return;
-  }
-  try {
-    await window.api.modpacks.addMod(props.modpackId, modId);
+// Mod CRUD functions (addMod, removeMod, executeModRemoval, toggleModEnabled,
+// executeModToggle, toggleModLocked) are now provided by useModpackMods composable
 
-    // Mark as recently added
-    recentlyAddedMods.value.add(modId);
-    setTimeout(() => {
-      recentlyAddedMods.value.delete(modId);
-    }, RECENT_THRESHOLD_MS);
-
-    await loadData();
-    emit("update");
-  } catch (err) {
-    const errorMsg = (err as Error).message;
-    toast.error("Cannot Add Mod", errorMsg);
-    console.error("Failed to add mod:", err);
-  }
-}
-
-async function removeMod(modId: string) {
-  if (isLinked.value) {
-    toast.error(
-      "Action Restricted",
-      "Cannot remove mods from a linked modpack. Manage mods from the remote source."
-    );
-    return;
-  }
-
-  if (lockedModIds.value.has(modId)) {
-    toast.error(
-      "Mod Locked",
-      "This mod is locked and cannot be removed. Unlock it first."
-    );
-    return;
-  }
-
-  // Check dependency impact before removing
-  try {
-    const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "remove");
-
-    // Only show dialog if there are actual visible items (mods that will break OR orphaned dependencies not used by others)
-    const breakingMods = impact.dependentMods.filter(d => d.willBreak);
-    const unusedOrphans = impact.orphanedDependencies.filter(d => !d.usedByOthers);
-
-    if (breakingMods.length > 0 || unusedOrphans.length > 0) {
-      // Show impact dialog
-      dependencyImpact.value = { ...impact, action: "remove" };
-      pendingModAction.value = { modId, action: "remove" };
-      showDependencyImpactDialog.value = true;
-      return;
-    }
-
-    // No impact, proceed directly
-    await executeModRemoval(modId);
-  } catch (err) {
-    console.error("Failed to remove mod:", err);
-  }
-}
-
-async function executeModRemoval(modId: string) {
-  try {
-    await window.api.modpacks.removeMod(props.modpackId, modId);
-    await loadData();
-    emit("update");
-  } catch (err) {
-    console.error("Failed to remove mod:", err);
-    toast.error("Remove Failed", (err as Error).message);
-  }
-}
-
-async function toggleModEnabled(modId: string) {
-  // Check if mod is locked
-  if (lockedModIds.value.has(modId)) {
-    toast.error(
-      "Mod Locked",
-      "This mod is locked and cannot be enabled/disabled. Unlock it first."
-    );
-    return;
-  }
-
-  // Check if we're disabling (mod is currently enabled)
-  const isCurrentlyEnabled = !disabledModIds.value.has(modId);
-
-  if (isCurrentlyEnabled) {
-    // We're about to disable - check dependency impact
-    try {
-      const impact = await window.api.modpacks.analyzeModRemovalImpact(props.modpackId, modId, "disable");
-
-      if (impact.dependentMods.filter(d => d.willBreak).length > 0) {
-        // Show impact dialog
-        dependencyImpact.value = { ...impact, action: "disable" };
-        pendingModAction.value = { modId, action: "disable" };
-        showDependencyImpactDialog.value = true;
-        return;
-      }
-    } catch (err) {
-      console.error("Failed to check dependency impact:", err);
-    }
-  }
-
-  // No impact or enabling, proceed
-  await executeModToggle(modId);
-}
-
-async function executeModToggle(modId: string) {
-  try {
-    const result = await window.api.modpacks.toggleMod(props.modpackId, modId);
-    if (result) {
-      // Update local state immediately for responsive UI
-      if (result.enabled) {
-        disabledModIds.value.delete(modId);
-        // If viewing disabled filter and enabling a mod, switch to "all" so it remains visible
-        if (modsFilter.value === "disabled") {
-          modsFilter.value = "all";
-        }
-      } else {
-        disabledModIds.value.add(modId);
-      }
-      // Trigger reactivity
-      disabledModIds.value = new Set(disabledModIds.value);
-      // Refresh sync status to reflect enabled/disabled changes
-      await refreshSyncStatus();
-      // Refresh unsaved changes count
-      await refreshUnsavedChangesCount();
-      emit("update");
-    }
-  } catch (err) {
-    console.error("Failed to toggle mod:", err);
-    toast.error("Toggle Failed", (err as Error).message);
-  }
-}
-
-async function toggleModLocked(modId: string) {
-  const isCurrentlyLocked = lockedModIds.value.has(modId);
-  const mod = currentMods.value.find(m => m.id === modId);
-  const modName = mod?.name || modId;
-
-  try {
-    const result = await window.api.modpacks.setModLocked(props.modpackId, modId, !isCurrentlyLocked);
-    if (result) {
-      // Update local state immediately
-      if (isCurrentlyLocked) {
-        lockedModIds.value.delete(modId);
-        toast.success("Mod Unlocked", `${modName} can now be modified`);
-      } else {
-        lockedModIds.value.add(modId);
-        toast.success("Mod Locked", `${modName} is now protected from changes`);
-      }
-      // Trigger reactivity
-      lockedModIds.value = new Set(lockedModIds.value);
-      // Refresh unsaved changes count
-      await refreshUnsavedChangesCount();
-      emit("update");
-    }
-  } catch (err) {
-    console.error("Failed to toggle mod lock:", err);
-    toast.error("Lock Failed", (err as Error).message);
-  }
-}
-
-// ========== MOD NOTES ==========
-function openModNoteDialog(mod: Mod) {
-  noteDialogMod.value = mod;
-  noteDialogText.value = modNotes.value[mod.id] || "";
-  showModNoteDialog.value = true;
-}
-
-async function saveModNote() {
-  if (!noteDialogMod.value || !modpack.value) return;
-
-  isSavingNote.value = true;
-  try {
-    const modId = noteDialogMod.value.id;
-    const newNotes = { ...modNotes.value };
-
-    if (noteDialogText.value.trim()) {
-      newNotes[modId] = noteDialogText.value.trim();
-    } else {
-      delete newNotes[modId];
-    }
-
-    // Save to database
-    await window.api.modpacks.update(props.modpackId, { mod_notes: newNotes });
-
-    // Update local state
-    modNotes.value = newNotes;
-
-    // Refresh unsaved changes count for version history badge
-    await refreshUnsavedChangesCount();
-
-    toast.success("Note Saved", noteDialogText.value.trim()
-      ? `Note saved for ${noteDialogMod.value.name}`
-      : `Note removed from ${noteDialogMod.value.name}`);
-
-    showModNoteDialog.value = false;
-    noteDialogMod.value = null;
-    noteDialogText.value = "";
-  } catch (err) {
-    console.error("Failed to save mod note:", err);
-    toast.error("Save Failed", (err as Error).message);
-  } finally {
-    isSavingNote.value = false;
-  }
-}
-
-function closeModNoteDialog() {
-  showModNoteDialog.value = false;
-  noteDialogMod.value = null;
-  noteDialogText.value = "";
-}
-
-function getModNote(modId: string): string | undefined {
-  return modNotes.value[modId];
-}
+// Mod Notes functions (openModNoteDialog, saveModNote, closeModNoteDialog, getModNote)
+// are now provided by useModpackMods composable
 
 async function removeSelectedMods() {
   if (selectedModIds.value.size === 0) return;
@@ -2252,93 +1255,9 @@ async function executeBulkRemove(idsToRemove: string[]) {
   }
 }
 
-function toggleSelect(modId: string) {
-  const newSet = new Set(selectedModIds.value);
-  if (newSet.has(modId)) {
-    newSet.delete(modId);
-  } else {
-    newSet.add(modId);
-  }
-  selectedModIds.value = newSet;
-}
-
-function selectAll() {
-  const newSet = new Set(selectedModIds.value);
-  for (const mod of filteredInstalledMods.value) {
-    newSet.add(mod.id!);
-  }
-  selectedModIds.value = newSet;
-}
-
-// Select all enabled mods (excludes disabled and locked)
-function selectAllEnabled() {
-  const enabledUnlockedMods = filteredInstalledMods.value.filter(
-    mod => !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
-  );
-
-  const newSet = new Set<string>();
-  for (const mod of enabledUnlockedMods) {
-    newSet.add(mod.id!);
-  }
-  selectedModIds.value = newSet;
-}
-
-// Select half of enabled mods (excludes disabled and locked)
-function selectHalfEnabled() {
-  const enabledUnlockedMods = filteredInstalledMods.value.filter(
-    mod => !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
-  );
-
-  if (enabledUnlockedMods.length === 0) {
-    return;
-  }
-
-  const halfCount = Math.ceil(enabledUnlockedMods.length / 2);
-  const modsToSelect = enabledUnlockedMods.slice(0, halfCount);
-
-  const newSet = new Set<string>();
-  for (const mod of modsToSelect) {
-    newSet.add(mod.id!);
-  }
-  selectedModIds.value = newSet;
-}
-
-// Select all disabled mods (excludes locked)
-function selectAllDisabled() {
-  const disabledUnlockedMods = filteredInstalledMods.value.filter(
-    mod => disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
-  );
-
-  const newSet = new Set<string>();
-  for (const mod of disabledUnlockedMods) {
-    newSet.add(mod.id!);
-  }
-  selectedModIds.value = newSet;
-}
-
-// Select half of disabled mods (excludes locked)
-function selectHalfDisabled() {
-  const disabledUnlockedMods = filteredInstalledMods.value.filter(
-    mod => disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
-  );
-
-  if (disabledUnlockedMods.length === 0) {
-    return;
-  }
-
-  const halfCount = Math.ceil(disabledUnlockedMods.length / 2);
-  const modsToSelect = disabledUnlockedMods.slice(0, halfCount);
-
-  const newSet = new Set<string>();
-  for (const mod of modsToSelect) {
-    newSet.add(mod.id!);
-  }
-  selectedModIds.value = newSet;
-}
-
-function clearSelection() {
-  selectedModIds.value = new Set();
-}
+// Selection functions (toggleSelect, selectAll, selectAllEnabled, selectHalfEnabled,
+// selectAllDisabled, selectHalfDisabled, clearSelection, isSelected) are now provided
+// by useModpackSelection composable
 
 // Bulk enable/disable selected mods
 async function bulkEnableSelected() {
@@ -2592,29 +1511,8 @@ async function confirmRemoveIncompatibleMods() {
   toast.success("Mods Removed", `Removed ${removed} incompatible mod(s)`);
 }
 
-// Confirm action after dependency impact warning
-async function confirmDependencyImpactAction() {
-  showDependencyImpactDialog.value = false;
-
-  if (!pendingModAction.value) return;
-
-  const { modId, action } = pendingModAction.value;
-
-  if (action === "remove") {
-    await executeModRemoval(modId);
-  } else {
-    await executeModToggle(modId);
-  }
-
-  pendingModAction.value = null;
-  dependencyImpact.value = null;
-}
-
-function cancelDependencyImpactAction() {
-  showDependencyImpactDialog.value = false;
-  pendingModAction.value = null;
-  dependencyImpact.value = null;
-}
+// confirmDependencyImpactAction and cancelDependencyImpactAction
+// are now provided by useModpackMods composable
 
 // Confirm action and also affect dependents
 async function confirmDependencyImpactWithDependents() {
@@ -2711,15 +1609,7 @@ function cancelBulkDependencyImpactAction() {
   bulkDependencyImpact.value = null;
 }
 
-function toggleSort(field: "name" | "version" | "date") {
-  if (sortBy.value === field) {
-    sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
-  } else {
-    sortBy.value = field;
-    // Default to descending for date (newest first), ascending for others
-    sortDir.value = field === "date" ? "desc" : "asc";
-  }
-}
+// toggleSort is now provided by useModpackFiltering composable
 
 async function selectImage() {
   const imagePath = await window.api.dialogs.selectImage();
@@ -3232,8 +2122,7 @@ async function reSearchIncompatibleMods() {
 // Track if initial check has been done for this modpack session
 const hasCheckedUpdatesOnOpen = ref(false);
 
-// Game log listener cleanup
-let removeLogListener: (() => void) | null = null;
+// Game log listener cleanup is now handled by useModpackGameLogs composable
 
 watch(
   () => props.isOpen,
@@ -3266,20 +2155,8 @@ watch(
         fetchLoaderVersions();
       }
 
-      // Set up game log listener (wrapped to prevent crashes)
-      removeLogListener = onGameLogLine((instanceId, logLine) => {
-        if (instance.value && instanceId === instance.value.id) {
-          gameLogs.value.push({
-            time: logLine.time,
-            level: logLine.level,
-            message: logLine.message
-          });
-          // Keep only last maxLogLines
-          if (gameLogs.value.length > maxLogLines) {
-            gameLogs.value = gameLogs.value.slice(-maxLogLines);
-          }
-        }
-      });
+      // Set up game log listener (handled by composable)
+      setupLogListener();
 
       // Check for mod updates only on initial open
       setTimeout(() => {
@@ -3290,11 +2167,8 @@ watch(
       }, 500);
     } else {
       // Cleanup on close
-      if (removeLogListener) {
-        removeLogListener();
-        removeLogListener = null;
-      }
-      gameLogs.value = [];
+      cleanupLogListener();
+      clearLogs();
     }
   },
   { immediate: true }
@@ -3325,12 +2199,7 @@ watch(
 );
 
 // Cleanup listener when component is destroyed (prevents memory leaks and white screen)
-onUnmounted(() => {
-  if (removeLogListener) {
-    removeLogListener();
-    removeLogListener = null;
-  }
-});
+// Note: useModpackGameLogs composable handles its own cleanup via onUnmounted
 </script>
 
 <template>
@@ -3936,7 +2805,7 @@ onUnmounted(() => {
                 </div>
                 <h3 class="text-lg font-semibold mb-2">Create Game Instance</h3>
                 <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
-                  Set up an isolated game environment to play this modpack with {{ modpackMods.length }} mods.
+                  Set up an isolated game environment to play this modpack with {{ currentMods.length }} mods.
                 </p>
 
                 <!-- Quick Info -->
@@ -3951,7 +2820,7 @@ onUnmounted(() => {
                   </span>
                   <span class="flex items-center gap-1.5">
                     <Layers class="w-3.5 h-3.5" />
-                    {{ modpackMods.length }} mods
+                    {{ currentMods.length }} mods
                   </span>
                 </div>
 
@@ -4098,7 +2967,7 @@ onUnmounted(() => {
                     <span class="text-sm font-medium">Changes not synced</span>
                     <span class="text-xs text-muted-foreground ml-2">
                       {{ instanceSyncStatus.totalDifferences }} difference{{ instanceSyncStatus.totalDifferences > 1 ?
-                      's' : '' }}
+                        's' : '' }}
                     </span>
                   </div>
                   <button @click="showSyncDetails = !showSyncDetails"
@@ -4932,7 +3801,8 @@ onUnmounted(() => {
                         <button
                           v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
                           class="w-7 h-7 flex items-center justify-center rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 hover:border-primary/50 transition-all duration-150"
-                          :title="`Update to ${updateAvailable[mod.id].displayName}`" @click.stop="quickUpdateMod(mod)">
+                          :title="`Update to ${updateAvailable[mod.id]?.displayName || 'latest version'}`"
+                          @click.stop="quickUpdateMod(mod)">
                           <ArrowUpCircle class="w-3.5 h-3.5" />
                         </button>
 

@@ -581,7 +581,7 @@ watch(
               <GitBranch v-else class="w-4 h-4" />
               Sync Deps
             </Button>
-            <Button variant="outline" size="sm" class="gap-1.5" @click="runAnalysis">
+            <Button variant="outline" size="sm" class="gap-1.5" @click="() => runAnalysis()">
               <RefreshCw class="w-4 h-4" />
               Re-analyze
             </Button>

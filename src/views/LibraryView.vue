@@ -13,9 +13,18 @@ import UpdatesDialog from "@/components/mods/UpdatesDialog.vue";
 import ModUpdateDialog from "@/components/mods/ModUpdateDialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
+import LibraryDragOverlay from "@/components/library/LibraryDragOverlay.vue";
+import LibraryEmptyState from "@/components/library/LibraryEmptyState.vue";
+import LibraryPaginationControls from "@/components/library/LibraryPaginationControls.vue";
+import LibraryResultsInfo from "@/components/library/LibraryResultsInfo.vue";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
+import { useLibraryFavorites } from "@/composables/useLibraryFavorites";
+import { useLibrarySettings } from "@/composables/useLibrarySettings";
+import { useLibrarySelection } from "@/composables/useLibrarySelection";
+import { useLibraryFiltering, type ModGroup } from "@/composables/useLibraryFiltering";
+import { useLibraryPagination } from "@/composables/useLibraryPagination";
 import {
   Search,
   FolderPlus,
@@ -46,10 +55,9 @@ import {
   GalleryVertical,
   Package,
 } from "lucide-vue-next";
-import { ref, onMounted, computed, watch, nextTick, shallowRef } from "vue";
-import { refDebounced } from "@vueuse/core";
+import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import type { Mod, Modpack, ModUsageInfo } from "@/types/electron";
+import type { Mod, Modpack } from "@/types/electron";
 
 const route = useRoute();
 const router = useRouter();
@@ -59,58 +67,145 @@ const toast = useToast();
 const { folders, moveModsToFolder, getModFolder, createFolder } =
   useFolderTree();
 
-// Search input ref for focus
-const searchInputRef = ref<HTMLInputElement | null>(null);
+// ============================================================================
+// COMPOSABLES INTEGRATION
+// ============================================================================
 
+// Core data state (not extracted - specific to this view)
 const mods = ref<Mod[]>([]);
 const modpacks = ref<Modpack[]>([]);
 const modUsageMap = ref<Map<string, Set<string>>>(new Map()); // ModID -> Set<ModpackID>
 const isLoading = ref(true);
 const error = ref<string | null>(null);
-const searchQuery = ref("");
-const searchQueryDebounced = refDebounced(searchQuery, 200);
-const selectedLoader = ref<string>("all");
-const selectedGameVersion = ref<string>("all");
-const selectedContentType = ref<"all" | "mod" | "resourcepack" | "shader">(
-  "all"
-);
-const modpackFilter = ref<string>("all"); // 'all', 'any', 'none', or modpackId
-const searchField = ref<"all" | "name" | "author" | "version" | "description">(
-  "all"
-);
+
+// Favorites composable
+const {
+  favoriteMods,
+  loadFavorites,
+  saveFavorites,
+  toggleFavorite,
+  isFavorite,
+} = useLibraryFavorites();
+
+// Settings composable (provides all persistent settings refs)
+const {
+  viewMode,
+  sortBy,
+  sortDir,
+  showThumbnails,
+  selectedLoader,
+  selectedGameVersion,
+  searchField,
+  modpackFilter,
+  selectedContentType,
+  visibleColumns,
+  showFilters,
+  itemsPerPage,
+  enableGrouping,
+  loadSettings,
+  setupAutoSave,
+} = useLibrarySettings();
+
+// Filtering composable (provides search, filter, and grouping logic)
+const {
+  searchQuery,
+  searchQueryDebounced,
+  quickFilter,
+  selectedFolderId,
+  expandedGroups,
+  loaderStats,
+  loaders,
+  contentTypeCounts,
+  gameVersions,
+  activeFilterCount,
+  filteredMods,
+  groupedMods,
+  displayMods,
+  clearAllFilters,
+  toggleGroup,
+  getGroupInfo,
+  toggleSort,
+} = useLibraryFiltering({
+  mods,
+  modUsageMap,
+  favoriteMods,
+  getModFolder,
+  sortBy,
+  sortDir,
+  enableGrouping,
+  selectedLoader,
+  selectedGameVersion,
+  selectedContentType,
+  modpackFilter,
+  searchField,
+});
+
+// Pagination composable
+const {
+  currentPage,
+  itemsPerPage: paginationItemsPerPage,
+  itemsPerPageOptions,
+  totalPages,
+  paginatedItems: paginatedGroups,
+  canGoPrev,
+  canGoNext,
+  goToPage,
+  prevPage,
+  nextPage,
+} = useLibraryPagination({
+  items: groupedMods,
+  filterDeps: [
+    searchQueryDebounced,
+    selectedLoader,
+    selectedGameVersion,
+    selectedContentType,
+    modpackFilter,
+    quickFilter,
+    selectedFolderId,
+  ],
+});
+
+// Sync pagination itemsPerPage with settings
+watch(itemsPerPage, (val) => {
+  paginationItemsPerPage.value = val;
+}, { immediate: true });
+watch(paginationItemsPerPage, (val) => {
+  itemsPerPage.value = val;
+});
+
+// Computed for component props
+const hasActiveFilters = computed(() => activeFilterCount.value > 0);
+const hasExpandedGroups = computed(() => groupedMods.value.some((g) => g.variants.length > 0));
+
+// Selection composable
+const {
+  selectedModIds,
+  selectedModsCompatibility,
+  toggleSelection,
+  clearSelection,
+  selectAll,
+  selectNone,
+  cleanupSelection,
+} = useLibrarySelection({
+  mods,
+  filteredMods,
+});
+
+// ============================================================================
+// LOCAL STATE (not extracted - view-specific)
+// ============================================================================
+
+// Search input ref for focus
+const searchInputRef = ref<HTMLInputElement | null>(null);
 
 // UI State
-const showFilters = ref(false);
 const showColumnSelector = ref(false);
-
-// Folder filter
-const selectedFolderId = ref<string | null>(null);
-
-// Favorites system (stored in localStorage)
-const favoriteMods = ref<Set<string>>(new Set());
-const quickFilter = ref<"all" | "favorites" | "recent">("all");
 
 // Duplicate detection
 const duplicates = ref<Map<string, string[]>>(new Map());
 
-// Resource grouping - group same mod across different versions/loaders
-const enableGrouping = ref(true);
-const expandedGroups = ref<Set<string>>(new Set());
-
-// Pagination
-const currentPage = ref(1);
-const itemsPerPage = ref(50);
-const itemsPerPageOptions = [25, 50, 100, 200];
-const isFiltering = ref(false);
-
-// Sorting
-const sortBy = ref<"name" | "loader" | "created_at" | "version">("name");
-const sortDir = ref<"asc" | "desc">("asc");
+// Sorting fields constant
 const sortFields = ["name", "loader", "version", "created_at"] as const;
-
-// View Mode
-const viewMode = ref<"grid" | "gallery" | "list" | "compact">("grid");
-const showThumbnails = ref<boolean>(true); // Toggle for mod thumbnails
 
 // List View Columns
 const availableColumns = [
@@ -124,13 +219,6 @@ const availableColumns = [
   { id: "size", label: "Size" },
   { id: "usage", label: "Usage" },
 ] as const;
-
-const visibleColumns = ref<Set<string>>(
-  new Set(["name", "version", "loader", "author"])
-);
-
-// Selection State
-const selectedModIds = ref<Set<string>>(new Set());
 
 // Details Panel
 const showDetails = ref(false);
@@ -166,440 +254,6 @@ const progressMessage = ref("");
 // Check if running in Electron
 const isElectron = () => window.api !== undefined;
 
-// Stats
-const loaderStats = computed(() => {
-  const stats: Record<string, number> = {};
-  for (const mod of mods.value) {
-    stats[mod.loader] = (stats[mod.loader] || 0) + 1;
-  }
-  return stats;
-});
-
-const loaders = computed(() => Object.keys(loaderStats.value).sort());
-
-// Content type counts
-const contentTypeCounts = computed(() => {
-  const counts = { mod: 0, resourcepack: 0, shader: 0 };
-  for (const m of mods.value) {
-    const ct = m.content_type || "mod";
-    if (ct === "mod") counts.mod++;
-    else if (ct === "resourcepack") counts.resourcepack++;
-    else if (ct === "shader") counts.shader++;
-  }
-  return counts;
-});
-
-const gameVersions = computed(() => {
-  const versions = new Set<string>();
-  for (const mod of mods.value) {
-    if (mod.game_version && mod.game_version !== "unknown") {
-      versions.add(mod.game_version);
-    }
-  }
-  return Array.from(versions).sort((a, b) =>
-    b.localeCompare(a, undefined, { numeric: true })
-  );
-});
-
-// Check if all selected mods are compatible (same game_version and loader)
-const selectedModsCompatibility = computed(() => {
-  if (selectedModIds.value.size === 0) {
-    return { compatible: false, gameVersion: null, loader: null };
-  }
-
-  const selectedMods = mods.value.filter((m) => selectedModIds.value.has(m.id));
-  if (selectedMods.length === 0) {
-    return { compatible: false, gameVersion: null, loader: null };
-  }
-
-  // Separate mods from non-mods (resourcepacks/shaders)
-  const modItems = selectedMods.filter(
-    (m) => !m.content_type || m.content_type === "mod"
-  );
-  const nonModItems = selectedMods.filter(
-    (m) => m.content_type && m.content_type !== "mod"
-  );
-
-  // Get game versions from mods only (single version per mod)
-  const modGameVersions = new Set(
-    modItems.map((m) => m.game_version).filter((v) => v && v !== "unknown")
-  );
-
-  // Get loaders from mods only (resourcepacks/shaders don't have loaders)
-  const loaders = new Set(
-    modItems.map((m) => m.loader).filter((l) => l && l !== "unknown")
-  );
-
-  // Check compatibility for mods
-  const hasSameVersion = modGameVersions.size <= 1;
-  const hasSameLoader = loaders.size <= 1;
-
-  // For non-mods, check if they have any overlapping versions with the mod game version
-  let nonModsCompatible = true;
-  const modGameVersion =
-    modGameVersions.size === 1 ? Array.from(modGameVersions)[0] : null;
-
-  if (modGameVersion && nonModItems.length > 0) {
-    // Check if all non-mod items support the mod game version
-    nonModsCompatible = nonModItems.every((item) => {
-      if (!item.game_versions || item.game_versions.length === 0) return true;
-      return item.game_versions.includes(modGameVersion);
-    });
-  }
-
-  // If we have mods with different loaders, it's incompatible
-  const compatible = hasSameVersion && hasSameLoader && nonModsCompatible;
-
-  // Determine the locked values
-  let gameVersion: string | null = null;
-  let loader: string | null = null;
-
-  if (modGameVersions.size === 1) {
-    gameVersion = Array.from(modGameVersions)[0];
-  } else if (modItems.length === 0 && nonModItems.length > 0) {
-    // Only non-mod items - find common version from game_versions arrays
-    const versionSets = nonModItems.map(
-      (item) => new Set(item.game_versions || [])
-    );
-    if (versionSets.length > 0 && versionSets[0].size > 0) {
-      const intersection = [...versionSets[0]].filter((v) =>
-        versionSets.every((set) => set.size === 0 || set.has(v))
-      );
-      if (intersection.length > 0) {
-        // Use the highest version as the common version
-        gameVersion = intersection[0]; // Already sorted descending by CurseForgeService
-      }
-    }
-  }
-
-  if (loaders.size === 1) {
-    loader = Array.from(loaders)[0];
-  } else if (modItems.length === 0 && nonModItems.length > 0) {
-    // Only non-mod items selected - no loader lock needed
-    loader = null;
-  }
-
-  return {
-    compatible,
-    gameVersion,
-    loader,
-  };
-});
-
-// Advanced search function
-function matchesSearchQuery(mod: Mod, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-
-  switch (searchField.value) {
-    case "name":
-      return mod.name.toLowerCase().includes(q);
-    case "author":
-      return (mod.author || "").toLowerCase().includes(q);
-    case "version":
-      return (
-        mod.version.toLowerCase().includes(q) ||
-        mod.game_version.toLowerCase().includes(q)
-      );
-    case "description":
-      return (mod.description || "").toLowerCase().includes(q);
-    case "all":
-    default:
-      return (
-        mod.name.toLowerCase().includes(q) ||
-        (mod.author || "").toLowerCase().includes(q) ||
-        mod.version.toLowerCase().includes(q) ||
-        (mod.description || "").toLowerCase().includes(q) ||
-        mod.loader.toLowerCase().includes(q)
-      );
-  }
-}
-
-// Count active filters
-const activeFilterCount = computed(() => {
-  let count = 0;
-  if (selectedLoader.value !== "all") count++;
-  if (selectedGameVersion.value !== "all") count++;
-  if (selectedContentType.value !== "all") count++;
-  if (modpackFilter.value !== "all") count++;
-  if (searchField.value !== "all") count++;
-  if (searchQuery.value) count++;
-  return count;
-});
-
-// Clear all filters
-function clearAllFilters() {
-  selectedLoader.value = "all";
-  selectedGameVersion.value = "all";
-  selectedContentType.value = "all";
-  modpackFilter.value = "all";
-  searchField.value = "all";
-  searchQuery.value = "";
-}
-
-const filteredMods = computed(() => {
-  let result = mods.value.filter((mod) => {
-    const matchesSearch = matchesSearchQuery(mod, searchQueryDebounced.value);
-
-    // Loader filter only applies to mods (resourcepacks/shaders don't have loaders)
-    const modContentType = mod.content_type || "mod";
-    const matchesLoader =
-      selectedLoader.value === "all" ||
-      modContentType !== "mod" || // Skip loader check for non-mods
-      mod.loader === selectedLoader.value;
-
-    // Version filter - for shaders/resourcepacks, check game_versions array
-    let matchesVersion = selectedGameVersion.value === "all";
-    if (!matchesVersion) {
-      if (
-        modContentType !== "mod" &&
-        mod.game_versions &&
-        mod.game_versions.length > 0
-      ) {
-        // For shaders/resourcepacks with game_versions array
-        matchesVersion = mod.game_versions.some(
-          (gv) =>
-            gv === selectedGameVersion.value ||
-            gv.startsWith(selectedGameVersion.value) ||
-            selectedGameVersion.value.startsWith(gv)
-        );
-      } else {
-        // Standard single version check for mods
-        matchesVersion = mod.game_version === selectedGameVersion.value;
-      }
-    }
-
-    // Content type filter
-    let matchesContentType = true;
-    if (selectedContentType.value !== "all") {
-      matchesContentType = modContentType === selectedContentType.value;
-    }
-
-    // Quick filter
-    let matchesQuickFilter = true;
-    if (quickFilter.value === "favorites") {
-      matchesQuickFilter = favoriteMods.value.has(mod.id);
-    } else if (quickFilter.value === "recent") {
-      // Show mods added in last 7 days
-      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      matchesQuickFilter = new Date(mod.created_at).getTime() > weekAgo;
-    }
-
-    // Folder filter
-    let matchesFolder = true;
-    if (selectedFolderId.value !== null) {
-      matchesFolder = getModFolder(mod.id) === selectedFolderId.value;
-    }
-
-    // Modpack filter
-    let matchesModpack = true;
-    if (modpackFilter.value !== "all") {
-      const usedInPacks = modUsageMap.value.get(mod.id);
-      if (modpackFilter.value === "any") {
-        matchesModpack = !!usedInPacks && usedInPacks.size > 0;
-      } else if (modpackFilter.value === "none") {
-        matchesModpack = !usedInPacks || usedInPacks.size === 0;
-      } else {
-        // Specific modpack ID
-        matchesModpack = !!usedInPacks && usedInPacks.has(modpackFilter.value);
-      }
-    }
-
-    return (
-      matchesSearch &&
-      matchesLoader &&
-      matchesVersion &&
-      matchesContentType &&
-      matchesQuickFilter &&
-      matchesFolder &&
-      matchesModpack
-    );
-  });
-
-  // Sort (favorites first if enabled, then by selected field)
-  result.sort((a, b) => {
-    // Favorites always first
-    const aFav = favoriteMods.value.has(a.id) ? 0 : 1;
-    const bFav = favoriteMods.value.has(b.id) ? 0 : 1;
-    if (aFav !== bFav) return aFav - bFav;
-
-    // Sorting numerically (e.g., download count) not applicable in metadata-only mode
-
-    const aVal = String(a[sortBy.value] || "");
-    const bVal = String(b[sortBy.value] || "");
-    const cmp = aVal.localeCompare(bVal);
-    return sortDir.value === "asc" ? cmp : -cmp;
-  });
-
-  return result;
-});
-
-// Grouping logic - group mods by their CurseForge/Modrinth project ID
-interface ModGroup {
-  groupKey: string;
-  primary: Mod;
-  variants: Mod[];
-  isExpanded: boolean;
-}
-
-const groupedMods = computed((): ModGroup[] => {
-  if (!enableGrouping.value) {
-    // No grouping - each mod is its own group
-    return filteredMods.value.map((mod) => ({
-      groupKey: mod.id,
-      primary: mod,
-      variants: [],
-      isExpanded: false,
-    }));
-  }
-
-  // Group by project ID (cf_project_id or mr_project_id) or by name if no project ID
-  const groups = new Map<string, Mod[]>();
-
-  for (const mod of filteredMods.value) {
-    let groupKey: string;
-
-    if (mod.cf_project_id) {
-      groupKey = `cf-${mod.cf_project_id}`;
-    } else if (mod.mr_project_id) {
-      groupKey = `mr-${mod.mr_project_id}`;
-    } else {
-      // Fallback: group by normalized name + loader
-      groupKey = `name-${mod.name.toLowerCase().replace(/\s+/g, "-")}-${mod.loader
-        }`;
-    }
-
-    if (!groups.has(groupKey)) {
-      groups.set(groupKey, []);
-    }
-    groups.get(groupKey)!.push(mod);
-  }
-
-  // Convert to ModGroup array
-  const result: ModGroup[] = [];
-
-  for (const [groupKey, mods] of groups) {
-    // Sort variants by version (newest first) then game_version
-    mods.sort((a, b) => {
-      // Sort by game version descending
-      const versionCompare = b.game_version.localeCompare(
-        a.game_version,
-        undefined,
-        { numeric: true }
-      );
-      if (versionCompare !== 0) return versionCompare;
-      // Then by mod version descending
-      return b.version.localeCompare(a.version, undefined, { numeric: true });
-    });
-
-    result.push({
-      groupKey,
-      primary: mods[0],
-      variants: mods.slice(1),
-      isExpanded: expandedGroups.value.has(groupKey),
-    });
-  }
-
-  return result;
-});
-
-// Pagination computed values
-const totalPages = computed(() =>
-  Math.ceil(groupedMods.value.length / itemsPerPage.value)
-);
-const paginatedGroups = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value;
-  const end = start + itemsPerPage.value;
-  return groupedMods.value.slice(start, end);
-});
-
-// Page navigation helpers
-const canGoPrev = computed(() => currentPage.value > 1);
-const canGoNext = computed(() => currentPage.value < totalPages.value);
-
-function goToPage(page: number) {
-  currentPage.value = Math.max(1, Math.min(page, totalPages.value));
-}
-
-function prevPage() {
-  if (canGoPrev.value) currentPage.value--;
-}
-
-function nextPage() {
-  if (canGoNext.value) currentPage.value++;
-}
-
-// Reset to page 1 when filters change
-watch(
-  [
-    searchQueryDebounced,
-    selectedLoader,
-    selectedGameVersion,
-    selectedContentType,
-    modpackFilter,
-    quickFilter,
-    selectedFolderId,
-  ],
-  () => {
-    currentPage.value = 1;
-  }
-);
-
-// Get displayable mods (considering grouping and expansion)
-const displayMods = computed((): Mod[] => {
-  if (!enableGrouping.value) {
-    return filteredMods.value;
-  }
-
-  const result: Mod[] = [];
-  for (const group of groupedMods.value) {
-    result.push(group.primary);
-    if (group.isExpanded) {
-      result.push(...group.variants);
-    }
-  }
-  return result;
-});
-
-// Toggle group expansion
-function toggleGroup(groupKey: string) {
-  if (expandedGroups.value.has(groupKey)) {
-    expandedGroups.value.delete(groupKey);
-  } else {
-    expandedGroups.value.add(groupKey);
-  }
-}
-
-// Get group info for a mod
-function getGroupInfo(
-  modId: string
-): {
-  isGrouped: boolean;
-  isPrimary: boolean;
-  variantCount: number;
-  groupKey: string;
-} | null {
-  for (const group of groupedMods.value) {
-    if (group.primary.id === modId) {
-      return {
-        isGrouped: group.variants.length > 0,
-        isPrimary: true,
-        variantCount: group.variants.length,
-        groupKey: group.groupKey,
-      };
-    }
-    if (group.variants.some((v) => v.id === modId)) {
-      return {
-        isGrouped: true,
-        isPrimary: false,
-        variantCount: 0,
-        groupKey: group.groupKey,
-      };
-    }
-  }
-  return null;
-}
-
 // Move mods to folder
 function moveSelectedToFolder(folderId: string | null) {
   const ids = Array.from(selectedModIds.value);
@@ -608,111 +262,7 @@ function moveSelectedToFolder(folderId: string | null) {
   clearSelection();
 }
 
-// Favorite functions
-function loadFavorites() {
-  const stored = localStorage.getItem("modex:favorites:mods");
-  if (stored) {
-    favoriteMods.value = new Set(JSON.parse(stored));
-  }
-}
-
-function saveFavorites() {
-  localStorage.setItem(
-    "modex:favorites:mods",
-    JSON.stringify([...favoriteMods.value])
-  );
-  // Trigger storage event for sidebar update
-  window.dispatchEvent(new Event("storage"));
-}
-
-function toggleFavorite(modId: string) {
-  if (favoriteMods.value.has(modId)) {
-    favoriteMods.value.delete(modId);
-  } else {
-    favoriteMods.value.add(modId);
-  }
-  saveFavorites();
-}
-
-function isFavorite(modId: string): boolean {
-  return favoriteMods.value.has(modId);
-}
-
-// Persistent Settings
-const SETTINGS_KEY = "modex:library:settings";
-
-function saveSettings() {
-  const settings = {
-    viewMode: viewMode.value,
-    sortBy: sortBy.value,
-    sortDir: sortDir.value,
-    showThumbnails: showThumbnails.value,
-    selectedLoader: selectedLoader.value,
-    selectedGameVersion: selectedGameVersion.value,
-    searchField: searchField.value,
-    modpackFilter: modpackFilter.value,
-    selectedContentType: selectedContentType.value,
-    visibleColumns: Array.from(visibleColumns.value),
-    showFilters: showFilters.value,
-    itemsPerPage: itemsPerPage.value,
-    enableGrouping: enableGrouping.value,
-  };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-}
-
-function loadSettings() {
-  try {
-    const stored = localStorage.getItem(SETTINGS_KEY);
-    if (stored) {
-      const settings = JSON.parse(stored);
-      if (settings.viewMode) viewMode.value = settings.viewMode;
-      if (settings.sortBy) sortBy.value = settings.sortBy;
-      if (settings.sortDir) sortDir.value = settings.sortDir;
-      if (settings.showThumbnails !== undefined)
-        showThumbnails.value = settings.showThumbnails;
-      if (settings.selectedLoader)
-        selectedLoader.value = settings.selectedLoader;
-      if (settings.selectedGameVersion)
-        selectedGameVersion.value = settings.selectedGameVersion;
-      if (settings.searchField) searchField.value = settings.searchField;
-      if (settings.modpackFilter) modpackFilter.value = settings.modpackFilter;
-      if (settings.selectedContentType)
-        selectedContentType.value = settings.selectedContentType;
-      if (settings.visibleColumns)
-        visibleColumns.value = new Set(settings.visibleColumns);
-      if (settings.showFilters !== undefined)
-        showFilters.value = settings.showFilters;
-      if (settings.itemsPerPage) itemsPerPage.value = settings.itemsPerPage;
-      if (settings.enableGrouping !== undefined)
-        enableGrouping.value = settings.enableGrouping;
-    }
-  } catch (e) {
-    console.warn("Failed to load settings", e);
-  }
-}
-
-// Watchers for persistence
-watch(
-  [
-    viewMode,
-    sortBy,
-    sortDir,
-    showThumbnails,
-    selectedLoader,
-    selectedGameVersion,
-    searchField,
-    modpackFilter,
-    selectedContentType,
-    visibleColumns,
-    showFilters,
-    itemsPerPage,
-    enableGrouping,
-  ],
-  () => {
-    saveSettings();
-  },
-  { deep: true }
-);
+// Duplicate detection
 function detectDuplicates() {
   const keyMap = new Map<string, string[]>();
   for (const mod of mods.value) {
@@ -796,10 +346,9 @@ async function loadMods() {
     // Detect duplicates (fast, local operation)
     detectDuplicates();
 
+    // Clean up selection for removed mods
     const currentIds = new Set(mods.value.map((m) => m.id!));
-    for (const id of selectedModIds.value) {
-      if (!currentIds.has(id)) selectedModIds.value.delete(id);
-    }
+    cleanupSelection(currentIds);
 
     // Load usage data in background (deferred)
     loadUsageDataDeferred(allMods.map((m) => m.id));
@@ -825,39 +374,6 @@ async function loadUsageDataDeferred(modIds: string[]) {
   } catch (err) {
     console.warn("Failed to load usage data:", err);
   }
-}
-
-// Sorting
-function toggleSort(field: "name" | "loader" | "created_at" | "version") {
-  if (sortBy.value === field) {
-    sortDir.value = sortDir.value === "asc" ? "desc" : "asc";
-  } else {
-    sortBy.value = field;
-    sortDir.value = "asc";
-  }
-}
-
-// Selection Logic
-function toggleSelection(id: string) {
-  if (selectedModIds.value.has(id)) {
-    selectedModIds.value.delete(id);
-  } else {
-    selectedModIds.value.add(id);
-  }
-}
-
-function clearSelection() {
-  selectedModIds.value.clear();
-}
-
-function selectAll() {
-  for (const mod of filteredMods.value) {
-    selectedModIds.value.add(mod.id!);
-  }
-}
-
-function selectNone() {
-  selectedModIds.value.clear();
 }
 
 // Details Panel - now uses modal
@@ -1294,6 +810,7 @@ useKeyboardShortcuts([
 onMounted(() => {
   loadFavorites();
   loadSettings();
+  setupAutoSave(); // Enable auto-save after loading settings
   loadMods();
 });
 </script>
@@ -1302,16 +819,7 @@ onMounted(() => {
   <div class="h-full flex flex-col relative" @dragenter="handleDragEnter" @dragover="handleDragOver"
     @dragleave="handleDragLeave" @drop="handleDrop">
     <!-- Drag & Drop Overlay -->
-    <div v-if="isDragging"
-      class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
-      <div class="text-center">
-        <FilePlus class="w-16 h-16 mx-auto text-primary mb-4" />
-        <p class="text-xl font-semibold">Drop .jar files here</p>
-        <p class="text-muted-foreground">
-          Files will be imported to your library
-        </p>
-      </div>
-    </div>
+    <LibraryDragOverlay :visible="isDragging" />
 
     <!-- Unified Header -->
     <header class="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-sm z-20">
@@ -1462,23 +970,8 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-else-if="mods.length === 0" class="flex items-center justify-center flex-1 bg-background">
-      <div class="text-center max-w-sm flex flex-col items-center">
-        <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-6">
-          <Package class="w-8 h-8 text-muted-foreground" />
-        </div>
-
-        <h3 class="text-xl font-bold mb-2">Your library is empty</h3>
-        <p class="text-muted-foreground mb-6 text-sm max-w-xs mx-auto leading-relaxed">
-          Browse CurseForge to discover and add mods.
-        </p>
-
-        <Button @click="router.push('/library/search')" size="lg"
-          class="gap-2.5 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
-          <Globe class="w-5 h-5" />
-          <span class="font-semibold">Browse Mods</span>
-        </Button>
-      </div>
+    <div v-else-if="mods.length === 0">
+      <LibraryEmptyState />
     </div>
 
     <div v-else class="flex-1 flex overflow-hidden bg-background">
@@ -1595,79 +1088,28 @@ onMounted(() => {
       <div class="flex-1 overflow-auto p-3 sm:p-6 pb-20">
         <!-- Results info + Pagination Controls -->
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              Showing
-              <template v-if="enableGrouping">
-                {{ paginatedGroups.length }} of {{ groupedMods.length }} groups
-              </template>
-              <template v-else>
-                {{ paginatedGroups.length }} of {{ filteredMods.length }} items
-              </template>
-              <span v-if="
-                enableGrouping &&
-                groupedMods.some((g) => g.variants.length > 0)
-              " class="text-muted-foreground/70">
-                ({{ filteredMods.length }} total mods)
-              </span>
-            </span>
-            <button v-if="
-              selectedLoader !== 'all' ||
-              selectedGameVersion !== 'all' ||
-              selectedContentType !== 'all' ||
-              modpackFilter !== 'all' ||
-              searchQuery
-            " @click="
-              selectedLoader = 'all';
-            selectedGameVersion = 'all';
-            selectedContentType = 'all';
-            modpackFilter = 'all';
-            searchQuery = '';
-            " class="text-primary hover:underline">
-              Clear filters
-            </button>
-          </div>
+          <LibraryResultsInfo
+            :enable-grouping="enableGrouping"
+            :paginated-groups-length="paginatedGroups.length"
+            :grouped-mods-length="groupedMods.length"
+            :filtered-mods-length="filteredMods.length"
+            :has-expanded-groups="hasExpandedGroups"
+            :has-active-filters="hasActiveFilters"
+            @clear-filters="clearAllFilters"
+          />
 
-          <!-- Pagination Controls -->
-          <div v-if="totalPages > 1" class="flex items-center gap-2">
-            <!-- Items per page selector -->
-            <div class="flex items-center gap-1.5">
-              <span class="text-xs text-muted-foreground hidden sm:inline">Show:</span>
-              <select v-model.number="itemsPerPage"
-                class="h-7 rounded-md border border-border bg-muted/50 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
-                <option v-for="opt in itemsPerPageOptions" :key="opt" :value="opt">
-                  {{ opt }}
-                </option>
-              </select>
-            </div>
-
-            <div class="h-4 w-px bg-border mx-1" />
-
-            <!-- Page navigation -->
-            <div class="flex items-center gap-1">
-              <button @click="goToPage(1)" :disabled="!canGoPrev"
-                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                ««
-              </button>
-              <button @click="prevPage" :disabled="!canGoPrev"
-                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                ‹
-              </button>
-
-              <span class="px-2 text-xs text-muted-foreground tabular-nums">
-                {{ currentPage }} / {{ totalPages }}
-              </span>
-
-              <button @click="nextPage" :disabled="!canGoNext"
-                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                ›
-              </button>
-              <button @click="goToPage(totalPages)" :disabled="!canGoNext"
-                class="h-7 w-7 flex items-center justify-center rounded-md border border-border text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                »»
-              </button>
-            </div>
-          </div>
+          <LibraryPaginationControls
+            :current-page="currentPage"
+            :total-pages="totalPages"
+            :items-per-page="itemsPerPage"
+            :items-per-page-options="itemsPerPageOptions"
+            :can-go-prev="canGoPrev"
+            :can-go-next="canGoNext"
+            @update:items-per-page="itemsPerPage = $event"
+            @go-to-page="goToPage"
+            @prev-page="prevPage"
+            @next-page="nextPage"
+          />
         </div>
 
         <!-- Grid View -->

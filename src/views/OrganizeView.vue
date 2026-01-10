@@ -332,6 +332,13 @@ function handleRootDragEnter(e: DragEvent) {
 }
 
 // Dialog openers
+function startCreateFolder() {
+  editingFolderId.value = null;
+  newFolderName.value = "";
+  newFolderColor.value = "#6366f1";
+  showCreateFolderDialog.value = true;
+}
+
 function openCreateSubfolder(parentId: string) {
   editingFolderId.value = parentId;
   newFolderName.value = "";
@@ -524,7 +531,7 @@ const moveDialogDescription = computed(() => {
             <div>
               <h1 class="text-lg font-semibold">Organize</h1>
               <p class="text-xs text-muted-foreground">{{ folders.length }} folders • {{ organizedMods }}/{{ totalMods
-                }} organized</p>
+              }} organized</p>
             </div>
           </div>
 

@@ -120,7 +120,9 @@ export function useLibrarySelection(options: UseLibrarySelectionOptions) {
 
   function selectAll(): void {
     for (const mod of filteredMods.value) {
-      selectedModIds.value.add(mod.id!);
+      if (mod.id) {
+        selectedModIds.value.add(mod.id);
+      }
     }
   }
 

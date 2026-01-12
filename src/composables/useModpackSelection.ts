@@ -33,7 +33,9 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
   function selectAll(): void {
     const newSet = new Set(selectedModIds.value);
     for (const mod of filteredMods.value) {
-      newSet.add(mod.id!);
+      if (mod.id) {
+        newSet.add(mod.id);
+      }
     }
     selectedModIds.value = newSet;
   }
@@ -42,12 +44,14 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
   function selectAllEnabled(): void {
     const enabledUnlockedMods = filteredMods.value.filter(
       (mod) =>
-        !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+        mod.id && !disabledModIds.value.has(mod.id) && !lockedModIds.value.has(mod.id)
     );
 
     const newSet = new Set<string>();
     for (const mod of enabledUnlockedMods) {
-      newSet.add(mod.id!);
+      if (mod.id) {
+        newSet.add(mod.id);
+      }
     }
     selectedModIds.value = newSet;
   }
@@ -56,7 +60,7 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
   function selectHalfEnabled(): void {
     const enabledUnlockedMods = filteredMods.value.filter(
       (mod) =>
-        !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+        mod.id && !disabledModIds.value.has(mod.id) && !lockedModIds.value.has(mod.id)
     );
 
     if (enabledUnlockedMods.length === 0) {
@@ -68,7 +72,9 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
 
     const newSet = new Set<string>();
     for (const mod of modsToSelect) {
-      newSet.add(mod.id!);
+      if (mod.id) {
+        newSet.add(mod.id);
+      }
     }
     selectedModIds.value = newSet;
   }
@@ -77,12 +83,14 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
   function selectAllDisabled(): void {
     const disabledUnlockedMods = filteredMods.value.filter(
       (mod) =>
-        disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+        mod.id && disabledModIds.value.has(mod.id) && !lockedModIds.value.has(mod.id)
     );
 
     const newSet = new Set<string>();
     for (const mod of disabledUnlockedMods) {
-      newSet.add(mod.id!);
+      if (mod.id) {
+        newSet.add(mod.id);
+      }
     }
     selectedModIds.value = newSet;
   }
@@ -91,7 +99,7 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
   function selectHalfDisabled(): void {
     const disabledUnlockedMods = filteredMods.value.filter(
       (mod) =>
-        disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+        mod.id && disabledModIds.value.has(mod.id) && !lockedModIds.value.has(mod.id)
     );
 
     if (disabledUnlockedMods.length === 0) {
@@ -103,7 +111,9 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
 
     const newSet = new Set<string>();
     for (const mod of modsToSelect) {
-      newSet.add(mod.id!);
+      if (mod.id) {
+        newSet.add(mod.id);
+      }
     }
     selectedModIds.value = newSet;
   }
@@ -128,14 +138,14 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
   const enabledUnlockedCount = computed(() => {
     return filteredMods.value.filter(
       (mod) =>
-        !disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+        mod.id && !disabledModIds.value.has(mod.id) && !lockedModIds.value.has(mod.id)
     ).length;
   });
 
   const disabledUnlockedCount = computed(() => {
     return filteredMods.value.filter(
       (mod) =>
-        disabledModIds.value.has(mod.id!) && !lockedModIds.value.has(mod.id!)
+        mod.id && disabledModIds.value.has(mod.id) && !lockedModIds.value.has(mod.id)
     ).length;
   });
 

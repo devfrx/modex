@@ -1068,12 +1068,14 @@ async function loadData() {
       if (pack.remote_source?.url && pack.remote_source.auto_check) {
         if (pack.remote_source.skip_initial_check) {
           // Clear the skip flag for next time
-          await window.api.modpacks.update(pack.id!, {
-            remote_source: {
-              ...pack.remote_source,
-              skip_initial_check: false,
-            },
-          });
+          if (pack.id) {
+            await window.api.modpacks.update(pack.id, {
+              remote_source: {
+                ...pack.remote_source,
+                skip_initial_check: false,
+              },
+            });
+          }
         } else {
           checkForRemoteUpdates();
         }
@@ -3050,7 +3052,7 @@ watch(
                     </div>
                     <div class="text-[11px] text-muted-foreground space-y-0.5">
                       <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
-                          }}</span></p>
+                      }}</span></p>
                       <p>Modpack: <span class="text-blue-400 font-medium">{{
                         extractLoaderVersion(modpack?.loader_version ||
                           'unknown') }}</span></p>

@@ -541,7 +541,11 @@ watch(() => props.open, async (open) => {
         gameLoadingMessage.value = "";
         gameLogs.value = [];
         logLevelFilter.value = "all";
-        await checkInstance();
+        try {
+            await checkInstance();
+        } catch (err) {
+            console.error("Failed to check instance on dialog open:", err);
+        }
     } else {
         // Clear logs when dialog closes
         gameLogs.value = [];
@@ -1143,11 +1147,13 @@ function handleConfigReverted(event: Event) {
                                         </div>
 
                                         <!-- Extra Mods in Instance (will be REMOVED) -->
-                                        <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length" class="space-y-1">
+                                        <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length"
+                                            class="space-y-1">
                                             <div class="flex items-center gap-2 text-red-400">
                                                 <Trash2 class="w-4 h-4" />
                                                 <span class="font-medium">Mods to remove ({{
-                                                    syncStatus.extraInInstance.filter(i => i.type === 'mod').length }})</span>
+                                                    syncStatus.extraInInstance.filter(i => i.type === 'mod').length
+                                                    }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These mods are not in the modpack and will be removed during sync.
@@ -1161,17 +1167,20 @@ function handleConfigReverted(event: Event) {
                                                 </div>
                                                 <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length > 5"
                                                     class="text-xs text-muted-foreground/70">
-                                                    ... and {{ syncStatus.extraInInstance.filter(i => i.type === 'mod').length - 5 }} more
+                                                    ... and {{syncStatus.extraInInstance.filter(i => i.type ===
+                                                    'mod').length - 5 }} more
                                                 </div>
                                             </div>
                                         </div>
 
                                         <!-- Extra Resourcepacks/Shaders (will be preserved) -->
-                                        <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length" class="space-y-1">
+                                        <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length"
+                                            class="space-y-1">
                                             <div class="flex items-center gap-2 text-blue-400">
                                                 <Package class="w-4 h-4" />
                                                 <span class="font-medium">Extra files ({{
-                                                    syncStatus.extraInInstance.filter(i => i.type !== 'mod').length }})</span>
+                                                    syncStatus.extraInInstance.filter(i => i.type !== 'mod').length
+                                                    }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These files will be preserved.
@@ -1187,7 +1196,8 @@ function handleConfigReverted(event: Event) {
                                                 </div>
                                                 <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 5"
                                                     class="text-xs text-muted-foreground/70">
-                                                    ... and {{ syncStatus.extraInInstance.filter(i => i.type !== 'mod').length - 5 }} more
+                                                    ... and {{syncStatus.extraInInstance.filter(i => i.type !==
+                                                    'mod').length - 5 }} more
                                                 </div>
                                             </div>
                                         </div>
@@ -1314,9 +1324,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                    }}</span>
+                                                }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                    }}%</span>
+                                                }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1349,7 +1359,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1359,7 +1369,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">

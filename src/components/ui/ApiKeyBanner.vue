@@ -34,12 +34,16 @@ onMounted(() => {
 
   // Re-check periodically in case user adds the key
   const interval = setInterval(async () => {
-    const newHasApiKey = await window.api.curseforge.hasApiKey();
-    if (newHasApiKey !== hasApiKey.value) {
-      hasApiKey.value = newHasApiKey;
-      if (newHasApiKey) {
-        isDismissed.value = false; // Reset dismiss when key is added
+    try {
+      const newHasApiKey = await window.api.curseforge.hasApiKey();
+      if (newHasApiKey !== hasApiKey.value) {
+        hasApiKey.value = newHasApiKey;
+        if (newHasApiKey) {
+          isDismissed.value = false; // Reset dismiss when key is added
+        }
       }
+    } catch (err) {
+      console.error("Failed to check API key:", err);
     }
   }, 5000);
 

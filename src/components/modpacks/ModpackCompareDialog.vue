@@ -88,7 +88,7 @@ const common = computed(() => {
 const versionDiffs = computed(() => {
   const bModsMap = new Map(packBMods.value.map((m) => [getProjectId(m), m]));
   const diffs: Array<{ modA: Mod; modB: Mod; name: string; projectId: string }> = [];
-  
+
   for (const modA of packAMods.value) {
     const projectId = getProjectId(modA);
     const modB = bModsMap.get(projectId);
@@ -139,7 +139,7 @@ async function loadComparison() {
 async function copyToB(modId: string) {
   if (!packBId.value || !areCompatible.value) return;
   if (packB.value?.remote_source?.url) return; // Block if linked
-  
+
   isCopying.value = true;
   try {
     await window.api.modpacks.addMod(packBId.value, modId);
@@ -156,7 +156,7 @@ async function copyToB(modId: string) {
 async function copyToA(modId: string) {
   if (!packAId.value || !areCompatible.value) return;
   if (packA.value?.remote_source?.url) return; // Block if linked
-  
+
   isCopying.value = true;
   try {
     await window.api.modpacks.addMod(packAId.value, modId);
@@ -173,7 +173,7 @@ async function copyToA(modId: string) {
 async function copyAllToB() {
   if (!packBId.value || !areCompatible.value) return;
   if (packB.value?.remote_source?.url) return; // Block if linked
-  
+
   isCopying.value = true;
   try {
     for (const mod of onlyInA.value) {
@@ -192,7 +192,7 @@ async function copyAllToB() {
 async function copyAllToA() {
   if (!packAId.value || !areCompatible.value) return;
   if (packA.value?.remote_source?.url) return; // Block if linked
-  
+
   isCopying.value = true;
   try {
     for (const mod of onlyInB.value) {
@@ -215,24 +215,24 @@ async function syncBothWays() {
     toast.error("Cannot Sync", "One or both packs are linked to a remote source");
     return;
   }
-  
+
   isSyncing.value = true;
   try {
     let addedToA = 0;
     let addedToB = 0;
-    
+
     // Copy mods from B to A
     for (const mod of onlyInB.value) {
       await window.api.modpacks.addMod(packAId.value, mod.id!);
       addedToA++;
     }
-    
+
     // Copy mods from A to B
     for (const mod of onlyInA.value) {
       await window.api.modpacks.addMod(packBId.value, mod.id!);
       addedToB++;
     }
-    
+
     await loadComparison();
     toast.success("Sync Complete", `Added ${addedToA} mods to ${packAName.value}, ${addedToB} mods to ${packBName.value}`);
   } catch (err: any) {
@@ -245,36 +245,36 @@ async function syncBothWays() {
 // Make pack B identical to pack A
 async function makeIdentical(direction: 'AtoB' | 'BtoA') {
   if (!packAId.value || !packBId.value || !areCompatible.value) return;
-  
+
   const targetId = direction === 'AtoB' ? packBId.value : packAId.value;
   const targetPack = direction === 'AtoB' ? packB.value : packA.value;
   const targetName = direction === 'AtoB' ? packBName.value : packAName.value;
   const sourceName = direction === 'AtoB' ? packAName.value : packBName.value;
   const modsToAdd = direction === 'AtoB' ? onlyInA.value : onlyInB.value;
   const modsToRemove = direction === 'AtoB' ? onlyInB.value : onlyInA.value;
-  
+
   if (targetPack?.remote_source?.url) {
     toast.error("Cannot Modify", `${targetName} is linked to a remote source`);
     return;
   }
-  
+
   isSyncing.value = true;
   try {
     let added = 0;
     let removed = 0;
-    
+
     // Add missing mods
     for (const mod of modsToAdd) {
       await window.api.modpacks.addMod(targetId, mod.id!);
       added++;
     }
-    
+
     // Remove extra mods
     for (const mod of modsToRemove) {
       await window.api.modpacks.removeMod(targetId, mod.id!);
       removed++;
     }
-    
+
     await loadComparison();
     toast.success("Sync Complete", `${targetName} is now identical to ${sourceName} (+${added}, -${removed} mods)`);
   } catch (err: any) {
@@ -287,25 +287,25 @@ async function makeIdentical(direction: 'AtoB' | 'BtoA') {
 // Update version in target pack (projectId is version-independent, modId is the actual mod to copy)
 async function updateVersion(projectId: string, sourceModId: string, direction: 'AtoB' | 'BtoA') {
   if (!packAId.value || !packBId.value) return;
-  
+
   const targetId = direction === 'AtoB' ? packBId.value : packAId.value;
   const targetPack = direction === 'AtoB' ? packB.value : packA.value;
   const targetMods = direction === 'AtoB' ? packBMods.value : packAMods.value;
   const sourceMods = direction === 'AtoB' ? packAMods.value : packBMods.value;
   const targetName = direction === 'AtoB' ? packBName.value : packAName.value;
-  
+
   if (targetPack?.remote_source?.url) {
     toast.error("Cannot Update", `${targetName} is linked to a remote source`);
     return;
   }
-  
+
   const sourceMod = sourceMods.find(m => m.id === sourceModId);
   if (!sourceMod) return;
-  
+
   // Find the old version in target to remove
   const targetMod = targetMods.find(m => getProjectId(m) === projectId);
   if (!targetMod) return;
-  
+
   isCopying.value = true;
   try {
     // Remove old version from target, add new version from source
@@ -323,10 +323,10 @@ async function updateVersion(projectId: string, sourceModId: string, direction: 
 // Export diff report
 async function exportDiffReport() {
   if (!packA.value || !packB.value) return;
-  
+
   const now = new Date().toISOString().split('T')[0];
   const filename = `compare-${packA.value.name}-vs-${packB.value.name}-${now}.md`;
-  
+
   let report = `# Modpack Comparison Report\n\n`;
   report += `**Date:** ${new Date().toLocaleDateString()}\n\n`;
   report += `## Packs Compared\n\n`;
@@ -334,13 +334,13 @@ async function exportDiffReport() {
   report += `|------|-----------|--------|------------|\n`;
   report += `| ${packA.value.name} | ${packA.value.minecraft_version} | ${packA.value.loader} | ${stats.value.totalA} |\n`;
   report += `| ${packB.value.name} | ${packB.value.minecraft_version} | ${packB.value.loader} | ${stats.value.totalB} |\n\n`;
-  
+
   report += `## Summary\n\n`;
   report += `- **Only in ${packA.value.name}:** ${stats.value.onlyInA} mods\n`;
   report += `- **Only in ${packB.value.name}:** ${stats.value.onlyInB} mods\n`;
   report += `- **Common mods:** ${stats.value.common}\n`;
   report += `- **Version differences:** ${stats.value.versionDiffs}\n\n`;
-  
+
   if (onlyInA.value.length > 0) {
     report += `## Only in ${packA.value.name}\n\n`;
     for (const mod of onlyInA.value) {
@@ -348,7 +348,7 @@ async function exportDiffReport() {
     }
     report += '\n';
   }
-  
+
   if (onlyInB.value.length > 0) {
     report += `## Only in ${packB.value.name}\n\n`;
     for (const mod of onlyInB.value) {
@@ -356,7 +356,7 @@ async function exportDiffReport() {
     }
     report += '\n';
   }
-  
+
   if (versionDiffs.value.length > 0) {
     report += `## Version Differences\n\n`;
     report += `| Mod | ${packA.value.name} | ${packB.value.name} |\n`;
@@ -366,14 +366,14 @@ async function exportDiffReport() {
     }
     report += '\n';
   }
-  
+
   if (common.value.length > 0) {
     report += `## Common Mods (${common.value.length})\n\n`;
     for (const mod of common.value) {
       report += `- ${mod.name}\n`;
     }
   }
-  
+
   // Save file
   try {
     const blob = new Blob([report], { type: 'text/markdown' });
@@ -398,13 +398,14 @@ function swapPacks() {
 
 watch(
   () => props.open,
-  (isOpen) => {
+  async (isOpen) => {
     if (isOpen) {
       // Clear mods first
       packAMods.value = [];
       packBMods.value = [];
 
-      loadModpacks().then(() => {
+      try {
+        await loadModpacks();
         // Auto-select if pre-selected packs are provided
         if (props.preSelectedPackA) {
           packAId.value = props.preSelectedPackA;
@@ -421,9 +422,12 @@ watch(
         // Explicitly load comparison if both packs are set
         // (watcher won't fire if IDs are same as before)
         if (packAId.value && packBId.value) {
-          loadComparison();
+          await loadComparison();
         }
-      });
+      } catch (err) {
+        console.error("Failed to load modpacks for comparison:", err);
+        toast.error("Load Failed", "Could not load modpacks for comparison");
+      }
     }
   }
 );
@@ -443,7 +447,8 @@ const packBName = computed(
 </script>
 
 <template>
-  <Dialog :open="open" @close="emit('close')" maxWidth="6xl" contentClass="p-0 max-h-[85vh] flex flex-col overflow-hidden">
+  <Dialog :open="open" @close="emit('close')" maxWidth="6xl"
+    contentClass="p-0 max-h-[85vh] flex flex-col overflow-hidden">
     <!-- Header -->
     <div class="px-5 py-4 border-b border-border/50 flex items-center gap-3 shrink-0">
       <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -457,7 +462,8 @@ const packBName = computed(
       </div>
       <!-- Header Actions -->
       <div class="flex items-center gap-2">
-        <Button v-if="packAId && packBId" variant="outline" size="sm" class="h-8 text-xs gap-1.5" @click="exportDiffReport">
+        <Button v-if="packAId && packBId" variant="outline" size="sm" class="h-8 text-xs gap-1.5"
+          @click="exportDiffReport">
           <FileDown class="w-3.5 h-3.5" />
           Export Report
         </Button>
@@ -465,7 +471,8 @@ const packBName = computed(
     </div>
 
     <!-- Comparison Controls -->
-    <div class="px-5 py-4 border-b border-border/50 bg-muted/10 grid grid-cols-[1fr_auto_1fr] gap-4 items-start shrink-0">
+    <div
+      class="px-5 py-4 border-b border-border/50 bg-muted/10 grid grid-cols-[1fr_auto_1fr] gap-4 items-start shrink-0">
       <!-- Pack A Selector -->
       <div class="space-y-2">
         <label class="text-xs font-medium text-muted-foreground">Source Pack (A)</label>
@@ -523,11 +530,11 @@ const packBName = computed(
     </div>
 
     <!-- Action Toolbar (when packs selected) -->
-    <div v-if="packAId && packBId && areCompatible" class="px-5 py-2 border-b border-border/50 bg-muted/5 flex items-center gap-3 shrink-0">
+    <div v-if="packAId && packBId && areCompatible"
+      class="px-5 py-2 border-b border-border/50 bg-muted/5 flex items-center gap-3 shrink-0">
       <!-- View Tabs -->
       <div class="flex items-center gap-1 p-0.5 bg-muted/50 rounded-lg">
-        <button @click="activeView = 'differences'"
-          class="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+        <button @click="activeView = 'differences'" class="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
           :class="activeView === 'differences' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'">
           Differences
         </button>
@@ -535,20 +542,20 @@ const packBName = computed(
           class="px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5"
           :class="activeView === 'versions' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'">
           Version Diff
-          <span v-if="versionDiffs.length > 0" class="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-600">
+          <span v-if="versionDiffs.length > 0"
+            class="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-600">
             {{ versionDiffs.length }}
           </span>
         </button>
       </div>
-      
+
       <div class="flex-1" />
-      
+
       <!-- Sync Actions -->
       <div class="flex items-center gap-2">
         <Button variant="outline" size="sm" class="h-7 text-xs gap-1.5"
           :disabled="isSyncing || (onlyInA.length === 0 && onlyInB.length === 0) || !!packA?.remote_source?.url || !!packB?.remote_source?.url"
-          @click="syncBothWays"
-          title="Add unique mods from each pack to the other">
+          @click="syncBothWays" title="Add unique mods from each pack to the other">
           <Merge class="w-3.5 h-3.5" />
           Sync Both Ways
         </Button>
@@ -560,15 +567,14 @@ const packBName = computed(
             <ChevronDown class="w-3 h-3" />
           </Button>
           <!-- Dropdown -->
-          <div class="absolute top-full right-0 mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
-            <button @click="makeIdentical('AtoB')" 
-              :disabled="!!packB?.remote_source?.url || isSyncing"
+          <div
+            class="absolute top-full right-0 mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+            <button @click="makeIdentical('AtoB')" :disabled="!!packB?.remote_source?.url || isSyncing"
               class="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-t-lg">
               <ArrowRight class="w-4 h-4" />
               <span>Make <strong class="text-primary">{{ packBName }}</strong> identical to A</span>
             </button>
-            <button @click="makeIdentical('BtoA')"
-              :disabled="!!packA?.remote_source?.url || isSyncing"
+            <button @click="makeIdentical('BtoA')" :disabled="!!packA?.remote_source?.url || isSyncing"
               class="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-b-lg">
               <ArrowRight class="w-4 h-4 rotate-180" />
               <span>Make <strong class="text-primary">{{ packAName }}</strong> identical to B</span>
@@ -601,7 +607,8 @@ const packBName = computed(
     </div>
 
     <!-- Comparison Columns (Differences View) -->
-    <div v-else-if="packAId && packBId && activeView === 'differences'" class="flex-1 flex overflow-hidden min-h-[300px]">
+    <div v-else-if="packAId && packBId && activeView === 'differences'"
+      class="flex-1 flex overflow-hidden min-h-[300px]">
       <!-- Unique to A -->
       <div class="flex-1 flex flex-col border-r border-border/30 min-w-0">
         <div class="p-3 border-b border-border/30 bg-amber-500/5 flex items-center justify-between shrink-0">
@@ -633,12 +640,13 @@ const packBName = computed(
               <Package class="w-4 h-4 text-muted-foreground shrink-0" />
               <div class="min-w-0">
                 <div class="font-medium truncate">{{ mod.name }}</div>
-                <div v-if="mod.version" class="text-xs text-muted-foreground truncate opacity-70">{{ mod.version }}</div>
+                <div v-if="mod.version" class="text-xs text-muted-foreground truncate opacity-70">{{ mod.version }}
+                </div>
               </div>
             </div>
             <Button variant="ghost" size="icon"
               class="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 hover:bg-amber-500/20 hover:text-amber-600"
-              :disabled="!areCompatible || !!packB?.remote_source?.url || isCopying" 
+              :disabled="!areCompatible || !!packB?.remote_source?.url || isCopying"
               :title="packB?.remote_source?.url ? 'Target pack is read-only' : areCompatible ? 'Copy to Pack B' : 'Incompatible'"
               @click="copyToB(mod.id)">
               <Lock v-if="packB?.remote_source?.url" class="w-3.5 h-3.5 text-muted-foreground" />
@@ -657,7 +665,8 @@ const packBName = computed(
           </span>
         </div>
         <div class="flex-1 overflow-y-auto p-2 space-y-1">
-          <div v-if="common.length === 0" class="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
+          <div v-if="common.length === 0"
+            class="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
             <Package class="w-8 h-8 mb-2 opacity-30" />
             <p>No common mods</p>
           </div>
@@ -707,7 +716,8 @@ const packBName = computed(
             <div class="min-w-0 pl-3 text-right flex items-center gap-2 justify-end">
               <div class="min-w-0">
                 <div class="font-medium truncate">{{ mod.name }}</div>
-                <div v-if="mod.version" class="text-xs text-muted-foreground truncate opacity-70">{{ mod.version }}</div>
+                <div v-if="mod.version" class="text-xs text-muted-foreground truncate opacity-70">{{ mod.version }}
+                </div>
               </div>
               <Package class="w-4 h-4 text-muted-foreground shrink-0" />
             </div>
@@ -717,7 +727,8 @@ const packBName = computed(
     </div>
 
     <!-- Version Diff View -->
-    <div v-else-if="packAId && packBId && activeView === 'versions'" class="flex-1 flex flex-col overflow-hidden min-h-[300px]">
+    <div v-else-if="packAId && packBId && activeView === 'versions'"
+      class="flex-1 flex flex-col overflow-hidden min-h-[300px]">
       <!-- Header -->
       <div class="p-3 border-b border-border/30 bg-amber-500/5 flex items-center justify-between shrink-0">
         <span class="text-sm font-medium flex items-center gap-2">
@@ -725,17 +736,17 @@ const packBName = computed(
           Mods with Different Versions ({{ versionDiffs.length }})
         </span>
       </div>
-      
+
       <div class="flex-1 overflow-y-auto">
-        <div v-if="versionDiffs.length === 0" class="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
+        <div v-if="versionDiffs.length === 0"
+          class="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
           <Check class="w-12 h-12 mb-3 text-green-500/50" />
           <p class="font-medium">All versions match!</p>
           <p class="text-sm opacity-70 mt-1">Common mods have the same version in both packs</p>
         </div>
-        
+
         <div v-else class="divide-y divide-border/30">
-          <div v-for="diff in versionDiffs" :key="diff.modA.id" 
-            class="p-4 hover:bg-muted/20 transition-colors">
+          <div v-for="diff in versionDiffs" :key="diff.modA.id" class="p-4 hover:bg-muted/20 transition-colors">
             <div class="flex items-center gap-4">
               <!-- Mod Info -->
               <div class="flex items-center gap-3 min-w-0 flex-1">
@@ -744,15 +755,16 @@ const packBName = computed(
                   <div class="font-medium truncate">{{ diff.name }}</div>
                 </div>
               </div>
-              
+
               <!-- Version A -->
               <div class="flex flex-col items-center gap-1 w-32">
                 <span class="text-[10px] text-muted-foreground uppercase">{{ packAName }}</span>
-                <span class="text-xs font-mono bg-amber-500/10 text-amber-600 px-2 py-1 rounded truncate max-w-full" :title="diff.modA.version">
+                <span class="text-xs font-mono bg-amber-500/10 text-amber-600 px-2 py-1 rounded truncate max-w-full"
+                  :title="diff.modA.version">
                   {{ diff.modA.version || 'N/A' }}
                 </span>
               </div>
-              
+
               <!-- Actions -->
               <div class="flex items-center gap-1">
                 <Button variant="ghost" size="icon" class="h-7 w-7 hover:bg-primary/20 hover:text-primary"
@@ -768,11 +780,12 @@ const packBName = computed(
                   <ArrowRight class="w-3.5 h-3.5 rotate-180" />
                 </Button>
               </div>
-              
+
               <!-- Version B -->
               <div class="flex flex-col items-center gap-1 w-32">
                 <span class="text-[10px] text-muted-foreground uppercase">{{ packBName }}</span>
-                <span class="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded truncate max-w-full" :title="diff.modB.version">
+                <span class="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded truncate max-w-full"
+                  :title="diff.modB.version">
                   {{ diff.modB.version || 'N/A' }}
                 </span>
               </div>

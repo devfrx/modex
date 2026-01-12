@@ -789,10 +789,10 @@ export class ModAnalyzerService {
       const hasMod2 = knownConflict.mod2Ids.some(id => installedCfIds.has(id));
 
       if (hasMod1 && hasMod2) {
-        const mod1Id = knownConflict.mod1Ids.find(id => installedCfIds.has(id))!;
-        const mod2Id = knownConflict.mod2Ids.find(id => installedCfIds.has(id))!;
+        const mod1Id = knownConflict.mod1Ids.find(id => installedCfIds.has(id));
+        const mod2Id = knownConflict.mod2Ids.find(id => installedCfIds.has(id));
 
-        if (mod1Id !== mod2Id) {
+        if (mod1Id && mod2Id && mod1Id !== mod2Id) {
           const mod1 = mods.find(m => m.curseforge_id === mod1Id);
           const mod2 = mods.find(m => m.curseforge_id === mod2Id);
 

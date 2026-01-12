@@ -193,9 +193,12 @@ async function loadModpacks() {
 
     const packsWithCounts = await Promise.all(
       packs.map(async (pack) => {
+        if (!pack.id) {
+          return { ...pack, modCount: 0, hasUnsavedChanges: false };
+        }
         const [mods, hasUnsaved] = await Promise.all([
-          window.api.modpacks.getMods(pack.id!),
-          window.api.modpacks.hasUnsavedChanges(pack.id!),
+          window.api.modpacks.getMods(pack.id),
+          window.api.modpacks.hasUnsavedChanges(pack.id),
         ]);
         return { ...pack, modCount: mods.length, hasUnsavedChanges: hasUnsaved };
       })
@@ -203,7 +206,7 @@ async function loadModpacks() {
 
     modpacks.value = packsWithCounts;
 
-    const currentIds = new Set(modpacks.value.map((m) => m.id!));
+    const currentIds = new Set(modpacks.value.map((m) => m.id).filter((id): id is string => !!id));
     for (const id of selectedModpackIds.value) {
       if (!currentIds.has(id)) selectedModpackIds.value.delete(id);
     }
@@ -1332,7 +1335,7 @@ onMounted(() => {
           class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
             :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
-            :is-running="isModpackRunning(pack.id!)" @delete="confirmDelete" @edit="openEditor"
+            :is-running="isModpackRunning(pack.id ?? '')" @delete="confirmDelete" @edit="openEditor"
             @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
             @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog"
             @play="openPlayTab" />

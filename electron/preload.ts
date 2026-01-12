@@ -680,6 +680,7 @@ contextBridge.exposeInMainWorld("api", {
       releaseName?: string;
       releaseNotes?: string;
       publishedAt?: string;
+      noReleases?: boolean;
       error?: string;
     }> => ipcRenderer.invoke("updates:checkAppUpdate"),
     setApiKey: (apiKey: string): Promise<{ success: boolean }> =>
@@ -691,7 +692,20 @@ contextBridge.exposeInMainWorld("api", {
       gameVersion: string,
       loader: string,
       contentType: "mod" | "resourcepack" | "shader"
-    ) =>
+    ): Promise<{
+      id: number;
+      modId: number;
+      displayName: string;
+      fileName: string;
+      releaseType: number;
+      fileDate: string;
+      fileLength: number;
+      downloadCount: number;
+      downloadUrl: string | null;
+      gameVersions: string[];
+      dependencies: Array<{ modId: number; relationType: number }>;
+      fileFingerprint: number;
+    } | null> =>
       ipcRenderer.invoke(
         "updates:checkMod",
         modId,
@@ -759,9 +773,13 @@ contextBridge.exposeInMainWorld("api", {
         slug?: string;
       }>;
       conflicts: Array<{
-        mod1: { id: string; name: string };
-        mod2: { id: string; name: string };
-        reason: string;
+        mod1: { id: string; name: string; curseforge_id?: number };
+        mod2: { id: string; name: string; curseforge_id?: number };
+        type: 'incompatible' | 'duplicate' | 'version_mismatch' | 'loader_mismatch';
+        severity: 'error' | 'warning' | 'info';
+        description: string;
+        suggestion?: string;
+        reason?: string;
       }>;
       performanceStats: {
         totalMods: number;
@@ -898,10 +916,60 @@ contextBridge.exposeInMainWorld("api", {
       };
     }>> => ipcRenderer.invoke("instance:getAll"),
 
-    get: (id: string): Promise<any | null> =>
+    get: (id: string): Promise<{
+      id: string;
+      name: string;
+      description?: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      path: string;
+      modpackId?: string;
+      icon?: string;
+      modCount?: number;
+      createdAt: string;
+      lastPlayed?: string;
+      playTime?: number;
+      state: "ready" | "installing" | "error";
+      lastSynced?: string;
+      memory?: { min: number; max: number };
+      javaArgs?: string;
+      source?: {
+        type: "curseforge" | "modrinth" | "local";
+        projectId?: number;
+        fileId?: number;
+        name?: string;
+        version?: string;
+      };
+    } | null> =>
       ipcRenderer.invoke("instance:get", id),
 
-    getByModpack: (modpackId: string): Promise<any | null> =>
+    getByModpack: (modpackId: string): Promise<{
+      id: string;
+      name: string;
+      description?: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      path: string;
+      modpackId?: string;
+      icon?: string;
+      modCount?: number;
+      createdAt: string;
+      lastPlayed?: string;
+      playTime?: number;
+      state: "ready" | "installing" | "error";
+      lastSynced?: string;
+      memory?: { min: number; max: number };
+      javaArgs?: string;
+      source?: {
+        type: "curseforge" | "modrinth" | "local";
+        projectId?: number;
+        fileId?: number;
+        name?: string;
+        version?: string;
+      };
+    } | null> =>
       ipcRenderer.invoke("instance:getByModpack", modpackId),
 
     create: (options: {
@@ -920,12 +988,71 @@ contextBridge.exposeInMainWorld("api", {
         name?: string;
         version?: string;
       };
-    }): Promise<any> => ipcRenderer.invoke("instance:create", options),
+    }): Promise<{
+      id: string;
+      name: string;
+      description?: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      path: string;
+      modpackId?: string;
+      icon?: string;
+      modCount?: number;
+      createdAt: string;
+      lastPlayed?: string;
+      playTime?: number;
+      state: "ready" | "installing" | "error";
+      lastSynced?: string;
+      memory?: { min: number; max: number };
+      javaArgs?: string;
+      source?: {
+        type: "curseforge" | "modrinth" | "local";
+        projectId?: number;
+        fileId?: number;
+        name?: string;
+        version?: string;
+      };
+    }> => ipcRenderer.invoke("instance:create", options),
 
     delete: (id: string): Promise<boolean> =>
       ipcRenderer.invoke("instance:delete", id),
 
-    update: (id: string, updates: any): Promise<any | null> =>
+    update: (id: string, updates: Partial<{
+      name: string;
+      description?: string;
+      icon?: string;
+      memory?: { min: number; max: number };
+      javaArgs?: string;
+      lastPlayed?: string;
+      playTime?: number;
+      state: "ready" | "installing" | "error";
+    }>): Promise<{
+      id: string;
+      name: string;
+      description?: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      path: string;
+      modpackId?: string;
+      icon?: string;
+      modCount?: number;
+      createdAt: string;
+      lastPlayed?: string;
+      playTime?: number;
+      state: "ready" | "installing" | "error";
+      lastSynced?: string;
+      memory?: { min: number; max: number };
+      javaArgs?: string;
+      source?: {
+        type: "curseforge" | "modrinth" | "local";
+        projectId?: number;
+        fileId?: number;
+        name?: string;
+        version?: string;
+      };
+    } | null> =>
       ipcRenderer.invoke("instance:update", id, updates),
 
     syncModpack: (
@@ -998,7 +1125,32 @@ contextBridge.exposeInMainWorld("api", {
     export: (instanceId: string): Promise<boolean> =>
       ipcRenderer.invoke("instance:export", instanceId),
 
-    duplicate: (instanceId: string, newName: string): Promise<any | null> =>
+    duplicate: (instanceId: string, newName: string): Promise<{
+      id: string;
+      name: string;
+      description?: string;
+      minecraftVersion: string;
+      loader: string;
+      loaderVersion?: string;
+      path: string;
+      modpackId?: string;
+      icon?: string;
+      modCount?: number;
+      createdAt: string;
+      lastPlayed?: string;
+      playTime?: number;
+      state: "ready" | "installing" | "error";
+      lastSynced?: string;
+      memory?: { min: number; max: number };
+      javaArgs?: string;
+      source?: {
+        type: "curseforge" | "modrinth" | "local";
+        projectId?: number;
+        fileId?: number;
+        name?: string;
+        version?: string;
+      };
+    } | null> =>
       ipcRenderer.invoke("instance:duplicate", instanceId, newName),
 
     getLauncherConfig: (): Promise<{
@@ -1017,7 +1169,32 @@ contextBridge.exposeInMainWorld("api", {
       modpackId: string,
       options?: { overridesZipPath?: string }
     ): Promise<{
-      instance: any;
+      instance: {
+        id: string;
+        name: string;
+        description?: string;
+        minecraftVersion: string;
+        loader: string;
+        loaderVersion?: string;
+        path: string;
+        modpackId?: string;
+        icon?: string;
+        modCount?: number;
+        createdAt: string;
+        lastPlayed?: string;
+        playTime?: number;
+        state: "ready" | "installing" | "error";
+        lastSynced?: string;
+        memory?: { min: number; max: number };
+        javaArgs?: string;
+        source?: {
+          type: "curseforge" | "modrinth" | "local";
+          projectId?: number;
+          fileId?: number;
+          name?: string;
+          version?: string;
+        };
+      };
       syncResult: {
         success: boolean;
         modsDownloaded: number;

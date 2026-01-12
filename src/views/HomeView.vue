@@ -302,7 +302,7 @@ onMounted(loadData);
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div v-for="pack in recentModpacks" :key="pack.id"
                             class="group relative rounded-lg bg-card border border-border/50 overflow-hidden cursor-pointer hover:border-primary/40 transition-all duration-200"
-                            @click="goToModpack(pack.id!)">
+                            @click="pack.id && goToModpack(pack.id)">
                             <div class="p-4">
                                 <div class="flex items-start gap-3 mb-3">
                                     <!-- Icon -->

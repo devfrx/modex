@@ -56,6 +56,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 153,
       primarySaturation: 60,
+      primaryLightness: 55,
       borderRadius: 8,
       borderWidth: 1,
       glassEffect: false,
@@ -70,6 +71,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 217,
       primarySaturation: 91,
+      primaryLightness: 55,
       borderRadius: 8,
       borderWidth: 1,
       glassEffect: false,
@@ -84,6 +86,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 262,
       primarySaturation: 83,
+      primaryLightness: 55,
       borderRadius: 8,
       borderWidth: 1,
       glassEffect: false,
@@ -98,6 +101,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 350,
       primarySaturation: 89,
+      primaryLightness: 55,
       borderRadius: 8,
       borderWidth: 1,
       glassEffect: false,
@@ -112,6 +116,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 38,
       primarySaturation: 92,
+      primaryLightness: 55,
       borderRadius: 8,
       borderWidth: 1,
       glassEffect: false,
@@ -126,6 +131,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 150,
       primarySaturation: 100,
+      primaryLightness: 55,
       borderRadius: 6,
       borderWidth: 2,
       glassEffect: false,
@@ -140,6 +146,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 153,
       primarySaturation: 60,
+      primaryLightness: 55,
       borderRadius: 12,
       borderWidth: 1,
       glassEffect: true,
@@ -154,6 +161,7 @@ export const stylePresets: StylePreset[] = [
     config: {
       primaryHue: 240,
       primarySaturation: 5,
+      primaryLightness: 55,
       borderRadius: 6,
       borderWidth: 1,
       glassEffect: false,
@@ -266,11 +274,11 @@ export function useTheme() {
       
       // Set primary-foreground based on lightness for contrast
       // White/light accents need dark text, dark accents need light text
-      if (lightness > 70) {
-        // Light accent - use dark foreground for readability
+      if (lightness > 60 || config.primaryHue > 360) {
+        // Light accent or white range - use dark foreground for readability
         root.style.setProperty("--primary-foreground", "220 13% 10%");
-      } else if (lightness < 30) {
-        // Dark accent - use light foreground
+      } else if (lightness < 30 || config.primaryHue < 0) {
+        // Dark accent or black range - use light foreground
         root.style.setProperty("--primary-foreground", "0 0% 98%");
       } else {
         // Normal range - use standard foreground based on theme
@@ -313,8 +321,10 @@ export function useTheme() {
   function applyStylePreset(presetId: string) {
     const preset = stylePresets.find((p) => p.id === presetId);
     if (preset) {
+      // Reset to defaults first, then apply preset config
+      // This ensures all values are properly reset when switching presets
       customization.value = {
-        ...customization.value,
+        ...defaultCustomization,
         ...preset.config,
         stylePreset: presetId,
       };

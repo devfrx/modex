@@ -42,6 +42,7 @@ import {
   ChevronDown,
 } from "lucide-vue-next";
 import type { Modpack, Mod } from "@/types/electron";
+import ModpackIcon from "@/assets/modex_modpack_icon2.png";
 
 const route = useRoute();
 const router = useRouter();
@@ -1024,9 +1025,7 @@ onMounted(() => {
         <div class="flex items-center gap-4">
           <!-- Title Section -->
           <div class="flex items-center gap-3 shrink-0">
-            <div class="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
-              <Package class="w-5 h-5" />
-            </div>
+            <img :src="ModpackIcon" alt="Modpacks" class="w-16 h-16 object-contain" />
             <div>
               <h1 class="text-lg font-semibold">Modpacks</h1>
               <p class="text-xs text-muted-foreground">{{ modpacks.length }} packs • {{ totalMods }} mods</p>

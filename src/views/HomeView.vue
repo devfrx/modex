@@ -18,6 +18,7 @@ import {
     Globe,
     RefreshCw,
 } from "lucide-vue-next";
+import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import type { Modpack } from "@/types/electron";
 
 const router = useRouter();
@@ -111,11 +112,7 @@ onMounted(loadData);
                 <div class="relative z-10 text-center px-4 sm:px-6 max-w-4xl mx-auto">
                     <!-- Logo/Brand -->
                     <div class="mb-8 flex justify-center">
-                        <div class="relative group">
-                            <div class="relative p-4 rounded-2xl bg-card/80 border border-primary/20 backdrop-blur-xl">
-                                <Box class="w-10 h-10 text-primary" />
-                            </div>
-                        </div>
+                        <img :src="ModexLogo" alt="ModEx" class="w-32 h-32 object-contain drop-shadow-lg" />
                     </div>
 
                     <!-- Headline -->

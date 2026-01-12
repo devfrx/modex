@@ -6,14 +6,7 @@
         class="relative px-2 sm:px-4 py-2 sm:py-2.5 bg-background/80 backdrop-blur-sm flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
         <!-- Title -->
         <div class="flex items-center gap-2">
-          <div
-            class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-violet-500/20 to-purple-500/10 border border-violet-500/20">
-            <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
-          </div>
+          <img :src="SandboxIcon" alt="Sandbox" class="w-14 h-14 object-contain" />
           <h2 class="text-xs sm:text-sm font-semibold text-foreground/80">
             Sandbox
           </h2>
@@ -679,6 +672,7 @@ import {
   Box,
   Gamepad2,
 } from "lucide-vue-next";
+import SandboxIcon from "@/assets/modex_sandbox_icon.png";
 import SandboxPixiCanvas from "@/components/SandboxPixiCanvas.vue";
 
 const POSITIONS_KEY = "modex:sandbox:positions";

@@ -58,6 +58,7 @@ import {
 import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { Mod, Modpack } from "@/types/electron";
+import ModsIcon from "@/assets/modex_mods_icon.png";
 
 const route = useRoute();
 const router = useRouter();
@@ -827,9 +828,7 @@ onMounted(() => {
         <div class="flex items-center gap-4">
           <!-- Title Section -->
           <div class="flex items-center gap-3 shrink-0">
-            <div class="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-              <HardDrive class="w-5 h-5" />
-            </div>
+            <img :src="ModsIcon" alt="Library" class="w-16 h-16 object-contain" />
             <div>
               <h1 class="text-lg font-semibold">Library</h1>
               <p class="text-xs text-muted-foreground">{{ mods.length }} items</p>

@@ -30,6 +30,7 @@ import {
   GripVertical,
   Boxes,
 } from "lucide-vue-next";
+import OrganizeIcon from "@/assets/modex_organize_icon.png";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -525,9 +526,7 @@ const moveDialogDescription = computed(() => {
         <div class="flex items-center gap-4">
           <!-- Title Section -->
           <div class="flex items-center gap-3 shrink-0">
-            <div class="w-9 h-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-              <FolderTree class="w-5 h-5" />
-            </div>
+            <img :src="OrganizeIcon" alt="Organize" class="w-16 h-16 object-contain" />
             <div>
               <h1 class="text-lg font-semibold">Organize</h1>
               <p class="text-xs text-muted-foreground">{{ folders.length }} folders • {{ organizedMods }}/{{ totalMods

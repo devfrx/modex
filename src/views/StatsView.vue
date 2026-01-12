@@ -36,6 +36,7 @@ import {
   RotateCcw,
 } from "lucide-vue-next";
 import type { Mod, Modpack } from "@/types/electron";
+import StatsIcon from "@/assets/modex_stats_icon.png";
 
 // Register Chart.js components
 ChartJS.register(
@@ -345,9 +346,7 @@ onMounted(() => {
         <div class="flex items-center gap-4">
           <!-- Title Section -->
           <div class="flex items-center gap-3 shrink-0">
-            <div class="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
-              <BarChart3 class="w-5 h-5" />
-            </div>
+            <img :src="StatsIcon" alt="Statistics" class="w-16 h-16 object-contain" />
             <div>
               <h1 class="text-lg font-semibold">Statistics</h1>
               <p class="text-xs text-muted-foreground">Library analytics and insights</p>

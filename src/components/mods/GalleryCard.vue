@@ -96,8 +96,7 @@ function handleImageError(e: Event) {
 
       <!-- Fallback Icon when no image -->
       <div v-if="!hasThumbnail" class="absolute inset-0 flex items-center justify-center">
-        <component :is="typeConfig.icon"
-          class="w-16 h-16 text-muted-foreground/30 group-hover:text-primary/40 transition-colors duration-300" />
+        <component :is="typeConfig.icon" class="w-16 h-16 text-muted-foreground/30 transition-colors duration-300" />
       </div>
 
       <!-- Gradient Overlay -->
@@ -157,8 +156,7 @@ function handleImageError(e: Event) {
       <!-- Bottom Content Overlay -->
       <div class="absolute bottom-0 left-0 right-0 p-4 z-10">
         <!-- Mod Name & Author -->
-        <h3
-          class="font-semibold text-base text-white leading-tight mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+        <h3 class="font-semibold text-base text-white leading-tight mb-1 line-clamp-2 transition-colors">
           {{ mod.name }}
         </h3>
         <p class="text-xs text-white/60 mb-3">

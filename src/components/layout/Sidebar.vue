@@ -17,6 +17,7 @@ import {
   PanelLeft,
   Zap,
 } from "lucide-vue-next";
+import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import { cn } from "@/lib/utils";
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useSidebar } from "@/composables/useSidebar";
@@ -151,9 +152,7 @@ onUnmounted(() => {
     <div class="p-4 border-b border-border/30 flex items-center"
       :class="settings.collapsed ? 'justify-center' : 'justify-between'">
       <div v-if="!settings.collapsed" class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-          <span class="text-primary font-bold text-sm">M</span>
-        </div>
+        <img :src="ModexLogo" alt="ModEx" class="w-9 h-9 object-contain" />
         <div>
           <h1 class="text-base font-semibold tracking-tight text-foreground">
             ModEx
@@ -163,9 +162,7 @@ onUnmounted(() => {
           </p>
         </div>
       </div>
-      <div v-else class="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-        <span class="text-primary font-bold text-sm">M</span>
-      </div>
+      <img v-else :src="ModexLogo" alt="ModEx" class="w-9 h-9 object-contain" />
       <button @click="emit('close')"
         class="sm:hidden p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Close menu" v-if="!settings.collapsed">

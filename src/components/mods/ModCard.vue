@@ -89,7 +89,7 @@ const loaderTagClass = computed(() => {
 
     <!-- Main Card Container -->
     <div
-      class="relative rounded-xl overflow-hidden bg-card border border-border/50 group-hover:border-primary/40 transition-all duration-300 shadow-sm group-hover:shadow-lg group-hover:shadow-primary/5">
+      class="relative rounded-xl overflow-hidden bg-card border border-border/50 group-hover:border-border/80 transition-all duration-300 shadow-sm group-hover:shadow-lg group-hover:shadow-black/10">
 
       <!-- Hero Image Section -->
       <div class="relative h-24 overflow-hidden bg-muted/30">
@@ -103,7 +103,7 @@ const loaderTagClass = computed(() => {
         </div>
 
         <!-- Gradient Overlays -->
-        <div class="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" />
+        <div class="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
 
         <!-- Top Bar -->
         <div class="absolute top-2 left-2 right-2 z-20 flex items-center justify-between">
@@ -152,8 +152,7 @@ const loaderTagClass = computed(() => {
       <div class="relative p-3">
         <!-- Title & Author -->
         <div class="mb-1.5">
-          <h3
-            class="font-semibold text-sm line-clamp-1 text-foreground group-hover:text-primary transition-colors cursor-pointer"
+          <h3 class="font-semibold text-sm line-clamp-1 text-foreground transition-colors cursor-pointer"
             @click.stop="$emit('show-details', mod)">
             {{ mod.name }}
           </h3>

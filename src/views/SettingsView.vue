@@ -4,6 +4,7 @@ import { useTheme, stylePresets } from "@/composables/useTheme";
 import { useToast } from "@/composables/useToast";
 import { useDialog } from "@/composables/useDialog";
 import { useSidebar } from "@/composables/useSidebar";
+import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import MinecraftInstallations from "@/components/ui/MinecraftInstallations.vue";
@@ -357,9 +358,7 @@ onMounted(() => {
 
       <div class="p-4 border-t border-border">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
-            <span class="text-sm font-bold text-primary">M</span>
-          </div>
+          <img :src="ModexLogo" alt="ModEx" class="w-9 h-9 object-contain" />
           <div>
             <div class="text-sm font-medium">ModEx</div>
             <div class="text-xs text-muted-foreground">v{{ appVersion }}</div>
@@ -953,10 +952,8 @@ onMounted(() => {
         <!-- About Tab -->
         <div v-if="currentTab === 'about'" class="space-y-8">
           <div class="flex flex-col items-center justify-center py-8 sm:py-12 text-center space-y-4 sm:space-y-6">
-            <div
-              class="w-20 h-20 sm:w-24 sm:h-24 bg-primary/10 rounded-2xl sm:rounded-3xl flex items-center justify-center mb-2 sm:mb-4">
-              <span class="text-4xl sm:text-5xl font-bold text-primary">M</span>
-            </div>
+            <img :src="ModexLogo" alt="ModEx"
+              class="w-24 h-24 sm:w-32 sm:h-32 object-contain drop-shadow-lg mb-2 sm:mb-4" />
 
             <div>
               <h2 class="text-2xl sm:text-3xl font-bold tracking-tight">

@@ -156,7 +156,7 @@
                                                 <div class="toggle-thumb" />
                                             </div>
                                             <span>{{ getEditValue(entry.keyPath, entry.value) ? 'Attivo' : 'Disattivo'
-                                            }}</span>
+                                                }}</span>
                                         </button>
                                     </template>
 
@@ -215,6 +215,112 @@
                                                             <div class="toggle-thumb" />
                                                         </div>
                                                     </button>
+
+                                                    <!-- Object Item (Complex) -->
+                                                    <div v-else-if="typeof item === 'object' && item !== null"
+                                                        class="array-object-item">
+                                                        <button class="object-item-toggle"
+                                                            @click="toggleExpanded(`${entry.keyPath}[${index}]`)">
+                                                            <svg :class="['expand-icon', { 'rotated': expandedPaths.has(`${entry.keyPath}[${index}]`) }]"
+                                                                xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                                fill="none" stroke="currentColor" stroke-width="2">
+                                                                <polyline points="9 18 15 12 9 6" />
+                                                            </svg>
+                                                            <span class="object-item-type">{{ Array.isArray(item) ?
+                                                                'array' : 'object' }}</span>
+                                                            <span class="object-item-preview">{{ getObjectPreview(item)
+                                                                }}</span>
+                                                        </button>
+
+                                                        <!-- Expanded Object Editor -->
+                                                        <div v-if="expandedPaths.has(`${entry.keyPath}[${index}]`)"
+                                                            class="object-item-content">
+                                                            <template v-if="Array.isArray(item)">
+                                                                <!-- Nested Array -->
+                                                                <div v-for="(nestedItem, nestedIdx) in item"
+                                                                    :key="nestedIdx" class="nested-item">
+                                                                    <span class="nested-index">[{{ nestedIdx }}]</span>
+                                                                    <input v-if="typeof nestedItem === 'string'"
+                                                                        type="text" :value="nestedItem"
+                                                                        class="nested-input"
+                                                                        @change="updateNestedArrayItem(entry.keyPath, entry.value, index, nestedIdx, ($event.target as HTMLInputElement).value)" />
+                                                                    <input v-else-if="typeof nestedItem === 'number'"
+                                                                        type="number" :value="nestedItem"
+                                                                        class="nested-input"
+                                                                        @change="updateNestedArrayItem(entry.keyPath, entry.value, index, nestedIdx, parseFloat(($event.target as HTMLInputElement).value))" />
+                                                                    <button v-else-if="typeof nestedItem === 'boolean'"
+                                                                        :class="['bool-toggle', 'small', { 'active': nestedItem }]"
+                                                                        @click="updateNestedArrayItem(entry.keyPath, entry.value, index, nestedIdx, !nestedItem)">
+                                                                        <div class="toggle-track">
+                                                                            <div class="toggle-thumb" />
+                                                                        </div>
+                                                                    </button>
+                                                                    <span v-else class="nested-complex">{{
+                                                                        JSON.stringify(nestedItem) }}</span>
+                                                                </div>
+                                                            </template>
+                                                            <template v-else>
+                                                                <!-- Object Properties -->
+                                                                <div v-for="(propValue, propKey) in item"
+                                                                    :key="String(propKey)" class="object-prop">
+                                                                    <span class="prop-key">{{ propKey }}</span>
+                                                                    <input v-if="typeof propValue === 'string'"
+                                                                        type="text" :value="propValue"
+                                                                        class="prop-input"
+                                                                        @change="updateObjectProperty(entry.keyPath, entry.value, index, String(propKey), ($event.target as HTMLInputElement).value)" />
+                                                                    <input v-else-if="typeof propValue === 'number'"
+                                                                        type="number" :value="propValue"
+                                                                        class="prop-input"
+                                                                        @change="updateObjectProperty(entry.keyPath, entry.value, index, String(propKey), parseFloat(($event.target as HTMLInputElement).value))" />
+                                                                    <button v-else-if="typeof propValue === 'boolean'"
+                                                                        :class="['bool-toggle', 'small', { 'active': propValue }]"
+                                                                        @click="updateObjectProperty(entry.keyPath, entry.value, index, String(propKey), !propValue)">
+                                                                        <div class="toggle-track">
+                                                                            <div class="toggle-thumb" />
+                                                                        </div>
+                                                                    </button>
+                                                                    <template v-else-if="Array.isArray(propValue)">
+                                                                        <!-- Array property -->
+                                                                        <div class="prop-array">
+                                                                            <button class="prop-array-toggle"
+                                                                                @click="toggleExpanded(`${entry.keyPath}[${index}].${propKey}`)">
+                                                                                <svg :class="['expand-icon-sm', { 'rotated': expandedPaths.has(`${entry.keyPath}[${index}].${propKey}`) }]"
+                                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                                    viewBox="0 0 24 24" fill="none"
+                                                                                    stroke="currentColor"
+                                                                                    stroke-width="2">
+                                                                                    <polyline points="9 18 15 12 9 6" />
+                                                                                </svg>
+                                                                                <span class="prop-array-count">{{
+                                                                                    propValue.length }} items</span>
+                                                                            </button>
+                                                                            <div v-if="expandedPaths.has(`${entry.keyPath}[${index}].${propKey}`)"
+                                                                                class="prop-array-items">
+                                                                                <div v-for="(arrItem, arrIdx) in propValue"
+                                                                                    :key="arrIdx"
+                                                                                    class="prop-array-item">
+                                                                                    <span class="prop-array-idx">#{{
+                                                                                        arrIdx + 1 }}</span>
+                                                                                    <input
+                                                                                        v-if="typeof arrItem === 'string'"
+                                                                                        type="text" :value="arrItem"
+                                                                                        class="prop-array-input"
+                                                                                        @change="updateObjectArrayProperty(entry.keyPath, entry.value, index, String(propKey), arrIdx, ($event.target as HTMLInputElement).value)" />
+                                                                                    <span v-else
+                                                                                        class="prop-array-complex">{{
+                                                                                        typeof arrItem === 'object' ?
+                                                                                        JSON.stringify(arrItem) :
+                                                                                        arrItem }}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </template>
+                                                                    <span v-else class="prop-complex">{{
+                                                                        JSON.stringify(propValue) }}</span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
 
                                                     <span v-else class="complex-item">{{ JSON.stringify(item) }}</span>
 
@@ -325,46 +431,41 @@
             </div>
         </template>
 
-        <!-- Changes Summary (Version Control style) -->
-        <div v-if="hasChanges && editorMode === 'visual'" class="changes-summary">
-            <div class="summary-header">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="2" class="summary-icon">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                <span>{{ modificationCount }} modifiche in sospeso</span>
-                <span class="summary-hint">(Appariranno in Version Control dopo il salvataggio)</span>
-            </div>
-            <div class="changes-list">
-                <div v-for="mod in modificationDetails" :key="mod.keyPath" class="change-item">
-                    <div class="change-location">
-                        <span v-if="mod.line" class="change-line">L{{ mod.line }}</span>
-                        <span v-if="mod.section" class="change-section">[{{ mod.section }}]</span>
+        <!-- Changes Summary (Compact floating bar) -->
+        <Transition name="slide-up">
+            <div v-if="hasChanges && editorMode === 'visual'" class="changes-bar">
+                <div class="changes-bar-content">
+                    <div class="changes-info">
+                        <div class="changes-badge">{{ modificationCount }}</div>
+                        <span class="changes-text">unsaved change{{ modificationCount !== 1 ? 's' : '' }}</span>
                     </div>
-                    <div class="change-content">
-                        <span class="change-key">{{ mod.key }}</span>
-                        <div class="change-values">
-                            <span class="change-old" :title="formatValue(mod.oldValue)">{{ formatValue(mod.oldValue)
-                            }}</span>
-                            <svg class="change-arrow-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M5 12h14M12 5l7 7-7 7" />
+                    <div class="changes-actions">
+                        <button class="changes-btn-discard" @click="discardChanges">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" class="w-4 h-4">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                <path d="M3 3v5h5" />
                             </svg>
-                            <span class="change-new" :title="formatValue(mod.newValue)">{{ formatValue(mod.newValue)
-                            }}</span>
-                        </div>
+                            Discard
+                        </button>
+                        <button class="changes-btn-save" :disabled="saving" @click="saveChanges">
+                            <svg v-if="saving" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg"
+                                fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4" />
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" class="w-4 h-4">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            {{ saving ? 'Saving...' : 'Save Changes' }}
+                        </button>
                     </div>
-                    <button class="change-reset" @click="resetValue(mod.keyPath)" title="Annulla questa modifica">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                            <path d="M3 3v5h5" />
-                        </svg>
-                    </button>
                 </div>
             </div>
-        </div>
+        </Transition>
     </div>
 </template>
 
@@ -724,6 +825,44 @@ const addArrayItem = (keyPath: string, originalValue: any) => {
     newArrayItems[keyPath] = '';
 };
 
+// Object in array helpers
+const getObjectPreview = (item: any): string => {
+    if (Array.isArray(item)) {
+        return `[${item.length} items]`;
+    }
+    const keys = Object.keys(item);
+    if (keys.length <= 2) {
+        return keys.map(k => `${k}: ${typeof item[k] === 'string' ? `"${item[k]}"` : item[k]}`).join(', ');
+    }
+    return `{ ${keys.slice(0, 2).join(', ')}... }`;
+};
+
+const updateObjectProperty = (keyPath: string, originalValue: any, arrayIndex: number, propKey: string, propValue: any) => {
+    const currentArray = [...getEditValue(keyPath, originalValue)];
+    const currentObj = { ...currentArray[arrayIndex] };
+    currentObj[propKey] = propValue;
+    currentArray[arrayIndex] = currentObj;
+    setEditedValue(keyPath, currentArray, originalValue);
+};
+
+const updateNestedArrayItem = (keyPath: string, originalValue: any, arrayIndex: number, nestedIndex: number, newValue: any) => {
+    const currentArray = [...getEditValue(keyPath, originalValue)];
+    const nestedArray = [...currentArray[arrayIndex]];
+    nestedArray[nestedIndex] = newValue;
+    currentArray[arrayIndex] = nestedArray;
+    setEditedValue(keyPath, currentArray, originalValue);
+};
+
+const updateObjectArrayProperty = (keyPath: string, originalValue: any, arrayIndex: number, propKey: string, arrIdx: number, newValue: any) => {
+    const currentArray = [...getEditValue(keyPath, originalValue)];
+    const currentObj = { ...currentArray[arrayIndex] };
+    const propArray = [...currentObj[propKey]];
+    propArray[arrIdx] = newValue;
+    currentObj[propKey] = propArray;
+    currentArray[arrayIndex] = currentObj;
+    setEditedValue(keyPath, currentArray, originalValue);
+};
+
 const formatValue = (value: any): string => {
     if (typeof value === 'object') {
         return JSON.stringify(value);
@@ -750,7 +889,7 @@ const saveChanges = async () => {
         } else {
             // Build modifications list with line numbers
             const modifications = Object.entries(editedValues).map(([keyPath, newValue]) => {
-                // Find original entry
+                // Here I'm trying to find original entry
                 const entry = parsedConfig.value?.allEntries.find(e => e.keyPath === keyPath);
 
                 return {
@@ -773,7 +912,7 @@ const saveChanges = async () => {
 
             console.log('[ConfigStructuredEditor] Save successful, reloading...');
 
-            // Reset edited values and reload
+            // Reset of the edited values and reload config
             Object.keys(editedValues).forEach(key => delete editedValues[key]);
             await loadConfig();
         }
@@ -820,12 +959,12 @@ defineExpose({
 
 <style scoped>
 .structured-editor {
-    @apply flex flex-col h-full bg-black/40 backdrop-blur-xl border border-white/10 overflow-hidden;
+    @apply flex flex-col h-full bg-background overflow-hidden;
 }
 
 /* Header */
 .editor-header {
-    @apply flex items-center justify-between p-4 border-b border-white/10 bg-white/5 shrink-0;
+    @apply flex items-center justify-between p-4 border-b border-border bg-card/50 shrink-0;
 }
 
 .header-left {
@@ -833,11 +972,11 @@ defineExpose({
 }
 
 .file-icon {
-    @apply w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-blue-500/20 flex items-center justify-center border border-white/10;
+    @apply w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-1 ring-primary/20;
 }
 
 .file-icon svg {
-    @apply w-5 h-5 text-purple-400;
+    @apply w-5 h-5 text-primary;
 }
 
 .file-info {
@@ -845,11 +984,11 @@ defineExpose({
 }
 
 .file-name {
-    @apply font-medium text-white;
+    @apply font-medium text-foreground;
 }
 
 .file-format {
-    @apply text-xs text-white/50 font-mono px-1.5 py-0.5 bg-white/10 rounded;
+    @apply text-xs text-muted-foreground font-mono px-1.5 py-0.5 bg-muted rounded;
 }
 
 .header-actions {
@@ -857,24 +996,24 @@ defineExpose({
 }
 
 .header-divider {
-    @apply w-px h-6 bg-white/10;
+    @apply w-px h-6 bg-border;
 }
 
 /* Mode Toggle */
 .mode-toggle {
-    @apply flex items-center bg-white/5 rounded-lg p-1 border border-white/10;
+    @apply flex items-center bg-muted/50 rounded-xl p-1;
 }
 
 .mode-btn {
-    @apply flex items-center gap-1.5 px-3 py-1.5 rounded-md text-white/50 text-sm font-medium transition-all;
+    @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-muted-foreground text-sm font-medium transition-all;
 }
 
 .mode-btn:hover {
-    @apply text-white/70;
+    @apply text-foreground;
 }
 
 .mode-btn.active {
-    @apply bg-purple-500/30 text-purple-300 shadow-sm;
+    @apply bg-background text-foreground shadow-sm ring-1 ring-border/50;
 }
 
 .mode-btn svg {
@@ -882,15 +1021,15 @@ defineExpose({
 }
 
 .btn-discard {
-    @apply flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white transition-all text-sm;
+    @apply flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-all text-sm;
 }
 
 .btn-save {
-    @apply flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-white/50 transition-all text-sm;
+    @apply flex items-center gap-2 px-4 py-2 rounded-xl bg-muted text-muted-foreground transition-all text-sm;
 }
 
 .btn-save.has-changes {
-    @apply bg-gradient-to-r from-green-500 to-emerald-500 border-green-400/50 text-white shadow-lg shadow-green-500/25 hover:shadow-green-500/40;
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
 }
 
 .btn-save:disabled {
@@ -899,33 +1038,33 @@ defineExpose({
 
 /* Search Bar */
 .search-bar {
-    @apply relative flex items-center p-3 border-b border-white/5 shrink-0;
+    @apply relative flex items-center p-3 border-b border-border/50 shrink-0;
 }
 
 .search-icon {
-    @apply absolute left-6 w-4 h-4 text-white/40;
+    @apply absolute left-6 w-4 h-4 text-muted-foreground;
 }
 
 .search-input {
-    @apply flex-1 bg-white/5 rounded-lg py-2 pl-10 pr-4 text-white placeholder-white/30 text-sm border border-transparent focus:border-purple-500/50 focus:outline-none transition-colors;
+    @apply flex-1 bg-muted/50 rounded-xl py-2.5 pl-10 pr-4 text-foreground placeholder-muted-foreground text-sm border border-transparent focus:border-primary/50 focus:outline-none transition-colors;
 }
 
 .search-count {
-    @apply absolute right-6 text-xs text-white/40;
+    @apply absolute right-6 text-xs text-muted-foreground;
 }
 
 /* Loading & Error States */
 .loading-state,
 .error-state {
-    @apply flex flex-col items-center justify-center py-16 gap-4 text-white/60;
+    @apply flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground;
 }
 
 .loading-spinner {
-    @apply w-8 h-8 border-2 border-white/20 border-t-purple-500 rounded-full animate-spin;
+    @apply w-8 h-8 border-2 border-muted border-t-primary rounded-full animate-spin;
 }
 
 .error-icon {
-    @apply w-12 h-12 text-red-400;
+    @apply w-12 h-12 text-destructive;
 }
 
 .error-actions {
@@ -933,29 +1072,29 @@ defineExpose({
 }
 
 .btn-retry {
-    @apply px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors;
+    @apply px-4 py-2 bg-muted hover:bg-muted/80 rounded-xl text-sm transition-colors;
 }
 
 .btn-raw-fallback {
-    @apply px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg text-sm transition-colors;
+    @apply px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl text-sm transition-colors;
 }
 
 /* Visual Content */
 .visual-content {
-    @apply flex-1 overflow-y-auto p-4 space-y-3;
+    @apply flex-1 overflow-y-auto p-4 space-y-3 pb-24;
 }
 
 /* Config Section */
 .config-section {
-    @apply bg-white/5 rounded-xl border border-white/10 overflow-hidden;
+    @apply bg-card rounded-xl border border-border overflow-hidden;
 }
 
 .section-header {
-    @apply w-full flex items-center gap-3 p-4 text-left hover:bg-white/5 transition-colors;
+    @apply w-full flex items-center gap-3 p-4 text-left hover:bg-muted/30 transition-colors;
 }
 
 .section-chevron {
-    @apply w-4 h-4 text-white/40 transition-transform shrink-0;
+    @apply w-4 h-4 text-muted-foreground transition-transform shrink-0;
 }
 
 .section-chevron.rotated {
@@ -963,11 +1102,11 @@ defineExpose({
 }
 
 .section-name {
-    @apply flex-1 font-medium text-white;
+    @apply flex-1 font-medium text-foreground;
 }
 
 .section-count {
-    @apply text-xs text-white/40 bg-white/10 px-2 py-0.5 rounded-full;
+    @apply text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full;
 }
 
 .section-content {
@@ -976,11 +1115,11 @@ defineExpose({
 
 /* Config Card */
 .config-card {
-    @apply bg-black/20 rounded-lg p-3 border border-transparent transition-all hover:border-white/10;
+    @apply bg-muted/30 rounded-xl p-3 border border-transparent transition-all hover:border-border;
 }
 
 .config-card.modified {
-    @apply border-purple-500/50 bg-purple-500/10;
+    @apply border-primary/50 bg-primary/5;
 }
 
 .card-header {
@@ -992,7 +1131,7 @@ defineExpose({
 }
 
 .key-name {
-    @apply font-mono text-sm text-white/90;
+    @apply font-mono text-sm text-foreground;
 }
 
 .key-type {
@@ -1000,27 +1139,27 @@ defineExpose({
 }
 
 .type-string {
-    @apply bg-green-500/20 text-green-400;
+    @apply bg-green-500/10 text-green-500;
 }
 
 .type-number {
-    @apply bg-blue-500/20 text-blue-400;
+    @apply bg-blue-500/10 text-blue-500;
 }
 
 .type-boolean {
-    @apply bg-yellow-500/20 text-yellow-400;
+    @apply bg-yellow-500/10 text-yellow-500;
 }
 
 .type-array {
-    @apply bg-purple-500/20 text-purple-400;
+    @apply bg-purple-500/10 text-purple-500;
 }
 
 .type-object {
-    @apply bg-orange-500/20 text-orange-400;
+    @apply bg-orange-500/10 text-orange-500;
 }
 
 .type-null {
-    @apply bg-gray-500/20 text-gray-400;
+    @apply bg-muted text-muted-foreground;
 }
 
 .card-value {
@@ -1028,7 +1167,7 @@ defineExpose({
 }
 
 .card-comment {
-    @apply flex items-start gap-1.5 mt-2 pt-2 border-t border-white/5 text-xs text-white/40 italic;
+    @apply flex items-start gap-1.5 mt-2 pt-2 border-t border-border/50 text-xs text-muted-foreground italic;
 }
 
 .comment-icon {
@@ -1037,7 +1176,7 @@ defineExpose({
 
 /* Value Inputs */
 .value-input {
-    @apply bg-black/30 rounded-lg px-3 py-2 text-white text-sm border border-white/10 focus:border-purple-500/50 focus:outline-none transition-colors font-mono;
+    @apply bg-background rounded-lg px-3 py-2 text-foreground text-sm border border-border focus:border-primary focus:outline-none transition-colors font-mono;
 }
 
 .number-input {
@@ -1054,11 +1193,11 @@ defineExpose({
 }
 
 .color-picker {
-    @apply w-10 h-10 rounded-lg border border-white/10 cursor-pointer bg-transparent;
+    @apply w-10 h-10 rounded-lg border border-border cursor-pointer bg-transparent;
 }
 
 .color-text-input {
-    @apply flex-1 bg-black/30 rounded-lg px-3 py-2 text-white text-sm border border-white/10 focus:border-purple-500/50 focus:outline-none transition-colors font-mono;
+    @apply flex-1 bg-background rounded-lg px-3 py-2 text-foreground text-sm border border-border focus:border-primary focus:outline-none transition-colors font-mono;
 }
 
 /* Boolean Toggle */
@@ -1067,11 +1206,11 @@ defineExpose({
 }
 
 .toggle-track {
-    @apply w-12 h-6 rounded-full bg-white/10 relative transition-colors;
+    @apply w-12 h-6 rounded-full bg-muted relative transition-colors;
 }
 
 .bool-toggle.active .toggle-track {
-    @apply bg-green-500;
+    @apply bg-primary;
 }
 
 .toggle-thumb {
@@ -1083,7 +1222,7 @@ defineExpose({
 }
 
 .bool-toggle span {
-    @apply text-sm text-white/70;
+    @apply text-sm text-muted-foreground;
 }
 
 /* Small toggle for arrays */
@@ -1105,35 +1244,131 @@ defineExpose({
 }
 
 .array-toggle {
-    @apply flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors;
+    @apply flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors;
 }
 
 .array-count {
-    @apply text-purple-400 font-mono text-xs;
+    @apply text-primary font-mono text-xs;
 }
 
 .array-items-card {
-    @apply mt-3 space-y-1 bg-black/20 rounded-lg p-2 border border-white/5;
+    @apply mt-3 space-y-1 bg-muted/30 rounded-xl p-2 border border-border/50;
 }
 
 .array-item {
-    @apply flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/5 transition-colors;
+    @apply flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors;
 }
 
 .array-index {
-    @apply text-xs font-mono text-white/30 w-6 shrink-0;
+    @apply text-xs font-mono text-muted-foreground w-6 shrink-0;
 }
 
 .array-item-input {
-    @apply flex-1 bg-black/30 rounded px-2 py-1.5 text-sm font-mono text-white border border-white/10 focus:border-purple-500/50 focus:outline-none transition-colors;
+    @apply flex-1 bg-background rounded-lg px-2 py-1.5 text-sm font-mono text-foreground border border-border focus:border-primary focus:outline-none transition-colors;
 }
 
 .complex-item {
-    @apply flex-1 text-xs font-mono text-white/50 truncate;
+    @apply flex-1 text-xs font-mono text-muted-foreground truncate;
+}
+
+/* Array Object Item (complex items in array) */
+.array-object-item {
+    @apply flex-1 flex flex-col;
+}
+
+.object-item-toggle {
+    @apply flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer;
+}
+
+.object-item-type {
+    @apply text-[10px] px-1.5 py-0.5 rounded font-medium uppercase bg-orange-500/10 text-orange-500;
+}
+
+.object-item-preview {
+    @apply text-xs font-mono text-muted-foreground truncate max-w-[200px];
+}
+
+.object-item-content {
+    @apply mt-2 ml-4 pl-3 border-l-2 border-border/50 space-y-1;
+}
+
+/* Object properties */
+.object-prop {
+    @apply flex items-center gap-2 py-1;
+}
+
+.prop-key {
+    @apply text-xs font-mono text-primary min-w-[80px] shrink-0;
+}
+
+.prop-input {
+    @apply flex-1 bg-background rounded-lg px-2 py-1 text-xs font-mono text-foreground border border-border focus:border-primary focus:outline-none transition-colors;
+}
+
+.prop-complex {
+    @apply text-xs font-mono text-muted-foreground truncate;
+}
+
+/* Nested items */
+.nested-item {
+    @apply flex items-center gap-2 py-1;
+}
+
+.nested-index {
+    @apply text-xs font-mono text-muted-foreground min-w-[30px] shrink-0;
+}
+
+.nested-input {
+    @apply flex-1 bg-background rounded-lg px-2 py-1 text-xs font-mono text-foreground border border-border focus:border-primary focus:outline-none transition-colors;
+}
+
+.nested-complex {
+    @apply text-xs font-mono text-muted-foreground truncate;
+}
+
+/* Property array (array inside object) */
+.prop-array {
+    @apply flex-1 flex flex-col;
+}
+
+.prop-array-toggle {
+    @apply flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer;
+}
+
+.expand-icon-sm {
+    @apply w-3 h-3 transition-transform shrink-0;
+}
+
+.expand-icon-sm.rotated {
+    @apply rotate-90;
+}
+
+.prop-array-count {
+    @apply text-purple-400 font-mono;
+}
+
+.prop-array-items {
+    @apply mt-1 ml-2 space-y-0.5;
+}
+
+.prop-array-item {
+    @apply flex items-center gap-2 py-0.5;
+}
+
+.prop-array-idx {
+    @apply text-[10px] font-mono text-muted-foreground w-5 shrink-0;
+}
+
+.prop-array-input {
+    @apply flex-1 bg-background rounded px-1.5 py-0.5 text-xs font-mono text-foreground border border-border focus:border-primary focus:outline-none transition-colors;
+}
+
+.prop-array-complex {
+    @apply text-xs font-mono text-muted-foreground truncate;
 }
 
 .array-remove-btn {
-    @apply p-1.5 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors shrink-0;
+    @apply p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0;
 }
 
 .array-remove-btn svg {
@@ -1141,19 +1376,19 @@ defineExpose({
 }
 
 .array-empty {
-    @apply text-center py-3 text-sm text-white/30 italic;
+    @apply text-center py-3 text-sm text-muted-foreground italic;
 }
 
 .array-add-row {
-    @apply flex items-center gap-2 mt-2 pt-2 border-t border-white/5;
+    @apply flex items-center gap-2 mt-2 pt-2 border-t border-border/50;
 }
 
 .array-add-input {
-    @apply flex-1 bg-black/30 rounded px-2 py-1.5 text-sm font-mono text-white placeholder-white/30 border border-white/10 focus:border-purple-500/50 focus:outline-none transition-colors;
+    @apply flex-1 bg-background rounded-lg px-2 py-1.5 text-sm font-mono text-foreground placeholder-muted-foreground border border-border focus:border-primary focus:outline-none transition-colors;
 }
 
 .array-add-btn {
-    @apply flex items-center gap-1 px-3 py-1.5 rounded bg-green-500/20 hover:bg-green-500/30 text-green-400 text-xs font-medium transition-colors;
+    @apply flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors;
 }
 
 .array-add-btn svg {
@@ -1166,11 +1401,11 @@ defineExpose({
 }
 
 .object-toggle {
-    @apply flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors;
+    @apply flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors;
 }
 
 .object-count {
-    @apply text-orange-400 font-mono text-xs;
+    @apply text-orange-500 font-mono text-xs;
 }
 
 .expand-icon {
@@ -1182,16 +1417,16 @@ defineExpose({
 }
 
 .json-preview {
-    @apply mt-2 p-3 bg-black/40 rounded-lg text-xs text-white/70 font-mono overflow-x-auto max-h-[200px] overflow-y-auto whitespace-pre-wrap break-all;
+    @apply mt-2 p-3 bg-muted/50 rounded-xl text-xs text-muted-foreground font-mono overflow-x-auto max-h-[200px] overflow-y-auto whitespace-pre-wrap break-all border border-border/50;
 }
 
 .null-value {
-    @apply text-sm font-mono text-gray-400 italic;
+    @apply text-sm font-mono text-muted-foreground italic;
 }
 
 /* Reset Button */
 .reset-btn {
-    @apply p-1.5 rounded-lg bg-white/5 hover:bg-orange-500/20 text-white/50 hover:text-orange-400 transition-colors shrink-0;
+    @apply p-1.5 rounded-lg hover:bg-orange-500/10 text-muted-foreground hover:text-orange-500 transition-colors shrink-0;
 }
 
 .reset-btn svg {
@@ -1200,11 +1435,11 @@ defineExpose({
 
 /* Empty State */
 .empty-state {
-    @apply flex flex-col items-center justify-center py-12 gap-3 text-white/50;
+    @apply flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground;
 }
 
 .empty-icon {
-    @apply w-16 h-16 text-white/20;
+    @apply w-16 h-16 text-muted-foreground/20;
 }
 
 /* Raw Editor */
@@ -1213,88 +1448,64 @@ defineExpose({
 }
 
 .raw-toolbar {
-    @apply flex items-center justify-between px-4 py-2 border-b border-white/5 bg-white/5;
+    @apply flex items-center justify-between px-4 py-2 border-b border-border/50 bg-muted/30;
 }
 
 .raw-hint {
-    @apply flex items-center gap-2 text-xs text-white/40;
+    @apply flex items-center gap-2 text-xs text-muted-foreground;
 }
 
 .raw-encoding {
-    @apply text-xs font-mono text-white/30 bg-white/10 px-2 py-0.5 rounded;
+    @apply text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded;
 }
 
 .raw-textarea {
-    @apply flex-1 w-full p-4 bg-transparent text-white font-mono text-sm resize-none focus:outline-none;
+    @apply flex-1 w-full p-4 bg-transparent text-foreground font-mono text-sm resize-none focus:outline-none;
     line-height: 1.6;
 }
 
-/* Changes Summary (Version Control style) */
-.changes-summary {
-    @apply border-t border-white/10 bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-4 shrink-0;
+/* Changes Bar (Compact floating) */
+.changes-bar {
+    @apply fixed bottom-6 left-1/2 -translate-x-1/2 z-50;
 }
 
-.summary-header {
-    @apply flex items-center gap-2 text-sm font-medium text-white mb-3 flex-wrap;
+.changes-bar-content {
+    @apply flex items-center gap-4 px-4 py-3 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-2xl shadow-black/20;
 }
 
-.summary-icon {
-    @apply w-4 h-4 text-purple-400;
-}
-
-.summary-hint {
-    @apply text-xs text-white/40 ml-auto;
-}
-
-.changes-list {
-    @apply space-y-2 max-h-[120px] overflow-y-auto;
-}
-
-.change-item {
-    @apply flex items-center gap-3 text-xs font-mono bg-black/20 rounded-lg p-2 hover:bg-black/30 transition-colors;
-}
-
-.change-location {
-    @apply flex items-center gap-1 shrink-0 min-w-[80px];
-}
-
-.change-line {
-    @apply text-cyan-400 font-semibold bg-cyan-500/10 px-1.5 py-0.5 rounded text-[10px];
-}
-
-.change-section {
-    @apply text-white/40 text-[10px] truncate max-w-[50px];
-}
-
-.change-content {
-    @apply flex-1 flex flex-col gap-0.5 min-w-0;
-}
-
-.change-key {
-    @apply text-white font-medium truncate;
-}
-
-.change-values {
+.changes-info {
     @apply flex items-center gap-2;
 }
 
-.change-old {
-    @apply text-red-400/80 line-through truncate max-w-[120px] text-[10px];
+.changes-badge {
+    @apply w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center;
 }
 
-.change-arrow-icon {
-    @apply w-3 h-3 text-purple-400 shrink-0;
+.changes-text {
+    @apply text-sm font-medium text-foreground;
 }
 
-.change-new {
-    @apply text-green-400 truncate max-w-[120px] text-[10px];
+.changes-actions {
+    @apply flex items-center gap-2;
 }
 
-.change-reset {
-    @apply p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors shrink-0;
+.changes-btn-discard {
+    @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors;
 }
 
-.change-reset svg {
-    @apply w-3.5 h-3.5;
+.changes-btn-save {
+    @apply flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50;
+}
+
+/* Slide-up transition */
+.slide-up-enter-active,
+.slide-up-leave-active {
+    transition: all 0.2s ease-out;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
 }
 </style>

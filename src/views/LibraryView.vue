@@ -1088,28 +1088,15 @@ onMounted(() => {
       <div class="flex-1 overflow-auto p-3 sm:p-6 pb-20">
         <!-- Results info + Pagination Controls -->
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <LibraryResultsInfo
-            :enable-grouping="enableGrouping"
-            :paginated-groups-length="paginatedGroups.length"
-            :grouped-mods-length="groupedMods.length"
-            :filtered-mods-length="filteredMods.length"
-            :has-expanded-groups="hasExpandedGroups"
-            :has-active-filters="hasActiveFilters"
-            @clear-filters="clearAllFilters"
-          />
+          <LibraryResultsInfo :enable-grouping="enableGrouping" :paginated-groups-length="paginatedGroups.length"
+            :grouped-mods-length="groupedMods.length" :filtered-mods-length="filteredMods.length"
+            :has-expanded-groups="hasExpandedGroups" :has-active-filters="hasActiveFilters"
+            @clear-filters="clearAllFilters" />
 
-          <LibraryPaginationControls
-            :current-page="currentPage"
-            :total-pages="totalPages"
-            :items-per-page="itemsPerPage"
-            :items-per-page-options="itemsPerPageOptions"
-            :can-go-prev="canGoPrev"
-            :can-go-next="canGoNext"
-            @update:items-per-page="itemsPerPage = $event"
-            @go-to-page="goToPage"
-            @prev-page="prevPage"
-            @next-page="nextPage"
-          />
+          <LibraryPaginationControls :current-page="currentPage" :total-pages="totalPages"
+            :items-per-page="itemsPerPage" :items-per-page-options="itemsPerPageOptions" :can-go-prev="canGoPrev"
+            :can-go-next="canGoNext" @update:items-per-page="itemsPerPage = $event" @go-to-page="goToPage"
+            @prev-page="prevPage" @next-page="nextPage" />
         </div>
 
         <!-- Grid View -->
@@ -1434,7 +1421,8 @@ onMounted(() => {
 
     <!-- Mod Details Modal -->
     <ModDetailsModal :open="showDetails" :mod="detailsMod" :context="{ type: 'library' }"
-      :current-file-id="detailsMod?.cf_file_id" @close="closeDetails" @version-changed="handleLibraryVersionChange" />
+      :current-file-id="detailsMod?.cf_file_id" :full-screen="true" @close="closeDetails"
+      @version-changed="handleLibraryVersionChange" />
 
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModIds.size > 0" :count="selectedModIds.size" label="mods" @clear="clearSelection">

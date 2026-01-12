@@ -87,6 +87,7 @@ import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
 import ChangelogDialog from "@/components/mods/ChangelogDialog.vue";
 import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
 import type { CFModLoader } from "@/types/electron";
+import DefaultModpackImage from "@/assets/modpack-placeholder.png";
 
 const props = defineProps<{
   modpackId: string;
@@ -424,8 +425,23 @@ const showHelp = ref(false);
 
 // More Menu State (for secondary tabs)
 const showMoreMenu = ref(false);
+const showImageMenu = ref(false);
+const moreMenuPosition = ref({ top: '0px', right: '0px' });
+const moreButtonRef = ref<HTMLButtonElement | null>(null);
 const secondaryTabs = ['discover', 'health', 'versions', 'remote'] as const;
 const isSecondaryTab = computed(() => secondaryTabs.includes(activeTab.value as any));
+
+function toggleMoreMenu(event: MouseEvent) {
+  if (!showMoreMenu.value) {
+    const button = event.currentTarget as HTMLButtonElement;
+    const rect = button.getBoundingClientRect();
+    moreMenuPosition.value = {
+      top: `${rect.bottom + 8}px`,
+      right: `${window.innerWidth - rect.right}px`
+    };
+  }
+  showMoreMenu.value = !showMoreMenu.value;
+}
 
 // Mods Filter overflow menu
 const showModsFilterMenu = ref(false);
@@ -1627,6 +1643,16 @@ async function selectImage() {
   }
 }
 
+async function removeImage() {
+  if (!modpack.value) return;
+  const success = await window.api.modpacks.setImage(props.modpackId, '');
+  if (success) {
+    modpack.value.image_url = '';
+    emit("update");
+    toast.success('Image Removed', 'Cover image has been removed');
+  }
+}
+
 function sanitizeRemoteUrl() {
   if (!editForm.value.remote_url) return;
 
@@ -2239,43 +2265,42 @@ watch(
         ? 'flex-1 flex flex-col overflow-hidden'
         : 'bg-background border border-border/50 rounded-lg sm:rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] sm:h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150'">
 
-      <!-- Modern Header -->
-      <div class="shrink-0 relative bg-card/50" :class="fullScreen && 'border-b border-border/40'">
-        <!-- Content -->
-        <div class="px-4 sm:px-6 py-4 sm:py-5">
+      <!-- Modern Header with Background Image -->
+      <div class="shrink-0 relative overflow-hidden" :class="fullScreen && 'border-b border-border/40'">
+        <!-- Background Image (modpack image or placeholder) -->
+        <div class="absolute inset-0">
+          <img :src="modpack?.image_url
+            ? (modpack.image_url.startsWith('http') || modpack.image_url.startsWith('file:')
+              ? modpack.image_url
+              : 'atom:///' + modpack.image_url.replace(/\\/g, '/'))
+            : DefaultModpackImage" class="w-full h-full object-cover blur-sm scale-110"
+            @error="($event.target as HTMLImageElement).src = DefaultModpackImage" />
+          <!-- Gradient overlays for readability -->
+          <div class="absolute inset-0 bg-gradient-to-r from-background/95 via-background/50 to-background/10"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent"></div>
+        </div>
+
+        <!-- Main Header Content -->
+        <div class="relative px-4 sm:px-6 py-4 sm:py-5">
           <div class="flex items-center gap-4">
             <!-- Back Button (full-screen mode only) -->
             <Button v-if="fullScreen" variant="ghost" size="sm"
-              class="h-9 w-9 p-0 rounded-xl shrink-0 hover:bg-muted/60" @click="$emit('close')">
+              class="h-9 w-9 p-0 rounded-xl shrink-0 hover:bg-white/10 backdrop-blur-sm" @click="$emit('close')">
               <ArrowLeft class="w-4 h-4" />
             </Button>
-
-            <!-- Pack Thumbnail -->
-            <div v-if="modpack?.image_url"
-              class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden ring-2 ring-primary/30 shadow-lg shadow-primary/10 shrink-0">
-              <img :src="modpack.image_url.startsWith('http') ||
-                modpack.image_url.startsWith('file:')
-                ? modpack.image_url
-                : 'atom:///' + modpack.image_url.replace(/\\/g, '/')
-                " class="w-full h-full object-cover" />
-            </div>
-            <div v-else
-              class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-primary/10 flex items-center justify-center ring-2 ring-primary/20 shrink-0">
-              <Package class="w-6 h-6 text-primary" />
-            </div>
 
             <!-- Name & Meta -->
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-3 mb-2">
-                <h2 class="text-lg sm:text-xl font-bold truncate text-foreground tracking-tight">
+                <h2 class="text-lg sm:text-xl font-bold truncate text-foreground tracking-tight drop-shadow-sm">
                   {{ modpack?.name || "Loading..." }}
                 </h2>
                 <span v-if="modpack?.version"
-                  class="hidden sm:inline text-xs px-2.5 py-1 rounded-lg bg-muted/80 text-muted-foreground font-mono border border-border/40">
+                  class="hidden sm:inline text-xs px-2.5 py-1 rounded-lg bg-muted/60 text-muted-foreground font-mono border border-border/40 backdrop-blur-sm">
                   v{{ modpack.version }}
                 </span>
                 <span v-if="modpack?.remote_source?.url"
-                  class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium border border-primary/20"
+                  class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-xs font-medium border border-primary/30 backdrop-blur-sm"
                   title="This modpack is linked to a remote source">
                   <Share2 class="w-3 h-3" />
                   Linked
@@ -2285,17 +2310,35 @@ watch(
               <!-- Stats Row -->
               <div class="flex items-center gap-2 flex-wrap">
                 <div v-if="modpack?.minecraft_version"
-                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20">
-                  <div class="w-2 h-2 rounded-full bg-primary"></div>
-                  <span class="text-xs font-semibold text-primary">{{ modpack.minecraft_version }}</span>
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 backdrop-blur-sm">
+                  <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                  <span class="text-xs font-semibold text-emerald-400">{{ modpack.minecraft_version }}</span>
                 </div>
                 <div v-if="modpack?.loader"
-                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/40">
-                  <div class="w-2 h-2 rounded-full bg-muted-foreground/60"></div>
-                  <span class="text-xs font-medium text-muted-foreground capitalize">{{ modpack.loader }}</span>
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border capitalize backdrop-blur-sm" :class="modpack.loader.toLowerCase() === 'forge'
+                    ? 'bg-orange-500/15 border-orange-500/30'
+                    : modpack.loader.toLowerCase() === 'fabric'
+                      ? 'bg-yellow-500/15 border-yellow-500/30'
+                      : modpack.loader.toLowerCase() === 'neoforge'
+                        ? 'bg-red-500/15 border-red-500/30'
+                        : 'bg-purple-500/15 border-purple-500/30'">
+                  <div class="w-2 h-2 rounded-full" :class="modpack.loader.toLowerCase() === 'forge'
+                    ? 'bg-orange-500'
+                    : modpack.loader.toLowerCase() === 'fabric'
+                      ? 'bg-yellow-500'
+                      : modpack.loader.toLowerCase() === 'neoforge'
+                        ? 'bg-red-500'
+                        : 'bg-purple-500'"></div>
+                  <span class="text-xs font-medium" :class="modpack.loader.toLowerCase() === 'forge'
+                    ? 'text-orange-400'
+                    : modpack.loader.toLowerCase() === 'fabric'
+                      ? 'text-yellow-400'
+                      : modpack.loader.toLowerCase() === 'neoforge'
+                        ? 'text-red-400'
+                        : 'text-purple-400'">{{ modpack.loader }}</span>
                 </div>
                 <div
-                  class="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/30">
+                  class="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 border border-border/40 backdrop-blur-sm">
                   <Layers class="w-3.5 h-3.5 text-muted-foreground" />
                   <span class="text-xs font-medium text-muted-foreground">{{ currentMods.length }} mods</span>
                 </div>
@@ -2304,19 +2347,39 @@ watch(
 
             <!-- Actions -->
             <div class="flex items-center gap-2 shrink-0">
-              <Button variant="ghost" size="sm" class="hidden sm:flex h-9 w-9 p-0 rounded-xl hover:bg-muted/60"
-                @click="selectImage" title="Set cover image">
-                <ImagePlus class="w-4 h-4" />
-              </Button>
+              <!-- Image Menu -->
+              <div class="relative hidden sm:block">
+                <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-xl hover:bg-white/10 backdrop-blur-sm"
+                  @click="showImageMenu = !showImageMenu" title="Manage cover image">
+                  <ImagePlus class="w-4 h-4" />
+                </Button>
+                <!-- Click outside to close -->
+                <div v-if="showImageMenu" class="fixed inset-0 z-40" @click="showImageMenu = false"></div>
+                <div v-if="showImageMenu"
+                  class="absolute right-0 top-full mt-1 w-40 py-1 bg-card border border-border rounded-xl shadow-xl z-50">
+                  <button class="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 flex items-center gap-2"
+                    @click="selectImage(); showImageMenu = false">
+                    <ImagePlus class="w-4 h-4" />
+                    Set Image
+                  </button>
+                  <button v-if="modpack?.image_url"
+                    class="w-full px-3 py-2 text-left text-sm hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                    @click="removeImage(); showImageMenu = false">
+                    <X class="w-4 h-4" />
+                    Remove Image
+                  </button>
+                </div>
+              </div>
               <Button variant="outline" size="sm"
-                class="hidden md:flex h-9 px-4 gap-2 rounded-xl border-border/50 hover:bg-muted/60"
+                class="hidden md:flex h-9 px-4 gap-2 rounded-xl border-border/50 hover:bg-white/10 backdrop-blur-sm"
                 @click="$emit('export')">
                 <Download class="w-4 h-4" />
                 <span class="font-medium">Export</span>
               </Button>
               <!-- Close button (modal mode only) -->
               <Button v-if="!fullScreen" variant="ghost" size="sm"
-                class="h-9 w-9 p-0 rounded-xl hover:bg-destructive/10 hover:text-destructive" @click="$emit('close')">
+                class="h-9 w-9 p-0 rounded-xl hover:bg-destructive/10 hover:text-destructive backdrop-blur-sm"
+                @click="$emit('close')">
                 <X class="w-4 h-4" />
               </Button>
             </div>
@@ -2329,64 +2392,71 @@ watch(
             " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
         </div>
 
-        <!-- Tab Navigation - Centered with More dropdown -->
-        <div class="px-3 sm:px-6 pb-3 sm:pb-4 flex justify-center">
-          <div class="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border/30">
-            <!-- Primary Tabs -->
-            <button class="tab-pill"
-              :class="activeTab === 'play' ? 'tab-pill-active tab-pill-game' : 'tab-pill-inactive'"
-              @click="activeTab = 'play'">
-              <Gamepad2 class="w-3.5 h-3.5" />
-              <span>Game</span>
-              <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            </button>
-            <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
-              @click="activeTab = 'mods'">
-              <Layers class="w-3.5 h-3.5" />
-              <span>Mods</span>
-            </button>
-            <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
-              @click="activeTab = 'configs'">
-              <FileCode class="w-3.5 h-3.5" />
-              <span>Configs</span>
-            </button>
-            <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
-              @click="activeTab = 'settings'">
-              <Settings class="w-3.5 h-3.5" />
-              <span>Details</span>
-            </button>
-
-            <!-- More dropdown for secondary tabs -->
-            <div class="relative">
-              <button class="tab-pill" :class="isSecondaryTab ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="showMoreMenu = !showMoreMenu">
-                <MoreHorizontal class="w-3.5 h-3.5" />
-                <span class="hidden sm:inline">More</span>
-                <span v-if="versionUnsavedCount > 0 && !isSecondaryTab"
-                  class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                <ChevronDown class="w-3 h-3 transition-transform" :class="showMoreMenu ? 'rotate-180' : ''" />
+        <!-- Tab Navigation -->
+        <div class="relative px-4 sm:px-6 pb-4">
+          <div class="flex justify-center">
+            <div class="inline-flex items-center gap-1 p-1 rounded-2xl bg-muted/50 border border-border/50">
+              <!-- Primary Tabs -->
+              <button class="tab-pill"
+                :class="activeTab === 'play' ? 'tab-pill-active tab-pill-game' : 'tab-pill-inactive'"
+                @click="activeTab = 'play'">
+                <Rocket class="w-3.5 h-3.5" />
+                <span>Play</span>
+                <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'mods'">
+                <Layers class="w-3.5 h-3.5" />
+                <span>Resources</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'configs'">
+                <FileCode class="w-3.5 h-3.5" />
+                <span>Configs</span>
+              </button>
+              <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
+                @click="activeTab = 'settings'">
+                <Settings class="w-3.5 h-3.5" />
+                <span>Details</span>
               </button>
 
-              <!-- Dropdown menu - higher z-index -->
-              <Transition name="fade">
-                <div v-if="showMoreMenu"
-                  class="absolute top-full right-0 mt-1 w-44 bg-popover border border-border rounded-lg shadow-xl z-[100] py-1 overflow-hidden">
+              <!-- More dropdown for secondary tabs -->
+              <div class="relative">
+                <button class="tab-pill" :class="isSecondaryTab ? 'tab-pill-active' : 'tab-pill-inactive'"
+                  @click="toggleMoreMenu($event)">
+                  <MoreHorizontal class="w-3.5 h-3.5" />
+                  <span class="hidden sm:inline">More</span>
+                  <span v-if="versionUnsavedCount > 0 && !isSecondaryTab"
+                    class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <ChevronDown class="w-3 h-3 transition-transform" :class="showMoreMenu ? 'rotate-180' : ''" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dropdown menu - Positioned outside the tab container for proper z-index -->
+          <Teleport to="body">
+            <Transition name="fade">
+              <div v-if="showMoreMenu" class="fixed inset-0 z-[200]" @click="showMoreMenu = false">
+                <div
+                  class="absolute w-48 bg-popover/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl py-1.5 overflow-hidden"
+                  :style="moreMenuPosition" @click.stop>
                   <button
-                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
                     :class="activeTab === 'discover' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'discover'; showMoreMenu = false">
                     <Sparkles class="w-4 h-4" />
                     Add Mods
                   </button>
                   <button
-                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
                     :class="activeTab === 'health' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'health'; showMoreMenu = false">
                     <Stethoscope class="w-4 h-4" />
                     Diagnostics
                   </button>
                   <button
-                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
                     :class="activeTab === 'versions' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'versions'; showMoreMenu = false">
                     <GitBranch class="w-4 h-4" />
@@ -2397,24 +2467,16 @@ watch(
                     </span>
                   </button>
                   <button
-                    class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
                     :class="activeTab === 'remote' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'remote'; showMoreMenu = false">
                     <Globe class="w-4 h-4" />
                     Cloud Sync
                   </button>
                 </div>
-              </Transition>
-
-              <!-- Backdrop to close dropdown -->
-              <div v-if="showMoreMenu" class="fixed inset-0 z-[99]" @click="showMoreMenu = false"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Bottom border -->
-        <div
-          class="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent">
+              </div>
+            </Transition>
+          </Teleport>
         </div>
       </div>
 
@@ -2803,7 +2865,7 @@ watch(
             <div v-if="!instance" class="flex items-center justify-center h-full p-6">
               <div class="text-center max-w-sm">
                 <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-muted/50 flex items-center justify-center">
-                  <Gamepad2 class="w-8 h-8 text-muted-foreground" />
+                  <Rocket class="w-8 h-8 text-muted-foreground" />
                 </div>
                 <h3 class="text-lg font-semibold mb-2">Create Game Instance</h3>
                 <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
@@ -2844,8 +2906,8 @@ watch(
                   <button @click="handleLaunch()" :disabled="instance.state !== 'ready' || isLaunching || isGameRunning"
                     class="play-button" :class="{ 'play-button-active': isGameRunning }">
                     <Loader2 v-if="isLaunching" class="w-7 h-7 animate-spin" />
-                    <Gamepad2 v-else-if="isGameRunning" class="w-7 h-7" />
-                    <Play v-else class="w-7 h-7" />
+                    <Play v-else-if="isGameRunning" class="w-7 h-7" />
+                    <Rocket v-else class="w-7 h-7" />
                   </button>
 
                   <!-- Status -->
@@ -4547,8 +4609,8 @@ watch(
       gameVersion: modpack?.minecraft_version,
       loader: modpack?.loader
     }" :current-file-id="modDetailsTarget?.cf_file_id" :full-screen="true"
-      :is-locked="modDetailsTarget ? lockedModIds.has(modDetailsTarget.id) : false" @close="closeModDetails"
-      @version-changed="handleModDetailsVersionChange" />
+      :is-locked="modDetailsTarget ? lockedModIds.has(modDetailsTarget.id) : false" :readonly="isLinked"
+      @close="closeModDetails" @version-changed="handleModDetailsVersionChange" />
 
     <!-- Mod Update Changelog Dialog -->
     <ChangelogDialog v-if="changelogMod" :open="showChangelogDialog" :mod-id="changelogMod.id"
@@ -4825,33 +4887,43 @@ watch(
       </div>
     </div>
 
-    <!-- Structured Config Editor -->
-    <div v-if="showStructuredEditor"
-      class="fixed inset-0 z-[60] bg-black/70 backdrop-blur-md flex items-center justify-center p-8 animate-in fade-in duration-150">
-      <div
-        class="bg-background border border-border/50 rounded-lg shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-        <div class="shrink-0 border-b border-border/50 bg-card/50 px-4 py-3 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-              <Settings class="w-4 h-4 text-primary" />
+    <!-- Structured Config Editor - Fullscreen Mode -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showStructuredEditor" class="fixed inset-0 z-[200] bg-background flex flex-col">
+          <!-- Fullscreen Header -->
+          <div
+            class="shrink-0 border-b border-border/50 bg-card/80 backdrop-blur-sm px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <button @click="handleCloseStructuredEditor"
+                class="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft class="w-5 h-5" />
+              </button>
+              <div
+                class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-1 ring-primary/20">
+                <Settings class="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 class="font-semibold text-lg text-foreground">{{ structuredEditorFile?.name }}</h3>
+                <p class="text-sm text-muted-foreground">{{ structuredEditorFile?.path }}</p>
+              </div>
             </div>
-            <div>
-              <h3 class="font-semibold text-foreground">Config Editor</h3>
-              <p class="text-xs text-muted-foreground">{{ structuredEditorFile?.name }}</p>
+            <div class="flex items-center gap-2">
+              <button @click="handleCloseStructuredEditor"
+                class="px-4 py-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
+                Close
+              </button>
             </div>
           </div>
-          <button @click="handleCloseStructuredEditor"
-            class="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
-            <X class="w-5 h-5" />
-          </button>
+          <!-- Editor Content -->
+          <div class="flex-1 overflow-hidden">
+            <ConfigStructuredEditor v-if="instance && structuredEditorFile" :instance-id="instance.id"
+              :config-path="structuredEditorFile.path" :refresh-key="configRefreshKey"
+              @close="handleCloseStructuredEditor" @saved="handleCloseStructuredEditor" />
+          </div>
         </div>
-        <div class="flex-1 overflow-hidden">
-          <ConfigStructuredEditor v-if="instance && structuredEditorFile" :instance-id="instance.id"
-            :config-path="structuredEditorFile.path" :refresh-key="configRefreshKey"
-            @close="handleCloseStructuredEditor" @saved="handleCloseStructuredEditor" />
-        </div>
-      </div>
-    </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -4868,19 +4940,26 @@ watch(
 
 /* Modern Tab Pill Styles */
 .tab-pill {
-  @apply px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 transition-colors duration-150 whitespace-nowrap;
+  @apply px-4 py-2 text-sm font-medium rounded-xl flex items-center gap-2 transition-all duration-200 whitespace-nowrap;
+  @apply hover:scale-[1.02];
 }
 
 .tab-pill-active {
-  @apply bg-muted text-foreground font-medium;
+  @apply bg-background text-foreground font-semibold shadow-sm;
+  @apply ring-1 ring-border/50;
 }
 
 .tab-pill-game {
-  @apply bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/20;
+  @apply bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-md shadow-primary/30;
+  @apply ring-0;
+}
+
+.tab-pill-game:hover {
+  @apply shadow-lg shadow-primary/40;
 }
 
 .tab-pill-inactive {
-  @apply text-muted-foreground hover:text-foreground hover:bg-muted/50;
+  @apply text-muted-foreground hover:text-foreground hover:bg-muted/60;
 }
 
 /* Sub-tab Styles */

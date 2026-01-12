@@ -119,7 +119,7 @@ function closeMoreActions() {
       class="relative rounded-xl overflow-hidden bg-card border border-border/50 group-hover:border-primary/40 transition-all duration-300 shadow-sm group-hover:shadow-lg group-hover:shadow-primary/5">
 
       <!-- Hero Image Section -->
-      <div class="relative h-32 overflow-hidden bg-muted/30">
+      <div class="relative h-28 overflow-hidden bg-muted/30">
         <!-- Background Image -->
         <img :src="modpack.image_url
           ? modpack.image_url.startsWith('http') || modpack.image_url.startsWith('file:')
@@ -173,22 +173,22 @@ function closeMoreActions() {
       </div>
 
       <!-- Content Section -->
-      <div class="relative p-3.5">
+      <div class="relative p-3">
         <!-- Title & Version -->
-        <div class="mb-2">
+        <div class="mb-1.5">
           <h3 class="font-semibold text-sm line-clamp-1 text-foreground group-hover:text-primary transition-colors">
             {{ modpack.name }}
           </h3>
-          <p class="text-[11px] text-muted-foreground/70 mt-0.5">v{{ modpack.version }}</p>
+          <p class="text-[10px] text-muted-foreground/60 mt-0.5">v{{ modpack.version }}</p>
         </div>
 
         <!-- Description -->
-        <p class="text-xs text-muted-foreground/80 line-clamp-1 mb-3">
-          {{ modpack.description || "Imported from CurseForge. Author: Unknown" }}
+        <p class="text-[11px] text-muted-foreground/70 line-clamp-1 mb-2.5">
+          {{ modpack.description || "Imported from CurseForge" }}
         </p>
 
         <!-- Tags Row -->
-        <div class="flex items-center gap-1.5 mb-3">
+        <div class="flex items-center gap-1.5 mb-2.5">
           <!-- MC Version -->
           <span v-if="modpack.minecraft_version" class="card-tag card-tag-primary">
             <Sparkles class="w-2.5 h-2.5" />

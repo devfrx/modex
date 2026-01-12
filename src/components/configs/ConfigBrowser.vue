@@ -73,6 +73,16 @@ const showFavoritesOnly = ref(false);
 const showFilters = ref(false);
 const favorites = ref<Set<string>>(new Set());
 
+// Folder category filter: 'configs' | 'saves' | 'all'
+const folderCategory = ref<'configs' | 'saves' | 'all'>('configs');
+
+// Folder categories mapping
+const folderCategories = {
+    configs: ['config', 'defaultconfigs', 'kubejs', 'scripts'],
+    saves: ['saves'],
+    all: ['config', 'defaultconfigs', 'kubejs', 'scripts', 'saves', 'resourcepacks', 'shaderpacks', 'options', 'servers']
+};
+
 // Toggle favorites filter
 const toggleFavoritesFilter = () => {
     showFavoritesOnly.value = !showFavoritesOnly.value;
@@ -133,9 +143,12 @@ async function loadFolders() {
     isLoading.value = true;
     try {
         const allFolders = await window.api.configs.getFolders(props.instanceId);
-        // Only show config and defaultconfigs folders in the browser
-        const allowedFolders = ['config', 'defaultconfigs'];
-        folders.value = allFolders.filter(f => allowedFolders.includes(f.name));
+        // Filter based on selected category
+        const allowedFolders = folderCategories[folderCategory.value];
+        // Also exclude 'local' folder as it contains non-config files
+        folders.value = allFolders.filter(f =>
+            allowedFolders.includes(f.name) && f.name !== 'local'
+        );
     } catch (error: any) {
         console.error("Failed to load config folders:", error);
         toast.error("Failed to load configs", error.message);
@@ -431,6 +444,11 @@ watch(
         loadFavorites();
     }
 );
+
+// Reload when folder category changes
+watch(folderCategory, () => {
+    loadFolders();
+});
 </script>
 
 <template>
@@ -485,6 +503,30 @@ watch(
             <!-- Filter Bar -->
             <div class="filter-bar">
                 <div class="flex items-center gap-2 flex-1 overflow-x-auto scrollbar-none">
+                    <!-- Folder Category Selector -->
+                    <div class="flex items-center p-0.5 bg-muted/50 rounded-lg">
+                        <button @click="folderCategory = 'configs'" :class="['px-2.5 py-1 text-xs font-medium rounded-md transition-all',
+                            folderCategory === 'configs'
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground']">
+                            Configs
+                        </button>
+                        <button @click="folderCategory = 'saves'" :class="['px-2.5 py-1 text-xs font-medium rounded-md transition-all',
+                            folderCategory === 'saves'
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground']">
+                            Saves
+                        </button>
+                        <button @click="folderCategory = 'all'" :class="['px-2.5 py-1 text-xs font-medium rounded-md transition-all',
+                            folderCategory === 'all'
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground']">
+                            All
+                        </button>
+                    </div>
+
+                    <div class="w-px h-4 bg-border/50"></div>
+
                     <!-- Filter Toggle -->
                     <button @click="showFilters = !showFilters"
                         :class="['filter-chip', showFilters || activeFileTypeFilter || showRecentlyModified ? 'filter-chip-active' : '']">

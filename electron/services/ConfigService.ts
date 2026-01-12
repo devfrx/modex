@@ -1012,7 +1012,13 @@ export class ConfigService {
     
     let lastFoundLine = 0;
     
-    const processObject = (obj: any, parentPath: string, depth: number): ConfigSection => {
+    // For top-level objects in JSON, treat first level nested objects as sections
+    // e.g., { "dragon": {...}, "pixie": {...} } -> dragon and pixie are sections
+    const isTopLevelSectionStructure = typeof parsed === 'object' && 
+      !Array.isArray(parsed) &&
+      Object.values(parsed).every(v => v !== null && typeof v === 'object' && !Array.isArray(v));
+    
+    const processObject = (obj: any, parentPath: string, depth: number, sectionName: string = ''): ConfigSection => {
       const section: ConfigSection = {
         name: parentPath || "root",
         displayName: parentPath ? parentPath.split(".").pop() || parentPath : "Root",
@@ -1027,10 +1033,18 @@ export class ConfigService {
         if (lineNum > 0) lastFoundLine = lineNum;
         
         if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-          // Nested object becomes a subsection
-          section.subsections.push(processObject(value, keyPath, depth + 1));
+          // Check if this is a top-level section (depth 0 with section structure)
+          if (depth === 0 && isTopLevelSectionStructure) {
+            // This nested object is a section - process its contents with section name
+            section.subsections.push(processObject(value, keyPath, depth + 1, key));
+          } else {
+            // Regular nested object becomes a subsection
+            section.subsections.push(processObject(value, keyPath, depth + 1, sectionName));
+          }
         } else {
           // Primitive or array becomes an entry
+          // Use the immediate parent as section name for better grouping
+          const effectiveSection = sectionName || (parentPath ? parentPath.split('.')[0] : '');
           section.entries.push({
             keyPath,
             key,
@@ -1040,6 +1054,7 @@ export class ConfigService {
             depth,
             modified: false,
             line: lineNum || undefined,
+            section: effectiveSection, // Add section name for grouping
           });
         }
       }

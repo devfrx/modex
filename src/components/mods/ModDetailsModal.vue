@@ -26,6 +26,7 @@ import {
   HardDrive,
   Globe,
   ArrowLeft,
+  Lock,
 } from "lucide-vue-next";
 import type { Mod } from "@/types";
 import { useToast } from "@/composables/useToast";
@@ -46,6 +47,8 @@ const props = defineProps<{
   fullScreen?: boolean;
   // Whether the mod is locked (prevents version changes)
   isLocked?: boolean;
+  // Whether the modpack is readonly/linked (prevents any modifications)
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -82,7 +85,8 @@ const filterLoader = ref<string>("all");
 
 // Computed
 const isModContext = computed(() => props.mod?.content_type === "mod" || !props.mod?.content_type);
-const canChangeVersion = computed(() => props.context?.type === "modpack" && !props.isLocked);
+const canChangeVersion = computed(() => props.context?.type === "modpack" && !props.isLocked && !props.readonly);
+const isReadonly = computed(() => props.isLocked || props.readonly);
 
 // Available game versions from loaded files
 const availableGameVersions = computed(() => {
@@ -392,14 +396,103 @@ onUnmounted(() => {
 <template>
   <!-- Fullscreen mode -->
   <div v-if="fullScreen && open" class="h-screen w-full flex flex-col bg-background overflow-hidden">
-    <!-- Fullscreen Back Button Header -->
-    <div class="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30 shrink-0">
-      <Button variant="ghost" size="sm" @click="emit('close')" class="gap-2">
+    <!-- CurseForge-style Hero Header -->
+    <div class="relative shrink-0 border-b border-border overflow-hidden">
+      <!-- Background gradient with mod accent color -->
+      <div class="absolute inset-0 bg-gradient-to-br from-primary/15 via-background to-background" />
+      <div
+        class="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
+
+      <!-- Back button floating -->
+      <Button variant="ghost" size="sm" @click="emit('close')"
+        class="absolute top-4 left-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
         <ArrowLeft class="w-4 h-4" />
         Back
       </Button>
-      <div class="h-4 w-px bg-border"></div>
-      <h1 class="text-lg font-semibold truncate">{{ mod?.name }}</h1>
+
+      <!-- External link button floating -->
+      <Button variant="ghost" size="sm" @click="openCurseForge" title="Open on CurseForge"
+        class="absolute top-4 right-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
+        <ExternalLink class="w-4 h-4" />
+        <span class="hidden sm:inline">CurseForge</span>
+      </Button>
+
+      <!-- Main header content -->
+      <div class="relative px-6 pt-16 pb-6">
+        <div class="flex items-start gap-6">
+          <!-- Mod Logo - Large with glow effect -->
+          <div class="relative group shrink-0">
+            <div
+              class="absolute -inset-2 bg-gradient-to-br from-primary/40 to-primary/10 rounded-3xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-500" />
+            <div
+              class="relative w-28 h-28 rounded-2xl overflow-hidden bg-background/80 backdrop-blur-sm border-2 border-border/50 shadow-2xl ring-1 ring-white/10">
+              <img v-if="mod?.logo_url || mod?.thumbnail_url" :src="mod.logo_url || mod.thumbnail_url" :alt="mod?.name"
+                class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
+              <div v-else
+                class="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
+                <component :is="contentTypeConfig.icon" class="w-14 h-14 text-muted-foreground/40" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Mod Info -->
+          <div class="flex-1 min-w-0 py-2">
+            <!-- Type badge & Name -->
+            <div class="flex items-center gap-3 flex-wrap mb-2">
+              <span class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 ring-1 shrink-0"
+                :class="contentTypeConfig.class">
+                <component :is="contentTypeConfig.icon" class="w-3.5 h-3.5" />
+                {{ contentTypeConfig.label }}
+              </span>
+              <h1 class="text-2xl sm:text-3xl font-bold text-foreground tracking-tight truncate">{{ mod?.name }}</h1>
+            </div>
+
+            <!-- Author -->
+            <div class="flex items-center gap-2 text-muted-foreground mb-4">
+              <User class="w-4 h-4 text-primary/70" />
+              <span class="font-medium">by {{ mod?.author || "Unknown" }}</span>
+            </div>
+
+            <!-- Stats Row -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <div v-if="mod?.download_count"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
+                <Download class="w-4 h-4 text-green-400" />
+                <span class="text-sm font-semibold text-foreground">{{ formatDownloads(mod.download_count) }}</span>
+                <span class="text-xs text-muted-foreground">downloads</span>
+              </div>
+
+              <div v-if="mod?.game_version"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
+                <Tag class="w-4 h-4 text-blue-400" />
+                <span class="text-sm font-semibold text-foreground">{{ mod.game_version }}</span>
+              </div>
+
+              <div v-if="mod?.loader && isModContext"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm" :class="mod.loader?.toLowerCase().includes('forge')
+                  ? 'bg-orange-500/10 border-orange-500/30'
+                  : 'bg-blue-500/10 border-blue-500/30'">
+                <span class="text-sm font-semibold"
+                  :class="mod.loader?.toLowerCase().includes('forge') ? 'text-orange-400' : 'text-blue-400'">
+                  {{ mod.loader }}
+                </span>
+              </div>
+
+              <div v-if="mod?.date_released"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
+                <Calendar class="w-4 h-4 text-muted-foreground" />
+                <span class="text-sm text-muted-foreground">{{ formatDate(mod.date_released) }}</span>
+              </div>
+            </div>
+
+            <!-- Description preview -->
+            <p v-if="mod?.description"
+              class="text-sm text-muted-foreground/80 mt-4 line-clamp-2 leading-relaxed max-w-3xl">
+              {{ mod.description }}
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="flex-1 overflow-auto">
@@ -598,8 +691,17 @@ onUnmounted(() => {
               <span class="ml-auto text-xs text-muted-foreground">{{ filteredFiles.length }} files</span>
             </div>
 
+            <!-- Info banner for readonly/linked modpack -->
+            <div v-if="context?.type === 'modpack' && isReadonly"
+              class="mb-4 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
+              <Lock class="w-5 h-5 text-amber-400 shrink-0" />
+              <p class="text-sm text-amber-300">
+                This modpack is in read-only mode. Version changes are disabled to maintain sync with the source.
+              </p>
+            </div>
+
             <!-- Info banner for library context -->
-            <div v-if="!canChangeVersion"
+            <div v-else-if="!canChangeVersion"
               class="mb-4 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
               <Info class="w-5 h-5 text-blue-400 shrink-0" />
               <p class="text-sm text-blue-300">
@@ -983,8 +1085,17 @@ onUnmounted(() => {
             <span class="ml-auto text-xs text-muted-foreground">{{ filteredFiles.length }} files</span>
           </div>
 
+          <!-- Info banner for readonly/linked modpack -->
+          <div v-if="context?.type === 'modpack' && isReadonly"
+            class="mb-4 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
+            <Lock class="w-5 h-5 text-amber-400 shrink-0" />
+            <p class="text-sm text-amber-300">
+              This modpack is in read-only mode. Version changes are disabled to maintain sync with the source.
+            </p>
+          </div>
+
           <!-- Info banner for library context -->
-          <div v-if="!canChangeVersion"
+          <div v-else-if="!canChangeVersion"
             class="mb-4 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
             <Info class="w-5 h-5 text-blue-400 shrink-0" />
             <p class="text-sm text-blue-300">

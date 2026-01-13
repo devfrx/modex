@@ -353,7 +353,7 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
       if (result.requiresConfirmation && result.syncStatus) {
         pendingLaunchData.value = {
           needsSync: result.syncStatus.needsSync,
-          differences: result.syncStatus.differences,
+          differences: result.syncStatus.differences ?? 0,
           lastSynced: result.syncStatus.lastSynced,
         };
         showSyncConfirmDialog.value = true;

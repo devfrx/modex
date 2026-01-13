@@ -363,7 +363,7 @@ async function handleLaunch(options?: { forceSync?: boolean; skipSync?: boolean 
         if (result.requiresConfirmation && result.syncStatus) {
             pendingLaunchData.value = {
                 needsSync: result.syncStatus.needsSync,
-                differences: result.syncStatus.differences,
+                differences: result.syncStatus.differences ?? 0,
                 lastSynced: result.syncStatus.lastSynced
             };
             showSyncConfirmDialog.value = true;
@@ -1162,7 +1162,7 @@ function handleConfigReverted(event: Event) {
                                                     <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
                                                     <Package v-else class="w-3 h-3" />
                                                     <span class="truncate line-through opacity-60">{{ item.oldFilename
-                                                        }}</span>
+                                                    }}</span>
                                                     <span class="text-orange-400">→</span>
                                                     <span class="truncate text-orange-400">{{ item.newFilename }}</span>
                                                     <span v-if="item.willBeDisabled"
@@ -1182,7 +1182,7 @@ function handleConfigReverted(event: Event) {
                                                 <Trash2 class="w-4 h-4" />
                                                 <span class="font-medium">Mods to remove ({{
                                                     syncStatus.extraInInstance.filter(i => i.type === 'mod').length
-                                                }})</span>
+                                                    }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These mods are not in the modpack and will be removed during sync.
@@ -1209,7 +1209,7 @@ function handleConfigReverted(event: Event) {
                                                 <Package class="w-4 h-4" />
                                                 <span class="font-medium">Extra files ({{
                                                     syncStatus.extraInInstance.filter(i => i.type !== 'mod').length
-                                                }})</span>
+                                                    }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These files will be preserved.
@@ -1353,9 +1353,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                    }}</span>
+                                                }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                    }}%</span>
+                                                }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1388,7 +1388,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1398,7 +1398,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">

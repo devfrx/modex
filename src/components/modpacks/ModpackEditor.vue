@@ -68,6 +68,9 @@ import {
   MessageSquarePlus,
   MoreHorizontal,
   Stethoscope,
+  Github,
+  Upload,
+  CloudUpload,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -1799,6 +1802,127 @@ async function exportResourceList(format: 'simple' | 'detailed' | 'markdown') {
   }
 }
 
+// Gist publishing
+const isPushingToGist = ref(false);
+const isDeletingGist = ref(false);
+const hasGistToken = ref(false);
+const gistExistsRemotely = ref(false);
+const isCheckingGistExists = ref(false);
+
+// Check for Gist token on mount and verify Gist exists
+onMounted(async () => {
+  hasGistToken.value = await window.api.gist.hasToken();
+  await checkGistExists();
+});
+
+// Check if the linked Gist still exists remotely
+async function checkGistExists() {
+  if (!modpack.value?.gist_config?.gist_id) {
+    gistExistsRemotely.value = false;
+    return;
+  }
+
+  isCheckingGistExists.value = true;
+  try {
+    gistExistsRemotely.value = await window.api.gist.gistExists(modpack.value.gist_config.gist_id);
+  } catch {
+    gistExistsRemotely.value = false;
+  } finally {
+    isCheckingGistExists.value = false;
+  }
+}
+
+async function deleteGistFromRemote() {
+  if (!props.modpackId || !modpack.value?.gist_config?.gist_id) return;
+
+  isDeletingGist.value = true;
+  try {
+    const result = await window.api.gist.deleteGist(props.modpackId);
+
+    if (result.success) {
+      await loadData();
+      gistExistsRemotely.value = false;
+      toast.success("Gist Deleted", "Remote Gist has been deleted and unlinked.");
+    } else {
+      toast.error("Delete Failed", result.error || "Unknown error");
+    }
+  } catch (err) {
+    console.error("Failed to delete Gist:", err);
+    toast.error("Delete Failed", (err as Error).message);
+  } finally {
+    isDeletingGist.value = false;
+  }
+}
+
+async function pushToGist(mode?: 'full' | 'current') {
+  if (!props.modpackId || !modpack.value) return;
+
+  // Check if token is configured
+  if (!hasGistToken.value) {
+    toast.error(
+      "GitHub Not Connected",
+      "Add your GitHub token in Settings > General > GitHub Gist"
+    );
+    return;
+  }
+
+  isPushingToGist.value = true;
+  try {
+    // Use provided mode, or load default from settings
+    let resolvedMode: 'full' | 'current' = mode || 'full';
+    if (!mode) {
+      try {
+        const gistSettings = await window.api.settings.getGist();
+        resolvedMode = gistSettings.defaultManifestMode || 'full';
+      } catch {
+        // Fallback to 'full' if settings fail
+      }
+    }
+
+    const result = await window.api.gist.pushManifest(props.modpackId, {
+      versionHistoryMode: resolvedMode,
+    });
+
+    if (result.success) {
+      // Reload modpack data to get updated gist_config
+      await loadData();
+
+      // Mark that the Gist exists remotely
+      gistExistsRemotely.value = true;
+
+      // Copy the raw URL to clipboard for easy sharing
+      if (result.rawUrl) {
+        await navigator.clipboard.writeText(result.rawUrl);
+      }
+
+      toast.success(
+        modpack.value.gist_config?.gist_id ? "Gist Updated ✓" : "Gist Created ✓",
+        `Manifest published to Gist. URL copied to clipboard.`
+      );
+    } else {
+      toast.error("Push Failed", result.error || "Unknown error");
+    }
+  } catch (err) {
+    console.error("Failed to push to Gist:", err);
+    toast.error("Push Failed", (err as Error).message);
+  } finally {
+    isPushingToGist.value = false;
+  }
+}
+
+async function openGistInBrowser() {
+  if (modpack.value?.gist_config?.html_url) {
+    window.open(modpack.value.gist_config.html_url, '_blank');
+  }
+}
+
+async function copyGistUrl() {
+  if (modpack.value?.gist_config?.raw_url) {
+    await navigator.clipboard.writeText(modpack.value.gist_config.raw_url);
+    toast.success("URL Copied", "Gist raw URL copied to clipboard");
+  }
+}
+
 async function checkForRemoteUpdates() {
   if (!modpack.value || !editForm.value.remote_url) return;
 
@@ -2394,7 +2518,7 @@ watch(
 
         <!-- Tab Navigation -->
         <div class="relative px-4 sm:px-6 pb-4">
-          <div class="flex justify-center">
+          <div class="flex justify-center items-center gap-3">
             <div class="inline-flex items-center gap-1 p-1 rounded-2xl bg-muted/50 border border-border/50">
               <!-- Primary Tabs -->
               <button class="tab-pill"
@@ -2432,6 +2556,15 @@ watch(
                 </button>
               </div>
             </div>
+
+            <!-- Cloud Sync Button - Separate from main tabs -->
+            <button class="tab-pill border" :class="activeTab === 'remote'
+              ? 'bg-blue-500/20 text-blue-500 border-blue-500/40 ring-1 ring-blue-500/30'
+              : 'tab-pill-inactive border-border/50'" @click="activeTab = 'remote'" title="Cloud Sync & Publishing">
+              <Globe class="w-3.5 h-3.5" />
+              <span class="hidden sm:inline">Cloud</span>
+              <span v-if="gistExistsRemotely || editForm.remote_url" class="w-2 h-2 rounded-full bg-blue-500"></span>
+            </button>
           </div>
 
           <!-- Dropdown menu - Positioned outside the tab container for proper z-index -->
@@ -2465,13 +2598,6 @@ watch(
                       class="ml-auto px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
                       {{ versionUnsavedCount }}
                     </span>
-                  </button>
-                  <button
-                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
-                    :class="activeTab === 'remote' ? 'bg-primary/10 text-primary' : 'text-foreground'"
-                    @click="activeTab = 'remote'; showMoreMenu = false">
-                    <Globe class="w-4 h-4" />
-                    Cloud Sync
                   </button>
                 </div>
               </div>
@@ -3114,7 +3240,7 @@ watch(
                     </div>
                     <div class="text-[11px] text-muted-foreground space-y-0.5">
                       <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
-                      }}</span></p>
+                          }}</span></p>
                       <p>Modpack: <span class="text-blue-400 font-medium">{{
                         extractLoaderVersion(modpack?.loader_version ||
                           'unknown') }}</span></p>
@@ -4333,57 +4459,93 @@ watch(
               </h3>
 
               <div class="space-y-6">
-                <!-- Check Button -->
-                <div v-if="editForm.remote_url"
-                  class="p-4 bg-muted/20 rounded-lg border border-border/50 flex items-center justify-between">
-                  <div class="text-sm">
-                    <div class="font-medium flex items-center gap-2">
-                      <RefreshCw class="w-4 h-4 text-primary" />
-                      Update Status
-                    </div>
-                    <div class="text-xs text-muted-foreground mt-1">
-                      Last checked:
-                      {{
-                        modpack?.remote_source?.last_checked
-                          ? new Date(
-                            modpack.remote_source.last_checked
-                          ).toLocaleString()
-                          : "Never"
-                      }}
-                    </div>
-                  </div>
-                  <Button variant="secondary" size="sm" @click="checkForRemoteUpdates" :disabled="isCheckingUpdate">
-                    <RefreshCw class="w-3.5 h-3.5 mr-2" :class="{ 'animate-spin': isCheckingUpdate }" />
-                    Check Now
-                  </Button>
-                </div>
+                <!-- ═══════════════════════════════════════════════════════════════════
+                     PUBLISHER / HOST SECTION
+                     For modpack creators who want to share their modpack with others
+                     Hidden if modpack is linked to a remote source (subscriber mode)
+                ═══════════════════════════════════════════════════════════════════ -->
+                <div v-if="!editForm.remote_url"
+                  class="p-4 bg-gradient-to-r from-primary/5 to-transparent rounded-xl border border-primary/20">
+                  <h4 class="text-sm font-semibold mb-3 flex items-center gap-2 text-primary">
+                    <CloudUpload class="w-4 h-4" />
+                    Publisher / Host
+                  </h4>
+                  <p class="text-xs text-muted-foreground mb-4">
+                    Publish your modpack manifest so others can subscribe and receive updates.
+                  </p>
 
-                <!-- Collaboration / Remote Updates -->
-                <div class="space-y-4">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium">Remote Manifest URL</label>
-                    <div class="flex gap-2">
-                      <input v-model="editForm.remote_url" type="text"
-                        class="flex-1 h-9 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
-                        placeholder="https://gist.githubusercontent.com/..." @change="sanitizeRemoteUrl" />
+                  <!-- Publish to Gist -->
+                  <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                      <Github class="w-4 h-4" />
+                      <span class="text-sm font-medium">GitHub Gist</span>
+                    </div>
+
+                    <!-- Show current Gist info if published AND exists remotely -->
+                    <div v-if="modpack?.gist_config?.gist_id && gistExistsRemotely"
+                      class="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <div class="text-sm font-medium text-green-500 flex items-center gap-2">
+                            <Check class="w-3.5 h-3.5" />
+                            Published to Gist
+                          </div>
+                          <div class="text-xs text-muted-foreground mt-1">
+                            Last updated: {{ modpack.gist_config.last_pushed
+                              ? new Date(modpack.gist_config.last_pushed).toLocaleString()
+                              : 'Unknown' }}
+                          </div>
+                        </div>
+                        <div class="flex gap-1">
+                          <Button variant="ghost" size="sm" @click="copyGistUrl" title="Copy raw URL">
+                            <Share2 class="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" @click="openGistInBrowser" title="Open in browser">
+                            <ExternalLink class="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive"
+                            @click="deleteGistFromRemote" :disabled="isDeletingGist" title="Delete Gist from GitHub">
+                            <Trash2 v-if="!isDeletingGist" class="w-3.5 h-3.5" />
+                            <Loader2 v-else class="w-3.5 h-3.5 animate-spin" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Show warning if gist_config exists but Gist was deleted remotely -->
+                    <div v-else-if="modpack?.gist_config?.gist_id && !gistExistsRemotely && !isCheckingGistExists"
+                      class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs">
+                      <div class="font-medium text-amber-500 mb-1">Gist not found</div>
+                      <span class="text-muted-foreground">
+                        The linked Gist was deleted or is inaccessible. Create a new one to re-publish.
+                      </span>
+                    </div>
+
+                    <div v-if="!hasGistToken" class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs">
+                      <div class="font-medium text-amber-500 mb-1">GitHub token required</div>
+                      <span class="text-muted-foreground">
+                        Add your GitHub token in Settings → GitHub Gist to enable direct publishing.
+                      </span>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                      <Button variant="default" size="sm" class="gap-2" @click="pushToGist()"
+                        :disabled="isPushingToGist || !hasGistToken">
+                        <CloudUpload v-if="!isPushingToGist" class="w-3.5 h-3.5" />
+                        <Loader2 v-else class="w-3.5 h-3.5 animate-spin" />
+                        {{ gistExistsRemotely ? 'Update Gist' : 'Create Gist' }}
+                      </Button>
                     </div>
                     <p class="text-xs text-muted-foreground">
-                      Paste the raw URL of a JSON manifest hosted on GitHub Gist
-                      or similar.
+                      Manifest mode (Full History / Current Only) can be configured in Settings.
                     </p>
                   </div>
 
-                  <div class="flex items-center gap-2">
-                    <input type="checkbox" id="auto-check" v-model="editForm.auto_check_remote"
-                      class="rounded border-border/50 text-primary focus:ring-primary/30" />
-                    <label for="auto-check" class="text-sm">Automatically check for updates on startup</label>
-                  </div>
-
-                  <div class="pt-4 border-t border-border/50">
-                    <h4 class="text-sm font-medium mb-2">Export for Hosting</h4>
-                    <p class="text-xs text-muted-foreground mb-3">
-                      Generates a .json file you can upload to Gist/GitHub to
-                      act as the "Master" version.
+                  <!-- Manual Export -->
+                  <div class="mt-4 pt-4 border-t border-border/30 space-y-3">
+                    <div class="text-sm font-medium">Manual Export</div>
+                    <p class="text-xs text-muted-foreground">
+                      Download a JSON manifest to host elsewhere (GitHub, web server, etc.)
                     </p>
                     <div class="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" class="gap-2" @click="exportManifest('full')">
@@ -4398,10 +4560,10 @@ watch(
                   </div>
 
                   <!-- Resource List Export -->
-                  <div class="pt-4 border-t border-border/50">
-                    <h4 class="text-sm font-medium mb-2">Export Resource List</h4>
-                    <p class="text-xs text-muted-foreground mb-3">
-                      Generate a sorted list of all mods and resources for sharing or documentation.
+                  <div class="mt-4 pt-4 border-t border-border/30 space-y-3">
+                    <div class="text-sm font-medium">Export Resource List</div>
+                    <p class="text-xs text-muted-foreground">
+                      Generate a list of mods/resources for sharing or documentation.
                     </p>
                     <div class="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" class="gap-2" @click="exportResourceList('simple')"
@@ -4416,6 +4578,82 @@ watch(
                         :disabled="isExportingResourceList">
                         Markdown
                       </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Info message when modpack is linked (subscriber mode) -->
+                <div v-if="editForm.remote_url" class="p-4 bg-muted/20 rounded-xl border border-border/50">
+                  <div class="flex items-start gap-3">
+                    <Info class="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+                    <div>
+                      <h4 class="text-sm font-medium mb-1">Publishing disabled</h4>
+                      <p class="text-xs text-muted-foreground">
+                        This modpack is linked to a remote source and receives updates from a host.
+                        To publish your own version, first remove the remote URL below to unlink it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ═══════════════════════════════════════════════════════════════════
+                     SUBSCRIBER / CLIENT SECTION  
+                     For users who want to sync with a remote modpack (read-only updates)
+                ═══════════════════════════════════════════════════════════════════ -->
+                <div class="p-4 bg-gradient-to-r from-blue-500/5 to-transparent rounded-xl border border-blue-500/20">
+                  <h4 class="text-sm font-semibold mb-3 flex items-center gap-2 text-blue-500">
+                    <Download class="w-4 h-4" />
+                    Subscriber / Client
+                  </h4>
+                  <p class="text-xs text-muted-foreground mb-4">
+                    Link to a remote manifest to receive updates from a host.
+                    <span class="text-amber-500">Note: This will enable sync mode for this modpack.</span>
+                  </p>
+
+                  <!-- Update Status -->
+                  <div v-if="editForm.remote_url"
+                    class="mb-4 p-3 bg-muted/20 rounded-lg border border-border/50 flex items-center justify-between">
+                    <div class="text-sm">
+                      <div class="font-medium flex items-center gap-2">
+                        <RefreshCw class="w-4 h-4 text-blue-500" />
+                        Sync Status
+                      </div>
+                      <div class="text-xs text-muted-foreground mt-1">
+                        Last checked:
+                        {{
+                          modpack?.remote_source?.last_checked
+                            ? new Date(modpack.remote_source.last_checked).toLocaleString()
+                            : "Never"
+                        }}
+                      </div>
+                    </div>
+                    <Button variant="secondary" size="sm" @click="checkForRemoteUpdates" :disabled="isCheckingUpdate">
+                      <RefreshCw class="w-3.5 h-3.5 mr-2" :class="{ 'animate-spin': isCheckingUpdate }" />
+                      Check Now
+                    </Button>
+                  </div>
+
+                  <div class="space-y-3">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium">Remote Manifest URL</label>
+                      <div class="flex gap-2">
+                        <input v-model="editForm.remote_url" type="text"
+                          class="flex-1 h-9 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50"
+                          placeholder="https://gist.githubusercontent.com/..." @change="sanitizeRemoteUrl" />
+                        <Button v-if="editForm.remote_url" variant="ghost" size="sm" @click="editForm.remote_url = ''"
+                          title="Clear URL">
+                          <X class="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <p class="text-xs text-muted-foreground">
+                        Paste the raw URL of a JSON manifest to sync with the host's modpack.
+                      </p>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <input type="checkbox" id="auto-check" v-model="editForm.auto_check_remote"
+                        class="rounded border-border/50 text-blue-500 focus:ring-blue-500/30" />
+                      <label for="auto-check" class="text-sm">Automatically check for updates on startup</label>
                     </div>
                   </div>
                 </div>

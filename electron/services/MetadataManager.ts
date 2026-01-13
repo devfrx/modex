@@ -85,6 +85,15 @@ export interface Modpack {
     last_checked?: string;
     skip_initial_check?: boolean;
   };
+  /** Gist publishing configuration for this modpack */
+  gist_config?: {
+    gist_id: string;
+    filename: string;
+    is_public: boolean;
+    last_pushed?: string;
+    raw_url?: string;
+    html_url?: string;
+  };
   // Track mods that failed to import due to incompatibility
   incompatible_mods?: Array<{
     cf_project_id: number;
@@ -125,6 +134,11 @@ interface AppConfig {
     showSyncConfirmation?: boolean;
     /** Default config sync mode when syncing */
     defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+  };
+  /** Gist publishing settings */
+  gistSettings?: {
+    /** Default manifest mode when publishing to Gist: 'full' includes version history, 'current' only latest */
+    defaultManifestMode?: "full" | "current";
   };
 }
 
@@ -329,6 +343,29 @@ export class MetadataManager {
       await this.saveConfig(config);
     } catch (error) {
       console.error("[MetadataManager] Failed to set instance sync settings:", error);
+      throw error;
+    }
+  }
+
+  // ==================== GIST SETTINGS ====================
+
+  async getGistSettings(): Promise<NonNullable<AppConfig["gistSettings"]>> {
+    const config = await this.getConfig();
+    return {
+      defaultManifestMode: config.gistSettings?.defaultManifestMode ?? "full",
+    };
+  }
+
+  async setGistSettings(settings: Partial<NonNullable<AppConfig["gistSettings"]>>): Promise<void> {
+    try {
+      const config = await this.getConfig();
+      config.gistSettings = {
+        ...config.gistSettings,
+        ...settings,
+      };
+      await this.saveConfig(config);
+    } catch (error) {
+      console.error("[MetadataManager] Failed to set gist settings:", error);
       throw error;
     }
   }

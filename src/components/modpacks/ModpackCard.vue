@@ -12,11 +12,14 @@ import {
   Flame,
   Globe,
   Link2,
+  Link2Off,
   Gamepad2,
   MoreHorizontal,
   CircleDot,
   Layers,
   Sparkles,
+  CloudOff,
+  Cloud,
 } from "lucide-vue-next";
 import { ref, computed } from "vue";
 import DefaultModpackImage from "@/assets/modpack-placeholder.png";
@@ -37,10 +40,17 @@ interface ModpackWithCount {
   cf_file_id?: number;
   cf_slug?: string;
   share_code?: string;
-  // Remote sync
+  // Remote sync (subscriber)
   remote_source?: {
     url?: string;
   };
+  // Gist config (publisher)
+  gist_config?: {
+    gist_id?: string;
+    raw_url?: string;
+  };
+  // Cloud status (verified at load time)
+  cloudStatus?: "published" | "subscribed" | "error" | null;
   // Unsaved changes flag
   hasUnsavedChanges?: boolean;
 }
@@ -205,7 +215,25 @@ function closeMoreActions() {
             <span v-if="modpack.cf_project_id" class="card-source card-source-cf" title="From CurseForge">
               <Flame class="w-3 h-3" />
             </span>
-            <span v-if="modpack.remote_source?.url" class="card-source card-source-linked" title="Cloud Synced">
+            <!-- Cloud Status Indicators -->
+            <template v-if="modpack.cloudStatus === 'error'">
+              <!-- Client Error -->
+              <span v-if="modpack.remote_source?.url" class="card-source bg-red-500/20 text-red-400 border-red-500/30"
+                title="Remote source connection failed">
+                <Link2Off class="w-3 h-3" />
+              </span>
+              <!-- Host Error -->
+              <span v-else class="card-source bg-red-500/20 text-red-400 border-red-500/30"
+                title="Cloud sync error - Gist not found">
+                <CloudOff class="w-3 h-3" />
+              </span>
+            </template>
+            <span v-else-if="modpack.cloudStatus === 'published'"
+              class="card-source bg-green-500/20 text-green-400 border-green-500/30" title="Published to Gist">
+              <Cloud class="w-3 h-3" />
+            </span>
+            <span v-else-if="modpack.cloudStatus === 'subscribed' || modpack.remote_source?.url"
+              class="card-source card-source-linked" title="Cloud Synced">
               <Link2 class="w-3 h-3" />
             </span>
             <span v-else-if="modpack.share_code" class="card-source card-source-shareable" title="Shareable">

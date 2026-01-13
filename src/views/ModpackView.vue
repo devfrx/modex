@@ -195,17 +195,27 @@ async function loadModpacks() {
     const packsWithCounts = await Promise.all(
       packs.map(async (pack) => {
         if (!pack.id) {
-          return { ...pack, modCount: 0, hasUnsavedChanges: false };
+          return { ...pack, modCount: 0, hasUnsavedChanges: false, cloudStatus: null as "published" | "subscribed" | "error" | null };
         }
         const [mods, hasUnsaved] = await Promise.all([
           window.api.modpacks.getMods(pack.id),
           window.api.modpacks.hasUnsavedChanges(pack.id),
         ]);
-        return { ...pack, modCount: mods.length, hasUnsavedChanges: hasUnsaved };
+        return { ...pack, modCount: mods.length, hasUnsavedChanges: hasUnsaved, cloudStatus: null as "published" | "subscribed" | "error" | null };
       })
     );
 
     modpacks.value = packsWithCounts;
+
+    // Verify cloud status in background (non-blocking)
+    window.api.modpacks.verifyCloudStatus().then((cloudStatuses) => {
+      modpacks.value = modpacks.value.map((pack) => ({
+        ...pack,
+        cloudStatus: pack.id ? cloudStatuses[pack.id] ?? null : null,
+      }));
+    }).catch((err) => {
+      console.warn("Failed to verify cloud status:", err);
+    });
 
     const currentIds = new Set(modpacks.value.map((m) => m.id).filter((id): id is string => !!id));
     for (const id of selectedModpackIds.value) {

@@ -30,6 +30,7 @@ import { ImageCacheService } from "./services/ImageCacheService.js";
 import { ModpackAnalyzerService, ModpackPreview, ModpackAnalysis } from "./services/ModpackAnalyzerService.js";
 import { InstanceService, ModexInstance, InstanceSyncResult } from "./services/InstanceService.js";
 import { ConfigService, ConfigFile, ConfigFolder, ConfigContent, ConfigExport } from "./services/ConfigService.js";
+import { GistService, GistInfo, GistOperationResult } from "./services/GistService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +53,7 @@ let imageCacheService: ImageCacheService;
 let modpackAnalyzerService: ModpackAnalyzerService;
 let instanceService: InstanceService;
 let configService: ConfigService;
+let gistService: GistService;
 
 // Register custom protocol for local file access (thumbnails cache)
 protocol.registerSchemesAsPrivileged([
@@ -95,6 +97,7 @@ async function initializeBackend() {
   modpackAnalyzerService = new ModpackAnalyzerService();
   instanceService = new InstanceService(metadataManager.getBasePath());
   configService = new ConfigService(metadataManager.getBasePath());
+  gistService = new GistService(metadataManager.getBasePath());
 
   // Connect instanceService to metadataManager for version control integration
   metadataManager.setInstanceService(instanceService);
@@ -409,6 +412,45 @@ async function initializeBackend() {
     return metadataManager.getModpackById(id);
   });
 
+  // Verify cloud status for all modpacks (called after list load for UI indicators)
+  ipcMain.handle("modpacks:verifyCloudStatus", async () => {
+    try {
+      const modpacks = await metadataManager.getAllModpacks();
+      const results: Record<string, "published" | "subscribed" | "error" | null> = {};
+
+      for (const modpack of modpacks) {
+        // Check publisher status (has gist_config)
+        if (modpack.gist_config?.gist_id) {
+          try {
+            const exists = await gistService.gistExists(modpack.gist_config.gist_id);
+            results[modpack.id] = exists ? "published" : "error";
+          } catch {
+            results[modpack.id] = "error";
+          }
+        }
+        // Check subscriber status (has remote_source URL)
+        else if (modpack.remote_source?.url) {
+          try {
+            // Try to fetch the remote URL to verify it exists
+            const response = await fetch(modpack.remote_source.url, { method: "HEAD" });
+            results[modpack.id] = response.ok ? "subscribed" : "error";
+          } catch {
+            results[modpack.id] = "error";
+          }
+        }
+        // No cloud connection
+        else {
+          results[modpack.id] = null;
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error("[Main] Failed to verify cloud status:", error);
+      return {};
+    }
+  });
+
   ipcMain.handle("modpacks:create", async (_, data: any) => {
     return metadataManager.createModpack(data);
   });
@@ -421,6 +463,14 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:update",
     async (_, id: string, updates: Partial<Modpack>) => {
+      // Protect critical fields on linked modpacks
+      const criticalFields = ['mod_ids', 'disabled_mod_ids', 'locked_mod_ids', 'mod_notes'];
+      const hasCriticalUpdates = criticalFields.some(f => f in updates);
+      
+      if (hasCriticalUpdates) {
+        await guardLinkedModpack(id, "modify modpack structure");
+      }
+      
       return metadataManager.updateModpack(id, updates);
     }
   );
@@ -716,6 +766,11 @@ async function initializeBackend() {
       modsSkipped: number;
       errors: string[];
     }> => {
+      // Guard: prevent updating linked modpacks (unless creating new)
+      if (!createNew) {
+        await guardLinkedModpack(modpackId, "update CF modpack");
+      }
+      
       if (!win) {
         return {
           success: false,
@@ -2875,6 +2930,11 @@ async function initializeBackend() {
   ipcMain.handle(
     "updates:applyUpdate",
     async (_, modId: string, newFileId: number, modpackId?: string) => {
+      // Guard: prevent updating mods in linked modpacks
+      if (modpackId) {
+        await guardLinkedModpack(modpackId, "update mod");
+      }
+
       const oldMod = await metadataManager.getModById(modId);
       if (!oldMod) return { success: false, error: "Mod not found" };
 
@@ -2938,10 +2998,15 @@ async function initializeBackend() {
           await metadataManager.replaceModInModpack(modpackId, modId, newMod.id);
           console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${modpackId}`);
         } else {
-          // Update all modpacks that contain this mod
+          // Update all modpacks that contain this mod (skip linked ones)
           const modpacks = await metadataManager.getAllModpacks();
           for (const mp of modpacks) {
             if (mp.mod_ids.includes(modId)) {
+              // Skip linked modpacks when updating globally
+              if (mp.remote_source?.url) {
+                console.log(`[Update] Skipping linked modpack ${mp.id}`);
+                continue;
+              }
               await metadataManager.replaceModInModpack(mp.id, modId, newMod.id);
               console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${mp.id}`);
             }
@@ -3157,6 +3222,150 @@ async function initializeBackend() {
       }
     }
   );
+
+  // ========== GIST IPC HANDLERS ==========
+
+  ipcMain.handle("gist:hasToken", async () => {
+    return gistService.hasToken();
+  });
+
+  ipcMain.handle("gist:getToken", async () => {
+    return gistService.getToken();
+  });
+
+  ipcMain.handle("gist:setToken", async (_, token: string) => {
+    return gistService.setToken(token);
+  });
+
+  ipcMain.handle("gist:getUser", async () => {
+    return gistService.getUser();
+  });
+
+  ipcMain.handle("gist:listGists", async (_, options?: { perPage?: number; page?: number }) => {
+    return gistService.listGists(options);
+  });
+
+  ipcMain.handle("gist:getGist", async (_, gistId: string) => {
+    return gistService.getGist(gistId);
+  });
+
+  ipcMain.handle("gist:gistExists", async (_, gistId: string) => {
+    return gistService.gistExists(gistId);
+  });
+
+  ipcMain.handle("gist:deleteGist", async (_, modpackId: string) => {
+    try {
+      const modpack = await metadataManager.getModpackById(modpackId);
+      if (!modpack) {
+        return { success: false, error: "Modpack not found" };
+      }
+
+      if (!modpack.gist_config?.gist_id) {
+        return { success: false, error: "No Gist linked to this modpack" };
+      }
+
+      const result = await gistService.deleteGist(modpack.gist_config.gist_id);
+
+      if (result.success) {
+        // Clear gist_config from modpack
+        await metadataManager.updateModpack(modpackId, {
+          gist_config: undefined,
+        });
+      }
+
+      return result;
+    } catch (err) {
+      console.error("[Main] Failed to delete Gist:", err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle("gist:createGist", async (_, options: {
+    description: string;
+    filename: string;
+    content: string;
+    isPublic?: boolean;
+  }) => {
+    return gistService.createGist(options);
+  });
+
+  ipcMain.handle("gist:updateGist", async (_, options: {
+    gistId: string;
+    filename: string;
+    content: string;
+    description?: string;
+  }) => {
+    return gistService.updateGist(options);
+  });
+
+  ipcMain.handle("gist:pushManifest", async (_, modpackId: string, options?: {
+    gistId?: string;
+    filename?: string;
+    isPublic?: boolean;
+    versionHistoryMode?: 'full' | 'current';
+  }) => {
+    try {
+      const modpack = await metadataManager.getModpackById(modpackId);
+      if (!modpack) {
+        return { success: false, error: "Modpack not found" };
+      }
+
+      // Export the manifest
+      const manifest = await metadataManager.exportRemoteManifest(modpackId, {
+        versionHistoryMode: options?.versionHistoryMode || 'full',
+      });
+
+      // Use existing gist config or provided options
+      let gistId = options?.gistId || modpack.gist_config?.gist_id;
+      const filename = options?.filename || modpack.gist_config?.filename || 
+        `${modpack.name.replace(/[^a-zA-Z0-9-_]/g, "-")}-manifest.json`;
+      const isPublic = options?.isPublic ?? modpack.gist_config?.is_public ?? false;
+
+      // If there's a gistId, verify it still exists - if not, clear it to create a new one
+      if (gistId) {
+        const exists = await gistService.gistExists(gistId);
+        if (!exists) {
+          console.log(`[Main] Gist ${gistId} no longer exists, will create new one`);
+          gistId = undefined;
+          // Clear the old gist_config since the gist was deleted
+          await metadataManager.updateModpack(modpackId, {
+            gist_config: undefined,
+          });
+        }
+      }
+
+      // Push to Gist
+      const result = await gistService.pushManifest({
+        modpackId,
+        modpackName: modpack.name,
+        manifest,
+        gistId,
+        filename,
+        isPublic,
+      });
+
+      if (result.success && result.gistId) {
+        // Update modpack with Gist config (for publisher tracking only)
+        // NOTE: We do NOT update remote_source here - that would make the modpack "linked/subscriber"
+        // The publisher flow is separate from the subscriber flow
+        await metadataManager.updateModpack(modpackId, {
+          gist_config: {
+            gist_id: result.gistId,
+            filename,
+            is_public: isPublic,
+            last_pushed: new Date().toISOString(),
+            raw_url: result.rawUrl,
+            html_url: result.htmlUrl,
+          },
+        });
+      }
+
+      return result;
+    } catch (error: any) {
+      console.error("[Main] Push manifest error:", error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // ========== DIALOGS IPC HANDLERS ==========
 
@@ -3720,6 +3929,22 @@ async function initializeBackend() {
       return { success: true };
     } catch (error) {
       console.error("Failed to save instance sync settings:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("settings:getGist", async () => {
+    return metadataManager.getGistSettings();
+  });
+
+  ipcMain.handle("settings:setGist", async (_, settings: {
+    defaultManifestMode?: "full" | "current";
+  }) => {
+    try {
+      await metadataManager.setGistSettings(settings);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to save gist settings:", error);
       throw error;
     }
   });

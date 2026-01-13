@@ -57,6 +57,15 @@ export interface Modpack {
     last_checked?: string;
     skip_initial_check?: boolean;
   };
+  /** Gist publishing configuration for this modpack */
+  gist_config?: {
+    gist_id: string;
+    filename: string;
+    is_public: boolean;
+    last_pushed?: string;
+    raw_url?: string;
+    html_url?: string;
+  };
   incompatible_mods?: Array<{
     cf_project_id: number;
     name: string;
@@ -182,6 +191,8 @@ contextBridge.exposeInMainWorld("api", {
     getAll: (): Promise<Modpack[]> => ipcRenderer.invoke("modpacks:getAll"),
     getById: (id: string): Promise<Modpack | undefined> =>
       ipcRenderer.invoke("modpacks:getById", id),
+    verifyCloudStatus: (): Promise<Record<string, "published" | "subscribed" | "error" | null>> =>
+      ipcRenderer.invoke("modpacks:verifyCloudStatus"),
     create: (data: {
       name: string;
       version?: string;
@@ -753,6 +764,81 @@ contextBridge.exposeInMainWorld("api", {
     }> => ipcRenderer.invoke("updates:applyUpdate", modId, newFileId, modpackId),
   },
 
+  // ========== GIST ==========
+  gist: {
+    hasToken: (): Promise<boolean> => ipcRenderer.invoke("gist:hasToken"),
+    getToken: (): Promise<string> => ipcRenderer.invoke("gist:getToken"),
+    setToken: (token: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("gist:setToken", token),
+    getUser: (): Promise<{ login: string; avatarUrl: string } | null> =>
+      ipcRenderer.invoke("gist:getUser"),
+    listGists: (options?: { perPage?: number; page?: number }): Promise<Array<{
+      id: string;
+      description: string;
+      htmlUrl: string;
+      rawUrl: string;
+      files: string[];
+      isPublic: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>> => ipcRenderer.invoke("gist:listGists", options),
+    getGist: (gistId: string): Promise<{
+      id: string;
+      description: string;
+      htmlUrl: string;
+      rawUrl: string;
+      files: string[];
+      isPublic: boolean;
+      createdAt: string;
+      updatedAt: string;
+    } | null> => ipcRenderer.invoke("gist:getGist", gistId),
+    gistExists: (gistId: string): Promise<boolean> => 
+      ipcRenderer.invoke("gist:gistExists", gistId),
+    deleteGist: (modpackId: string): Promise<{
+      success: boolean;
+      error?: string;
+    }> => ipcRenderer.invoke("gist:deleteGist", modpackId),
+    createGist: (options: {
+      description: string;
+      filename: string;
+      content: string;
+      isPublic?: boolean;
+    }): Promise<{
+      success: boolean;
+      gistId?: string;
+      htmlUrl?: string;
+      rawUrl?: string;
+      error?: string;
+    }> => ipcRenderer.invoke("gist:createGist", options),
+    updateGist: (options: {
+      gistId: string;
+      filename: string;
+      content: string;
+      description?: string;
+    }): Promise<{
+      success: boolean;
+      gistId?: string;
+      htmlUrl?: string;
+      rawUrl?: string;
+      error?: string;
+    }> => ipcRenderer.invoke("gist:updateGist", options),
+    pushManifest: (
+      modpackId: string,
+      options?: {
+        gistId?: string;
+        filename?: string;
+        isPublic?: boolean;
+        versionHistoryMode?: 'full' | 'current';
+      }
+    ): Promise<{
+      success: boolean;
+      gistId?: string;
+      htmlUrl?: string;
+      rawUrl?: string;
+      error?: string;
+    }> => ipcRenderer.invoke("gist:pushManifest", modpackId, options),
+  },
+
   // ========== DIALOGS ==========
   dialogs: {
     selectZipFile: (): Promise<string | null> =>
@@ -1311,6 +1397,15 @@ contextBridge.exposeInMainWorld("api", {
       defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
     }): Promise<{ success: boolean }> =>
       ipcRenderer.invoke("settings:setInstanceSync", settings),
+
+    getGist: (): Promise<{
+      defaultManifestMode: "full" | "current";
+    }> => ipcRenderer.invoke("settings:getGist"),
+
+    setGist: (settings: {
+      defaultManifestMode?: "full" | "current";
+    }): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("settings:setGist", settings),
 
     /** Smart launch with automatic sync if needed */
     smartLaunch: (instanceId: string, modpackId: string, options?: {

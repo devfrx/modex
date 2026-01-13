@@ -44,6 +44,27 @@ export type {
   ModpackChange,
 };
 
+// ==================== GIST TYPES ====================
+
+export interface GistInfo {
+  id: string;
+  description: string;
+  htmlUrl: string;
+  rawUrl: string;
+  files: string[];
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GistOperationResult {
+  success: boolean;
+  gistId?: string;
+  htmlUrl?: string;
+  rawUrl?: string;
+  error?: string;
+}
+
 // ==================== MOD USAGE ====================
 
 export interface ModUsageInfo {
@@ -141,6 +162,8 @@ export interface ElectronAPI {
   modpacks: {
     getAll: () => Promise<Modpack[]>;
     getById: (id: string) => Promise<Modpack | undefined>;
+    /** Verify cloud status for all modpacks (gist exists, remote URL accessible) */
+    verifyCloudStatus: () => Promise<Record<string, "published" | "subscribed" | "error" | null>>;
     create: (data: CreateModpackData) => Promise<string>;
     /** Alias for create - adds a new modpack */
     add: (data: CreateModpackData) => Promise<string>;
@@ -589,6 +612,50 @@ export interface ElectronAPI {
     }>;
   };
 
+  // ========== GIST ==========
+  gist: {
+    /** Check if a GitHub token is configured */
+    hasToken: () => Promise<boolean>;
+    /** Get the current GitHub token (masked for security) */
+    getToken: () => Promise<string>;
+    /** Set the GitHub Personal Access Token */
+    setToken: (token: string) => Promise<{ success: boolean; error?: string }>;
+    /** Get authenticated user info */
+    getUser: () => Promise<{ login: string; avatarUrl: string } | null>;
+    /** List user's Gists */
+    listGists: (options?: { perPage?: number; page?: number }) => Promise<GistInfo[]>;
+    /** Get a specific Gist by ID */
+    getGist: (gistId: string) => Promise<GistInfo | null>;
+    /** Check if a Gist exists remotely */
+    gistExists: (gistId: string) => Promise<boolean>;
+    /** Delete a Gist and clear config from modpack */
+    deleteGist: (modpackId: string) => Promise<{ success: boolean; error?: string }>;
+    /** Create a new Gist */
+    createGist: (options: {
+      description: string;
+      filename: string;
+      content: string;
+      isPublic?: boolean;
+    }) => Promise<GistOperationResult>;
+    /** Update an existing Gist */
+    updateGist: (options: {
+      gistId: string;
+      filename: string;
+      content: string;
+      description?: string;
+    }) => Promise<GistOperationResult>;
+    /** Push modpack manifest to Gist (create or update) */
+    pushManifest: (
+      modpackId: string,
+      options?: {
+        gistId?: string;
+        filename?: string;
+        isPublic?: boolean;
+        versionHistoryMode?: 'full' | 'current';
+      }
+    ) => Promise<GistOperationResult>;
+  };
+
   // ========== DIALOGS ==========
   dialogs: {
     selectZipFile: () => Promise<string | null>;
@@ -655,6 +722,12 @@ export interface ElectronAPI {
       autoImportConfigsAfterGame?: boolean;
       showSyncConfirmation?: boolean;
       defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+    }) => Promise<{ success: boolean }>;
+    getGist: () => Promise<{
+      defaultManifestMode: "full" | "current";
+    }>;
+    setGist: (settings: {
+      defaultManifestMode?: "full" | "current";
     }) => Promise<{ success: boolean }>;
     /** Smart launch with automatic sync if needed */
     smartLaunch: (instanceId: string, modpackId: string, options?: {

@@ -191,6 +191,22 @@ export interface Modpack {
     skip_initial_check?: boolean;
   };
 
+  /** Gist publishing configuration for this modpack */
+  gist_config?: {
+    /** GitHub Gist ID (if already published) */
+    gist_id: string;
+    /** Filename used in the Gist */
+    filename: string;
+    /** Whether the Gist is public */
+    is_public: boolean;
+    /** Last time the manifest was pushed to Gist */
+    last_pushed?: string;
+    /** The raw URL to the Gist file */
+    raw_url?: string;
+    /** The HTML URL to the Gist */
+    html_url?: string;
+  };
+
   /** Mods that failed to import due to incompatibility */
   incompatible_mods?: Array<{
     cf_project_id: number;
@@ -416,6 +432,11 @@ export interface ModpackVersionHistory {
 
 export interface AppConfig {
   curseforge_api_key?: string;
+  /** Gist publishing settings */
+  gistSettings?: {
+    /** Default manifest mode when publishing to Gist: 'full' includes version history, 'current' only latest */
+    defaultManifestMode?: "full" | "current";
+  };
   theme?: "light" | "dark" | "system";
   /** Instance sync settings */
   instanceSync?: {

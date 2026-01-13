@@ -41,6 +41,8 @@ import {
   BarChart3,
   LayoutGrid,
   BookOpen,
+  Github,
+  ExternalLink,
 } from "lucide-vue-next";
 
 // Sidebar settings
@@ -85,6 +87,9 @@ const modpackCount = ref(0);
 const isClearingData = ref(false);
 const apiAvailable = ref(true);
 const cfApiKey = ref("");
+const githubToken = ref("");
+const githubUser = ref<{ login: string; avatarUrl: string } | null>(null);
+const isSavingGithubToken = ref(false);
 const isCheckingUpdate = ref(false);
 const currentTab = ref("general");
 
@@ -93,6 +98,11 @@ const syncSettings = ref({
   autoSyncBeforeLaunch: true,
   showSyncConfirmation: true,
   defaultConfigSyncMode: "new_only" as "overwrite" | "new_only" | "skip",
+});
+
+// Gist Settings
+const gistSettings = ref({
+  defaultManifestMode: "full" as "full" | "current",
 });
 
 // Tabs Configuration
@@ -176,6 +186,17 @@ async function loadSettings() {
 
     // Load API Key
     cfApiKey.value = await window.api.updates.getApiKey();
+
+    // Load GitHub token and user
+    const hasGithubToken = await window.api.gist.hasToken();
+    if (hasGithubToken) {
+      githubToken.value = "••••••••••••••••"; // masked
+      githubUser.value = await window.api.gist.getUser();
+    }
+
+    // Load Gist settings
+    const gistSettingsData = await window.api.settings.getGist();
+    gistSettings.value = gistSettingsData;
   } catch (err) {
     console.error("Failed to load stats:", err);
   }
@@ -187,6 +208,60 @@ async function saveCfApiKey() {
     toast.success("Connected ✓", "CurseForge API key saved.");
   } catch (err) {
     toast.error("Couldn't save", "API key wasn't saved. Try again.");
+  }
+}
+
+async function saveGithubToken() {
+  if (!githubToken.value || githubToken.value === "••••••••••••••••") {
+    toast.error("Invalid Token", "Please enter a valid GitHub token.");
+    return;
+  }
+
+  isSavingGithubToken.value = true;
+  try {
+    const result = await window.api.gist.setToken(githubToken.value);
+    if (result.success) {
+      githubUser.value = await window.api.gist.getUser();
+      githubToken.value = "••••••••••••••••"; // mask after save
+      toast.success("Connected ✓", `Logged in as ${githubUser.value?.login || 'GitHub user'}`);
+    } else {
+      toast.error("Invalid Token", result.error || "Token validation failed.");
+    }
+  } catch (err) {
+    toast.error("Couldn't save", "GitHub token wasn't saved. Try again.");
+  } finally {
+    isSavingGithubToken.value = false;
+  }
+}
+
+async function clearGithubToken() {
+  try {
+    await window.api.gist.setToken("");
+    githubToken.value = "";
+    githubUser.value = null;
+    toast.success("Disconnected", "GitHub token removed.");
+  } catch (err) {
+    toast.error("Error", "Couldn't remove GitHub token.");
+  }
+}
+
+async function saveGistSettings() {
+  try {
+    // Convert reactive object to plain object to avoid IPC cloning issues
+    const plainSettings = {
+      defaultManifestMode: gistSettings.value.defaultManifestMode,
+    };
+    console.log("[SettingsView] Saving gist settings:", plainSettings);
+    const result = await window.api.settings.setGist(plainSettings);
+    console.log("[SettingsView] Save gist settings result:", result);
+    if (result?.success) {
+      toast.success("Saved", "Gist settings updated.");
+    } else {
+      toast.error("Error", "Couldn't save Gist settings.");
+    }
+  } catch (err) {
+    console.error("[SettingsView] Failed to save gist settings:", err);
+    toast.error("Error", "Couldn't save Gist settings.");
   }
 }
 
@@ -409,6 +484,88 @@ onMounted(() => {
                   </div>
                   <p class="text-xs text-muted-foreground">
                     Required for browsing and updates.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- GitHub Gist API -->
+          <section class="space-y-4">
+            <h3 class="text-lg font-medium flex items-center gap-2">
+              <Github class="w-4 h-4 text-primary" />
+              GitHub Gist
+            </h3>
+            <div class="p-5 rounded-lg border border-border/50 bg-card/50">
+              <div class="space-y-4">
+                <!-- Connected User Display -->
+                <div v-if="githubUser"
+                  class="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <img :src="githubUser.avatarUrl" alt="GitHub Avatar" class="w-8 h-8 rounded-full" />
+                    <div>
+                      <div class="font-medium text-green-500 flex items-center gap-2">
+                        <Check class="w-4 h-4" />
+                        Connected as @{{ githubUser.login }}
+                      </div>
+                      <p class="text-xs text-muted-foreground">
+                        You can publish modpack manifests to GitHub Gist
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" @click="clearGithubToken"
+                    class="text-destructive hover:text-destructive">
+                    Disconnect
+                  </Button>
+                </div>
+
+                <!-- Token Input -->
+                <div v-else class="space-y-2">
+                  <label class="text-sm font-medium flex items-center gap-2">
+                    Personal Access Token
+                  </label>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <Input v-model="githubToken" type="password" placeholder="ghp_xxxxxxxxxxxx" class="flex-1" />
+                    <Button variant="outline" @click="saveGithubToken" :disabled="isSavingGithubToken"
+                      class="w-full sm:w-auto">
+                      {{ isSavingGithubToken ? 'Verifying...' : 'Connect' }}
+                    </Button>
+                  </div>
+                  <p class="text-xs text-muted-foreground">
+                    Token requires <code class="px-1 py-0.5 bg-muted rounded text-xs">gist</code> scope.
+                    <a href="https://github.com/settings/tokens/new?scopes=gist&description=ModEx%20Gist%20Access"
+                      target="_blank" class="text-primary hover:underline inline-flex items-center gap-1">
+                      Create token
+                      <ExternalLink class="w-3 h-3" />
+                    </a>
+                  </p>
+                </div>
+
+                <div class="text-xs text-muted-foreground border-t border-border/50 pt-3 mt-3">
+                  <strong>What is this?</strong> With a GitHub token, you can publish your modpack manifests
+                  directly to GitHub Gist from the Remote tab in the Modpack Editor. This enables easy sharing
+                  and collaboration with friends.
+                </div>
+
+                <!-- Default Manifest Mode -->
+                <div v-if="githubUser" class="border-t border-border/50 pt-4 mt-4">
+                  <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+                    <div>
+                      <div class="font-medium text-sm">Default Manifest Mode</div>
+                      <div class="text-xs text-muted-foreground">
+                        Which version history to include when publishing
+                      </div>
+                    </div>
+                    <select v-model="gistSettings.defaultManifestMode" @change="saveGistSettings"
+                      class="h-9 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50">
+                      <option value="full">Full History</option>
+                      <option value="current">Current Version Only</option>
+                    </select>
+                  </div>
+                  <p class="text-xs text-muted-foreground mt-2">
+                    <strong>Full History:</strong> Includes all version tags (allows subscribers to rollback).
+                    <br />
+                    <strong>Current Only:</strong> Smaller file, only latest state (no version history for subscribers).
                   </p>
                 </div>
               </div>

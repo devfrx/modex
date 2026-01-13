@@ -343,6 +343,8 @@ export interface ElectronAPI {
       skipped: number;
       errors: string[];
     }>;
+    /** Subscribe to refresh dependencies progress */
+    onRefreshDependenciesProgress: (callback: (data: { current: number; total: number; modName: string }) => void) => () => void;
   };
 
   // ========== VERSION CONTROL ==========
@@ -588,6 +590,7 @@ export interface ElectronAPI {
       publishedAt?: string;
       noReleases?: boolean;
       error?: string;
+      isPrerelease?: boolean;
     }>;
     setApiKey: (apiKey: string) => Promise<{ success: boolean }>;
     getApiKey: () => Promise<string>;
@@ -741,13 +744,14 @@ export interface ElectronAPI {
       requiresConfirmation?: boolean;
       syncStatus?: {
         needsSync: boolean;
-        differences: number;
+        loaderVersionMismatch?: boolean;
+        differences?: number;
         lastSynced?: string;
         missingInInstance: Array<{ filename: string; type: string }>;
         extraInInstance: Array<{ filename: string; type: string }>;
         disabledMismatch: Array<{ filename: string; issue: string }>;
         configDifferences: number;
-        totalDifferences: number;
+        totalDifferences?: number;
       };
       syncPerformed: boolean;
       syncResult?: InstanceSyncResult;

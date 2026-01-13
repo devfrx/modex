@@ -151,12 +151,19 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("mods:getById", async (_, id: string) => {
+    if (!id || typeof id !== 'string') {
+      console.warn('[IPC] mods:getById called with invalid id:', id);
+      return undefined;
+    }
     return metadataManager.getModById(id);
   });
 
   ipcMain.handle(
     "mods:add",
     async (_, modData: Omit<Mod, "id" | "created_at">) => {
+      if (!modData || !modData.name) {
+        throw new Error('Invalid mod data: name is required');
+      }
       return metadataManager.addMod(modData);
     }
   );
@@ -164,15 +171,24 @@ async function initializeBackend() {
   ipcMain.handle(
     "mods:update",
     async (_, id: string, updates: Partial<Mod>) => {
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid mod id');
+      }
       return metadataManager.updateMod(id, updates);
     }
   );
 
   ipcMain.handle("mods:delete", async (_, id: string) => {
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid mod id');
+    }
     return metadataManager.deleteMod(id);
   });
 
   ipcMain.handle("mods:bulkDelete", async (_, ids: string[]) => {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return 0;
+    }
     return metadataManager.deleteMods(ids);
   });
 
@@ -409,6 +425,10 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("modpacks:getById", async (_, id: string) => {
+    if (!id || typeof id !== 'string') {
+      console.warn('[IPC] modpacks:getById called with invalid id:', id);
+      return undefined;
+    }
     return metadataManager.getModpackById(id);
   });
 
@@ -424,7 +444,8 @@ async function initializeBackend() {
           try {
             const exists = await gistService.gistExists(modpack.gist_config.gist_id);
             results[modpack.id] = exists ? "published" : "error";
-          } catch {
+          } catch (err) {
+            console.warn(`[verifyCloudStatus] Failed to verify gist for modpack ${modpack.id}:`, err);
             results[modpack.id] = "error";
           }
         }
@@ -434,7 +455,8 @@ async function initializeBackend() {
             // Try to fetch the remote URL to verify it exists
             const response = await fetch(modpack.remote_source.url, { method: "HEAD" });
             results[modpack.id] = response.ok ? "subscribed" : "error";
-          } catch {
+          } catch (err) {
+            console.warn(`[verifyCloudStatus] Failed to verify remote source for modpack ${modpack.id}:`, err);
             results[modpack.id] = "error";
           }
         }
@@ -452,17 +474,26 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("modpacks:create", async (_, data: any) => {
+    if (!data || !data.name) {
+      throw new Error('Invalid modpack data: name is required');
+    }
     return metadataManager.createModpack(data);
   });
 
   // Backward compatibility
   ipcMain.handle("modpacks:add", async (_, data: any) => {
+    if (!data || !data.name) {
+      throw new Error('Invalid modpack data: name is required');
+    }
     return metadataManager.createModpack(data);
   });
 
   ipcMain.handle(
     "modpacks:update",
     async (_, id: string, updates: Partial<Modpack>) => {
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid modpack id');
+      }
       // Protect critical fields on linked modpacks
       const criticalFields = ['mod_ids', 'disabled_mod_ids', 'locked_mod_ids', 'mod_notes'];
       const hasCriticalUpdates = criticalFields.some(f => f in updates);
@@ -476,6 +507,9 @@ async function initializeBackend() {
   );
 
   ipcMain.handle("modpacks:delete", async (_, id: string) => {
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid modpack id');
+    }
     // First, find and delete any linked instance
     const linkedInstance = await instanceService.getInstanceByModpack(id);
     if (linkedInstance) {
@@ -488,10 +522,16 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("modpacks:getMods", async (_, modpackId: string) => {
+    if (!modpackId || typeof modpackId !== 'string') {
+      return [];
+    }
     return metadataManager.getModsInModpack(modpackId);
   });
 
   ipcMain.handle("modpacks:getModsMultiple", async (_, modpackIds: string[]) => {
+    if (!Array.isArray(modpackIds)) {
+      return {};
+    }
     const result = await metadataManager.getModsInMultipleModpacks(modpackIds);
     // Convert Map to plain object for IPC serialization
     const obj: Record<string, Mod[]> = {};
@@ -504,6 +544,9 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:addMod",
     async (_, modpackId: string, modId: string) => {
+      if (!modpackId || !modId) {
+        throw new Error('Invalid modpack or mod id');
+      }
       await guardLinkedModpack(modpackId, "add mod");
       return metadataManager.addModToModpack(modpackId, modId);
     }
@@ -512,6 +555,12 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:addModsBatch",
     async (_, modpackId: string, modIds: string[]) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!Array.isArray(modIds)) {
+        throw new Error('Invalid modIds: must be an array');
+      }
       await guardLinkedModpack(modpackId, "add mods");
       return metadataManager.addModsToModpackBatch(modpackId, modIds);
     }
@@ -520,6 +569,12 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:checkModDependents",
     async (_, modpackId: string, modId: string) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        return [];
+      }
+      if (!modId || typeof modId !== 'string') {
+        return [];
+      }
       return metadataManager.checkModDependents(modpackId, modId);
     }
   );
@@ -527,6 +582,12 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:analyzeModRemovalImpact",
     async (_, modpackId: string, modId: string, action: "remove" | "disable") => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        return { warnings: [], errors: [], canProceed: false };
+      }
+      if (!modId || typeof modId !== 'string') {
+        return { warnings: [], errors: [], canProceed: false };
+      }
       return metadataManager.analyzeModRemovalImpact(modpackId, modId, action);
     }
   );
@@ -534,6 +595,9 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:refreshDependencies",
     async (_, modpackId: string, force?: boolean) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        return { updated: 0, skipped: 0, errors: ['Invalid modpackId'] };
+      }
       const onProgress = (current: number, total: number, modName: string) => {
         if (win) {
           win.webContents.send("modpacks:refreshDependenciesProgress", { current, total, modName });
@@ -546,6 +610,12 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:removeMod",
     async (_, modpackId: string, modId: string) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!modId || typeof modId !== 'string') {
+        throw new Error('Invalid modId: must be a non-empty string');
+      }
       await guardLinkedModpack(modpackId, "remove mod");
       return metadataManager.removeModFromModpack(modpackId, modId);
     }
@@ -554,6 +624,12 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:toggleMod",
     async (_, modpackId: string, modId: string) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!modId || typeof modId !== 'string') {
+        throw new Error('Invalid modId: must be a non-empty string');
+      }
       await guardLinkedModpack(modpackId, "toggle mod");
       return metadataManager.toggleModInModpack(modpackId, modId);
     }
@@ -562,16 +638,31 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:setModEnabled",
     async (_, modpackId: string, modId: string, enabled: boolean) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!modId || typeof modId !== 'string') {
+        throw new Error('Invalid modId: must be a non-empty string');
+      }
+      if (typeof enabled !== 'boolean') {
+        throw new Error('Invalid enabled: must be a boolean');
+      }
       await guardLinkedModpack(modpackId, "change mod state");
       return metadataManager.setModEnabledInModpack(modpackId, modId, enabled);
     }
   );
 
   ipcMain.handle("modpacks:getDisabledMods", async (_, modpackId: string) => {
+    if (!modpackId || typeof modpackId !== 'string') {
+      return [];
+    }
     return metadataManager.getDisabledMods(modpackId);
   });
 
   ipcMain.handle("modpacks:getLockedMods", async (_, modpackId: string) => {
+    if (!modpackId || typeof modpackId !== 'string') {
+      return [];
+    }
     return metadataManager.getLockedMods(modpackId);
   });
 
@@ -581,12 +672,24 @@ async function initializeBackend() {
     sortBy?: 'name' | 'type' | 'source';
     includeDisabled?: boolean;
   }) => {
+    if (!modpackId || typeof modpackId !== 'string') {
+      return '';
+    }
     return metadataManager.generateResourceList(modpackId, options);
   });
 
   ipcMain.handle(
     "modpacks:setModLocked",
     async (_, modpackId: string, modId: string, locked: boolean) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!modId || typeof modId !== 'string') {
+        throw new Error('Invalid modId: must be a non-empty string');
+      }
+      if (typeof locked !== 'boolean') {
+        throw new Error('Invalid locked: must be a boolean');
+      }
       await guardLinkedModpack(modpackId, "change mod lock state");
       return metadataManager.setModLocked(modpackId, modId, locked);
     }
@@ -595,6 +698,12 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:updateLockedMods",
     async (_, modpackId: string, lockedModIds: string[]) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!Array.isArray(lockedModIds)) {
+        throw new Error('Invalid lockedModIds: must be an array');
+      }
       await guardLinkedModpack(modpackId, "update locked mods");
       return metadataManager.updateLockedMods(modpackId, lockedModIds);
     }
@@ -603,6 +712,12 @@ async function initializeBackend() {
   ipcMain.handle(
     "modpacks:clone",
     async (_, modpackId: string, newName: string) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!newName || typeof newName !== 'string' || newName.trim() === '') {
+        throw new Error('Invalid newName: must be a non-empty string');
+      }
       // Clone the modpack (includes configs, version history)
       const newModpackId = await metadataManager.cloneModpack(modpackId, newName);
 
@@ -1389,6 +1504,23 @@ async function initializeBackend() {
 
   ipcMain.handle("remote:importFromUrl", async (_, url: string) => {
     if (!win) return { success: false, error: "Window not available" };
+
+    // Validate URL
+    if (!url || typeof url !== 'string') {
+      return { success: false, error: "Invalid URL: must be a non-empty string" };
+    }
+    
+    // Security: Only allow HTTPS URLs to prevent SSRF attacks
+    if (!url.startsWith('https://')) {
+      return { success: false, error: "Invalid URL: only HTTPS URLs are allowed for security reasons" };
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch {
+      return { success: false, error: "Invalid URL format" };
+    }
 
     // Check for API key (required for fetching mod metadata)
     if (!curseforgeService.hasApiKey()) {
@@ -3513,14 +3645,33 @@ async function initializeBackend() {
     memory?: { min: number; max: number };
     source?: ModexInstance["source"];
   }) => {
+    // Validate required fields
+    if (!options || typeof options !== 'object') {
+      throw new Error('Invalid instance options: must be an object');
+    }
+    if (!options.name || typeof options.name !== 'string' || options.name.trim() === '') {
+      throw new Error('Invalid instance options: name is required and must be a non-empty string');
+    }
+    if (!options.minecraftVersion || typeof options.minecraftVersion !== 'string') {
+      throw new Error('Invalid instance options: minecraftVersion is required');
+    }
+    if (!options.loader || typeof options.loader !== 'string') {
+      throw new Error('Invalid instance options: loader is required');
+    }
     return instanceService.createInstance(options);
   });
 
   ipcMain.handle("instance:delete", async (_, id: string) => {
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid instance id: must be a non-empty string');
+    }
     return instanceService.deleteInstance(id);
   });
 
   ipcMain.handle("instance:update", async (_, id: string, updates: Partial<ModexInstance>) => {
+    if (!id || typeof id !== 'string') {
+      throw new Error('Invalid instance id: must be a non-empty string');
+    }
     return instanceService.updateInstance(id, updates);
   });
 
@@ -3591,6 +3742,12 @@ async function initializeBackend() {
         content_type: m.content_type || "mod" as "mod" | "resourcepack" | "shader"
       }));
 
+    // Get locked mods to preserve during clearExisting
+    const lockedModIds = new Set(modpack.locked_mod_ids || []);
+    const lockedModFilenames = mods
+      .filter(m => lockedModIds.has(m.id))
+      .map(m => m.filename);
+
     // Use passed overridesZipPath, or use the calculated overrides path
     // The overrides are always stored at userData/modex/overrides/{modpackId}
     const overridesSource = options?.overridesZipPath || metadataManager.getOverridesPath(modpackId);
@@ -3598,6 +3755,7 @@ async function initializeBackend() {
     return instanceService.syncModpackToInstance(instanceId, {
       mods: modsToSync,
       disabledMods: disabledModsToSync,
+      lockedModFilenames,
       overridesZipPath: overridesSource
     }, {
       clearExisting: options?.clearExisting,

@@ -236,6 +236,11 @@ contextBridge.exposeInMainWorld("api", {
       skipped: number;
       errors: string[];
     }> => ipcRenderer.invoke("modpacks:refreshDependencies", modpackId, force),
+    onRefreshDependenciesProgress: (callback: (data: { current: number; total: number; modName: string }) => void) => {
+      const handler = (_: any, data: any) => callback(data);
+      ipcRenderer.on("modpacks:refreshDependenciesProgress", handler);
+      return () => ipcRenderer.removeListener("modpacks:refreshDependenciesProgress", handler);
+    },
     removeMod: (modpackId: string, modId: string): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:removeMod", modpackId, modId),
     toggleMod: (
@@ -693,6 +698,7 @@ contextBridge.exposeInMainWorld("api", {
       publishedAt?: string;
       noReleases?: boolean;
       error?: string;
+      isPrerelease?: boolean;
     }> => ipcRenderer.invoke("updates:checkAppUpdate"),
     setApiKey: (apiKey: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke("updates:setApiKey", apiKey),
@@ -1113,6 +1119,9 @@ contextBridge.exposeInMainWorld("api", {
       lastPlayed?: string;
       playTime?: number;
       state: "ready" | "installing" | "error";
+      minecraftVersion?: string;
+      loader?: string;
+      loaderVersion?: string;
     }>): Promise<{
       id: string;
       name: string;
@@ -1417,13 +1426,17 @@ contextBridge.exposeInMainWorld("api", {
       success: boolean;
       error?: string;
       needsSync?: boolean;
+      requiresConfirmation?: boolean;
       syncStatus?: {
         needsSync: boolean;
+        loaderVersionMismatch?: boolean;
+        differences?: number;
+        lastSynced?: string;
         missingInInstance: Array<{ filename: string; type: string }>;
         extraInInstance: Array<{ filename: string; type: string }>;
         disabledMismatch: Array<{ filename: string; issue: string }>;
         configDifferences: number;
-        totalDifferences: number;
+        totalDifferences?: number;
       };
       syncPerformed: boolean;
       syncResult?: {

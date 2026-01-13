@@ -141,6 +141,9 @@ export class InstanceService {
   /** Track running games by instance ID */
   private runningGames: Map<string, RunningGameInfo> = new Map();
 
+  /** Sync locks per instance to prevent concurrent sync operations */
+  private syncLocks: Map<string, Promise<void>> = new Map();
+
   /** Callback for game status updates */
   private onGameStatusChange?: (instanceId: string, info: RunningGameInfo) => void;
 
@@ -436,6 +439,32 @@ export class InstanceService {
   // ==================== SYNC / INSTALL ====================
 
   /**
+   * Execute an operation with instance sync lock.
+   * Prevents concurrent sync operations on the same instance.
+   */
+  private async withSyncLock<T>(instanceId: string, operation: () => Promise<T>): Promise<T> {
+    // Wait for any existing sync to complete
+    const existingLock = this.syncLocks.get(instanceId);
+    if (existingLock) {
+      console.log(`[InstanceService] Waiting for existing sync on instance ${instanceId} to complete...`);
+      await existingLock;
+    }
+
+    // Create a new lock promise
+    let resolve: () => void;
+    const lockPromise = new Promise<void>((r) => { resolve = r; });
+    this.syncLocks.set(instanceId, lockPromise);
+
+    try {
+      return await operation();
+    } finally {
+      // Release lock
+      this.syncLocks.delete(instanceId);
+      resolve!();
+    }
+  }
+
+  /**
    * Sync configs FROM instance TO modpack overrides folder
    * This ensures version control captures instance modifications
    */
@@ -493,6 +522,8 @@ export class InstanceService {
         filename: string;
         content_type?: "mod" | "resourcepack" | "shader";
       }>;
+      /** Filenames of locked mods - preserved during clearExisting */
+      lockedModFilenames?: string[];
       overridesZipPath?: string;  // Path to extracted overrides or zip
       manifestData?: any;          // CurseForge manifest.json content
     },
@@ -515,47 +546,65 @@ export class InstanceService {
       };
     }
 
-    const result: InstanceSyncResult = {
-      success: true,
-      modsDownloaded: 0,
-      modsSkipped: 0,
-      configsCopied: 0,
-      configsSkipped: 0,
-      errors: [],
-      warnings: []
-    };
+    // Use sync lock to prevent concurrent syncs on the same instance
+    return this.withSyncLock(instanceId, async () => {
+      const result: InstanceSyncResult = {
+        success: true,
+        modsDownloaded: 0,
+        modsSkipped: 0,
+        configsCopied: 0,
+        configsSkipped: 0,
+        errors: [],
+        warnings: []
+      };
 
-    try {
-      // Update state
-      instance.state = "installing";
-      await this.saveInstanceMeta(instance);
+      try {
+        // Update state
+        instance.state = "installing";
+        await this.saveInstanceMeta(instance);
 
-      // Prepare destination folders
-      const modsPath = path.join(instance.path, "mods");
-      const resourcepacksPath = path.join(instance.path, "resourcepacks");
-      const shaderpacksPath = path.join(instance.path, "shaderpacks");
+        // Prepare destination folders
+        const modsPath = path.join(instance.path, "mods");
+        const resourcepacksPath = path.join(instance.path, "resourcepacks");
+        const shaderpacksPath = path.join(instance.path, "shaderpacks");
 
-      await fs.ensureDir(modsPath);
-      await fs.ensureDir(resourcepacksPath);
-      await fs.ensureDir(shaderpacksPath);
+        await fs.ensureDir(modsPath);
+        await fs.ensureDir(resourcepacksPath);
+        await fs.ensureDir(shaderpacksPath);
 
-      // Clear existing mods if requested
-      if (options.clearExisting) {
-        options.onProgress?.("Clearing existing content...", 0, 1);
+        // Build set of locked mod filenames for preservation during clearExisting
+        const lockedFilenamesSet = new Set(modpackData.lockedModFilenames || []);
 
-        // Clear mods (includes .jar and .zip mods/datapacks)
+        // Clear existing mods if requested (but preserve locked mods)
+        if (options.clearExisting) {
+          options.onProgress?.("Clearing existing content...", 0, 1);
+
+          // Clear mods (includes .jar and .zip mods/datapacks) - but preserve locked
         const existingMods = await fs.readdir(modsPath);
         for (const file of existingMods) {
           if (file.endsWith(".jar") || file.endsWith(".jar.disabled") ||
             file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
+            // Extract base filename (remove .disabled suffix for comparison)
+            const baseFilename = file.replace(".disabled", "");
+            // Skip locked mods
+            if (lockedFilenamesSet.has(baseFilename)) {
+              console.log(`[Sync] Preserving locked mod during clear: ${file}`);
+              continue;
+            }
             await fs.remove(path.join(modsPath, file));
           }
         }
 
         // Clear resourcepacks (but not user-added ones - only .zip)
+        // Note: Resourcepacks and shaders can also be locked
         const existingResourcepacks = await fs.readdir(resourcepacksPath);
         for (const file of existingResourcepacks) {
-          if (file.endsWith(".zip")) {
+          if (file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
+            const baseFilename = file.replace(".disabled", "");
+            if (lockedFilenamesSet.has(baseFilename)) {
+              console.log(`[Sync] Preserving locked resourcepack during clear: ${file}`);
+              continue;
+            }
             await fs.remove(path.join(resourcepacksPath, file));
           }
         }
@@ -563,7 +612,12 @@ export class InstanceService {
         // Clear shaderpacks
         const existingShaderpacks = await fs.readdir(shaderpacksPath);
         for (const file of existingShaderpacks) {
-          if (file.endsWith(".zip")) {
+          if (file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
+            const baseFilename = file.replace(".disabled", "");
+            if (lockedFilenamesSet.has(baseFilename)) {
+              console.log(`[Sync] Preserving locked shader during clear: ${file}`);
+              continue;
+            }
             await fs.remove(path.join(shaderpacksPath, file));
           }
         }
@@ -945,16 +999,17 @@ export class InstanceService {
       await this.saveInstanceMeta(instance);
 
       return result;
-    } catch (error: any) {
-      instance.state = "error";
-      await this.saveInstanceMeta(instance);
+      } catch (error: any) {
+        instance.state = "error";
+        await this.saveInstanceMeta(instance);
 
-      return {
-        ...result,
-        success: false,
-        errors: [...result.errors, error.message]
-      };
-    }
+        return {
+          ...result,
+          success: false,
+          errors: [...result.errors, error.message]
+        };
+      }
+    }); // end withSyncLock
   }
 
   /**
@@ -2920,7 +2975,10 @@ export class InstanceService {
           console.log("[InstanceService] Log file is fresh, reading from start");
         }
       }
-    } catch { }
+    } catch (err) {
+      // Non-critical: log file may not exist yet
+      console.debug("[InstanceService] Log file init check failed (expected during startup):", err);
+    }
 
     /**
      * Read new content from log file using streams for better performance
@@ -3326,7 +3384,9 @@ export class InstanceService {
     if ((gameInfo as any).logFileWatcher) {
       try {
         (gameInfo as any).logFileWatcher.close();
-      } catch { }
+      } catch (err) {
+        console.debug("[InstanceService] Failed to close log file watcher:", err);
+      }
     }
 
     gameInfo.status = "stopped";

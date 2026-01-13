@@ -3319,7 +3319,7 @@ async function initializeBackend() {
       let gistId = options?.gistId || modpack.gist_config?.gist_id;
       const filename = options?.filename || modpack.gist_config?.filename || 
         `${modpack.name.replace(/[^a-zA-Z0-9-_]/g, "-")}-manifest.json`;
-      const isPublic = options?.isPublic ?? modpack.gist_config?.is_public ?? false;
+      let isPublic = options?.isPublic ?? modpack.gist_config?.is_public ?? true;
 
       // If there's a gistId, verify it still exists - if not, clear it to create a new one
       if (gistId) {
@@ -3327,6 +3327,8 @@ async function initializeBackend() {
         if (!exists) {
           console.log(`[Main] Gist ${gistId} no longer exists, will create new one`);
           gistId = undefined;
+          // Force public for new gist since old config is being cleared
+          isPublic = options?.isPublic ?? true;
           // Clear the old gist_config since the gist was deleted
           await metadataManager.updateModpack(modpackId, {
             gist_config: undefined,

@@ -260,7 +260,7 @@ export class GistService {
         },
         body: JSON.stringify({
           description: options.description,
-          public: options.isPublic ?? false,
+          public: options.isPublic ?? true,
           files: {
             [options.filename]: {
               content: options.content,
@@ -471,7 +471,7 @@ export class GistService {
         description,
         filename,
         content: options.manifest,
-        isPublic: options.isPublic ?? false,
+        isPublic: options.isPublic ?? true,
       });
     }
   }

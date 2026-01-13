@@ -840,6 +840,7 @@ export interface ElectronAPI {
       missingInInstance: Array<{ filename: string; type: string }>;
       extraInInstance: Array<{ filename: string; type: string }>;
       disabledMismatch: Array<{ filename: string; issue: string }>;
+      updatesToApply: Array<{ oldFilename: string; newFilename: string; type: string; willBeDisabled?: boolean }>;
       configDifferences: number;
       totalDifferences: number;
       loaderVersionMismatch?: boolean;

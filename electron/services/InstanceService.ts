@@ -394,6 +394,45 @@ export class InstanceService {
     await fs.writeJson(metaPath, metaWithoutPath, { spaces: 2 });
   }
 
+  /**
+   * Extract the base name from a mod/resource filename for update detection
+   * Strips version numbers and common suffixes to get a comparable base name
+   * Examples:
+   *   "jei-1.20.1-forge-15.20.0.106.jar" → "jei"
+   *   "FreshAnimations_v1.10.3.zip" → "FreshAnimations"
+   *   "ComplementaryShaders_v4.7.1.zip" → "ComplementaryShaders"
+   */
+  private extractBaseName(filename: string): string | null {
+    if (!filename) return null;
+    
+    // Remove extension (.jar, .zip, .disabled)
+    let name = filename.replace(/\.(jar|zip)(\.disabled)?$/i, '');
+    
+    // Common version patterns to remove:
+    // - _v1.2.3, -v1.2.3, _1.2.3, -1.2.3
+    // - _forge-1.2.3, -forge-1.2.3
+    // - _mc1.20.1, -mc1.20.1
+    // - +1.20.1
+    
+    // Remove trailing version patterns
+    // Match: separator + optional loader/mc + version numbers
+    const versionPatterns = [
+      /[-_+]v?\d+\.\d+.*$/i,                    // -v1.2.3, _1.2.3, +1.2.3
+      /[-_](forge|fabric|neoforge|quilt)[-_].+$/i, // -forge-1.2.3
+      /[-_]mc\d+\.\d+.*$/i,                     // -mc1.20.1
+      /[-_]for[-_].+$/i,                        // -for-1.20.1
+    ];
+    
+    for (const pattern of versionPatterns) {
+      name = name.replace(pattern, '');
+    }
+    
+    // Normalize: trim and convert to comparable form
+    name = name.trim();
+    
+    return name.length > 0 ? name : null;
+  }
+
   // ==================== SYNC / INSTALL ====================
 
   /**
@@ -579,6 +618,48 @@ export class InstanceService {
         }
       }
 
+      // Re-enable resourcepacks that are no longer in the disabled list
+      const rpFilenamesAll = new Set(
+        modpackData.mods.filter(m => m.content_type === "resourcepack").map(m => m.filename)
+      );
+      const disabledRpFilenames = new Set(
+        (modpackData.disabledMods || []).filter(m => m.content_type === "resourcepack").map(m => m.filename)
+      );
+      
+      const existingRpFiles = await fs.readdir(resourcepacksPath);
+      for (const file of existingRpFiles) {
+        if (file.endsWith(".zip.disabled")) {
+          const originalFilename = file.replace(".disabled", "");
+          if (rpFilenamesAll.has(originalFilename) && !disabledRpFilenames.has(originalFilename)) {
+            const disabledPath = path.join(resourcepacksPath, file);
+            const enabledPath = path.join(resourcepacksPath, originalFilename);
+            await fs.rename(disabledPath, enabledPath);
+            console.log(`[Sync] Re-enabled resourcepack: ${originalFilename}`);
+          }
+        }
+      }
+
+      // Re-enable shaders that are no longer in the disabled list
+      const shaderFilenamesAll = new Set(
+        modpackData.mods.filter(m => m.content_type === "shader").map(m => m.filename)
+      );
+      const disabledShaderFilenames = new Set(
+        (modpackData.disabledMods || []).filter(m => m.content_type === "shader").map(m => m.filename)
+      );
+      
+      const existingShaderFiles = await fs.readdir(shaderpacksPath);
+      for (const file of existingShaderFiles) {
+        if (file.endsWith(".zip.disabled")) {
+          const originalFilename = file.replace(".disabled", "");
+          if (shaderFilenamesAll.has(originalFilename) && !disabledShaderFilenames.has(originalFilename)) {
+            const disabledPath = path.join(shaderpacksPath, file);
+            const enabledPath = path.join(shaderpacksPath, originalFilename);
+            await fs.rename(disabledPath, enabledPath);
+            console.log(`[Sync] Re-enabled shader: ${originalFilename}`);
+          }
+        }
+      }
+
       // ==================== HANDLE REMOVED MODS ====================
       // Remove mods from instance that are no longer in the modpack
       if (!options.clearExisting) {
@@ -618,10 +699,31 @@ export class InstanceService {
             }
           }
         }
+        
+        // Remove outdated resourcepacks (old versions of tracked resources)
         for (const file of existingRPs) {
-          if (file.endsWith(".zip") && !rpFilenames.has(file)) {
-            // This is a user-added resourcepack, keep it
-            console.log(`[Sync] User resourcepack (kept): ${file}`);
+          const baseFile = file.replace(".disabled", "");
+          if ((baseFile.endsWith(".zip")) && !rpFilenames.has(baseFile)) {
+            // Check if this is an old version of a tracked resourcepack
+            const instanceBaseName = this.extractBaseName(baseFile);
+            let isOutdatedVersion = false;
+            
+            for (const expectedFilename of rpFilenames) {
+              const expectedBaseName = this.extractBaseName(expectedFilename);
+              if (instanceBaseName && expectedBaseName && 
+                  instanceBaseName.toLowerCase() === expectedBaseName.toLowerCase()) {
+                // Same base name, different version - this is an outdated version
+                isOutdatedVersion = true;
+                console.log(`[Sync] Removing outdated resourcepack: ${file} (replaced by ${expectedFilename})`);
+                await fs.remove(path.join(resourcepacksPath, file));
+                result.warnings.push(`Removed outdated resourcepack: ${baseFile}`);
+                break;
+              }
+            }
+            
+            if (!isOutdatedVersion) {
+              console.log(`[Sync] User resourcepack (kept): ${file}`);
+            }
           }
         }
 
@@ -642,10 +744,31 @@ export class InstanceService {
             }
           }
         }
+        
+        // Remove outdated shaders (old versions of tracked shaders)
         for (const file of existingShaders) {
-          if (file.endsWith(".zip") && !shaderFilenames.has(file)) {
-            // This is a user-added shader, keep it
-            console.log(`[Sync] User shader (kept): ${file}`);
+          const baseFile = file.replace(".disabled", "");
+          if ((baseFile.endsWith(".zip")) && !shaderFilenames.has(baseFile)) {
+            // Check if this is an old version of a tracked shader
+            const instanceBaseName = this.extractBaseName(baseFile);
+            let isOutdatedVersion = false;
+            
+            for (const expectedFilename of shaderFilenames) {
+              const expectedBaseName = this.extractBaseName(expectedFilename);
+              if (instanceBaseName && expectedBaseName && 
+                  instanceBaseName.toLowerCase() === expectedBaseName.toLowerCase()) {
+                // Same base name, different version - this is an outdated version
+                isOutdatedVersion = true;
+                console.log(`[Sync] Removing outdated shader: ${file} (replaced by ${expectedFilename})`);
+                await fs.remove(path.join(shaderpacksPath, file));
+                result.warnings.push(`Removed outdated shader: ${baseFile}`);
+                break;
+              }
+            }
+            
+            if (!isOutdatedVersion) {
+              console.log(`[Sync] User shader (kept): ${file}`);
+            }
           }
         }
       }
@@ -1925,6 +2048,7 @@ export class InstanceService {
   /**
    * Check sync status between instance and modpack
    * Returns differences that need syncing
+   * Now includes cf_project_id to properly detect updates (same project, different version/filename)
    */
   async checkSyncStatus(
     instanceId: string,
@@ -1932,6 +2056,7 @@ export class InstanceService {
       id: string;
       filename: string;
       content_type?: string;
+      cf_project_id?: number;
     }>,
     disabledModIds: string[],
     overridesPath?: string
@@ -1940,6 +2065,7 @@ export class InstanceService {
     missingInInstance: Array<{ filename: string; type: string }>;
     extraInInstance: Array<{ filename: string; type: string }>;
     disabledMismatch: Array<{ filename: string; issue: string }>;
+    updatesToApply: Array<{ oldFilename: string; newFilename: string; type: string; willBeDisabled?: boolean }>;
     configDifferences: number;
     totalDifferences: number;
   }> {
@@ -1950,6 +2076,7 @@ export class InstanceService {
         missingInInstance: [],
         extraInInstance: [],
         disabledMismatch: [],
+        updatesToApply: [],
         configDifferences: 0,
         totalDifferences: 0
       };
@@ -1960,6 +2087,7 @@ export class InstanceService {
       missingInInstance: [] as Array<{ filename: string; type: string }>,
       extraInInstance: [] as Array<{ filename: string; type: string }>,
       disabledMismatch: [] as Array<{ filename: string; issue: string }>,
+      updatesToApply: [] as Array<{ oldFilename: string; newFilename: string; type: string; willBeDisabled?: boolean }>,
       configDifferences: 0,
       totalDifferences: 0
     };
@@ -1992,8 +2120,21 @@ export class InstanceService {
         console.log(`[checkSyncStatus] Mods folder does not exist: ${modsPath}`);
       }
 
+      // Build a map of cf_project_id -> expected filename for update detection
+      const projectIdToExpectedFilename = new Map<number, string>();
+      for (const mod of modpackMods) {
+        if (mod.cf_project_id && mod.filename) {
+          projectIdToExpectedFilename.set(mod.cf_project_id, mod.filename);
+        }
+      }
+
+      // Track filenames that are part of an update (to exclude from "extra" list)
+      const modsPartOfUpdate = new Set<string>();
+
       // Check mods that should be in instance
       const expectedFilenames = new Set<string>();
+      const allInstanceMods = [...instanceFiles.keys()];
+      
       for (const mod of modpackMods) {
         // content_type defaults to "mod" if undefined
         const modContentType = mod.content_type || "mod";
@@ -2004,9 +2145,35 @@ export class InstanceService {
         const shouldBeDisabled = disabledSet.has(mod.id);
 
         if (!instanceFiles.has(filename)) {
-          // Mod is missing entirely
-          console.log(`[checkSyncStatus] MISSING: ${filename} (id: ${mod.id}, disabled: ${shouldBeDisabled})`);
-          result.missingInInstance.push({ filename, type: "mod" });
+          // Mod is missing - check if there's an old version (update scenario)
+          let isUpdate = false;
+          
+          // Use extractBaseName to detect updates (same project, different version)
+          const modBaseName = this.extractBaseName(mod.filename);
+          if (modBaseName) {
+            for (const instanceFile of allInstanceMods) {
+              const instanceBaseName = this.extractBaseName(instanceFile);
+              if (instanceBaseName && 
+                  modBaseName.toLowerCase() === instanceBaseName.toLowerCase() &&
+                  mod.filename !== instanceFile) {
+                console.log(`[checkSyncStatus] MOD UPDATE DETECTED: ${instanceFile} → ${mod.filename} (willBeDisabled: ${shouldBeDisabled})`);
+                result.updatesToApply.push({
+                  oldFilename: instanceFile,
+                  newFilename: mod.filename,
+                  type: "mod",
+                  willBeDisabled: shouldBeDisabled
+                });
+                modsPartOfUpdate.add(instanceFile);
+                isUpdate = true;
+                break;
+              }
+            }
+          }
+          
+          if (!isUpdate) {
+            console.log(`[checkSyncStatus] MISSING: ${filename} (id: ${mod.id}, disabled: ${shouldBeDisabled})`);
+            result.missingInInstance.push({ filename, type: "mod" });
+          }
         } else {
           const isEnabled = instanceFiles.get(filename)!;
           if (shouldBeDisabled && isEnabled) {
@@ -2018,10 +2185,11 @@ export class InstanceService {
       }
 
       console.log(`[checkSyncStatus] Missing in instance: ${result.missingInInstance.length}`);
+      console.log(`[checkSyncStatus] Updates to apply (mods): ${result.updatesToApply.filter(u => u.type === 'mod').length}`);
 
-      // Check for extra mods in instance
+      // Check for extra mods in instance (exclude mods that are part of an update)
       for (const [filename] of instanceFiles) {
-        if (!expectedFilenames.has(filename)) {
+        if (!expectedFilenames.has(filename) && !modsPartOfUpdate.has(filename)) {
           result.extraInInstance.push({ filename, type: "mod" });
         }
       }
@@ -2034,6 +2202,14 @@ export class InstanceService {
         // Get packs from mods database
         const packMods = modpackMods.filter(m => m.content_type === contentType);
         const expectedPacks = new Set(packMods.map(m => m.filename).filter(Boolean));
+        
+        // Build project ID -> filename map for this content type
+        const contentProjectIdToFilename = new Map<number, string>();
+        for (const mod of packMods) {
+          if (mod.cf_project_id && mod.filename) {
+            contentProjectIdToFilename.set(mod.cf_project_id, mod.filename);
+          }
+        }
 
         console.log(`[checkSyncStatus] Checking ${contentType}s: ${packMods.length} expected`);
 
@@ -2052,35 +2228,86 @@ export class InstanceService {
 
         if (await fs.pathExists(folderPath)) {
           const files = await fs.readdir(folderPath);
-          // Include both .zip and .zip.disabled files (strip .disabled suffix for matching)
-          const zipFiles = files.filter(f => f.endsWith(".zip"));
-          const disabledZipFiles = files.filter(f => f.endsWith(".zip.disabled")).map(f => f.replace(".disabled", ""));
-          const allZipFiles = [...new Set([...zipFiles, ...disabledZipFiles])];
-
-          console.log(`[checkSyncStatus] ${contentType} folder has: ${zipFiles.join(', ')}`);
-          console.log(`[checkSyncStatus] ${contentType} disabled: ${disabledZipFiles.join(', ')}`);
-
-          // Build case-insensitive map for matching (include disabled files)
+          // Build a map of filename -> isEnabled for this folder
+          const instancePackFiles: Map<string, boolean> = new Map();
+          
+          for (const f of files) {
+            if (f.endsWith(".zip")) {
+              instancePackFiles.set(f, true); // enabled
+            } else if (f.endsWith(".zip.disabled")) {
+              const enabledName = f.replace(".disabled", "");
+              instancePackFiles.set(enabledName, false); // disabled
+            }
+          }
+          
+          const allZipFiles = [...instancePackFiles.keys()];
           const zipFilesLower = new Map(allZipFiles.map(f => [f.toLowerCase(), f]));
 
-          // Check missing from mods database only (overrides are copied during sync)
+          console.log(`[checkSyncStatus] ${contentType} folder has enabled: ${[...instancePackFiles.entries()].filter(([_, v]) => v).map(([k]) => k).join(', ')}`);
+          console.log(`[checkSyncStatus] ${contentType} folder has disabled: ${[...instancePackFiles.entries()].filter(([_, v]) => !v).map(([k]) => k).join(', ')}`);
+
+          // Track which instance files are outdated versions (to be replaced by updates)
+          const outdatedFilesInInstance = new Set<string>();
+
+          // Check missing from mods database - detect updates vs new additions
           for (const mod of packMods) {
             if (mod.filename) {
-              const existsExact = allZipFiles.includes(mod.filename);
+              const existsExact = instancePackFiles.has(mod.filename);
               const existsCaseInsensitive = zipFilesLower.has(mod.filename.toLowerCase());
+              const shouldBeDisabled = disabledSet.has(mod.id);
 
               if (!existsExact && !existsCaseInsensitive) {
-                console.log(`[checkSyncStatus] MISSING ${contentType}: ${mod.filename}`);
-                result.missingInInstance.push({ filename: mod.filename, type: contentType });
-              } else if (!existsExact && existsCaseInsensitive) {
-                console.log(`[checkSyncStatus] ${contentType} found with different case: expected "${mod.filename}", found "${zipFilesLower.get(mod.filename.toLowerCase())}"`);
+                // New file is missing - check if it's an update (old version exists)
+                let isUpdate = false;
+                
+                if (mod.cf_project_id) {
+                  // Look for files with similar project patterns (same project, different version)
+                  for (const instanceFile of allZipFiles) {
+                    const modBaseName = this.extractBaseName(mod.filename);
+                    const instanceBaseName = this.extractBaseName(instanceFile);
+                    
+                    if (modBaseName && instanceBaseName && 
+                        modBaseName.toLowerCase() === instanceBaseName.toLowerCase() &&
+                        mod.filename !== instanceFile) {
+                      console.log(`[checkSyncStatus] UPDATE DETECTED: ${instanceFile} → ${mod.filename} (willBeDisabled: ${shouldBeDisabled})`);
+                      result.updatesToApply.push({
+                        oldFilename: instanceFile,
+                        newFilename: mod.filename,
+                        type: contentType,
+                        willBeDisabled: shouldBeDisabled
+                      });
+                      outdatedFilesInInstance.add(instanceFile);
+                      isUpdate = true;
+                      break;
+                    }
+                  }
+                }
+                
+                if (!isUpdate) {
+                  console.log(`[checkSyncStatus] MISSING ${contentType}: ${mod.filename}`);
+                  result.missingInInstance.push({ filename: mod.filename, type: contentType });
+                }
+              } else {
+                // File exists - check disabled state
+                const actualFilename = existsExact ? mod.filename : zipFilesLower.get(mod.filename.toLowerCase())!;
+                const isEnabled = instancePackFiles.get(actualFilename) ?? true;
+                
+                if (shouldBeDisabled && isEnabled) {
+                  result.disabledMismatch.push({ filename: mod.filename, issue: "should be disabled" });
+                } else if (!shouldBeDisabled && !isEnabled) {
+                  result.disabledMismatch.push({ filename: mod.filename, issue: "should be enabled" });
+                }
+                
+                if (!existsExact && existsCaseInsensitive) {
+                  console.log(`[checkSyncStatus] ${contentType} found with different case: expected "${mod.filename}", found "${actualFilename}"`);
+                }
               }
             }
           }
 
-          // Check extra (files not in mods OR overrides) - use allZipFiles to include disabled
+          // Check extra (files not in expected packs and not outdated versions)
           for (const file of allZipFiles) {
-            if (!expectedPacks.has(file)) {
+            if (!expectedPacks.has(file) && !outdatedFilesInInstance.has(file)) {
               result.extraInInstance.push({ filename: file, type: contentType });
             }
           }
@@ -2099,12 +2326,12 @@ export class InstanceService {
       // Configs are managed directly as physical files, not as virtual modpack references
       // The user edits configs directly on the instance, so there's nothing to "sync"
 
-      // Extra files in instance are NOT counted as requiring sync
-      // These are user-added files that should be preserved
-      // Only missingInInstance and disabledMismatch require sync action
+      // Updates count as differences (need to download new + remove old)
+      // Extra files in instance are NOT counted as requiring sync (preserved)
       result.totalDifferences =
         result.missingInInstance.length +
-        result.disabledMismatch.length;
+        result.disabledMismatch.length +
+        result.updatesToApply.length;
 
       result.needsSync = result.totalDifferences > 0;
 

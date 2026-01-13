@@ -105,6 +105,7 @@ const syncStatus = ref<{
     missingInInstance: Array<{ filename: string; type: string }>;
     extraInInstance: Array<{ filename: string; type: string }>;
     disabledMismatch: Array<{ filename: string; issue: string }>;
+    updatesToApply: Array<{ oldFilename: string; newFilename: string; type: string; willBeDisabled?: boolean }>;
     configDifferences: number;
     totalDifferences: number;
     loaderVersionMismatch?: boolean;
@@ -1146,6 +1147,34 @@ function handleConfigReverted(event: Event) {
                                             </div>
                                         </div>
 
+                                        <!-- Updates to Apply -->
+                                        <div v-if="syncStatus.updatesToApply?.length" class="space-y-1">
+                                            <div class="flex items-center gap-2 text-orange-400">
+                                                <RefreshCw class="w-4 h-4" />
+                                                <span class="font-medium">Updates available ({{
+                                                    syncStatus.updatesToApply.length }})</span>
+                                            </div>
+                                            <div class="ml-6 space-y-1 max-h-24 overflow-y-auto">
+                                                <div v-for="item in syncStatus.updatesToApply.slice(0, 5)"
+                                                    :key="item.newFilename"
+                                                    class="flex items-center gap-2 text-muted-foreground text-xs">
+                                                    <Palette v-if="item.type === 'resourcepack'" class="w-3 h-3" />
+                                                    <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
+                                                    <Package v-else class="w-3 h-3" />
+                                                    <span class="truncate line-through opacity-60">{{ item.oldFilename
+                                                        }}</span>
+                                                    <span class="text-orange-400">→</span>
+                                                    <span class="truncate text-orange-400">{{ item.newFilename }}</span>
+                                                    <span v-if="item.willBeDisabled"
+                                                        class="text-[9px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded font-semibold uppercase">disabled</span>
+                                                </div>
+                                                <div v-if="syncStatus.updatesToApply.length > 5"
+                                                    class="text-xs text-muted-foreground/70">
+                                                    ... and {{ syncStatus.updatesToApply.length - 5 }} more
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <!-- Extra Mods in Instance (will be REMOVED) -->
                                         <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length"
                                             class="space-y-1">
@@ -1153,7 +1182,7 @@ function handleConfigReverted(event: Event) {
                                                 <Trash2 class="w-4 h-4" />
                                                 <span class="font-medium">Mods to remove ({{
                                                     syncStatus.extraInInstance.filter(i => i.type === 'mod').length
-                                                    }})</span>
+                                                }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These mods are not in the modpack and will be removed during sync.
@@ -1168,7 +1197,7 @@ function handleConfigReverted(event: Event) {
                                                 <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length > 5"
                                                     class="text-xs text-muted-foreground/70">
                                                     ... and {{syncStatus.extraInInstance.filter(i => i.type ===
-                                                    'mod').length - 5 }} more
+                                                        'mod').length - 5}} more
                                                 </div>
                                             </div>
                                         </div>
@@ -1180,7 +1209,7 @@ function handleConfigReverted(event: Event) {
                                                 <Package class="w-4 h-4" />
                                                 <span class="font-medium">Extra files ({{
                                                     syncStatus.extraInInstance.filter(i => i.type !== 'mod').length
-                                                    }})</span>
+                                                }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These files will be preserved.
@@ -1197,7 +1226,7 @@ function handleConfigReverted(event: Event) {
                                                 <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 5"
                                                     class="text-xs text-muted-foreground/70">
                                                     ... and {{syncStatus.extraInInstance.filter(i => i.type !==
-                                                    'mod').length - 5 }} more
+                                                        'mod').length - 5}} more
                                                 </div>
                                             </div>
                                         </div>
@@ -1324,9 +1353,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                }}</span>
+                                                    }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                }}%</span>
+                                                    }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1359,7 +1388,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1369,7 +1398,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">

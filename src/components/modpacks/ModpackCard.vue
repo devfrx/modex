@@ -492,11 +492,11 @@ const imageUrl = computed(() => {
   position: absolute;
   top: 10px;
   right: 10px;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
   border: 2px solid rgba(255, 255, 255, 0.3);
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -515,6 +515,8 @@ const imageUrl = computed(() => {
 .rest-select.is-checked {
   background: hsl(var(--primary));
   border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.3), 0 2px 8px hsl(var(--primary) / 0.4);
+  color: white;
 }
 
 /* Rest - Favorite */
@@ -679,6 +681,8 @@ const imageUrl = computed(() => {
 .hover-select.is-checked {
   background: hsl(var(--primary));
   border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.3), 0 2px 8px hsl(var(--primary) / 0.4);
+  color: white;
 }
 
 /* Hover - Live badge - ENTERS FROM TOP-LEFT */

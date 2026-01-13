@@ -49,6 +49,7 @@ import {
   Play,
   Loader2,
   FolderOpen,
+  FolderX,
   FileCode,
   Clock,
   HardDrive,
@@ -436,19 +437,19 @@ function startLogConsoleResize(e: MouseEvent) {
   isResizingLogConsole.value = true;
   const startY = e.clientY;
   const startHeight = logConsoleHeight.value;
-  
+
   const onMouseMove = (moveEvent: MouseEvent) => {
     const deltaY = startY - moveEvent.clientY;
     const newHeight = Math.min(Math.max(startHeight + deltaY, 150), window.innerHeight - 150);
     logConsoleHeight.value = newHeight;
   };
-  
+
   const onMouseUp = () => {
     isResizingLogConsole.value = false;
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mouseup', onMouseUp);
   };
-  
+
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('mouseup', onMouseUp);
 }
@@ -2578,12 +2579,11 @@ watch(
             </div>
 
             <!-- Cloud Sync Button - Separate from main tabs -->
-            <button class="tab-pill border" :class="activeTab === 'remote'
-              ? 'bg-blue-500/20 text-blue-500 border-blue-500/40 ring-1 ring-blue-500/30'
-              : 'tab-pill-inactive border-border/50'" @click="activeTab = 'remote'" title="Sync with cloud & share your modpack">
+            <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
+              @click="activeTab = 'remote'" title="Sync with cloud & share your modpack">
               <CloudUpload class="w-3.5 h-3.5" />
               <span class="hidden sm:inline">Share</span>
-              <span v-if="gistExistsRemotely || editForm.remote_url" class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span v-if="gistExistsRemotely || editForm.remote_url" class="w-2 h-2 rounded-full bg-primary"></span>
             </button>
           </div>
 
@@ -4254,7 +4254,8 @@ watch(
                   {{ instanceSyncStatus.missingInInstance.length }} to add
                 </div>
                 <div class="sync-section-items">
-                  <div v-for="item in instanceSyncStatus.missingInInstance.slice(0, 5)" :key="item.filename" class="sync-item">
+                  <div v-for="item in instanceSyncStatus.missingInInstance.slice(0, 5)" :key="item.filename"
+                    class="sync-item">
                     <span class="sync-item-type">{{ item.type }}</span>
                     <span class="sync-item-name">{{ item.filename }}</span>
                   </div>
@@ -4264,35 +4265,62 @@ watch(
                 </div>
               </div>
 
-              <!-- Extra Mods to Remove -->
-              <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 0" class="sync-section sync-section-remove">
+              <!-- Updates to Apply (new section) -->
+              <div v-if="instanceSyncStatus.updatesToApply?.length > 0" class="sync-section sync-section-update">
                 <div class="sync-section-title">
-                  <Trash2 class="w-3.5 h-3.5" />
-                  {{ instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length }} mods to remove
+                  <RefreshCw class="w-3.5 h-3.5" />
+                  {{ instanceSyncStatus.updatesToApply.length }} to update
                 </div>
                 <div class="sync-section-items">
-                  <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').slice(0, 5)" :key="item.filename" class="sync-item">
+                  <div v-for="item in instanceSyncStatus.updatesToApply.slice(0, 5)" :key="item.newFilename"
+                    class="sync-item sync-item-update">
+                    <span class="sync-item-type">{{ item.type }}</span>
+                    <span class="sync-item-name sync-item-old">{{ item.oldFilename }}</span>
+                    <span class="sync-item-arrow">→</span>
+                    <span class="sync-item-name sync-item-new">{{ item.newFilename }}</span>
+                    <span v-if="item.willBeDisabled" class="sync-item-disabled-badge">disabled</span>
+                  </div>
+                  <div v-if="instanceSyncStatus.updatesToApply.length > 5" class="sync-item-more">
+                    +{{ instanceSyncStatus.updatesToApply.length - 5 }} more
+                  </div>
+                </div>
+              </div>
+
+              <!-- Extra Mods to Remove -->
+              <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 0"
+                class="sync-section sync-section-remove">
+                <div class="sync-section-title">
+                  <Trash2 class="w-3.5 h-3.5" />
+                  {{instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length}} mods to remove
+                </div>
+                <div class="sync-section-items">
+                  <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').slice(0, 5)"
+                    :key="item.filename" class="sync-item">
                     <span class="sync-item-name">{{ item.filename }}</span>
                   </div>
-                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 5" class="sync-item-more">
-                    +{{ instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length - 5 }} more
+                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 5"
+                    class="sync-item-more">
+                    +{{instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length - 5}} more
                   </div>
                 </div>
               </div>
 
               <!-- Extra Files (preserved) -->
-              <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 0" class="sync-section sync-section-extra">
+              <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 0"
+                class="sync-section sync-section-extra">
                 <div class="sync-section-title">
                   <Package class="w-3.5 h-3.5" />
-                  {{ instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length }} extra files (preserved)
+                  {{instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length}} extra files (preserved)
                 </div>
                 <div class="sync-section-items">
-                  <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').slice(0, 5)" :key="item.filename" class="sync-item">
+                  <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').slice(0, 5)"
+                    :key="item.filename" class="sync-item">
                     <span class="sync-item-type">{{ item.type }}</span>
                     <span class="sync-item-name">{{ item.filename }}</span>
                   </div>
-                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 5" class="sync-item-more">
-                    +{{ instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length - 5 }} more
+                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 5"
+                    class="sync-item-more">
+                    +{{instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length - 5}} more
                   </div>
                 </div>
               </div>
@@ -4315,7 +4343,8 @@ watch(
                   {{ instanceSyncStatus.disabledMismatch.length }} enable/disable states to fix
                 </div>
                 <div class="sync-section-items">
-                  <div v-for="item in instanceSyncStatus.disabledMismatch.slice(0, 5)" :key="item.filename" class="sync-item">
+                  <div v-for="item in instanceSyncStatus.disabledMismatch.slice(0, 5)" :key="item.filename"
+                    class="sync-item">
                     <span class="sync-item-name">{{ item.filename }}</span>
                     <span class="sync-item-issue">{{ item.issue }}</span>
                   </div>
@@ -4329,20 +4358,20 @@ watch(
               <div class="sync-mode-section">
                 <span class="text-[10px] text-muted-foreground uppercase">Sync Mode</span>
                 <div class="sync-mode-buttons">
-                  <button @click="selectedSyncMode = 'new_only'" class="sync-mode-btn" 
+                  <button @click="selectedSyncMode = 'new_only'" class="sync-mode-btn"
                     :class="{ 'sync-mode-active': selectedSyncMode === 'new_only' }"
                     title="Only add new files, keep existing ones unchanged">New Only</button>
-                  <button @click="selectedSyncMode = 'overwrite'" class="sync-mode-btn" 
+                  <button @click="selectedSyncMode = 'overwrite'" class="sync-mode-btn"
                     :class="{ 'sync-mode-active-warning': selectedSyncMode === 'overwrite' }"
                     title="Replace all files with modpack versions">Overwrite</button>
-                  <button @click="selectedSyncMode = 'skip'" class="sync-mode-btn" 
+                  <button @click="selectedSyncMode = 'skip'" class="sync-mode-btn"
                     :class="{ 'sync-mode-active-muted': selectedSyncMode === 'skip' }"
                     title="Don't sync now, I'll do it manually">Skip</button>
                 </div>
                 <p class="text-[10px] text-muted-foreground/70 mt-1.5">
-                  {{ selectedSyncMode === 'new_only' ? 'Adds missing files without touching existing ones' : 
-                     selectedSyncMode === 'overwrite' ? 'Replaces all files to match the modpack exactly' : 
-                     'Skips syncing, launch with current instance state' }}
+                  {{ selectedSyncMode === 'new_only' ? 'Adds missing files without touching existing ones' :
+                    selectedSyncMode === 'overwrite' ? 'Replaces all files to match the modpack exactly' :
+                      'Skips syncing, launch with current instance state' }}
                 </p>
               </div>
             </div>
@@ -4359,154 +4388,155 @@ watch(
         <div v-if="isLaunching && loaderProgress" class="floating-progress">
           <div class="progress-text">
             <span>{{ loaderProgress.stage }}</span>
-            <span v-if="loaderProgress.total > 0" class="progress-count">{{ loaderProgress.current }}/{{ loaderProgress.total }}</span>
+            <span v-if="loaderProgress.total > 0" class="progress-count">{{ loaderProgress.current }}/{{
+              loaderProgress.total }}</span>
           </div>
           <div v-if="loaderProgress.total > 0" class="progress-bar">
-            <div class="progress-fill" :style="{ width: `${(loaderProgress.current / loaderProgress.total) * 100}%` }"></div>
+            <div class="progress-fill" :style="{ width: `${(loaderProgress.current / loaderProgress.total) * 100}%` }">
+            </div>
           </div>
         </div>
 
         <div class="floating-bar" :class="{ 'floating-bar-minimized': isFloatingBarMinimized }">
           <!-- Minimize/Expand Toggle -->
-          <button class="floating-bar-minimize-btn" @click="isFloatingBarMinimized = !isFloatingBarMinimized" 
+          <button class="floating-bar-minimize-btn" @click="isFloatingBarMinimized = !isFloatingBarMinimized"
             :title="isFloatingBarMinimized ? 'Expand Bar' : 'Minimize Bar'">
             <ChevronDown v-if="!isFloatingBarMinimized" class="w-4 h-4" />
             <ChevronUp v-else class="w-4 h-4" />
           </button>
-          
+
           <!-- Main Content (hidden when minimized) -->
           <template v-if="!isFloatingBarMinimized">
             <div class="floating-bar-divider floating-bar-divider-mini" />
-            
+
             <!-- Primary: Play/Create Instance Button -->
             <template v-if="!instance">
               <button class="floating-bar-play floating-bar-create-instance" @click="handleCreateInstance()"
                 title="Create Instance" :disabled="isCreatingInstance">
-              <Loader2 v-if="isCreatingInstance" class="w-5 h-5 animate-spin" />
-              <Plus v-else class="w-5 h-5" />
-            </button>
-            <span class="floating-bar-status-text text-amber-400">{{ isCreatingInstance ? 'Creating...' : 'No instance' }}</span>
-          </template>
-          
-          <template v-else-if="instance.state === 'installing'">
-            <button class="floating-bar-play floating-bar-syncing" disabled title="Syncing...">
-              <Loader2 class="w-5 h-5 animate-spin" />
-            </button>
-            <span class="floating-bar-status-text text-blue-400">Syncing...</span>
-          </template>
-          
-          <template v-else-if="isLaunching">
-            <button class="floating-bar-play floating-bar-launching" disabled title="Launching...">
-              <Loader2 class="w-5 h-5 animate-spin" />
-            </button>
-            <span class="floating-bar-status-text text-primary">Launching...</span>
-          </template>
-          
-          <template v-else-if="isGameRunning">
-            <button class="floating-bar-play" 
-              :class="runningGame?.status === 'running' ? 'floating-bar-play-game' : 'floating-bar-play-launcher'"
-              @click="handleKillGame()" 
-              :title="runningGame?.status === 'running' ? 'Stop Game' : 'Stop Launcher'">
-              <Square v-if="runningGame?.status !== 'running'" class="w-4 h-4 fill-current" />
-              <X v-else class="w-5 h-5" />
-            </button>
-            <span class="floating-bar-status-text" :class="runningGame?.status === 'running' ? 'text-green-400' : 'text-amber-400'">
-              {{ runningGame?.status === 'running' ? 'Playing' : 'Loading...' }}
-            </span>
-          </template>
-          
-          <template v-else>
-            <button class="floating-bar-play" :class="{ 'floating-bar-play-ready': instance.state === 'ready' }"
-              :disabled="instance.state !== 'ready'" @click="handleLaunch()" title="Play">
-              <Play class="w-5 h-5 fill-current" />
-            </button>
-            <span v-if="instance.state === 'ready'" class="floating-bar-status-text text-green-400">Ready</span>
-            <span v-else class="floating-bar-status-text text-muted-foreground">{{ instance.state }}</span>
-          </template>
+                <Loader2 v-if="isCreatingInstance" class="w-5 h-5 animate-spin" />
+                <Plus v-else class="w-5 h-5" />
+              </button>
+              <span class="floating-bar-status-text text-amber-400">{{ isCreatingInstance ? 'Creating...'
+                : 'No instance' }}</span>
+            </template>
 
-          <!-- Sync Status Indicator -->
-          <template v-if="instance && instanceSyncStatus?.needsSync">
+            <template v-else-if="instance.state === 'installing'">
+              <button class="floating-bar-play floating-bar-syncing" disabled title="Syncing...">
+                <Loader2 class="w-5 h-5 animate-spin" />
+              </button>
+              <span class="floating-bar-status-text text-blue-400">Syncing...</span>
+            </template>
+
+            <template v-else-if="isLaunching">
+              <button class="floating-bar-play floating-bar-launching" disabled title="Launching...">
+                <Loader2 class="w-5 h-5 animate-spin" />
+              </button>
+              <span class="floating-bar-status-text text-primary">Launching...</span>
+            </template>
+
+            <template v-else-if="isGameRunning">
+              <button class="floating-bar-play"
+                :class="runningGame?.status === 'running' ? 'floating-bar-play-game' : 'floating-bar-play-launcher'"
+                @click="handleKillGame()" :title="runningGame?.status === 'running' ? 'Stop Game' : 'Stop Launcher'">
+                <Square v-if="runningGame?.status !== 'running'" class="w-4 h-4 fill-current" />
+                <X v-else class="w-5 h-5" />
+              </button>
+              <span class="floating-bar-status-text"
+                :class="runningGame?.status === 'running' ? 'text-green-400' : 'text-amber-400'">
+                {{ runningGame?.status === 'running' ? 'Playing' : 'Loading...' }}
+              </span>
+            </template>
+
+            <template v-else>
+              <button class="floating-bar-play" :class="{ 'floating-bar-play-ready': instance.state === 'ready' }"
+                :disabled="instance.state !== 'ready'" @click="handleLaunch()" title="Play">
+                <Play class="w-5 h-5 fill-current" />
+              </button>
+              <span v-if="instance.state === 'ready'" class="floating-bar-status-text text-green-400">Ready</span>
+              <span v-else class="floating-bar-status-text text-muted-foreground">{{ instance.state }}</span>
+            </template>
+
+            <!-- Sync Status Indicator -->
+            <template v-if="instance && instanceSyncStatus?.needsSync">
+              <div class="floating-bar-divider" />
+              <button class="floating-bar-btn floating-bar-btn-sync"
+                :class="{ 'floating-bar-btn-active': showSyncDetails }" @click="showSyncDetails = !showSyncDetails"
+                :title="`${instanceSyncStatus.totalDifferences} changes pending`">
+                <AlertTriangle class="w-4 h-4" />
+                <span class="floating-bar-sync-count">{{ instanceSyncStatus.totalDifferences }}</span>
+              </button>
+              <button class="floating-bar-btn floating-bar-btn-sync-action" @click="handleSyncInstance"
+                :disabled="isSyncingInstance" title="Sync Now">
+                <Loader2 v-if="isSyncingInstance" class="w-4 h-4 animate-spin" />
+                <RefreshCw v-else class="w-4 h-4" />
+              </button>
+            </template>
+
+            <!-- In Sync Badge -->
+            <template v-else-if="instance && instanceSyncStatus && !instanceSyncStatus.needsSync">
+              <div class="floating-bar-divider" />
+              <span class="floating-bar-sync-ok">
+                <Check class="w-3.5 h-3.5" />
+                In Sync
+              </span>
+            </template>
+
+            <!-- Divider -->
             <div class="floating-bar-divider" />
-            <button class="floating-bar-btn floating-bar-btn-sync" 
-              :class="{ 'floating-bar-btn-active': showSyncDetails }"
-              @click="showSyncDetails = !showSyncDetails"
-              :title="`${instanceSyncStatus.totalDifferences} changes pending`">
-              <AlertTriangle class="w-4 h-4" />
-              <span class="floating-bar-sync-count">{{ instanceSyncStatus.totalDifferences }}</span>
-            </button>
-            <button class="floating-bar-btn floating-bar-btn-sync-action" 
-              @click="handleSyncInstance" 
-              :disabled="isSyncingInstance"
-              title="Sync Now">
-              <Loader2 v-if="isSyncingInstance" class="w-4 h-4 animate-spin" />
-              <RefreshCw v-else class="w-4 h-4" />
-            </button>
+
+            <!-- Instance Actions (when instance exists) -->
+            <template v-if="instance">
+              <button class="floating-bar-btn" @click="openInstanceSettings()" title="Instance Settings">
+                <Sliders class="w-4 h-4" />
+              </button>
+              <button class="floating-bar-btn" @click="handleOpenInstanceFolder()" title="Open Folder">
+                <FolderOpen class="w-4 h-4" />
+              </button>
+              <button class="floating-bar-btn" @click="showLogConsole = !showLogConsole"
+                :class="{ 'floating-bar-btn-active': showLogConsole }"
+                :title="showLogConsole ? 'Hide Console' : 'Show Console'">
+                <Terminal class="w-4 h-4" />
+              </button>
+              <button class="floating-bar-btn floating-bar-btn-delete-instance" @click="showDeleteInstanceDialog = true"
+                title="Delete Instance">
+                <FolderX class="w-4 h-4" />
+              </button>
+            </template>
+
+            <!-- Selection Actions (only in mods tab with selection) -->
+            <template v-if="activeTab === 'mods' && selectedModIds.size > 0">
+              <div class="floating-bar-divider" />
+              <span class="floating-bar-count">{{ selectedModIds.size }} selected</span>
+              <div class="floating-bar-divider" />
+
+              <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-enable" @click="bulkEnableSelected"
+                title="Enable">
+                <ToggleRight class="w-4 h-4" />
+              </button>
+              <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-disable" @click="bulkDisableSelected"
+                title="Disable">
+                <ToggleLeft class="w-4 h-4" />
+              </button>
+              <button v-if="!isLinked" class="floating-bar-btn" @click="bulkLockSelected" title="Lock">
+                <Lock class="w-4 h-4" />
+              </button>
+              <button v-if="!isLinked" class="floating-bar-btn" @click="bulkUnlockSelected" title="Unlock">
+                <LockOpen class="w-4 h-4" />
+              </button>
+
+              <div v-if="!isLinked" class="floating-bar-divider" />
+
+              <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-danger" @click="removeSelectedMods"
+                title="Remove">
+                <Trash2 class="w-4 h-4" />
+              </button>
+
+              <button class="floating-bar-btn floating-bar-btn-clear" @click="clearSelection" title="Clear selection">
+                <X class="w-4 h-4" />
+              </button>
+            </template>
           </template>
-          
-          <!-- In Sync Badge -->
-          <template v-else-if="instance && instanceSyncStatus && !instanceSyncStatus.needsSync">
-            <div class="floating-bar-divider" />
-            <span class="floating-bar-sync-ok">
-              <Check class="w-3.5 h-3.5" />
-              In Sync
-            </span>
-          </template>
 
-          <!-- Divider -->
-          <div class="floating-bar-divider" />
-
-          <!-- Instance Actions (when instance exists) -->
-          <template v-if="instance">
-            <button class="floating-bar-btn" @click="openInstanceSettings()" title="Instance Settings">
-              <Sliders class="w-4 h-4" />
-            </button>
-            <button class="floating-bar-btn" @click="handleOpenInstanceFolder()" title="Open Folder">
-              <FolderOpen class="w-4 h-4" />
-            </button>
-            <button class="floating-bar-btn" @click="showLogConsole = !showLogConsole" 
-              :class="{ 'floating-bar-btn-active': showLogConsole }"
-              :title="showLogConsole ? 'Hide Console' : 'Show Console'">
-              <Terminal class="w-4 h-4" />
-            </button>
-            <button class="floating-bar-btn floating-bar-btn-danger" @click="showDeleteInstanceDialog = true" title="Delete Instance">
-              <Trash2 class="w-4 h-4" />
-            </button>
-          </template>
-
-          <!-- Selection Actions (only in mods tab with selection) -->
-          <template v-if="activeTab === 'mods' && selectedModIds.size > 0">
-            <div class="floating-bar-divider" />
-            <span class="floating-bar-count">{{ selectedModIds.size }} selected</span>
-            <div class="floating-bar-divider" />
-            
-            <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-enable" @click="bulkEnableSelected"
-              title="Enable">
-              <ToggleRight class="w-4 h-4" />
-            </button>
-            <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-disable" @click="bulkDisableSelected"
-              title="Disable">
-              <ToggleLeft class="w-4 h-4" />
-            </button>
-            <button v-if="!isLinked" class="floating-bar-btn" @click="bulkLockSelected" title="Lock">
-              <Lock class="w-4 h-4" />
-            </button>
-            <button v-if="!isLinked" class="floating-bar-btn" @click="bulkUnlockSelected" title="Unlock">
-              <LockOpen class="w-4 h-4" />
-            </button>
-
-            <div v-if="!isLinked" class="floating-bar-divider" />
-
-            <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-danger" @click="removeSelectedMods"
-              title="Remove">
-              <Trash2 class="w-4 h-4" />
-            </button>
-
-            <button class="floating-bar-btn floating-bar-btn-clear" @click="clearSelection" title="Clear selection">
-              <X class="w-4 h-4" />
-            </button>
-          </template>
-          </template>
-          
           <!-- Minimized indicator -->
           <template v-else>
             <span class="floating-bar-minimized-label">Actions Bar</span>
@@ -4530,17 +4560,19 @@ watch(
                 <label class="text-xs text-muted-foreground">Minimum RAM</label>
                 <span class="text-xs font-medium">{{ (memoryMin / 1024).toFixed(1) }} GB</span>
               </div>
-              <input type="range" v-model.number="memoryMin" :min="1024" :max="maxAllowedRam" :step="512" class="w-full styled-range" />
+              <input type="range" v-model.number="memoryMin" :min="1024" :max="maxAllowedRam" :step="512"
+                class="w-full styled-range" />
             </div>
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label class="text-xs text-muted-foreground">Maximum RAM</label>
                 <span class="text-xs font-medium">{{ (memoryMax / 1024).toFixed(1) }} GB</span>
               </div>
-              <input type="range" v-model.number="memoryMax" :min="2048" :max="maxAllowedRam" :step="512" class="w-full styled-range" />
+              <input type="range" v-model.number="memoryMax" :min="2048" :max="maxAllowedRam" :step="512"
+                class="w-full styled-range" />
             </div>
             <p class="text-[11px] text-muted-foreground">
-              System has {{ systemMemory ? Math.round(systemMemory.total / 1024) : '...' }} GB RAM. 
+              System has {{ systemMemory ? Math.round(systemMemory.total / 1024) : '...' }} GB RAM.
               Recommended max: {{ systemMemory ? Math.round(systemMemory.suggestedMax / 1024) : '...' }} GB.
             </p>
           </div>
@@ -4601,10 +4633,11 @@ watch(
           </div>
         </div>
       </div>
-      
+
       <template #footer>
         <div class="flex items-center justify-between w-full gap-3">
-          <Button variant="destructive" size="sm" @click="showInstanceSettings = false; showDeleteInstanceDialog = true">
+          <Button variant="destructive" size="sm"
+            @click="showInstanceSettings = false; showDeleteInstanceDialog = true">
             <Trash2 class="w-4 h-4 mr-2" />
             Delete Instance
           </Button>
@@ -4623,10 +4656,9 @@ watch(
       @close="showDeleteInstanceDialog = false" @confirm="handleDeleteInstance" />
 
     <!-- Log Console Slide-up Panel -->
-    <Transition enter-active-class="transition duration-300 ease-out"
-      enter-from-class="translate-y-full opacity-0" enter-to-class="translate-y-0 opacity-100"
-      leave-active-class="transition duration-200 ease-in" leave-from-class="translate-y-0 opacity-100"
-      leave-to-class="translate-y-full opacity-0">
+    <Transition enter-active-class="transition duration-300 ease-out" enter-from-class="translate-y-full opacity-0"
+      enter-to-class="translate-y-0 opacity-100" leave-active-class="transition duration-200 ease-in"
+      leave-from-class="translate-y-0 opacity-100" leave-to-class="translate-y-full opacity-0">
       <div v-if="showLogConsole && instance" class="log-console-panel" :style="{ height: logConsoleHeight + 'px' }">
         <!-- Resize Handle -->
         <div class="log-console-resize-handle" @mousedown="startLogConsoleResize">
@@ -4641,31 +4673,31 @@ watch(
               LIVE
             </span>
           </div>
-          
+
           <!-- Log Level Filters -->
           <div class="flex items-center gap-2">
-            <button @click="setLogLevelFilter('all')" 
-              class="log-filter-btn" :class="{ 'log-filter-active': logLevelFilter === 'all' }">
+            <button @click="setLogLevelFilter('all')" class="log-filter-btn"
+              :class="{ 'log-filter-active': logLevelFilter === 'all' }">
               All
               <span class="log-filter-count">{{ totalLogCount }}</span>
             </button>
-            <button @click="setLogLevelFilter('info')" 
-              class="log-filter-btn log-filter-info" :class="{ 'log-filter-active': logLevelFilter === 'info' }">
+            <button @click="setLogLevelFilter('info')" class="log-filter-btn log-filter-info"
+              :class="{ 'log-filter-active': logLevelFilter === 'info' }">
               Info
               <span v-if="logLevelCounts.info > 0" class="log-filter-count">{{ logLevelCounts.info }}</span>
             </button>
-            <button @click="setLogLevelFilter('warn')" 
-              class="log-filter-btn log-filter-warn" :class="{ 'log-filter-active': logLevelFilter === 'warn' }">
+            <button @click="setLogLevelFilter('warn')" class="log-filter-btn log-filter-warn"
+              :class="{ 'log-filter-active': logLevelFilter === 'warn' }">
               Warn
               <span v-if="logLevelCounts.warn > 0" class="log-filter-count">{{ logLevelCounts.warn }}</span>
             </button>
-            <button @click="setLogLevelFilter('error')" 
-              class="log-filter-btn log-filter-error" :class="{ 'log-filter-active': logLevelFilter === 'error' }">
+            <button @click="setLogLevelFilter('error')" class="log-filter-btn log-filter-error"
+              :class="{ 'log-filter-active': logLevelFilter === 'error' }">
               Error
               <span v-if="logLevelCounts.error > 0" class="log-filter-count">{{ logLevelCounts.error }}</span>
             </button>
           </div>
-          
+
           <div class="flex items-center gap-1">
             <button @click="clearLogs" class="log-console-btn" title="Clear">
               <Trash2 class="w-3.5 h-3.5" />
@@ -4682,8 +4714,8 @@ watch(
             <p v-else>No logs match the current filter.</p>
           </div>
           <div v-else class="log-console-entries">
-            <div v-for="(log, index) in filteredGameLogs" :key="index" 
-              class="log-console-entry" :class="getLogLevelClass(log.level)">
+            <div v-for="(log, index) in filteredGameLogs" :key="index" class="log-console-entry"
+              :class="getLogLevelClass(log.level)">
               <span class="log-time">{{ log.time }}</span>
               <span class="log-message">{{ log.message }}</span>
             </div>
@@ -5348,19 +5380,25 @@ watch(
 }
 
 @keyframes game-running-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 8px hsl(142 76% 36% / 0.4);
   }
+
   50% {
     box-shadow: 0 0 16px hsl(142 76% 36% / 0.6);
   }
 }
 
 @keyframes launcher-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 8px hsl(38 92% 50% / 0.4);
     transform: scale(1);
   }
+
   50% {
     box-shadow: 0 0 16px hsl(38 92% 50% / 0.6);
     transform: scale(1.02);
@@ -5412,6 +5450,16 @@ watch(
 .floating-bar-btn-danger:hover {
   background: rgba(239, 68, 68, 0.2);
   color: rgb(248, 113, 113);
+}
+
+/* Delete Instance - Orange/Amber style to differentiate from Remove Mod (red) */
+.floating-bar-btn-delete-instance {
+  color: rgb(251, 191, 36);
+}
+
+.floating-bar-btn-delete-instance:hover {
+  background: rgba(251, 191, 36, 0.2);
+  color: rgb(252, 211, 77);
 }
 
 .floating-bar-btn-clear {
@@ -5554,9 +5602,12 @@ watch(
 }
 
 @keyframes live-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.4;
   }
@@ -5767,6 +5818,10 @@ watch(
   border-left: 3px solid hsl(142 76% 45%);
 }
 
+.sync-section-update {
+  border-left: 3px solid hsl(38 92% 50%);
+}
+
 .sync-section-remove {
   border-left: 3px solid hsl(0 84% 60%);
 }
@@ -5831,6 +5886,36 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Update item styles */
+.sync-item-update {
+  flex-wrap: wrap;
+}
+
+.sync-item-old {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.sync-item-arrow {
+  color: hsl(38 92% 50%);
+  font-weight: 600;
+}
+
+.sync-item-new {
+  color: hsl(38 92% 50%);
+}
+
+.sync-item-disabled-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: hsl(280 60% 55% / 0.2);
+  color: hsl(280 60% 65%);
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .sync-item-more {

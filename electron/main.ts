@@ -3727,14 +3727,15 @@ async function initializeBackend() {
   ipcMain.handle("instance:checkSyncStatus", async (_, instanceId: string, modpackId: string) => {
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) {
-      return { needsSync: false, missingInInstance: [], extraInInstance: [], disabledMismatch: [], configDifferences: 0, totalDifferences: 0, loaderVersionMismatch: false };
+      return { needsSync: false, missingInInstance: [], extraInInstance: [], disabledMismatch: [], updatesToApply: [], configDifferences: 0, totalDifferences: 0, loaderVersionMismatch: false };
     }
 
     const mods = await metadataManager.getModsInModpack(modpackId);
     const modData = mods.map(m => ({
       id: m.id,
       filename: m.filename,
-      content_type: m.content_type
+      content_type: m.content_type,
+      cf_project_id: m.cf_project_id
     }));
 
     // Get overrides path for config comparison - use camelCase field name

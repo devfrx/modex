@@ -95,7 +95,7 @@ import DefaultModpackImage from "@/assets/modpack-placeholder.png";
 const props = defineProps<{
   modpackId: string;
   isOpen: boolean;
-  initialTab?: "play" | "mods" | "discover" | "health" | "versions" | "settings" | "remote" | "configs";
+  initialTab?: "mods" | "discover" | "health" | "versions" | "settings" | "remote" | "configs";
   /** When true, renders as a full-screen view instead of a modal dialog */
   fullScreen?: boolean;
 }>();
@@ -153,7 +153,6 @@ const modDetailsTarget = ref<Mod | null>(null);
 // showModNoteDialog, noteDialogMod, noteDialogText, isSavingNote are from composable
 
 const activeTab = ref<
-  | "play"
   | "mods"
   | "discover"
   | "health"
@@ -166,6 +165,9 @@ const activeTab = ref<
 // Error state for graceful degradation (prevents white screen)
 const loadError = ref<string | null>(null);
 const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
+
+// Floating bar minimize state
+const isFloatingBarMinimized = ref(false);
 
 // ========== DEFERRED CALLBACKS ==========
 // These will be assigned to actual functions later in the file
@@ -425,6 +427,31 @@ const {
 
 // Help Guide State
 const showHelp = ref(false);
+
+// Log Console Resize State
+const logConsoleHeight = ref(300);
+const isResizingLogConsole = ref(false);
+
+function startLogConsoleResize(e: MouseEvent) {
+  isResizingLogConsole.value = true;
+  const startY = e.clientY;
+  const startHeight = logConsoleHeight.value;
+  
+  const onMouseMove = (moveEvent: MouseEvent) => {
+    const deltaY = startY - moveEvent.clientY;
+    const newHeight = Math.min(Math.max(startHeight + deltaY, 150), window.innerHeight - 150);
+    logConsoleHeight.value = newHeight;
+  };
+  
+  const onMouseUp = () => {
+    isResizingLogConsole.value = false;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  };
+  
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
 
 // More Menu State (for secondary tabs)
 const showMoreMenu = ref(false);
@@ -2521,13 +2548,6 @@ watch(
           <div class="flex justify-center items-center gap-3">
             <div class="inline-flex items-center gap-1 p-1 rounded-2xl bg-muted/50 border border-border/50">
               <!-- Primary Tabs -->
-              <button class="tab-pill"
-                :class="activeTab === 'play' ? 'tab-pill-active tab-pill-game' : 'tab-pill-inactive'"
-                @click="activeTab = 'play'">
-                <Rocket class="w-3.5 h-3.5" />
-                <span>Play</span>
-                <span v-if="isGameRunning" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              </button>
               <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'mods'">
                 <Layers class="w-3.5 h-3.5" />
@@ -2560,9 +2580,9 @@ watch(
             <!-- Cloud Sync Button - Separate from main tabs -->
             <button class="tab-pill border" :class="activeTab === 'remote'
               ? 'bg-blue-500/20 text-blue-500 border-blue-500/40 ring-1 ring-blue-500/30'
-              : 'tab-pill-inactive border-border/50'" @click="activeTab = 'remote'" title="Cloud Sync & Publishing">
-              <Globe class="w-3.5 h-3.5" />
-              <span class="hidden sm:inline">Cloud</span>
+              : 'tab-pill-inactive border-border/50'" @click="activeTab = 'remote'" title="Sync with cloud & share your modpack">
+              <CloudUpload class="w-3.5 h-3.5" />
+              <span class="hidden sm:inline">Share</span>
               <span v-if="gistExistsRemotely || editForm.remote_url" class="w-2 h-2 rounded-full bg-blue-500"></span>
             </button>
           </div>
@@ -2623,41 +2643,8 @@ watch(
 
         <!-- Help Content (expanded) -->
         <div v-if="showHelp" class="px-3 sm:px-6 pb-4 pt-2 bg-muted/20 border-t border-border/20">
-          <!-- Play Tab Help -->
-          <div v-if="activeTab === 'play'" class="help-content">
-            <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Play class="w-4 h-4 text-primary" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <h4 class="font-semibold text-foreground mb-2">Play - Launch Your Modpack</h4>
-                <p class="text-sm text-muted-foreground mb-3">
-                  Create an isolated game instance and launch Minecraft with your modpack.
-                </p>
-                <div class="grid md:grid-cols-2 gap-4 text-sm">
-                  <div class="space-y-2">
-                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
-                      <Gamepad2 class="w-4 h-4 text-primary" />
-                      Instance System
-                    </h5>
-                    <p class="text-muted-foreground">Each modpack has its own isolated instance with separate mods,
-                      configs, and saves.</p>
-                  </div>
-                  <div class="space-y-2">
-                    <h5 class="font-medium text-foreground flex items-center gap-1.5">
-                      <RefreshCw class="w-4 h-4 text-primary" />
-                      Auto-Sync
-                    </h5>
-                    <p class="text-muted-foreground">Keep your instance updated with the latest modpack changes
-                      automatically.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- Configs Tab Help -->
-          <div v-else-if="activeTab === 'configs'" class="help-content">
+          <div v-if="activeTab === 'configs'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                 <FileCode class="w-4 h-4 text-primary" />
@@ -2983,417 +2970,20 @@ watch(
 
       <!-- Content -->
       <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- PLAY TAB -->
-        <template v-if="activeTab === 'play'">
-          <!-- Play Tab - Clean Minimal Design -->
-          <div class="flex-1 overflow-y-auto">
-            <!-- No Instance State -->
-            <div v-if="!instance" class="flex items-center justify-center h-full p-6">
-              <div class="text-center max-w-sm">
-                <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-muted/50 flex items-center justify-center">
-                  <Rocket class="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 class="text-lg font-semibold mb-2">Create Game Instance</h3>
-                <p class="text-sm text-muted-foreground mb-6 leading-relaxed">
-                  Set up an isolated game environment to play this modpack with {{ currentMods.length }} mods.
-                </p>
-
-                <!-- Quick Info -->
-                <div class="flex items-center justify-center gap-4 mb-6 text-xs text-muted-foreground">
-                  <span class="flex items-center gap-1.5">
-                    <Package class="w-3.5 h-3.5" />
-                    {{ modpack?.minecraft_version }}
-                  </span>
-                  <span class="flex items-center gap-1.5 capitalize">
-                    <Sparkles class="w-3.5 h-3.5" />
-                    {{ modpack?.loader }}
-                  </span>
-                  <span class="flex items-center gap-1.5">
-                    <Layers class="w-3.5 h-3.5" />
-                    {{ currentMods.length }} mods
-                  </span>
-                </div>
-
-                <button @click="handleCreateInstance" :disabled="isCreatingInstance"
-                  class="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                  <Loader2 v-if="isCreatingInstance" class="w-4 h-4 animate-spin" />
-                  <Play v-else class="w-4 h-4" />
-                  {{ isCreatingInstance ? 'Creating...' : 'Create Instance' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Instance Ready State -->
-            <div v-else class="p-4 space-y-4">
-              <!-- Main Launch Section -->
-              <div class="rounded-xl border border-border/50 bg-card/50 overflow-hidden">
-                <div class="p-5 flex items-center gap-5">
-                  <!-- Play Button -->
-                  <button @click="handleLaunch()" :disabled="instance.state !== 'ready' || isLaunching || isGameRunning"
-                    class="play-button" :class="{ 'play-button-active': isGameRunning }">
-                    <Loader2 v-if="isLaunching" class="w-7 h-7 animate-spin" />
-                    <Play v-else-if="isGameRunning" class="w-7 h-7" />
-                    <Rocket v-else class="w-7 h-7" />
-                  </button>
-
-                  <!-- Status -->
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 mb-1">
-                      <h3 class="font-semibold">
-                        {{ isGameRunning
-                          ? (runningGame?.gameProcessRunning ? 'Game Running' : 'Launching...')
-                          : isLaunching ? 'Starting...' : 'Ready to Play' }}
-                      </h3>
-                      <span v-if="isGameRunning && runningGame?.gameProcessRunning"
-                        class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse"></span>
-                        LIVE
-                      </span>
-                    </div>
-                    <div class="flex items-center gap-3 text-sm text-muted-foreground">
-                      <span>{{ instanceStats?.modCount || 0 }} mods</span>
-                      <span>•</span>
-                      <span>{{ modpack?.loader }} {{ modpack?.minecraft_version }}</span>
-                    </div>
-
-                    <!-- First Launch Notice -->
-                    <div v-if="!isGameRunning && !isLaunching && !instance?.lastPlayed"
-                      class="mt-2 text-xs text-primary flex items-center gap-1.5">
-                      <Info class="w-3.5 h-3.5" />
-                      {{ modpack?.loader }} will be installed on first launch
-                    </div>
-
-                    <!-- Launch Progress -->
-                    <div v-if="loaderProgress && isLaunching" class="mt-2 text-xs text-muted-foreground">
-                      <span>{{ loaderProgress.stage }}</span>
-                      <span v-if="loaderProgress.total > 0" class="text-foreground ml-1">
-                        {{ loaderProgress.current }}/{{ loaderProgress.total }}
-                      </span>
-                    </div>
-
-                    <!-- Running Actions -->
-                    <div v-if="isGameRunning" class="flex items-center gap-2 mt-3">
-                      <button @click="handleKillGame"
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors">
-                        <X class="w-3.5 h-3.5" />
-                        {{ runningGame?.gameProcessRunning ? 'Stop' : 'Cancel' }}
-                      </button>
-                      <button v-if="runningGame?.gameProcessRunning" @click="showLogConsole = !showLogConsole"
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-muted hover:bg-muted/80 transition-colors">
-                        <Terminal class="w-3.5 h-3.5" />
-                        {{ showLogConsole ? 'Hide' : 'Logs' }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Quick Actions -->
-                  <div class="flex items-center gap-1">
-                    <button @click="openInstanceSettings()"
-                      class="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Settings">
-                      <Sliders class="w-4 h-4" />
-                    </button>
-                    <button @click="handleOpenInstanceFolder()"
-                      class="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Open Folder">
-                      <FolderOpen class="w-4 h-4" />
-                    </button>
-                    <button @click="showDeleteInstanceDialog = true"
-                      class="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="Delete Instance">
-                      <Trash2 class="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Log Console -->
-                <div v-if="showLogConsole && isGameRunning" class="border-t border-border/50">
-                  <div class="px-4 py-2 bg-muted/30 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <Terminal class="w-3.5 h-3.5 text-muted-foreground" />
-                      <span class="text-xs font-medium">Console</span>
-                      <div class="flex items-center gap-0.5 ml-2">
-                        <button @click="logLevelFilter = 'all'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
-                          :class="logLevelFilter === 'all' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'">All</button>
-                        <button @click="logLevelFilter = 'info'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
-                          :class="logLevelFilter === 'info' ? 'bg-blue-500/20 text-blue-400' : 'text-muted-foreground hover:text-foreground'">Info</button>
-                        <button @click="logLevelFilter = 'warn'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
-                          :class="logLevelFilter === 'warn' ? 'bg-amber-500/20 text-amber-400' : 'text-muted-foreground hover:text-foreground'">Warn</button>
-                        <button @click="logLevelFilter = 'error'"
-                          class="px-1.5 py-0.5 text-[10px] rounded transition-colors"
-                          :class="logLevelFilter === 'error' ? 'bg-red-500/20 text-red-400' : 'text-muted-foreground hover:text-foreground'">Error</button>
-                      </div>
-                    </div>
-                    <button @click="gameLogs = []; logLevelFilter = 'all'"
-                      class="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
-                  </div>
-                  <div ref="logScrollRef" class="h-40 overflow-y-auto bg-black/40 p-2 font-mono text-[11px] space-y-px">
-                    <div v-if="filteredGameLogs.length === 0" class="text-muted-foreground text-center py-4 text-xs">
-                      {{ gameLogs.length === 0 ? 'Waiting for logs...' : 'No logs match filter' }}
-                    </div>
-                    <div v-for="(log, idx) in filteredGameLogs" :key="idx" class="flex gap-2 leading-relaxed">
-                      <span class="text-muted-foreground/60 shrink-0">{{ log.time }}</span>
-                      <span class="shrink-0 font-medium w-12" :class="{
-                        'text-blue-400': log.level === 'INFO',
-                        'text-amber-400': log.level === 'WARN' || log.level === 'WARNING',
-                        'text-red-400': log.level === 'ERROR' || log.level === 'FATAL' || log.level === 'SEVERE',
-                        'text-muted-foreground/50': log.level === 'DEBUG' || log.level === 'TRACE'
-                      }">{{ log.level }}</span>
-                      <span class="text-foreground/80 break-all">{{ log.message }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Sync Status -->
-              <div v-if="instanceSyncStatus?.needsSync"
-                class="rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
-                <div class="p-4 flex items-center gap-3">
-                  <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
-                  <div class="flex-1 min-w-0">
-                    <span class="text-sm font-medium">Changes not synced</span>
-                    <span class="text-xs text-muted-foreground ml-2">
-                      {{ instanceSyncStatus.totalDifferences }} difference{{ instanceSyncStatus.totalDifferences > 1 ?
-                        's' : '' }}
-                    </span>
-                  </div>
-                  <button @click="showSyncDetails = !showSyncDetails"
-                    class="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground">
-                    <ChevronDown class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showSyncDetails }" />
-                  </button>
-                  <button @click="handleSyncInstance" :disabled="isSyncingInstance"
-                    class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium flex items-center gap-1.5 transition-colors">
-                    <Loader2 v-if="isSyncingInstance" class="w-3 h-3 animate-spin" />
-                    <RefreshCw v-else class="w-3 h-3" />
-                    {{ isSyncingInstance ? 'Syncing...' : 'Sync' }}
-                  </button>
-                </div>
-
-                <!-- Sync Details -->
-                <div v-if="showSyncDetails" class="px-4 pb-4 space-y-3 border-t border-amber-500/20 pt-3">
-                  <!-- Missing in Instance -->
-                  <div v-if="instanceSyncStatus.missingInInstance.length > 0"
-                    class="p-2.5 rounded-lg bg-primary/5 border border-primary/20">
-                    <div class="flex items-center gap-2 text-primary font-medium text-xs mb-2">
-                      <Plus class="w-3.5 h-3.5" />
-                      {{ instanceSyncStatus.missingInInstance.length }} files to add
-                    </div>
-                    <div class="space-y-1 max-h-28 overflow-y-auto">
-                      <div v-for="item in instanceSyncStatus.missingInInstance" :key="item.filename"
-                        class="text-[11px] text-muted-foreground flex items-center gap-2">
-                        <span class="px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[10px] uppercase">{{
-                          item.type }}</span>
-                        <span class="truncate">{{ item.filename }}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Extra Mods in Instance (will be REMOVED) -->
-                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 0"
-                    class="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
-                    <div class="flex items-center gap-2 text-red-400 font-medium text-xs mb-2">
-                      <Trash2 class="w-3.5 h-3.5" />
-                      {{instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length}} mods to remove
-                    </div>
-                    <p class="text-[11px] text-muted-foreground mb-2">
-                      These mods are not in the modpack and will be removed during sync.
-                    </p>
-                    <div class="space-y-1 max-h-28 overflow-y-auto">
-                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod')"
-                        :key="item.filename" class="text-[11px] text-muted-foreground flex items-center gap-2">
-                        <span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] uppercase">{{
-                          item.type }}</span>
-                        <span class="truncate">{{ item.filename }}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Extra Resourcepacks/Shaders in Instance (will be preserved) -->
-                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 0"
-                    class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
-                    <div class="flex items-center gap-2 text-muted-foreground font-medium text-xs mb-2">
-                      <FileWarning class="w-3.5 h-3.5" />
-                      {{instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length}} additional files
-                    </div>
-                    <p class="text-[11px] text-muted-foreground mb-2">
-                      These files were added manually and will be preserved.
-                    </p>
-                    <div class="space-y-1 max-h-28 overflow-y-auto">
-                      <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod')"
-                        :key="item.filename" class="text-[11px] text-muted-foreground flex items-center gap-2">
-                        <span class="px-1.5 py-0.5 rounded bg-zinc-500/20 text-zinc-400 text-[10px] uppercase">{{
-                          item.type }}</span>
-                        <span class="truncate">{{ item.filename }}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Loader Version Mismatch -->
-                  <div v-if="instanceSyncStatus.loaderVersionMismatch"
-                    class="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <div class="flex items-center gap-2 text-blue-400 font-medium text-xs mb-1">
-                      <RefreshCw class="w-3.5 h-3.5" />
-                      Loader version update
-                    </div>
-                    <div class="text-[11px] text-muted-foreground space-y-0.5">
-                      <p>Instance: <span class="text-foreground font-medium">{{ instance?.loaderVersion || 'unknown'
-                          }}</span></p>
-                      <p>Modpack: <span class="text-blue-400 font-medium">{{
-                        extractLoaderVersion(modpack?.loader_version ||
-                          'unknown') }}</span></p>
-                      <p class="text-blue-400/80 mt-1">New loader will be installed on next launch.</p>
-                    </div>
-                  </div>
-
-                  <!-- Disabled State Mismatch -->
-                  <div v-if="instanceSyncStatus.disabledMismatch.length > 0"
-                    class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
-                    <div class="flex items-center gap-2 text-muted-foreground font-medium text-xs mb-2">
-                      <FileWarning class="w-3.5 h-3.5" />
-                      {{ instanceSyncStatus.disabledMismatch.length }} state mismatches
-                    </div>
-                    <div class="space-y-1 max-h-28 overflow-y-auto">
-                      <div v-for="item in instanceSyncStatus.disabledMismatch" :key="item.filename"
-                        class="text-[11px] text-muted-foreground flex items-center gap-2">
-                        <span class="truncate flex-1">{{ item.filename }}</span>
-                        <span class="text-muted-foreground/70 text-[10px]">{{ item.issue }}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Sync Mode -->
-                  <div class="p-2.5 rounded-lg bg-muted/30 border border-border/30">
-                    <div class="text-xs font-medium mb-2">Sync Mode</div>
-                    <div class="flex gap-1.5 flex-wrap">
-                      <button @click="selectedSyncMode = 'new_only'"
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all" :class="selectedSyncMode === 'new_only'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
-                        Only New Files
-                      </button>
-                      <button @click="selectedSyncMode = 'overwrite'"
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all" :class="selectedSyncMode === 'overwrite'
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
-                        Overwrite All
-                      </button>
-                      <button @click="selectedSyncMode = 'skip'"
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all" :class="selectedSyncMode === 'skip'
-                          ? 'bg-zinc-600 text-white'
-                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'">
-                        Skip Existing
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- In Sync Badge -->
-              <div v-else-if="instanceSyncStatus && !instanceSyncStatus.needsSync"
-                class="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center gap-3">
-                <Check class="w-4 h-4 text-primary" />
-                <div class="flex-1">
-                  <span class="text-sm font-medium text-primary">Instance In Sync</span>
-                  <span v-if="instanceSyncStatus.extraInInstance.length > 0" class="text-xs text-muted-foreground ml-2">
-                    • {{ instanceSyncStatus.extraInInstance.length }} additional files
-                  </span>
-                </div>
-              </div>
-
-              <!-- Quick Access Grid -->
-              <div class="grid grid-cols-4 gap-2">
-                <button @click="handleOpenInstanceFolder('mods')"
-                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
-                  <Layers
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <div class="text-xs font-medium">Mods</div>
-                  <div class="text-[10px] text-muted-foreground">{{ instanceStats?.modCount || 0 }}</div>
-                </button>
-                <button @click="handleOpenInstanceFolder('config')"
-                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
-                  <FileCode
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <div class="text-xs font-medium">Config</div>
-                  <div class="text-[10px] text-muted-foreground">Settings</div>
-                </button>
-                <button @click="handleOpenInstanceFolder('resourcepacks')"
-                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
-                  <Image
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <div class="text-xs font-medium">Packs</div>
-                  <div class="text-[10px] text-muted-foreground">Textures</div>
-                </button>
-                <button @click="handleOpenInstanceFolder('saves')"
-                  class="p-3 rounded-xl bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 text-center transition-all group">
-                  <Save
-                    class="w-4 h-4 mx-auto mb-1.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <div class="text-xs font-medium">Saves</div>
-                  <div class="text-[10px] text-muted-foreground">Worlds</div>
-                </button>
-              </div>
-
-              <!-- Instance Details Card -->
-              <div class="rounded-xl border border-border/50 bg-card/50 p-4">
-                <div class="flex items-center gap-3 mb-4">
-                  <div class="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center">
-                    <Gamepad2 class="w-5 h-5 text-muted-foreground" />
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="font-medium text-sm truncate">{{ instance.name }}</div>
-                    <div class="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                      <span class="flex items-center gap-1">
-                        <Clock class="w-3 h-3" />
-                        {{ formatPlayDate(instance.lastPlayed) }}
-                      </span>
-                      <span class="flex items-center gap-1">
-                        <HardDrive class="w-3 h-3" />
-                        {{ instanceStats?.totalSize || '...' }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Settings -->
-                <div class="space-y-3 pt-4 border-t border-border/50">
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm">Auto-sync before launch</span>
-                    <button @click="toggleAutoSync" class="relative w-9 h-5 rounded-full transition-colors"
-                      :class="syncSettings.autoSyncEnabled ? 'bg-primary' : 'bg-muted'">
-                      <span
-                        class="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
-                        :class="{ 'translate-x-4': syncSettings.autoSyncEnabled }" />
-                    </button>
-                  </div>
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm">Confirm before sync</span>
-                    <button @click="toggleSyncConfirmation" class="relative w-9 h-5 rounded-full transition-colors"
-                      :class="syncSettings.showConfirmation ? 'bg-primary' : 'bg-muted'">
-                      <span
-                        class="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
-                        :class="{ 'translate-x-4': syncSettings.showConfirmation }" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-
         <!-- CONFIGS TAB -->
-        <template v-else-if="activeTab === 'configs'">
+        <template v-if="activeTab === 'configs'">
           <div class="flex-1 overflow-hidden flex flex-col">
             <div v-if="!instance" class="flex flex-col items-center justify-center h-full gap-4 p-6">
               <FileCode class="w-16 h-16 text-muted-foreground/50" />
               <div class="text-center">
                 <h3 class="font-semibold text-lg">No Instance Found</h3>
-                <p class="text-sm text-muted-foreground">Create an instance in the Play tab to manage configs</p>
+                <p class="text-sm text-muted-foreground">Create an instance using the Play button to manage configs</p>
               </div>
-              <button @click="activeTab = 'play'"
-                class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium">
-                Go to Play Tab
+              <button @click="handleCreateInstance" :disabled="isCreatingInstance"
+                class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium flex items-center gap-2">
+                <Loader2 v-if="isCreatingInstance" class="w-4 h-4 animate-spin" />
+                <Play v-else class="w-4 h-4" />
+                {{ isCreatingInstance ? 'Creating...' : 'Create Instance' }}
               </button>
             </div>
 
@@ -3649,46 +3239,9 @@ watch(
               </div>
             </div>
 
-            <!-- Secondary bar: Bulk actions & Update All -->
-            <div v-if="selectedModIds.size > 0 || updatesAvailableCount > 0 || incompatibleModCount > 0"
-              class="flex items-center justify-between mt-2 pt-2 border-t border-border/20">
-              <!-- Bulk Actions -->
-              <div v-if="selectedModIds.size > 0 && !isLinked" class="flex items-center gap-2">
-                <span class="text-xs text-muted-foreground">{{ selectedModIds.size }} selected</span>
-                <button
-                  class="h-6 px-2 text-[10px] rounded bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1"
-                  @click="bulkEnableSelected">
-                  <ToggleRight class="w-3 h-3" />
-                  Enable
-                </button>
-                <button
-                  class="h-6 px-2 text-[10px] rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 flex items-center gap-1"
-                  @click="bulkDisableSelected">
-                  <ToggleLeft class="w-3 h-3" />
-                  Disable
-                </button>
-                <button
-                  class="h-6 px-2 text-[10px] rounded bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 flex items-center gap-1"
-                  @click="bulkLockSelected">
-                  <Lock class="w-3 h-3" />
-                  Lock
-                </button>
-                <button
-                  class="h-6 px-2 text-[10px] rounded bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 flex items-center gap-1"
-                  @click="bulkUnlockSelected">
-                  <LockOpen class="w-3 h-3" />
-                  Unlock
-                </button>
-                <button
-                  class="h-6 px-2 text-[10px] rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 flex items-center gap-1"
-                  @click="removeSelectedMods">
-                  <Trash2 class="w-3 h-3" />
-                  Remove
-                </button>
-              </div>
-              <div v-else class="flex-1"></div>
-
-              <!-- Action Buttons -->
+            <!-- Action Buttons (non-selection actions) -->
+            <div v-if="updatesAvailableCount > 0 || incompatibleModCount > 0"
+              class="flex items-center justify-end mt-2 pt-2 border-t border-border/20">
               <div class="flex items-center gap-2">
                 <button v-if="updatesAvailableCount > 0 && !isLinked"
                   class="h-6 text-[10px] px-2.5 rounded flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
@@ -4672,6 +4225,473 @@ watch(
       </div>
     </div>
 
+    <!-- Global Floating Action Bar -->
+    <Transition enter-active-class="transition duration-300 ease-out"
+      enter-from-class="opacity-0 translate-y-8 scale-95" enter-to-class="opacity-100 translate-y-0 scale-100"
+      leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100 translate-y-0 scale-100"
+      leave-to-class="opacity-0 translate-y-8 scale-95">
+      <div class="floating-bar-container">
+        <!-- Sync Status Panel (above main bar) -->
+        <Transition enter-active-class="transition duration-200 ease-out"
+          enter-from-class="opacity-0 translate-y-2 scale-95" enter-to-class="opacity-100 translate-y-0 scale-100"
+          leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 translate-y-0 scale-100"
+          leave-to-class="opacity-0 translate-y-2 scale-95">
+          <div v-if="showSyncDetails && instanceSyncStatus?.needsSync" class="floating-sync-panel">
+            <div class="sync-panel-header">
+              <div class="flex items-center gap-2">
+                <AlertTriangle class="w-4 h-4 text-amber-400" />
+                <span class="font-medium text-sm">{{ instanceSyncStatus.totalDifferences }} changes pending</span>
+              </div>
+              <button @click="showSyncDetails = false" class="sync-panel-close">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+            <div class="sync-panel-content">
+              <!-- Missing in Instance -->
+              <div v-if="instanceSyncStatus.missingInInstance.length > 0" class="sync-section sync-section-add">
+                <div class="sync-section-title">
+                  <Plus class="w-3.5 h-3.5" />
+                  {{ instanceSyncStatus.missingInInstance.length }} to add
+                </div>
+                <div class="sync-section-items">
+                  <div v-for="item in instanceSyncStatus.missingInInstance.slice(0, 5)" :key="item.filename" class="sync-item">
+                    <span class="sync-item-type">{{ item.type }}</span>
+                    <span class="sync-item-name">{{ item.filename }}</span>
+                  </div>
+                  <div v-if="instanceSyncStatus.missingInInstance.length > 5" class="sync-item-more">
+                    +{{ instanceSyncStatus.missingInInstance.length - 5 }} more
+                  </div>
+                </div>
+              </div>
+
+              <!-- Extra Mods to Remove -->
+              <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 0" class="sync-section sync-section-remove">
+                <div class="sync-section-title">
+                  <Trash2 class="w-3.5 h-3.5" />
+                  {{ instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length }} mods to remove
+                </div>
+                <div class="sync-section-items">
+                  <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').slice(0, 5)" :key="item.filename" class="sync-item">
+                    <span class="sync-item-name">{{ item.filename }}</span>
+                  </div>
+                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 5" class="sync-item-more">
+                    +{{ instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length - 5 }} more
+                  </div>
+                </div>
+              </div>
+
+              <!-- Extra Files (preserved) -->
+              <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 0" class="sync-section sync-section-extra">
+                <div class="sync-section-title">
+                  <Package class="w-3.5 h-3.5" />
+                  {{ instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length }} extra files (preserved)
+                </div>
+                <div class="sync-section-items">
+                  <div v-for="item in instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').slice(0, 5)" :key="item.filename" class="sync-item">
+                    <span class="sync-item-type">{{ item.type }}</span>
+                    <span class="sync-item-name">{{ item.filename }}</span>
+                  </div>
+                  <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 5" class="sync-item-more">
+                    +{{ instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length - 5 }} more
+                  </div>
+                </div>
+              </div>
+
+              <!-- Loader Version Mismatch -->
+              <div v-if="instanceSyncStatus.loaderVersionMismatch" class="sync-section sync-section-loader">
+                <div class="sync-section-title">
+                  <RefreshCw class="w-3.5 h-3.5" />
+                  Loader update available
+                </div>
+                <div class="text-[11px] text-muted-foreground">
+                  {{ instance?.loaderVersion }} → {{ extractLoaderVersion(modpack?.loader_version || '') }}
+                </div>
+              </div>
+
+              <!-- Disabled State Mismatch -->
+              <div v-if="instanceSyncStatus.disabledMismatch?.length > 0" class="sync-section sync-section-disabled">
+                <div class="sync-section-title">
+                  <ToggleLeft class="w-3.5 h-3.5" />
+                  {{ instanceSyncStatus.disabledMismatch.length }} enable/disable states to fix
+                </div>
+                <div class="sync-section-items">
+                  <div v-for="item in instanceSyncStatus.disabledMismatch.slice(0, 5)" :key="item.filename" class="sync-item">
+                    <span class="sync-item-name">{{ item.filename }}</span>
+                    <span class="sync-item-issue">{{ item.issue }}</span>
+                  </div>
+                  <div v-if="instanceSyncStatus.disabledMismatch.length > 5" class="sync-item-more">
+                    +{{ instanceSyncStatus.disabledMismatch.length - 5 }} more
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sync Mode Selection -->
+              <div class="sync-mode-section">
+                <span class="text-[10px] text-muted-foreground uppercase">Sync Mode</span>
+                <div class="sync-mode-buttons">
+                  <button @click="selectedSyncMode = 'new_only'" class="sync-mode-btn" 
+                    :class="{ 'sync-mode-active': selectedSyncMode === 'new_only' }"
+                    title="Only add new files, keep existing ones unchanged">New Only</button>
+                  <button @click="selectedSyncMode = 'overwrite'" class="sync-mode-btn" 
+                    :class="{ 'sync-mode-active-warning': selectedSyncMode === 'overwrite' }"
+                    title="Replace all files with modpack versions">Overwrite</button>
+                  <button @click="selectedSyncMode = 'skip'" class="sync-mode-btn" 
+                    :class="{ 'sync-mode-active-muted': selectedSyncMode === 'skip' }"
+                    title="Don't sync now, I'll do it manually">Skip</button>
+                </div>
+                <p class="text-[10px] text-muted-foreground/70 mt-1.5">
+                  {{ selectedSyncMode === 'new_only' ? 'Adds missing files without touching existing ones' : 
+                     selectedSyncMode === 'overwrite' ? 'Replaces all files to match the modpack exactly' : 
+                     'Skips syncing, launch with current instance state' }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Transition>
+
+        <!-- First Launch Notice (above main bar) -->
+        <div v-if="instance && !instance.lastPlayed && !isGameRunning && !isLaunching" class="floating-notice">
+          <Info class="w-3.5 h-3.5 text-primary" />
+          <span>{{ modpack?.loader }} will be installed on first launch</span>
+        </div>
+
+        <!-- Launch Progress (above main bar) -->
+        <div v-if="isLaunching && loaderProgress" class="floating-progress">
+          <div class="progress-text">
+            <span>{{ loaderProgress.stage }}</span>
+            <span v-if="loaderProgress.total > 0" class="progress-count">{{ loaderProgress.current }}/{{ loaderProgress.total }}</span>
+          </div>
+          <div v-if="loaderProgress.total > 0" class="progress-bar">
+            <div class="progress-fill" :style="{ width: `${(loaderProgress.current / loaderProgress.total) * 100}%` }"></div>
+          </div>
+        </div>
+
+        <div class="floating-bar" :class="{ 'floating-bar-minimized': isFloatingBarMinimized }">
+          <!-- Minimize/Expand Toggle -->
+          <button class="floating-bar-minimize-btn" @click="isFloatingBarMinimized = !isFloatingBarMinimized" 
+            :title="isFloatingBarMinimized ? 'Expand Bar' : 'Minimize Bar'">
+            <ChevronDown v-if="!isFloatingBarMinimized" class="w-4 h-4" />
+            <ChevronUp v-else class="w-4 h-4" />
+          </button>
+          
+          <!-- Main Content (hidden when minimized) -->
+          <template v-if="!isFloatingBarMinimized">
+            <div class="floating-bar-divider floating-bar-divider-mini" />
+            
+            <!-- Primary: Play/Create Instance Button -->
+            <template v-if="!instance">
+              <button class="floating-bar-play floating-bar-create-instance" @click="handleCreateInstance()"
+                title="Create Instance" :disabled="isCreatingInstance">
+              <Loader2 v-if="isCreatingInstance" class="w-5 h-5 animate-spin" />
+              <Plus v-else class="w-5 h-5" />
+            </button>
+            <span class="floating-bar-status-text text-amber-400">{{ isCreatingInstance ? 'Creating...' : 'No instance' }}</span>
+          </template>
+          
+          <template v-else-if="instance.state === 'installing'">
+            <button class="floating-bar-play floating-bar-syncing" disabled title="Syncing...">
+              <Loader2 class="w-5 h-5 animate-spin" />
+            </button>
+            <span class="floating-bar-status-text text-blue-400">Syncing...</span>
+          </template>
+          
+          <template v-else-if="isLaunching">
+            <button class="floating-bar-play floating-bar-launching" disabled title="Launching...">
+              <Loader2 class="w-5 h-5 animate-spin" />
+            </button>
+            <span class="floating-bar-status-text text-primary">Launching...</span>
+          </template>
+          
+          <template v-else-if="isGameRunning">
+            <button class="floating-bar-play" 
+              :class="runningGame?.status === 'running' ? 'floating-bar-play-game' : 'floating-bar-play-launcher'"
+              @click="handleKillGame()" 
+              :title="runningGame?.status === 'running' ? 'Stop Game' : 'Stop Launcher'">
+              <Square v-if="runningGame?.status !== 'running'" class="w-4 h-4 fill-current" />
+              <X v-else class="w-5 h-5" />
+            </button>
+            <span class="floating-bar-status-text" :class="runningGame?.status === 'running' ? 'text-green-400' : 'text-amber-400'">
+              {{ runningGame?.status === 'running' ? 'Playing' : 'Loading...' }}
+            </span>
+          </template>
+          
+          <template v-else>
+            <button class="floating-bar-play" :class="{ 'floating-bar-play-ready': instance.state === 'ready' }"
+              :disabled="instance.state !== 'ready'" @click="handleLaunch()" title="Play">
+              <Play class="w-5 h-5 fill-current" />
+            </button>
+            <span v-if="instance.state === 'ready'" class="floating-bar-status-text text-green-400">Ready</span>
+            <span v-else class="floating-bar-status-text text-muted-foreground">{{ instance.state }}</span>
+          </template>
+
+          <!-- Sync Status Indicator -->
+          <template v-if="instance && instanceSyncStatus?.needsSync">
+            <div class="floating-bar-divider" />
+            <button class="floating-bar-btn floating-bar-btn-sync" 
+              :class="{ 'floating-bar-btn-active': showSyncDetails }"
+              @click="showSyncDetails = !showSyncDetails"
+              :title="`${instanceSyncStatus.totalDifferences} changes pending`">
+              <AlertTriangle class="w-4 h-4" />
+              <span class="floating-bar-sync-count">{{ instanceSyncStatus.totalDifferences }}</span>
+            </button>
+            <button class="floating-bar-btn floating-bar-btn-sync-action" 
+              @click="handleSyncInstance" 
+              :disabled="isSyncingInstance"
+              title="Sync Now">
+              <Loader2 v-if="isSyncingInstance" class="w-4 h-4 animate-spin" />
+              <RefreshCw v-else class="w-4 h-4" />
+            </button>
+          </template>
+          
+          <!-- In Sync Badge -->
+          <template v-else-if="instance && instanceSyncStatus && !instanceSyncStatus.needsSync">
+            <div class="floating-bar-divider" />
+            <span class="floating-bar-sync-ok">
+              <Check class="w-3.5 h-3.5" />
+              In Sync
+            </span>
+          </template>
+
+          <!-- Divider -->
+          <div class="floating-bar-divider" />
+
+          <!-- Instance Actions (when instance exists) -->
+          <template v-if="instance">
+            <button class="floating-bar-btn" @click="openInstanceSettings()" title="Instance Settings">
+              <Sliders class="w-4 h-4" />
+            </button>
+            <button class="floating-bar-btn" @click="handleOpenInstanceFolder()" title="Open Folder">
+              <FolderOpen class="w-4 h-4" />
+            </button>
+            <button class="floating-bar-btn" @click="showLogConsole = !showLogConsole" 
+              :class="{ 'floating-bar-btn-active': showLogConsole }"
+              :title="showLogConsole ? 'Hide Console' : 'Show Console'">
+              <Terminal class="w-4 h-4" />
+            </button>
+            <button class="floating-bar-btn floating-bar-btn-danger" @click="showDeleteInstanceDialog = true" title="Delete Instance">
+              <Trash2 class="w-4 h-4" />
+            </button>
+          </template>
+
+          <!-- Selection Actions (only in mods tab with selection) -->
+          <template v-if="activeTab === 'mods' && selectedModIds.size > 0">
+            <div class="floating-bar-divider" />
+            <span class="floating-bar-count">{{ selectedModIds.size }} selected</span>
+            <div class="floating-bar-divider" />
+            
+            <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-enable" @click="bulkEnableSelected"
+              title="Enable">
+              <ToggleRight class="w-4 h-4" />
+            </button>
+            <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-disable" @click="bulkDisableSelected"
+              title="Disable">
+              <ToggleLeft class="w-4 h-4" />
+            </button>
+            <button v-if="!isLinked" class="floating-bar-btn" @click="bulkLockSelected" title="Lock">
+              <Lock class="w-4 h-4" />
+            </button>
+            <button v-if="!isLinked" class="floating-bar-btn" @click="bulkUnlockSelected" title="Unlock">
+              <LockOpen class="w-4 h-4" />
+            </button>
+
+            <div v-if="!isLinked" class="floating-bar-divider" />
+
+            <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-danger" @click="removeSelectedMods"
+              title="Remove">
+              <Trash2 class="w-4 h-4" />
+            </button>
+
+            <button class="floating-bar-btn floating-bar-btn-clear" @click="clearSelection" title="Clear selection">
+              <X class="w-4 h-4" />
+            </button>
+          </template>
+          </template>
+          
+          <!-- Minimized indicator -->
+          <template v-else>
+            <span class="floating-bar-minimized-label">Actions Bar</span>
+          </template>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Instance Settings Modal -->
+    <Dialog :open="showInstanceSettings" @close="showInstanceSettings = false" title="Instance Settings" size="md">
+      <div class="space-y-6">
+        <!-- Memory Settings -->
+        <div class="space-y-4">
+          <h4 class="text-sm font-semibold flex items-center gap-2">
+            <Sliders class="w-4 h-4 text-primary" />
+            Memory Allocation
+          </h4>
+          <div class="space-y-3">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-muted-foreground">Minimum RAM</label>
+                <span class="text-xs font-medium">{{ (memoryMin / 1024).toFixed(1) }} GB</span>
+              </div>
+              <input type="range" v-model.number="memoryMin" :min="1024" :max="maxAllowedRam" :step="512" class="w-full styled-range" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs text-muted-foreground">Maximum RAM</label>
+                <span class="text-xs font-medium">{{ (memoryMax / 1024).toFixed(1) }} GB</span>
+              </div>
+              <input type="range" v-model.number="memoryMax" :min="2048" :max="maxAllowedRam" :step="512" class="w-full styled-range" />
+            </div>
+            <p class="text-[11px] text-muted-foreground">
+              System has {{ systemMemory ? Math.round(systemMemory.total / 1024) : '...' }} GB RAM. 
+              Recommended max: {{ systemMemory ? Math.round(systemMemory.suggestedMax / 1024) : '...' }} GB.
+            </p>
+          </div>
+        </div>
+
+        <!-- Java Arguments -->
+        <div class="space-y-2">
+          <h4 class="text-sm font-semibold flex items-center gap-2">
+            <Terminal class="w-4 h-4 text-primary" />
+            Custom Java Arguments
+          </h4>
+          <textarea v-model="customJavaArgs" rows="2" placeholder="-XX:+UseG1GC -XX:MaxGCPauseMillis=50"
+            class="w-full px-3 py-2 text-xs bg-muted/50 border border-border/50 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          <p class="text-[11px] text-muted-foreground">
+            Advanced: Add custom JVM flags. Leave empty for defaults.
+          </p>
+        </div>
+
+        <!-- Sync Settings -->
+        <div class="space-y-3">
+          <h4 class="text-sm font-semibold flex items-center gap-2">
+            <RefreshCw class="w-4 h-4 text-primary" />
+            Sync Preferences
+          </h4>
+          <div class="space-y-2">
+            <label class="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30 cursor-pointer">
+              <span class="text-sm">Auto-sync before launch</span>
+              <button @click="toggleAutoSync" class="relative w-9 h-5 rounded-full transition-colors"
+                :class="syncSettings.autoSyncEnabled ? 'bg-primary' : 'bg-muted'">
+                <span class="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="{ 'translate-x-4': syncSettings.autoSyncEnabled }" />
+              </button>
+            </label>
+            <label class="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30 cursor-pointer">
+              <span class="text-sm">Confirm before sync</span>
+              <button @click="toggleSyncConfirmation" class="relative w-9 h-5 rounded-full transition-colors"
+                :class="syncSettings.showConfirmation ? 'bg-primary' : 'bg-muted'">
+                <span class="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="{ 'translate-x-4': syncSettings.showConfirmation }" />
+              </button>
+            </label>
+          </div>
+        </div>
+
+        <!-- Instance Info -->
+        <div class="p-3 rounded-lg bg-muted/30 border border-border/30 space-y-2">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-muted-foreground">Last Played</span>
+            <span>{{ formatPlayDate(instance?.lastPlayed) }}</span>
+          </div>
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-muted-foreground">Size</span>
+            <span>{{ instanceStats?.totalSize || '...' }}</span>
+          </div>
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-muted-foreground">Mods</span>
+            <span>{{ instanceStats?.modCount || 0 }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <div class="flex items-center justify-between w-full gap-3">
+          <Button variant="destructive" size="sm" @click="showInstanceSettings = false; showDeleteInstanceDialog = true">
+            <Trash2 class="w-4 h-4 mr-2" />
+            Delete Instance
+          </Button>
+          <div class="flex gap-3">
+            <Button variant="secondary" @click="showInstanceSettings = false">Cancel</Button>
+            <Button @click="saveInstanceSettings(); showInstanceSettings = false">Save Settings</Button>
+          </div>
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- Delete Instance Confirmation -->
+    <ConfirmDialog :open="showDeleteInstanceDialog" title="Delete Instance"
+      :message="`Are you sure you want to delete this instance? This will remove all installed mods, configs, and saves from the instance folder. Your library mods will not be affected.`"
+      confirm-text="Delete Instance" cancel-text="Keep Instance" variant="danger" icon="trash"
+      @close="showDeleteInstanceDialog = false" @confirm="handleDeleteInstance" />
+
+    <!-- Log Console Slide-up Panel -->
+    <Transition enter-active-class="transition duration-300 ease-out"
+      enter-from-class="translate-y-full opacity-0" enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-200 ease-in" leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-full opacity-0">
+      <div v-if="showLogConsole && instance" class="log-console-panel" :style="{ height: logConsoleHeight + 'px' }">
+        <!-- Resize Handle -->
+        <div class="log-console-resize-handle" @mousedown="startLogConsoleResize">
+          <div class="log-console-resize-bar"></div>
+        </div>
+        <div class="log-console-header">
+          <div class="flex items-center gap-2">
+            <Terminal class="w-4 h-4 text-primary" />
+            <span class="font-medium text-sm">Game Console</span>
+            <span v-if="isGameRunning" class="log-console-live-badge">
+              <span class="log-console-live-dot"></span>
+              LIVE
+            </span>
+          </div>
+          
+          <!-- Log Level Filters -->
+          <div class="flex items-center gap-2">
+            <button @click="setLogLevelFilter('all')" 
+              class="log-filter-btn" :class="{ 'log-filter-active': logLevelFilter === 'all' }">
+              All
+              <span class="log-filter-count">{{ totalLogCount }}</span>
+            </button>
+            <button @click="setLogLevelFilter('info')" 
+              class="log-filter-btn log-filter-info" :class="{ 'log-filter-active': logLevelFilter === 'info' }">
+              Info
+              <span v-if="logLevelCounts.info > 0" class="log-filter-count">{{ logLevelCounts.info }}</span>
+            </button>
+            <button @click="setLogLevelFilter('warn')" 
+              class="log-filter-btn log-filter-warn" :class="{ 'log-filter-active': logLevelFilter === 'warn' }">
+              Warn
+              <span v-if="logLevelCounts.warn > 0" class="log-filter-count">{{ logLevelCounts.warn }}</span>
+            </button>
+            <button @click="setLogLevelFilter('error')" 
+              class="log-filter-btn log-filter-error" :class="{ 'log-filter-active': logLevelFilter === 'error' }">
+              Error
+              <span v-if="logLevelCounts.error > 0" class="log-filter-count">{{ logLevelCounts.error }}</span>
+            </button>
+          </div>
+          
+          <div class="flex items-center gap-1">
+            <button @click="clearLogs" class="log-console-btn" title="Clear">
+              <Trash2 class="w-3.5 h-3.5" />
+            </button>
+            <button @click="showLogConsole = false" class="log-console-btn" title="Close">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div ref="logScrollRef" class="log-console-content">
+          <div v-if="filteredGameLogs.length === 0" class="log-console-empty">
+            <Terminal class="w-8 h-8 text-muted-foreground/20" />
+            <p v-if="gameLogs.length === 0">No logs yet. Start the game to see output.</p>
+            <p v-else>No logs match the current filter.</p>
+          </div>
+          <div v-else class="log-console-entries">
+            <div v-for="(log, index) in filteredGameLogs" :key="index" 
+              class="log-console-entry" :class="getLogLevelClass(log.level)">
+              <span class="log-time">{{ log.time }}</span>
+              <span class="log-message">{{ log.message }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Remote Update Review Dialog -->
     <UpdateReviewDialog v-if="updateResult && modpack" :open="showReviewDialog" :modpack-name="modpack.name"
       :changes="updateResult.changes" :new-version="updateResult.remoteManifest?.modpack.version"
@@ -4975,84 +4995,6 @@ watch(
       </template>
     </Dialog>
 
-    <!-- Instance Settings Dialog -->
-    <Dialog :open="showInstanceSettings" @close="showInstanceSettings = false">
-      <template #header>
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Sliders class="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h3 class="font-semibold">Instance Settings</h3>
-            <p class="text-sm text-muted-foreground">Configure memory and JVM arguments</p>
-          </div>
-        </div>
-      </template>
-
-      <div class="space-y-6 py-4">
-        <!-- Memory Settings -->
-        <div class="space-y-4">
-          <h4 class="font-medium flex items-center gap-2">
-            <MemoryStick class="w-4 h-4 text-primary" />
-            Memory Allocation
-            <span v-if="systemMemory" class="text-xs text-muted-foreground font-normal ml-auto">
-              System: {{ (systemMemory.total / 1024).toFixed(1) }} GB total
-            </span>
-          </h4>
-
-          <!-- Min RAM Slider -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-sm text-muted-foreground">Minimum RAM</label>
-              <span class="text-sm font-mono text-primary">{{ (memoryMin / 1024).toFixed(1) }} GB</span>
-            </div>
-            <input type="range" v-model.number="memoryMin" min="512" :max="Math.min(memoryMax - 512, maxAllowedRam)"
-              step="256" class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
-            <div class="flex justify-between text-[10px] text-muted-foreground">
-              <span>512 MB</span>
-              <span>{{ ((Math.min(memoryMax - 512, maxAllowedRam)) / 1024).toFixed(1) }} GB</span>
-            </div>
-          </div>
-
-          <!-- Max RAM Slider -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-sm text-muted-foreground">Maximum RAM</label>
-              <span class="text-sm font-mono text-primary">{{ (memoryMax / 1024).toFixed(1) }} GB</span>
-            </div>
-            <input type="range" v-model.number="memoryMax" :min="Math.max(1024, memoryMin + 512)" :max="maxAllowedRam"
-              step="256" class="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
-            <div class="flex justify-between text-[10px] text-muted-foreground">
-              <span>{{ (Math.max(1024, memoryMin + 512) / 1024).toFixed(1) }} GB</span>
-              <span>{{ (maxAllowedRam / 1024).toFixed(1) }} GB</span>
-            </div>
-          </div>
-
-          <div class="text-xs text-muted-foreground bg-muted/30 rounded-lg p-2">
-            💡 Recommended: 4-6 GB for light modpacks, 8-12 GB for heavy modpacks
-          </div>
-        </div>
-
-        <!-- JVM Arguments -->
-        <div class="space-y-2">
-          <h4 class="font-medium flex items-center gap-2">
-            <Cpu class="w-4 h-4 text-primary" />
-            Custom JVM Arguments
-          </h4>
-          <textarea v-model="customJavaArgs" rows="3" placeholder="-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
-            class="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border focus:border-primary outline-none font-mono text-sm resize-none"></textarea>
-          <div class="text-xs text-muted-foreground">
-            Advanced: Add custom Java arguments (leave empty for defaults)
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <Button variant="secondary" @click="showInstanceSettings = false">Cancel</Button>
-        <Button @click="saveInstanceSettings">Save Settings</Button>
-      </template>
-    </Dialog>
-
     <!-- Delete Instance Confirmation Dialog -->
     <ConfirmDialog :open="showDeleteInstanceDialog" title="Delete this instance?"
       :message="`This removes the game instance and all its data (mods, configs, saves). Your pack won't be affected — you can set it up again anytime.`"
@@ -5274,5 +5216,824 @@ watch(
 .play-button-active {
   @apply bg-primary/15 text-primary border-2 border-primary/40;
   box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FLOATING ACTION BAR
+   ═══════════════════════════════════════════════════════════════════ */
+.floating-bar-container {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  pointer-events: none;
+}
+
+.floating-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 16px;
+  background: hsl(var(--card) / 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid hsl(var(--border) / 0.5);
+  box-shadow:
+    0 25px 50px -12px hsl(var(--background) / 0.5),
+    0 0 0 1px hsl(var(--border) / 0.3);
+  pointer-events: auto;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-bar-minimized {
+  padding: 6px 12px;
+  gap: 8px;
+}
+
+/* Minimize button */
+.floating-bar-minimize-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.floating-bar-minimize-btn:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.floating-bar-minimized .floating-bar-minimize-btn {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+}
+
+.floating-bar-minimized .floating-bar-minimize-btn:hover {
+  background: hsl(var(--primary) / 0.25);
+}
+
+.floating-bar-divider-mini {
+  height: 20px;
+}
+
+.floating-bar-minimized-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.floating-bar-play {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.3);
+}
+
+.floating-bar-play:hover:not(:disabled) {
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px hsl(var(--primary) / 0.4);
+}
+
+.floating-bar-play:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Game is fully running - green with accent glow */
+.floating-bar-play-game {
+  background: hsl(142 76% 36%);
+  border: 2px solid hsl(142 76% 50%);
+  color: white;
+  box-shadow: 0 0 12px hsl(142 76% 36% / 0.4);
+  animation: game-running-glow 2s ease-in-out infinite;
+}
+
+.floating-bar-play-game:hover {
+  background: hsl(0 84% 50%);
+  border-color: hsl(0 84% 60%);
+  box-shadow: 0 0 12px hsl(0 84% 50% / 0.4);
+  animation: none;
+}
+
+/* Launcher loading - amber/orange pulsing */
+.floating-bar-play-launcher {
+  background: hsl(38 92% 50%);
+  border: 2px solid hsl(38 92% 60%);
+  color: white;
+  box-shadow: 0 0 12px hsl(38 92% 50% / 0.4);
+  animation: launcher-pulse 1.5s ease-in-out infinite;
+}
+
+.floating-bar-play-launcher:hover {
+  background: hsl(0 84% 50%);
+  border-color: hsl(0 84% 60%);
+  box-shadow: 0 0 12px hsl(0 84% 50% / 0.4);
+  animation: none;
+}
+
+@keyframes game-running-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px hsl(142 76% 36% / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 16px hsl(142 76% 36% / 0.6);
+  }
+}
+
+@keyframes launcher-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px hsl(38 92% 50% / 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 16px hsl(38 92% 50% / 0.6);
+    transform: scale(1.02);
+  }
+}
+
+.floating-bar-divider {
+  width: 1px;
+  height: 24px;
+  background: hsl(var(--border) / 0.5);
+  margin: 0 4px;
+}
+
+.floating-bar-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.floating-bar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.floating-bar-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.floating-bar-btn-enable:hover {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+}
+
+.floating-bar-btn-disable:hover {
+  background: rgba(251, 191, 36, 0.2);
+  color: rgb(251, 191, 36);
+}
+
+.floating-bar-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: rgb(248, 113, 113);
+}
+
+.floating-bar-btn-clear {
+  margin-left: 2px;
+}
+
+.floating-bar-btn-clear:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.floating-bar-btn-active {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+}
+
+.floating-bar-status-text {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.floating-bar-create-instance {
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.8) 100%);
+  color: white;
+}
+
+.floating-bar-create-instance:hover:not(:disabled) {
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.9) 0%, hsl(var(--primary) / 0.7) 100%);
+}
+
+.floating-bar-syncing {
+  background: hsl(217 91% 60% / 0.2);
+  border: 1px solid hsl(217 91% 60% / 0.4);
+  color: hsl(217 91% 60%);
+  box-shadow: none;
+}
+
+.floating-bar-launching {
+  background: hsl(var(--primary) / 0.2);
+  border: 1px solid hsl(var(--primary) / 0.4);
+  color: hsl(var(--primary));
+  box-shadow: none;
+}
+
+.floating-bar-play-ready {
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.85) 100%);
+  color: hsl(var(--primary-foreground));
+  box-shadow: 0 2px 12px hsl(var(--primary) / 0.4);
+}
+
+.floating-bar-play-ready:hover:not(:disabled) {
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.9) 0%, hsl(var(--primary) / 0.75) 100%);
+  box-shadow: 0 4px 20px hsl(var(--primary) / 0.5);
+  transform: scale(1.08);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LOG CONSOLE PANEL
+   ═══════════════════════════════════════════════════════════════════ */
+.log-console-panel {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, calc(100% - 40px));
+  min-height: 150px;
+  max-height: calc(100vh - 150px);
+  background: hsl(var(--card) / 0.98);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid hsl(var(--border) / 0.5);
+  box-shadow: 0 25px 50px -12px hsl(var(--background) / 0.5);
+  z-index: 55;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-console-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.log-console-resize-handle:hover .log-console-resize-bar {
+  background: hsl(var(--primary) / 0.5);
+  width: 60px;
+}
+
+.log-console-resize-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: hsl(var(--muted-foreground) / 0.3);
+  transition: all 0.15s ease;
+}
+
+.log-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  padding-top: 16px;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.log-console-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: hsl(142 76% 36% / 0.2);
+  border: 1px solid hsl(142 76% 36% / 0.4);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: hsl(142 76% 50%);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.log-console-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(142 76% 50%);
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.log-console-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.log-console-btn:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+/* Log Level Filter Buttons */
+.log-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.3);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.log-filter-btn:hover {
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border) / 0.5);
+}
+
+.log-filter-btn.log-filter-active {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+.log-filter-info.log-filter-active {
+  background: hsl(217 91% 60% / 0.15);
+  color: hsl(217 91% 60%);
+  border-color: hsl(217 91% 60% / 0.3);
+}
+
+.log-filter-warn.log-filter-active {
+  background: hsl(38 92% 50% / 0.15);
+  color: hsl(38 92% 50%);
+  border-color: hsl(38 92% 50% / 0.3);
+}
+
+.log-filter-error.log-filter-active {
+  background: hsl(0 84% 60% / 0.15);
+  color: hsl(0 84% 60%);
+  border-color: hsl(0 84% 60% / 0.3);
+}
+
+.log-filter-count {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: hsl(var(--muted) / 0.6);
+  color: inherit;
+  font-weight: 700;
+  min-width: 18px;
+  text-align: center;
+}
+
+.log-filter-active .log-filter-count {
+  background: currentColor;
+  color: hsl(var(--card));
+}
+
+.log-console-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.log-console-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: hsl(var(--muted-foreground) / 0.5);
+  gap: 8px;
+}
+
+.log-console-empty p {
+  font-size: 12px;
+}
+
+.log-console-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.log-console-entry {
+  color: rgba(255, 255, 255, 0.6);
+  word-break: break-word;
+  padding: 2px 0;
+}
+
+.log-console-entry.text-blue-400 {
+  color: rgb(96, 165, 250);
+}
+
+.log-console-entry.text-amber-400 {
+  color: rgb(251, 191, 36);
+}
+
+.log-console-entry.text-red-400 {
+  color: rgb(248, 113, 113);
+}
+
+.log-console-entry.text-muted-foreground {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.log-time {
+  color: rgba(255, 255, 255, 0.4);
+  margin-right: 8px;
+  font-size: 10px;
+}
+
+.log-message {
+  color: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SYNC PANEL (above floating bar)
+   ═══════════════════════════════════════════════════════════════════ */
+.floating-sync-panel {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(500px, calc(100vw - 40px));
+  margin-bottom: 12px;
+  background: hsl(var(--card) / 0.98);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid hsl(var(--border) / 0.5);
+  box-shadow: 0 25px 50px -12px hsl(var(--background) / 0.5);
+  overflow: hidden;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.sync-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.sync-panel-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sync-panel-close:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.sync-panel-content {
+  padding: 12px 16px 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sync-section {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: hsl(var(--muted) / 0.3);
+}
+
+.sync-section-add {
+  border-left: 3px solid hsl(142 76% 45%);
+}
+
+.sync-section-remove {
+  border-left: 3px solid hsl(0 84% 60%);
+}
+
+.sync-section-loader {
+  border-left: 3px solid hsl(217 91% 60%);
+}
+
+.sync-section-disabled {
+  border-left: 3px solid hsl(280 60% 55%);
+}
+
+.sync-section-extra {
+  border-left: 3px solid hsl(200 70% 50%);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sync-item-issue {
+  font-size: 9px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.sync-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 8px;
+}
+
+.sync-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sync-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.sync-item-type {
+  padding: 1px 4px;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 4px;
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: hsl(var(--muted-foreground));
+}
+
+.sync-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-item-more {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground) / 0.7);
+  padding-top: 4px;
+}
+
+.sync-mode-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid hsl(var(--border) / 0.5);
+}
+
+.sync-mode-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.sync-mode-btn {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: hsl(var(--muted) / 0.3);
+  color: hsl(var(--muted-foreground));
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.sync-mode-btn:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.sync-mode-active {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+.sync-mode-active-warning {
+  background: hsl(45 93% 47% / 0.2);
+  color: hsl(45 93% 60%);
+  border-color: hsl(45 93% 47% / 0.4);
+}
+
+.sync-mode-active-muted {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FLOATING BAR - SYNC INDICATOR
+   ═══════════════════════════════════════════════════════════════════ */
+.floating-bar-btn-sync {
+  color: rgb(251, 191, 36);
+  position: relative;
+}
+
+.floating-bar-btn-sync:hover {
+  background: rgba(251, 191, 36, 0.2);
+}
+
+.floating-bar-sync-count {
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.floating-bar-btn-sync-action {
+  color: hsl(var(--primary));
+}
+
+.floating-bar-btn-sync-action:hover {
+  background: hsl(var(--primary) / 0.2);
+}
+
+.floating-bar-sync-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: hsl(142 76% 50%);
+  padding: 0 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FLOATING NOTICE & PROGRESS
+   ═══════════════════════════════════════════════════════════════════ */
+.floating-notice {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: hsl(var(--card) / 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+  border: 1px solid hsl(var(--primary) / 0.3);
+  font-size: 11px;
+  color: hsl(var(--foreground) / 0.8);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.floating-progress {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+  padding: 10px 14px;
+  background: hsl(var(--card) / 0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+  border: 1px solid hsl(var(--primary) / 0.3);
+  pointer-events: auto;
+}
+
+.progress-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: hsl(var(--foreground) / 0.8);
+}
+
+.progress-count {
+  font-weight: 600;
+  color: hsl(var(--primary));
+}
+
+.progress-bar {
+  height: 4px;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: hsl(var(--primary));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   STYLED RANGE SLIDER
+   ═══════════════════════════════════════════════════════════════════ */
+.styled-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.styled-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.styled-range::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+.styled-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.styled-range::-moz-range-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
 }
 </style>

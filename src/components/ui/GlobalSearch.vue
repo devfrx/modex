@@ -335,8 +335,8 @@ async function handleContextAction(action: string) {
                     if (pack) {
                         toast.info("Starting...", `Launching ${pack.name}`);
                         close();
-                        // Navigate to modpack with play tab
-                        router.push(`/modpacks?id=${actualId}&tab=play&autolaunch=true`);
+                        // Navigate to modpack (floating bar handles play)
+                        router.push(`/modpacks/${actualId}?autolaunch=true`);
                     }
                 } catch (err) {
                     toast.error("Couldn't launch");
@@ -488,7 +488,7 @@ async function handleSelect(result: (typeof searchResults.value)[0]) {
     if (result.type === "instance" && result.data) {
         // Navigate to the linked modpack if exists
         if (result.data.modpackId) {
-            router.push(`/modpacks?id=${result.data.modpackId}&tab=play`);
+            router.push(`/modpacks/${result.data.modpackId}`);
         } else {
             toast.info("No linked pack", "This instance isn't connected to a modpack.");
         }

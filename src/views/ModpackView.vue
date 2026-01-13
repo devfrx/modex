@@ -691,9 +691,9 @@ function openEditor(id: string) {
   router.push(`/modpacks/${id}`);
 }
 
-// Open editor with play tab
+// Open editor (play tab removed - floating bar handles play)
 function openPlayTab(id: string) {
-  router.push(`/modpacks/${id}?tab=play`);
+  router.push(`/modpacks/${id}`);
 }
 
 // Share

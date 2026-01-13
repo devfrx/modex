@@ -11,8 +11,8 @@
     --card-foreground: 210 20% 98%;
     --popover: 220 13% 6%;
     --popover-foreground: 210 20% 98%;
-    --primary: 153 60% 53%;
-    --primary-foreground: 220 13% 5%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 220 13% 10%;
     --secondary: 220 13% 12%;
     --secondary-foreground: 210 20% 98%;
     --muted: 220 13% 14%;
@@ -23,7 +23,7 @@
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 15%;
     --input: 220 13% 12%;
-    --ring: 153 60% 53%;
+    --ring: 0 0% 100%;
     --success: 153 60% 53%;
     --warning: 38 92% 50%;
     --info: 199 89% 48%;
@@ -35,10 +35,10 @@
     --shadow: 0 4px 12px -2px var(--shadow-color), 0 2px 6px -2px var(--shadow-color);
     --glass-bg: rgba(255, 255, 255, 0.02);
     --glass-blur: 16px;
-    --primary-hue: 153;
-    --primary-sat: 60%;
-    --glow-primary: 0 0 20px hsla(153, 60%, 53%, 0.3);
-    --glow-strong: 0 0 40px hsla(153, 60%, 53%, 0.4);
+    --primary-hue: 0;
+    --primary-sat: 0%;
+    --glow-primary: 0 0 20px hsla(0, 0%, 100%, 0.3);
+    --glow-strong: 0 0 40px hsla(0, 0%, 100%, 0.4);
     
     /* ========== DESIGN TOKENS ========== */
     
@@ -97,6 +97,11 @@
     --info: 199 89% 48%;
     --glow-primary: 0 0 20px hsla(153, 60%, 42%, 0.2);
     --glow-strong: 0 0 40px hsla(153, 60%, 42%, 0.3);
+  }
+
+  /* White accent color overrides - ensure dark text on white buttons */
+  [data-accent="white"] {
+    --primary-foreground: 220 13% 10%;
   }
 
   [data-theme="forest"] {
@@ -647,5 +652,18 @@ button:active:not(:disabled),
 .slide-leave-to {
   opacity: 0;
   transform: translateX(100%);
+}
+
+/* White accent - ensure text visibility on primary buttons */
+[data-accent="white"] .bg-primary {
+  color: hsl(220 13% 10%) !important;
+}
+
+[data-accent="white"] .text-primary {
+  color: hsl(0 0% 85%) !important;
+}
+
+[data-accent="white"] .text-primary-foreground {
+  color: hsl(220 13% 10%) !important;
 }
 

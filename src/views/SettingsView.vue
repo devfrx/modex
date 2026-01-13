@@ -122,6 +122,7 @@ const currentTabName = computed(() => {
 
 // Accent color options
 const accentColors = [
+  { name: "white", value: "0 0% 100%", class: "bg-white border border-gray-300" },
   { name: "purple", value: "263.4 70% 50.4%", class: "bg-purple-500" },
   { name: "blue", value: "217.2 91.2% 59.8%", class: "bg-blue-500" },
   { name: "green", value: "142.1 76.2% 36.3%", class: "bg-green-500" },
@@ -296,6 +297,16 @@ async function applyAccentColor(color: (typeof accentColors)[0]) {
   accentColor.value = color.name;
   localStorage.setItem("modex:accent", color.name);
   document.documentElement.style.setProperty("--primary", color.value);
+  
+  // Set primary-foreground based on accent brightness
+  // White/light colors need dark text, colored accents need light text
+  if (color.name === "white") {
+    document.documentElement.style.setProperty("--primary-foreground", "220 13% 10%");
+    document.documentElement.setAttribute("data-accent", "white");
+  } else {
+    document.documentElement.style.setProperty("--primary-foreground", "220 13% 5%");
+    document.documentElement.removeAttribute("data-accent");
+  }
 }
 
 async function clearAllData() {

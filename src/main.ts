@@ -16,6 +16,7 @@ if (savedTheme === "system") {
 
 // Initialize accent color
 const accentColors: Record<string, string> = {
+  white: "0 0% 100%",
   purple: "263.4 70% 50.4%",
   blue: "217.2 91.2% 59.8%",
   green: "142.1 76.2% 36.3%",
@@ -23,9 +24,17 @@ const accentColors: Record<string, string> = {
   orange: "24.6 95% 53.1%",
   pink: "330.4 81.2% 60.4%",
 };
-const savedAccent = localStorage.getItem("modex:accent") || "purple";
+const savedAccent = localStorage.getItem("modex:accent") || "white";
 if (accentColors[savedAccent]) {
   document.documentElement.style.setProperty("--primary", accentColors[savedAccent]);
+  // Set primary-foreground based on accent brightness
+  if (savedAccent === "white") {
+    document.documentElement.style.setProperty("--primary-foreground", "220 13% 10%");
+    document.documentElement.setAttribute("data-accent", "white");
+  } else {
+    document.documentElement.style.setProperty("--primary-foreground", "220 13% 5%");
+    document.documentElement.removeAttribute("data-accent");
+  }
 }
 
 createApp(App)

@@ -92,6 +92,7 @@
         }
         // Apply accent color to loading screen
         var accentColors = {
+          white: { hex: "#ffffff", glow: "rgba(255, 255, 255, 0.5)", dim: "rgba(255, 255, 255, 0.2)" },
           purple: { hex: "#8b5cf6", glow: "rgba(139, 92, 246, 0.5)", dim: "rgba(139, 92, 246, 0.2)" },
           blue: { hex: "#3b82f6", glow: "rgba(59, 130, 246, 0.5)", dim: "rgba(59, 130, 246, 0.2)" },
           green: { hex: "#22c55e", glow: "rgba(34, 197, 94, 0.5)", dim: "rgba(34, 197, 94, 0.2)" },
@@ -99,11 +100,14 @@
           orange: { hex: "#f97316", glow: "rgba(249, 115, 22, 0.5)", dim: "rgba(249, 115, 22, 0.2)" },
           pink: { hex: "#ec4899", glow: "rgba(236, 72, 153, 0.5)", dim: "rgba(236, 72, 153, 0.2)" }
         };
-        var savedAccent = localStorage.getItem("modex:accent") || "purple";
-        var accent = accentColors[savedAccent] || accentColors.purple;
+        var savedAccent = localStorage.getItem("modex:accent") || "white";
+        var accent = accentColors[savedAccent] || accentColors.white;
         document.documentElement.style.setProperty("--loading-accent", accent.hex);
         document.documentElement.style.setProperty("--loading-accent-glow", accent.glow);
         document.documentElement.style.setProperty("--loading-accent-dim", accent.dim);
+        if (savedAccent === "white") {
+          document.documentElement.setAttribute("data-accent", "white");
+        }
       })();
     </script>
   </head>

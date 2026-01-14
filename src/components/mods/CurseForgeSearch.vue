@@ -5,6 +5,8 @@ import {
   Download,
   Plus,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   ExternalLink,
   Star,
@@ -22,10 +24,12 @@ import {
   Layers,
   FileText,
   ArrowLeft,
+  Eye,
 } from "lucide-vue-next";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
+import ModDetailsModal from "./ModDetailsModal.vue";
 import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
 import type { Modpack, CFMod, CFFile, CFFileIndex, CFCategory } from "@/types/electron";
@@ -86,16 +90,55 @@ function viewChangelog(mod: CFMod, file: CFFile) {
   changelogOpen.value = true;
 }
 
+// Mod Details Modal State
+const modDetailsOpen = ref(false);
+const selectedModForDetails = ref<Mod | null>(null);
+
+function viewModDetails(cfMod: CFMod, event?: MouseEvent) {
+  // Stop propagation to prevent toggling the expand
+  if (event) {
+    event.stopPropagation();
+  }
+
+  // Convert CFMod to Mod type for the modal
+  const mod: Mod = {
+    id: `cf-${cfMod.id}-0`, // Placeholder file ID
+    name: cfMod.name,
+    slug: cfMod.slug,
+    version: cfMod.latestFiles?.[0]?.displayName || "Unknown",
+    game_version: selectedVersion.value || cfMod.latestFiles?.[0]?.gameVersions?.[0] || "Unknown",
+    loader: selectedLoader.value || "",
+    content_type: selectedContentType.value === "mods" ? "mod" : selectedContentType.value === "resourcepacks" ? "resourcepack" : "shader",
+    description: cfMod.summary,
+    author: cfMod.authors?.map(a => a.name).join(", ") || "Unknown",
+    thumbnail_url: cfMod.logo?.thumbnailUrl,
+    logo_url: cfMod.logo?.url,
+    download_count: cfMod.downloadCount,
+    created_at: new Date().toISOString(),
+    filename: cfMod.latestFiles?.[0]?.fileName || "",
+    source: "curseforge",
+    cf_project_id: cfMod.id,
+  };
+
+  selectedModForDetails.value = mod;
+  modDetailsOpen.value = true;
+}
+
+function closeModDetails() {
+  modDetailsOpen.value = false;
+  selectedModForDetails.value = null;
+}
+
 // Accordion & Files State
 const expandedModId = ref<number | null>(null);
 const modFiles = ref<CFFile[]>([]);
 const isLoadingFiles = ref(false);
 
-// Mobile responsive state
-const showMobileFilters = ref(false);
+// Filter panel collapsed state (starts collapsed)
+const isFilterSidebarCollapsed = ref(true);
 
 // New Filters
-const showReleaseConfig = ref(false); // To toggle advanced filter visibility if needed, or just show in sidebar
+const showReleaseConfig = ref(false); // To toggle advanced filter visibility if needed
 const filterRelease = ref(true);
 const filterBeta = ref(false);
 const filterAlpha = ref(false);
@@ -1050,7 +1093,8 @@ function getReleaseColor(type: number) {
 
 <template>
   <component :is="fullScreen ? 'div' : Dialog" v-if="!fullScreen || open" :open="open" @close="emit('close')"
-    maxWidth="6xl" contentClass="p-0 border-none bg-transparent shadow-none">
+    maxWidth="6xl" contentClass="p-0 border-none bg-transparent shadow-none"
+    :class="fullScreen ? 'relative h-full' : ''">
     <div :class="[
       'flex flex-col overflow-hidden bg-background relative',
       fullScreen ? 'h-screen w-full' : 'h-[90vh] md:h-[80vh] rounded-xl border border-border shadow-2xl'
@@ -1066,257 +1110,238 @@ function getReleaseColor(type: number) {
         <h1 class="text-lg font-semibold">Browse CurseForge</h1>
       </div>
 
-      <div class="flex flex-1 md:flex-row flex-col overflow-hidden">
-        <!-- Mobile Filter Toggle -->
-        <button @click="showMobileFilters = !showMobileFilters"
-          class="md:hidden flex items-center justify-between w-full p-3 border-b border-border bg-muted/30">
-          <span class="flex items-center gap-2 text-sm font-medium">
-            <Filter class="w-4 h-4 text-primary" />
-            Filters
-            <span v-if="selectedVersion || selectedLoader"
-              class="px-1.5 py-0.5 text-xs bg-primary/20 text-primary rounded-full">
-              {{ [selectedVersion, selectedLoader].filter(Boolean).length }}
-            </span>
-          </span>
-          <ChevronDown class="w-4 h-4 transition-transform" :class="showMobileFilters ? 'rotate-180' : ''" />
-        </button>
-
-        <!-- Sidebar Filters - Hidden on mobile unless toggled -->
-        <div
-          class="flex-shrink-0 border-r border-border bg-muted/10 flex flex-col overflow-hidden transition-all duration-200"
-          :class="[
-            showMobileFilters ? 'max-h-[50vh] md:max-h-none' : 'max-h-0 md:max-h-none',
-            'md:w-64 w-full'
-          ]">
-          <div class="hidden md:block p-4 border-b border-border">
-            <h3 class="font-semibold flex items-center gap-2">
+      <div class="flex flex-1 flex-col overflow-hidden">
+        <!-- Collapsible Filter Bar -->
+        <div class="border-b border-border bg-muted/10">
+          <!-- Filter Toggle Header -->
+          <button @click="isFilterSidebarCollapsed = !isFilterSidebarCollapsed"
+            class="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
+            <span class="flex items-center gap-2 text-sm font-medium">
               <Filter class="w-4 h-4 text-primary" />
               Filters
-            </h3>
-          </div>
+              <!-- Active filters badges -->
+              <span v-if="selectedContentType !== 'mods'"
+                class="px-2 py-0.5 text-xs rounded-full bg-blue-500/15 text-blue-400">
+                {{ selectedContentType === 'resourcepacks' ? 'Packs' : 'Shaders' }}
+              </span>
+              <span v-if="selectedVersion" class="px-2 py-0.5 text-xs rounded-full bg-primary/15 text-primary">
+                {{ selectedVersion }}
+              </span>
+              <span v-if="selectedLoader && selectedContentType === 'mods'" class="px-2 py-0.5 text-xs rounded-full"
+                :class="selectedLoader.includes('forge') ? 'bg-orange-500/15 text-orange-400' : 'bg-blue-500/15 text-blue-400'">
+                {{ selectedLoader }}
+              </span>
+              <span v-if="selectedCategory" class="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">
+                {{categories.find(c => c.value === selectedCategory)?.label || selectedCategory}}
+              </span>
+            </span>
+            <ChevronDown class="w-4 h-4 transition-transform duration-200"
+              :class="!isFilterSidebarCollapsed ? 'rotate-180' : ''" />
+          </button>
 
-          <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 md:space-y-6">
-            <!-- Content Type -->
-            <div class="space-y-2">
-              <label
-                class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                Content Type
-                <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
-              </label>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
-                  :class="selectedContentType === 'mods'
-                    ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                    : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
-                    " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'mods')">
-                  <Layers class="w-3 h-3" />
-                  Mods
-                </button>
-                <button
-                  class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
-                  :class="selectedContentType === 'resourcepacks'
-                    ? 'bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30'
-                    : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
-                    " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'resourcepacks')">
-                  <Image class="w-3 h-3" />
-                  Packs
-                </button>
-                <button
-                  class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
-                  :class="selectedContentType === 'shaders'
-                    ? 'bg-pink-500/15 text-pink-500 ring-1 ring-pink-500/30'
-                    : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground'
-                    " :disabled="lockFilters" @click="!lockFilters && (selectedContentType = 'shaders')">
-                  <Sparkles class="w-3 h-3" />
-                  Shaders
-                </button>
-              </div>
-            </div>
-
-            <!-- Game Version -->
-            <div class="space-y-2">
-              <label
-                class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                Game Version
-                <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
-              </label>
-              <div class="relative">
-                <select v-model="selectedVersion" :disabled="lockFilters"
-                  class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none disabled:opacity-60 disabled:cursor-not-allowed"
-                  @change="searchQuery ? searchMods() : loadPopular()">
-                  <option value="" class="bg-popover text-popover-foreground">
-                    All Versions
-                  </option>
-                  <option v-for="v in gameVersions.filter(Boolean)" :key="v" :value="v"
-                    class="bg-popover text-popover-foreground">
-                    {{ v }}
-                  </option>
-                </select>
-                <ChevronDown
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-              </div>
-            </div>
-
-            <!-- Mod Loader (only for mods) -->
-            <div v-if="selectedContentType === 'mods'" class="space-y-2">
-              <label
-                class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                Mod Loader
-                <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
-              </label>
-              <div class="relative">
-                <select v-model="selectedLoader" :disabled="lockFilters"
-                  class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none disabled:opacity-60 disabled:cursor-not-allowed"
-                  @change="searchQuery ? searchMods() : loadPopular()">
-                  <option v-for="l in modLoaders" :key="l.value" :value="l.value"
-                    class="bg-popover text-popover-foreground">
-                    {{ l.label }}
-                  </option>
-                </select>
-                <ChevronDown
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-              </div>
-            </div>
-
-            <!-- Category -->
-            <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</label>
-              <div class="relative">
-                <select v-model="selectedCategory"
-                  class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
-                  @change="searchQuery ? searchMods() : loadPopular()">
-                  <option v-for="c in categories" :key="c.value" :value="c.value"
-                    class="bg-popover text-popover-foreground">
-                    {{ c.label }}
-                  </option>
-                </select>
-                <ChevronDown
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-              </div>
-            </div>
-
-            <!-- Sort -->
-            <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort By</label>
-              <div class="relative">
-                <select v-model="selectedSortField"
-                  class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none"
-                  @change="searchQuery ? searchMods() : loadPopular()">
-                  <option v-for="s in sortFields" :key="s.value" :value="s.value"
-                    class="bg-popover text-popover-foreground">
-                    {{ s.label }}
-                  </option>
-                </select>
-                <ChevronDown
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-              </div>
-            </div>
-
-            <!-- Release Types -->
-            <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Release Channels</label>
-              <div class="flex flex-wrap gap-1.5">
-                <label
-                  class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
-                  :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-muted/30 hover:bg-muted/50'">
-                  <input type="checkbox" v-model="filterRelease" class="sr-only" />
-                  <div class="w-3 h-3 rounded-full bg-primary ring-2 ring-primary/30" />
-                  <span class="text-xs font-medium"
-                    :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
-                </label>
-                <label
-                  class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
-                  :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'bg-muted/30 hover:bg-muted/50'">
-                  <input type="checkbox" v-model="filterBeta" class="sr-only" />
-                  <div class="w-3 h-3 rounded-full bg-blue-500 ring-2 ring-blue-500/30" />
-                  <span class="text-xs font-medium"
-                    :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
-                </label>
-                <label
-                  class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
-                  :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'bg-muted/30 hover:bg-muted/50'">
-                  <input type="checkbox" v-model="filterAlpha" class="sr-only" />
-                  <div class="w-3 h-3 rounded-full bg-orange-500 ring-2 ring-orange-500/30" />
-                  <span class="text-xs font-medium"
-                    :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Divider -->
-            <div class="border-t border-border my-2"></div>
-
-            <!-- Add to Modpack -->
-            <div class="space-y-2">
-              <label
-                class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Package class="w-3 h-3" />
-                Add to Modpack
-                <span v-if="lockedModpackId" class="text-[10px] text-amber-500">(locked)</span>
-              </label>
-              <!-- Locked modpack mode -->
-              <template v-if="lockedModpackId">
-                <div class="relative">
-                  <select v-model="targetModpackId" disabled
-                    class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm appearance-none opacity-60 cursor-not-allowed">
-                    <option v-for="pack in allModpacks.filter(p => p.id === lockedModpackId)" :key="pack.id"
-                      :value="pack.id" class="bg-popover text-popover-foreground">
-                      {{ pack.name }} ({{ pack.minecraft_version }} {{ pack.loader }})
-                    </option>
-                  </select>
-                  <ChevronDown
-                    class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
+          <!-- Expanded Filters Panel -->
+          <div class="overflow-hidden transition-all duration-300"
+            :class="isFilterSidebarCollapsed ? 'max-h-0' : 'max-h-[500px]'">
+            <div class="p-4 pt-0 space-y-4">
+              <!-- Row 1: Content Type + Basic Filters -->
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                <!-- Content Type -->
+                <div class="space-y-1.5">
+                  <label
+                    class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    Type
+                    <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
+                  </label>
+                  <div class="flex gap-1">
+                    <button
+                      class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
+                      :class="selectedContentType === 'mods'
+                        ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
+                        : 'bg-muted/50 hover:bg-muted text-muted-foreground'" :disabled="lockFilters"
+                      @click="!lockFilters && (selectedContentType = 'mods')">
+                      <Layers class="w-3 h-3" />
+                      Mods
+                    </button>
+                    <button
+                      class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
+                      :class="selectedContentType === 'resourcepacks'
+                        ? 'bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30'
+                        : 'bg-muted/50 hover:bg-muted text-muted-foreground'" :disabled="lockFilters"
+                      @click="!lockFilters && (selectedContentType = 'resourcepacks')">
+                      <Image class="w-3 h-3" />
+                      Packs
+                    </button>
+                    <button
+                      class="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1"
+                      :class="selectedContentType === 'shaders'
+                        ? 'bg-pink-500/15 text-pink-500 ring-1 ring-pink-500/30'
+                        : 'bg-muted/50 hover:bg-muted text-muted-foreground'" :disabled="lockFilters"
+                      @click="!lockFilters && (selectedContentType = 'shaders')">
+                      <Sparkles class="w-3 h-3" />
+                      Shaders
+                    </button>
+                  </div>
                 </div>
-                <p class="text-xs text-primary">
-                  Adding directly to this modpack
-                </p>
-              </template>
-              <!-- Only show select when both filters are set -->
-              <template v-else-if="selectedVersion && selectedLoader">
-                <div class="relative">
-                  <select v-model="targetModpackId"
-                    class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
-                    <option :value="null" class="bg-popover text-popover-foreground">
-                      Library Only
-                    </option>
-                    <option v-for="pack in compatibleModpacks" :key="pack.id" :value="pack.id"
-                      class="bg-popover text-popover-foreground">
-                      {{ pack.name }} ({{ pack.minecraft_version }}
-                      {{ pack.loader }})
-                    </option>
-                  </select>
-                  <ChevronDown
-                    class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-                </div>
-                <p v-if="compatibleModpacks.length === 0" class="text-xs text-muted-foreground">
-                  No modpacks match the current filters
-                </p>
-              </template>
-              <p v-else class="text-xs text-amber-500 p-2 bg-amber-500/10 rounded-md">
-                Set both version & loader filters to enable adding to modpacks
-              </p>
-            </div>
 
-            <!-- Target Folder -->
-            <div class="space-y-2">
-              <label
-                class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <FolderOpen class="w-3 h-3" />
-                Target Folder
-              </label>
-              <div class="relative">
-                <select v-model="targetFolderId"
-                  class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
-                  <option :value="null" class="bg-popover text-popover-foreground">
-                    Library Root
-                  </option>
-                  <option v-for="f in foldersList" :key="f.id" :value="f.id" class="bg-popover text-popover-foreground">
-                    {{ f.name }}
-                  </option>
-                </select>
-                <ChevronDown
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
+                <!-- Game Version -->
+                <div class="space-y-1.5">
+                  <label
+                    class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    Version
+                    <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
+                  </label>
+                  <div class="relative">
+                    <select v-model="selectedVersion" :disabled="lockFilters"
+                      class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none disabled:opacity-60 disabled:cursor-not-allowed"
+                      @change="searchQuery ? searchMods() : loadPopular()">
+                      <option value="" class="bg-popover text-popover-foreground">All</option>
+                      <option v-for="v in gameVersions.filter(Boolean)" :key="v" :value="v"
+                        class="bg-popover text-popover-foreground">{{ v }}</option>
+                    </select>
+                    <ChevronDown
+                      class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                  </div>
+                </div>
+
+                <!-- Mod Loader (only for mods) -->
+                <div v-if="selectedContentType === 'mods'" class="space-y-1.5">
+                  <label
+                    class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    Loader
+                    <span v-if="lockFilters" class="text-[10px] text-amber-500">(locked)</span>
+                  </label>
+                  <div class="relative">
+                    <select v-model="selectedLoader" :disabled="lockFilters"
+                      class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none disabled:opacity-60 disabled:cursor-not-allowed"
+                      @change="searchQuery ? searchMods() : loadPopular()">
+                      <option v-for="l in modLoaders" :key="l.value" :value="l.value"
+                        class="bg-popover text-popover-foreground">{{ l.label }}</option>
+                    </select>
+                    <ChevronDown
+                      class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                  </div>
+                </div>
+
+                <!-- Category -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</label>
+                  <div class="relative">
+                    <select v-model="selectedCategory"
+                      class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none"
+                      @change="searchQuery ? searchMods() : loadPopular()">
+                      <option v-for="c in categories" :key="c.value" :value="c.value"
+                        class="bg-popover text-popover-foreground">{{ c.label }}</option>
+                    </select>
+                    <ChevronDown
+                      class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                  </div>
+                </div>
+
+                <!-- Sort -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort By</label>
+                  <div class="relative">
+                    <select v-model="selectedSortField"
+                      class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none"
+                      @change="searchQuery ? searchMods() : loadPopular()">
+                      <option v-for="s in sortFields" :key="s.value" :value="s.value"
+                        class="bg-popover text-popover-foreground">{{ s.label }}</option>
+                    </select>
+                    <ChevronDown
+                      class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 2: Release Channels + Target Options -->
+              <div class="flex flex-wrap items-end gap-4">
+                <!-- Release Channels -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Channels</label>
+                  <div class="flex gap-1.5">
+                    <label
+                      class="flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none"
+                      :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-muted/50 hover:bg-muted'">
+                      <input type="checkbox" v-model="filterRelease" class="sr-only" />
+                      <div class="w-2.5 h-2.5 rounded-full bg-primary" />
+                      <span class="text-xs font-medium"
+                        :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
+                    </label>
+                    <label
+                      class="flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none"
+                      :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'bg-muted/50 hover:bg-muted'">
+                      <input type="checkbox" v-model="filterBeta" class="sr-only" />
+                      <div class="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                      <span class="text-xs font-medium"
+                        :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
+                    </label>
+                    <label
+                      class="flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-all select-none"
+                      :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'bg-muted/50 hover:bg-muted'">
+                      <input type="checkbox" v-model="filterAlpha" class="sr-only" />
+                      <div class="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                      <span class="text-xs font-medium"
+                        :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Separator -->
+                <div class="hidden sm:block h-8 w-px bg-border"></div>
+
+                <!-- Add to Modpack -->
+                <div class="space-y-1.5 min-w-[180px]">
+                  <label
+                    class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Package class="w-3 h-3" />
+                    Add to Modpack
+                    <span v-if="lockedModpackId" class="text-[10px] text-amber-500">(locked)</span>
+                  </label>
+                  <template v-if="lockedModpackId">
+                    <div class="relative">
+                      <select v-model="targetModpackId" disabled
+                        class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs appearance-none opacity-60 cursor-not-allowed">
+                        <option v-for="pack in allModpacks.filter(p => p.id === lockedModpackId)" :key="pack.id"
+                          :value="pack.id">
+                          {{ pack.name }}
+                        </option>
+                      </select>
+                      <ChevronDown
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                    </div>
+                  </template>
+                  <template v-else-if="selectedVersion && selectedLoader">
+                    <div class="relative">
+                      <select v-model="targetModpackId"
+                        class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none">
+                        <option :value="null">Library Only</option>
+                        <option v-for="pack in compatibleModpacks" :key="pack.id" :value="pack.id">{{ pack.name }}
+                        </option>
+                      </select>
+                      <ChevronDown
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                    </div>
+                  </template>
+                  <div v-else class="text-xs text-amber-500/80 italic">Set version & loader</div>
+                </div>
+
+                <!-- Target Folder -->
+                <div class="space-y-1.5 min-w-[140px]">
+                  <label
+                    class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <FolderOpen class="w-3 h-3" />
+                    Folder
+                  </label>
+                  <div class="relative">
+                    <select v-model="targetFolderId"
+                      class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none">
+                      <option :value="null">Library Root</option>
+                      <option v-for="f in foldersList" :key="f.id" :value="f.id">{{ f.name }}</option>
+                    </select>
+                    <ChevronDown
+                      class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1441,7 +1466,7 @@ function getReleaseColor(type: number) {
                     <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
                         formatDownloads(mod.downloadCount)
-                          }}</span>
+                      }}</span>
                         downloads</span>
                       <span class="w-1 h-1 rounded-full bg-border"></span>
                       <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>
@@ -1452,6 +1477,9 @@ function getReleaseColor(type: number) {
 
                   <!-- Actions -->
                   <div class="flex items-center gap-2" v-if="!isSelectionMode">
+                    <Button variant="ghost" size="icon" @click.stop="viewModDetails(mod, $event)" title="View Details">
+                      <Eye class="w-4 h-4 text-muted-foreground" />
+                    </Button>
                     <Button variant="ghost" size="icon" @click.stop="openModPage(mod)" title="View on CurseForge">
                       <ExternalLink class="w-4 h-4 text-muted-foreground" />
                     </Button>
@@ -1601,6 +1629,14 @@ function getReleaseColor(type: number) {
     <ChangelogDialog v-if="selectedChangelogMod" :open="changelogOpen" :mod-id="selectedChangelogMod.id"
       :file-id="selectedChangelogMod.fileId" :mod-name="selectedChangelogMod.name"
       :version="selectedChangelogMod.version" :slug="selectedChangelogMod.slug" @close="changelogOpen = false" />
+
+    <!-- Mod Details Modal -->
+    <ModDetailsModal v-if="selectedModForDetails" :open="modDetailsOpen" :mod="selectedModForDetails"
+      :full-screen="fullScreen" :context="{
+        type: 'browse',
+        gameVersion: selectedVersion || undefined,
+        loader: selectedLoader || undefined
+      }" :readonly="true" :hide-files-tab="true" @close="closeModDetails" />
   </component>
 </template>
 

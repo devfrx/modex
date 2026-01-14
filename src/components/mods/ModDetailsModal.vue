@@ -36,7 +36,7 @@ const props = defineProps<{
   mod: Mod | null;
   // Context for filtering files/versions
   context?: {
-    type: "library" | "modpack";
+    type: "library" | "modpack" | "browse";
     modpackId?: string;
     gameVersion?: string;
     loader?: string;
@@ -49,6 +49,8 @@ const props = defineProps<{
   isLocked?: boolean;
   // Whether the modpack is readonly/linked (prevents any modifications)
   readonly?: boolean;
+  // Hide files tab (for browse context where you can't download)
+  hideFilesTab?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -64,6 +66,12 @@ const isLoadingDescription = ref(false);
 const isLoadingGallery = ref(false);
 const isLoadingFiles = ref(false);
 const isChangingVersion = ref(false);
+
+// Header collapse state
+const isHeaderCollapsed = ref(false);
+const scrollContainerRef = ref<HTMLElement | null>(null);
+const lastScrollTop = ref(0);
+const scrollThreshold = 50; // Tolerance for scroll direction detection
 
 // Data
 const description = ref<string>("");
@@ -87,6 +95,21 @@ const filterLoader = ref<string>("all");
 const isModContext = computed(() => props.mod?.content_type === "mod" || !props.mod?.content_type);
 const canChangeVersion = computed(() => props.context?.type === "modpack" && !props.isLocked && !props.readonly);
 const isReadonly = computed(() => props.isLocked || props.readonly);
+
+// Available tabs based on hideFilesTab prop
+const availableTabs = computed(() => {
+  return props.hideFilesTab
+    ? ['description', 'gallery'] as const
+    : ['description', 'gallery', 'files'] as const;
+});
+
+// Helper to extract displayable version tags from a file's gameVersions
+const getFileVersionTags = (gameVersions: string[] | undefined): string[] => {
+  const knownLoaders = ['Forge', 'Fabric', 'NeoForge', 'Quilt'];
+  return (gameVersions || [])
+    .filter(v => /^1\.\d+/.test(v) || knownLoaders.includes(v))
+    .slice(0, 5);
+};
 
 // Available game versions from loaded files
 const availableGameVersions = computed(() => {
@@ -365,11 +388,18 @@ watch(() => props.open, (isOpen) => {
     selectedFileId.value = null;
     showLightbox.value = false;
 
-    // Load data
+    // Load data immediately when modal opens
     loadModData();
-    loadDescription();
+    // Force load description immediately (not waiting for tab change)
+    setTimeout(() => {
+      loadDescription();
+    }, 0);
+    // Also load files in background to populate available versions/loaders in header
+    if (!props.hideFilesTab) {
+      loadFiles();
+    }
   }
-});
+}, { immediate: true });
 
 // Handle keyboard navigation for gallery
 function handleKeydown(e: KeyboardEvent) {
@@ -384,6 +414,24 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+// Handle scroll for header collapse/expand
+function handleScroll(e: Event) {
+  const target = e.target as HTMLElement;
+  const currentScrollTop = target.scrollTop;
+  const scrollDiff = currentScrollTop - lastScrollTop.value;
+
+  // Only change state if scrolled past threshold for tolerance
+  if (scrollDiff > scrollThreshold && currentScrollTop > 100) {
+    // Scrolling down - collapse header
+    isHeaderCollapsed.value = true;
+  } else if (scrollDiff < -scrollThreshold || currentScrollTop <= 50) {
+    // Scrolling up or near top - expand header
+    isHeaderCollapsed.value = false;
+  }
+
+  lastScrollTop.value = currentScrollTop;
+}
+
 onMounted(() => {
   window.addEventListener("keydown", handleKeydown);
 });
@@ -391,432 +439,515 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeydown);
 });
+
+// Reset header state when modal opens
+watch(() => props.open, (isOpen) => {
+  if (isOpen) {
+    isHeaderCollapsed.value = false;
+    lastScrollTop.value = 0;
+  }
+}, { immediate: true });
 </script>
 
 <template>
-  <!-- Fullscreen mode -->
-  <div v-if="fullScreen && open" class="h-screen w-full flex flex-col bg-background overflow-hidden">
-    <!-- CurseForge-style Hero Header -->
-    <div class="relative shrink-0 border-b border-border overflow-hidden">
-      <!-- Background gradient with mod accent color -->
-      <div class="absolute inset-0 bg-gradient-to-br from-primary/15 via-background to-background" />
-      <div
-        class="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
+  <!-- Fullscreen mode - positioned within main content area, not covering sidebar -->
+  <Transition enter-active-class="transition-all duration-200 ease-out"
+    leave-active-class="transition-all duration-150 ease-in" enter-from-class="opacity-0" leave-to-class="opacity-0">
+    <div v-if="fullScreen && open" class="absolute inset-0 z-50 flex flex-col bg-background overflow-hidden">
+      <!-- CurseForge-style Hero Header -->
+      <div class="relative shrink-0 border-b border-border overflow-hidden transition-all duration-300 ease-out"
+        :class="isHeaderCollapsed ? 'max-h-[60px]' : 'max-h-[300px]'">
+        <!-- Background gradient with mod accent color -->
+        <div class="absolute inset-0 bg-gradient-to-br from-primary/15 via-background to-background" />
+        <div
+          class="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent" />
 
-      <!-- Back button floating -->
-      <Button variant="ghost" size="sm" @click="emit('close')"
-        class="absolute top-4 left-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
-        <ArrowLeft class="w-4 h-4" />
-        Back
-      </Button>
+        <!-- Back button floating -->
+        <Button variant="ghost" size="sm" @click="emit('close')"
+          class="absolute top-4 left-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
+          <ArrowLeft class="w-4 h-4" />
+          Back
+        </Button>
 
-      <!-- External link button floating -->
-      <Button variant="ghost" size="sm" @click="openCurseForge" title="Open on CurseForge"
-        class="absolute top-4 right-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
-        <ExternalLink class="w-4 h-4" />
-        <span class="hidden sm:inline">CurseForge</span>
-      </Button>
+        <!-- External link button floating -->
+        <Button variant="ghost" size="sm" @click="openCurseForge" title="Open on CurseForge"
+          class="absolute top-4 right-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
+          <ExternalLink class="w-4 h-4" />
+          <span class="hidden sm:inline">CurseForge</span>
+        </Button>
 
-      <!-- Main header content -->
-      <div class="relative px-6 pt-16 pb-6">
-        <div class="flex items-start gap-6">
-          <!-- Mod Logo - Large with glow effect -->
-          <div class="relative group shrink-0">
-            <div
-              class="absolute -inset-2 bg-gradient-to-br from-primary/40 to-primary/10 rounded-3xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-500" />
-            <div
-              class="relative w-28 h-28 rounded-2xl overflow-hidden bg-background/80 backdrop-blur-sm border-2 border-border/50 shadow-2xl ring-1 ring-white/10">
-              <img v-if="mod?.logo_url || mod?.thumbnail_url" :src="mod.logo_url || mod.thumbnail_url" :alt="mod?.name"
-                class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
-              <div v-else
-                class="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
-                <component :is="contentTypeConfig.icon" class="w-14 h-14 text-muted-foreground/40" />
-              </div>
+        <!-- Collapsed Header (shown when scrolling) -->
+        <div v-if="isHeaderCollapsed" class="relative px-6 py-3 flex items-center gap-4">
+          <!-- Logo small -->
+          <div
+            class="w-10 h-10 rounded-lg overflow-hidden bg-background/80 border border-border/50 shadow shrink-0 ml-12">
+            <img v-if="mod?.logo_url || mod?.thumbnail_url" :src="mod.logo_url || mod.thumbnail_url" :alt="mod?.name"
+              class="w-full h-full object-cover" />
+            <div v-else class="w-full h-full flex items-center justify-center bg-muted">
+              <component :is="contentTypeConfig.icon" class="w-5 h-5 text-muted-foreground/40" />
             </div>
           </div>
 
-          <!-- Mod Info -->
-          <div class="flex-1 min-w-0 py-2">
-            <!-- Type badge & Name -->
-            <div class="flex items-center gap-3 flex-wrap mb-2">
-              <span class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 ring-1 shrink-0"
-                :class="contentTypeConfig.class">
-                <component :is="contentTypeConfig.icon" class="w-3.5 h-3.5" />
-                {{ contentTypeConfig.label }}
-              </span>
-              <h1 class="text-2xl sm:text-3xl font-bold text-foreground tracking-tight truncate">{{ mod?.name }}</h1>
+          <!-- Title -->
+          <h1 class="text-lg font-bold text-foreground truncate">{{ mod?.name }}</h1>
+
+          <!-- Quick stats -->
+          <div class="flex items-center gap-2 ml-auto mr-16">
+            <span class="px-2 py-0.5 rounded text-xs font-medium" :class="contentTypeConfig.class">
+              {{ contentTypeConfig.label }}
+            </span>
+            <span v-if="mod?.game_version" class="px-2 py-0.5 rounded text-xs bg-muted text-muted-foreground">
+              {{ mod.game_version }}
+            </span>
+            <span v-if="mod?.loader && isModContext" class="px-2 py-0.5 rounded text-xs"
+              :class="mod.loader?.toLowerCase().includes('forge') ? 'bg-orange-500/15 text-orange-400' : 'bg-blue-500/15 text-blue-400'">
+              {{ mod.loader }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Main header content (full, hidden when collapsed) -->
+        <div v-else class="relative px-6 pt-16 pb-6">
+          <div class="flex items-start gap-6">
+            <!-- Mod Logo - Large with glow effect -->
+            <div class="relative group shrink-0">
+              <div
+                class="absolute -inset-2 bg-gradient-to-br from-primary/40 to-primary/10 rounded-3xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-500" />
+              <div
+                class="relative w-28 h-28 rounded-2xl overflow-hidden bg-background/80 backdrop-blur-sm border-2 border-border/50 shadow-2xl ring-1 ring-white/10">
+                <img v-if="mod?.logo_url || mod?.thumbnail_url" :src="mod.logo_url || mod.thumbnail_url"
+                  :alt="mod?.name"
+                  class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
+                <div v-else
+                  class="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
+                  <component :is="contentTypeConfig.icon" class="w-14 h-14 text-muted-foreground/40" />
+                </div>
+              </div>
             </div>
 
-            <!-- Author -->
-            <div class="flex items-center gap-2 text-muted-foreground mb-4">
-              <User class="w-4 h-4 text-primary/70" />
-              <span class="font-medium">by {{ mod?.author || "Unknown" }}</span>
-            </div>
-
-            <!-- Stats Row -->
-            <div class="flex items-center gap-3 flex-wrap">
-              <div v-if="mod?.download_count"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
-                <Download class="w-4 h-4 text-green-400" />
-                <span class="text-sm font-semibold text-foreground">{{ formatDownloads(mod.download_count) }}</span>
-                <span class="text-xs text-muted-foreground">downloads</span>
-              </div>
-
-              <div v-if="mod?.game_version"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
-                <Tag class="w-4 h-4 text-blue-400" />
-                <span class="text-sm font-semibold text-foreground">{{ mod.game_version }}</span>
-              </div>
-
-              <div v-if="mod?.loader && isModContext"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm" :class="mod.loader?.toLowerCase().includes('forge')
-                  ? 'bg-orange-500/10 border-orange-500/30'
-                  : 'bg-blue-500/10 border-blue-500/30'">
-                <span class="text-sm font-semibold"
-                  :class="mod.loader?.toLowerCase().includes('forge') ? 'text-orange-400' : 'text-blue-400'">
-                  {{ mod.loader }}
+            <!-- Mod Info -->
+            <div class="flex-1 min-w-0 py-2">
+              <!-- Type badge & Name -->
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 ring-1 shrink-0"
+                  :class="contentTypeConfig.class">
+                  <component :is="contentTypeConfig.icon" class="w-3.5 h-3.5" />
+                  {{ contentTypeConfig.label }}
                 </span>
+                <h1 class="text-2xl sm:text-3xl font-bold text-foreground tracking-tight truncate">{{ mod?.name }}</h1>
               </div>
 
-              <div v-if="mod?.date_released"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
-                <Calendar class="w-4 h-4 text-muted-foreground" />
-                <span class="text-sm text-muted-foreground">{{ formatDate(mod.date_released) }}</span>
+              <!-- Author -->
+              <div class="flex items-center gap-2 text-muted-foreground mb-4">
+                <User class="w-4 h-4 text-primary/70" />
+                <span class="font-medium">by {{ mod?.author || "Unknown" }}</span>
               </div>
+
+              <!-- Stats Row -->
+              <div class="flex items-center gap-3 flex-wrap">
+                <div v-if="mod?.download_count"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
+                  <Download class="w-4 h-4 text-green-400" />
+                  <span class="text-sm font-semibold text-foreground">{{ formatDownloads(mod.download_count) }}</span>
+                  <span class="text-xs text-muted-foreground">downloads</span>
+                </div>
+
+                <div v-if="mod?.game_version"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
+                  <Tag class="w-4 h-4 text-blue-400" />
+                  <span class="text-sm font-semibold text-foreground">{{ mod.game_version }}</span>
+                </div>
+
+                <div v-if="mod?.loader && isModContext"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm" :class="mod.loader?.toLowerCase().includes('forge')
+                    ? 'bg-orange-500/10 border-orange-500/30'
+                    : 'bg-blue-500/10 border-blue-500/30'">
+                  <span class="text-sm font-semibold"
+                    :class="mod.loader?.toLowerCase().includes('forge') ? 'text-orange-400' : 'text-blue-400'">
+                    {{ mod.loader }}
+                  </span>
+                </div>
+
+                <div v-if="mod?.date_released"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
+                  <Calendar class="w-4 h-4 text-muted-foreground" />
+                  <span class="text-sm text-muted-foreground">{{ formatDate(mod.date_released) }}</span>
+                </div>
+              </div>
+
+              <!-- Available Versions & Loaders (shown for mods/resourcepacks/shaders) -->
+              <div v-if="availableGameVersions.length > 0 || availableLoaders.length > 0"
+                class="mt-4 flex flex-wrap items-center gap-2">
+                <!-- Available Game Versions -->
+                <div v-if="availableGameVersions.length > 0" class="flex items-center gap-1.5">
+                  <span class="text-xs text-muted-foreground">Versions:</span>
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="v in availableGameVersions.slice(0, 6)" :key="v"
+                      class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                      {{ v }}
+                    </span>
+                    <span v-if="availableGameVersions.length > 6"
+                      class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/40 text-muted-foreground">
+                      +{{ availableGameVersions.length - 6 }} more
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Separator -->
+                <div v-if="availableGameVersions.length > 0 && availableLoaders.length > 0"
+                  class="w-px h-4 bg-border/50" />
+
+                <!-- Available Loaders (only for mods) -->
+                <div v-if="isModContext && availableLoaders.length > 0" class="flex items-center gap-1.5">
+                  <span class="text-xs text-muted-foreground">Loaders:</span>
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="l in availableLoaders.slice(0, 4)" :key="l"
+                      class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="l === 'Forge' ? 'bg-orange-500/15 text-orange-400' :
+                        l === 'NeoForge' ? 'bg-orange-500/15 text-orange-400' :
+                          'bg-blue-500/15 text-blue-400'">
+                      {{ l }}
+                    </span>
+                    <span v-if="availableLoaders.length > 4"
+                      class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/40 text-muted-foreground">
+                      +{{ availableLoaders.length - 4 }} more
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Description preview -->
+              <p v-if="mod?.description"
+                class="text-sm text-muted-foreground/80 mt-4 line-clamp-2 leading-relaxed max-w-3xl">
+                {{ mod.description }}
+              </p>
             </div>
-
-            <!-- Description preview -->
-            <p v-if="mod?.description"
-              class="text-sm text-muted-foreground/80 mt-4 line-clamp-2 leading-relaxed max-w-3xl">
-              {{ mod.description }}
-            </p>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="flex-1 overflow-auto">
-      <!-- Tabs with modern styling -->
-      <div class="flex gap-1 bg-muted/30 p-1.5 mx-6 mt-4 rounded-xl">
-        <button v-for="tab in ['description', 'gallery', 'files'] as const" :key="tab"
-          class="flex-1 px-4 py-2.5 text-sm font-medium transition-all duration-200 rounded-lg" :class="activeTab === tab
-            ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="activeTab = tab">
-          <span class="flex items-center justify-center gap-2">
-            <FileText v-if="tab === 'description'" class="w-4 h-4" />
-            <ImageIcon v-else-if="tab === 'gallery'" class="w-4 h-4" />
-            <Package v-else class="w-4 h-4" />
-            <span class="capitalize">{{ tab }}</span>
-            <span v-if="tab === 'gallery' && screenshots.length > 0" class="text-xs px-1.5 py-0.5 rounded-full"
-              :class="activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-muted-foreground/20 text-muted-foreground'">
-              {{ screenshots.length }}
-            </span>
-            <span v-if="tab === 'files' && context?.type === 'modpack'"
-              class="text-xs bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium">
-              Filtered
-            </span>
+      <div ref="scrollContainerRef" class="flex-1 overflow-auto" @scroll="handleScroll">
+        <!-- Tabs navigation bar -->
+        <div class="sticky top-0 z-20 px-6 pt-4 pb-2 bg-background">
+          <div class="flex p-1 bg-muted/50 rounded-xl border border-border/40 shadow-sm">
+            <button v-for="tab in availableTabs" :key="tab"
+              class="flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 rounded-lg flex items-center justify-center gap-2"
+              :class="activeTab === tab
+                ? 'bg-background text-foreground shadow-md border border-border/50'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'" @click="activeTab = tab">
+              <FileText v-if="tab === 'description'" class="w-4 h-4" />
+              <ImageIcon v-else-if="tab === 'gallery'" class="w-4 h-4" />
+              <Package v-else class="w-4 h-4" />
+              <span class="capitalize">{{ tab }}</span>
+              <span v-if="tab === 'gallery' && screenshots.length > 0" class="text-xs px-1.5 py-0.5 rounded-full"
+                :class="activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'">
+                {{ screenshots.length }}
+              </span>
+              <span v-if="tab === 'files' && files.length > 0" class="text-xs px-1.5 py-0.5 rounded-full"
+                :class="activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'">
+                {{ filteredFiles.length }}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto px-6 py-5">
+          <!-- Description Tab -->
+          <div v-if="activeTab === 'description'" class="min-h-[300px]">
+            <div v-if="isLoadingDescription" class="flex flex-col items-center justify-center py-16">
+              <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
+              <span class="text-sm text-muted-foreground mt-3">Loading description...</span>
+            </div>
+            <div v-else
+              class="prose prose-sm prose-invert max-w-none mod-description bg-muted/20 rounded-xl p-6 border border-border/30"
+              v-html="description" />
+          </div>
+
+          <!-- Gallery Tab -->
+          <div v-else-if="activeTab === 'gallery'" class="min-h-[300px]">
+            <div v-if="screenshots.length === 0"
+              class="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                <ImageIcon class="w-10 h-10 opacity-40" />
+              </div>
+              <p class="font-medium">No screenshots available</p>
+              <p class="text-sm mt-1 opacity-70">This mod hasn't uploaded any images yet</p>
+            </div>
+
+            <div v-else class="space-y-5">
+              <!-- Main Image with enhanced styling -->
+              <div
+                class="relative aspect-video rounded-2xl overflow-hidden bg-gradient-to-br from-muted/40 to-muted/20 cursor-pointer group shadow-xl ring-1 ring-border/30"
+                @click="showLightbox = true">
+                <img v-if="selectedScreenshot" :src="selectedScreenshot.url"
+                  :alt="selectedScreenshot.title || 'Screenshot'"
+                  class="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.02]" />
+                <div
+                  class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
+                  <div class="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+                    <span v-if="selectedScreenshot?.title" class="text-white font-medium text-sm drop-shadow-lg">
+                      {{ selectedScreenshot.title }}
+                    </span>
+                    <span class="text-white/90 text-sm bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                      Click to enlarge
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Navigation Arrows with improved design -->
+                <button v-if="screenshots.length > 1"
+                  class="absolute left-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
+                  @click.stop="prevScreenshot">
+                  <ChevronLeft class="w-5 h-5" />
+                </button>
+                <button v-if="screenshots.length > 1"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
+                  @click.stop="nextScreenshot">
+                  <ChevronRight class="w-5 h-5" />
+                </button>
+
+                <!-- Image counter badge -->
+                <div
+                  class="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-sm text-white text-xs font-medium">
+                  {{ selectedScreenshotIndex + 1 }} / {{ screenshots.length }}
+                </div>
+              </div>
+
+              <!-- Thumbnails with enhanced styling -->
+              <div v-if="screenshots.length > 1" class="flex gap-2.5 overflow-x-auto pb-2 px-0.5">
+                <button v-for="(screenshot, index) in screenshots" :key="screenshot.id"
+                  class="shrink-0 w-28 h-20 rounded-xl overflow-hidden transition-all duration-200 ring-2 ring-offset-2 ring-offset-background"
+                  :class="index === selectedScreenshotIndex
+                    ? 'ring-primary shadow-lg shadow-primary/20 scale-105'
+                    : 'ring-transparent hover:ring-border hover:scale-102'" @click="selectedScreenshotIndex = index">
+                  <img :src="screenshot.thumbnailUrl" :alt="screenshot.title || `Screenshot ${index + 1}`"
+                    class="w-full h-full object-cover" />
+                </button>
+              </div>
+
+              <!-- Screenshot Info with better styling -->
+              <div v-if="selectedScreenshot?.title || selectedScreenshot?.description"
+                class="p-4 rounded-xl bg-muted/30 border border-border/30">
+                <p v-if="selectedScreenshot.title" class="font-semibold text-foreground">{{ selectedScreenshot.title }}
+                </p>
+                <p v-if="selectedScreenshot.description" class="text-sm text-muted-foreground mt-1">{{
+                  selectedScreenshot.description }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Files Tab -->
+          <div v-else-if="activeTab === 'files'" class="min-h-[300px]">
+            <div v-if="isLoadingFiles" class="flex flex-col items-center justify-center py-16">
+              <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
+              <span class="text-sm text-muted-foreground mt-3">Loading versions...</span>
+            </div>
+
+            <div v-else>
+              <!-- Context Info Banner with enhanced design -->
+              <div v-if="context?.type === 'modpack'"
+                class="mb-5 p-4 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 shadow-sm">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+                    <Info class="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <span class="text-sm font-semibold text-primary">Modpack Compatibility Filter</span>
+                    <p class="text-xs text-muted-foreground mt-0.5">
+                      Showing versions for
+                      <span class="font-semibold text-foreground">{{ context.gameVersion }}</span>
+                      <span v-if="context.loader && isModContext"> + {{ context.loader }}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Release Type Filters with modern toggle buttons -->
+              <div class="flex flex-wrap items-center gap-3 mb-5 p-3 rounded-xl bg-muted/30 border border-border/30">
+                <span class="text-sm text-muted-foreground font-medium">Filter:</span>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                  :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-muted/50'">
+                  <input type="checkbox" v-model="filterRelease" class="sr-only" />
+                  <div class="w-3.5 h-3.5 rounded-full bg-primary ring-2 ring-primary/30" />
+                  <span class="text-sm font-medium"
+                    :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
+                </label>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                  :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'hover:bg-muted/50'">
+                  <input type="checkbox" v-model="filterBeta" class="sr-only" />
+                  <div class="w-3.5 h-3.5 rounded-full bg-blue-500 ring-2 ring-blue-500/30" />
+                  <span class="text-sm font-medium"
+                    :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
+                </label>
+                <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                  :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'hover:bg-muted/50'">
+                  <input type="checkbox" v-model="filterAlpha" class="sr-only" />
+                  <div class="w-3.5 h-3.5 rounded-full bg-orange-500 ring-2 ring-orange-500/30" />
+                  <span class="text-sm font-medium"
+                    :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
+                </label>
+
+                <!-- Game Version & Loader Filters (only in library context) -->
+                <template v-if="!canChangeVersion">
+                  <div class="h-5 w-px bg-border/50 mx-1" />
+
+                  <!-- Game Version Filter -->
+                  <div class="relative" v-if="availableGameVersions.length > 0">
+                    <select v-model="filterGameVersion"
+                      class="h-8 pl-3 pr-7 rounded-lg bg-muted/50 border-none text-sm font-medium appearance-none cursor-pointer focus:ring-1 focus:ring-primary transition-all"
+                      :class="filterGameVersion !== 'all' ? 'text-primary bg-primary/10 ring-1 ring-primary/30' : 'text-muted-foreground'">
+                      <option value="all">All Versions</option>
+                      <option v-for="v in availableGameVersions" :key="v" :value="v">{{ v }}</option>
+                    </select>
+                    <ChevronDown
+                      class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
+                  </div>
+
+                  <!-- Loader Filter (only for mods) -->
+                  <div class="relative" v-if="isModContext && availableLoaders.length > 0">
+                    <select v-model="filterLoader"
+                      class="h-8 pl-3 pr-7 rounded-lg bg-muted/50 border-none text-sm font-medium appearance-none cursor-pointer focus:ring-1 focus:ring-primary transition-all"
+                      :class="filterLoader !== 'all'
+                        ? (filterLoader === 'Forge' ? 'text-orange-400 bg-orange-500/10 ring-1 ring-orange-500/30' : 'text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/30')
+                        : 'text-muted-foreground'">
+                      <option value="all">All Loaders</option>
+                      <option v-for="l in availableLoaders" :key="l" :value="l">{{ l }}</option>
+                    </select>
+                    <ChevronDown
+                      class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
+                  </div>
+                </template>
+
+                <!-- File count -->
+                <span class="ml-auto text-xs text-muted-foreground">{{ filteredFiles.length }} files</span>
+              </div>
+
+              <!-- Info banner for readonly/linked modpack -->
+              <div v-if="context?.type === 'modpack' && isReadonly"
+                class="mb-4 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
+                <Lock class="w-5 h-5 text-amber-400 shrink-0" />
+                <p class="text-sm text-amber-300">
+                  This modpack is in read-only mode. Version changes are disabled to maintain sync with the source.
+                </p>
+              </div>
+
+              <!-- Info banner for library context -->
+              <div v-else-if="!canChangeVersion"
+                class="mb-4 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
+                <Info class="w-5 h-5 text-blue-400 shrink-0" />
+                <p class="text-sm text-blue-300">
+                  Version changes are only available when editing a modpack. Here you can browse available versions.
+                </p>
+              </div>
+
+              <!-- Files List - Empty State -->
+              <div v-if="filteredFiles.length === 0" class="text-center py-12">
+                <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                  <Package class="w-10 h-10 text-muted-foreground/40" />
+                </div>
+                <p class="font-medium text-foreground">No compatible files found</p>
+                <p class="text-sm text-muted-foreground mt-1.5">Try enabling more release types or check CurseForge
+                  directly</p>
+              </div>
+
+              <!-- Files List with enhanced cards -->
+              <div v-else class="space-y-2.5 max-h-[400px] overflow-y-auto pr-2">
+                <div v-for="file in filteredFiles" :key="file.id"
+                  class="p-4 rounded-xl border-2 transition-all duration-200 group" :class="[
+                    canChangeVersion ? 'cursor-pointer' : 'cursor-default',
+                    canChangeVersion && selectedFileId === file.id
+                      ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
+                      : 'border-border/40 bg-muted/20',
+                    canChangeVersion && selectedFileId !== file.id ? 'hover:border-primary/40 hover:bg-muted/40' : '',
+                    file.id === currentFileId ? 'ring-2 ring-primary/20 ring-offset-2 ring-offset-background' : ''
+                  ]" @click="canChangeVersion && (selectedFileId = file.id)">
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2.5 flex-wrap">
+                        <span
+                          class="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                          {{ file.displayName }}
+                        </span>
+                        <span class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide shrink-0"
+                          :class="getReleaseTypeClass(file.releaseType)">
+                          {{ getReleaseTypeName(file.releaseType) }}
+                        </span>
+                        <span v-if="file.id === currentFileId"
+                          class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide bg-primary/20 text-primary shrink-0 flex items-center gap-1">
+                          <Check class="w-3 h-3" />
+                          Installed
+                        </span>
+                      </div>
+
+                      <div class="flex items-center gap-4 mt-2.5 text-xs text-muted-foreground">
+                        <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
+                          <Calendar class="w-3.5 h-3.5 text-primary/60" />
+                          {{ formatDate(file.fileDate) }}
+                        </span>
+                        <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
+                          <HardDrive class="w-3.5 h-3.5 text-blue-400/60" />
+                          {{ formatSize(file.fileLength) }}
+                        </span>
+                        <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
+                          <Download class="w-3.5 h-3.5 text-green-400/60" />
+                          {{ formatDownloads(file.downloadCount) }}
+                        </span>
+                      </div>
+
+                      <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                        <span v-for="gv in getFileVersionTags(file.gameVersions)" :key="gv"
+                          class="px-2 py-0.5 rounded-md text-[10px] font-medium" :class="['Forge', 'Fabric', 'NeoForge', 'Quilt'].includes(gv)
+                            ? (gv === 'Forge' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400')
+                            : 'bg-muted text-muted-foreground'">
+                          {{ gv }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Selection Indicator with animation (only in modpack context) -->
+                    <div v-if="canChangeVersion"
+                      class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200"
+                      :class="selectedFileId === file.id
+                        ? 'border-primary bg-primary scale-110'
+                        : 'border-muted-foreground/30 group-hover:border-primary/50'">
+                      <Check v-if="selectedFileId === file.id" class="w-3.5 h-3.5 text-primary-foreground" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fullscreen footer -->
+      <div class="flex items-center justify-between w-full px-6 py-4 border-t border-border bg-muted/30 shrink-0">
+        <div class="text-xs text-muted-foreground flex items-center gap-2">
+          <Clock class="w-3.5 h-3.5" />
+          <span v-if="mod?.date_released">
+            Released {{ formatDate(mod.date_released) }}
           </span>
-        </button>
-      </div>
-
-      <!-- Content -->
-      <div class="flex-1 overflow-y-auto px-6 py-5">
-        <!-- Description Tab -->
-        <div v-if="activeTab === 'description'" class="min-h-[300px]">
-          <div v-if="isLoadingDescription" class="flex flex-col items-center justify-center py-16">
-            <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
-            <span class="text-sm text-muted-foreground mt-3">Loading description...</span>
-          </div>
-          <div v-else
-            class="prose prose-sm prose-invert max-w-none mod-description bg-muted/20 rounded-xl p-6 border border-border/30"
-            v-html="description" />
+          <span v-else>—</span>
         </div>
 
-        <!-- Gallery Tab -->
-        <div v-else-if="activeTab === 'gallery'" class="min-h-[300px]">
-          <div v-if="screenshots.length === 0"
-            class="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-              <ImageIcon class="w-10 h-10 opacity-40" />
-            </div>
-            <p class="font-medium">No screenshots available</p>
-            <p class="text-sm mt-1 opacity-70">This mod hasn't uploaded any images yet</p>
-          </div>
+        <div class="flex gap-3">
+          <Button variant="outline" @click="emit('close')" class="px-5">
+            Close
+          </Button>
 
-          <div v-else class="space-y-5">
-            <!-- Main Image with enhanced styling -->
-            <div
-              class="relative aspect-video rounded-2xl overflow-hidden bg-gradient-to-br from-muted/40 to-muted/20 cursor-pointer group shadow-xl ring-1 ring-border/30"
-              @click="showLightbox = true">
-              <img v-if="selectedScreenshot" :src="selectedScreenshot.url"
-                :alt="selectedScreenshot.title || 'Screenshot'"
-                class="w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.02]" />
-              <div
-                class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
-                <div class="absolute bottom-4 left-4 right-4 flex items-center justify-between">
-                  <span v-if="selectedScreenshot?.title" class="text-white font-medium text-sm drop-shadow-lg">
-                    {{ selectedScreenshot.title }}
-                  </span>
-                  <span class="text-white/90 text-sm bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
-                    Click to enlarge
-                  </span>
-                </div>
-              </div>
-
-              <!-- Navigation Arrows with improved design -->
-              <button v-if="screenshots.length > 1"
-                class="absolute left-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
-                @click.stop="prevScreenshot">
-                <ChevronLeft class="w-5 h-5" />
-              </button>
-              <button v-if="screenshots.length > 1"
-                class="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
-                @click.stop="nextScreenshot">
-                <ChevronRight class="w-5 h-5" />
-              </button>
-
-              <!-- Image counter badge -->
-              <div
-                class="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-sm text-white text-xs font-medium">
-                {{ selectedScreenshotIndex + 1 }} / {{ screenshots.length }}
-              </div>
-            </div>
-
-            <!-- Thumbnails with enhanced styling -->
-            <div v-if="screenshots.length > 1" class="flex gap-2.5 overflow-x-auto pb-2 px-0.5">
-              <button v-for="(screenshot, index) in screenshots" :key="screenshot.id"
-                class="shrink-0 w-28 h-20 rounded-xl overflow-hidden transition-all duration-200 ring-2 ring-offset-2 ring-offset-background"
-                :class="index === selectedScreenshotIndex
-                  ? 'ring-primary shadow-lg shadow-primary/20 scale-105'
-                  : 'ring-transparent hover:ring-border hover:scale-102'" @click="selectedScreenshotIndex = index">
-                <img :src="screenshot.thumbnailUrl" :alt="screenshot.title || `Screenshot ${index + 1}`"
-                  class="w-full h-full object-cover" />
-              </button>
-            </div>
-
-            <!-- Screenshot Info with better styling -->
-            <div v-if="selectedScreenshot?.title || selectedScreenshot?.description"
-              class="p-4 rounded-xl bg-muted/30 border border-border/30">
-              <p v-if="selectedScreenshot.title" class="font-semibold text-foreground">{{ selectedScreenshot.title }}
-              </p>
-              <p v-if="selectedScreenshot.description" class="text-sm text-muted-foreground mt-1">{{
-                selectedScreenshot.description }}</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Files Tab -->
-        <div v-else-if="activeTab === 'files'" class="min-h-[300px]">
-          <div v-if="isLoadingFiles" class="flex flex-col items-center justify-center py-16">
-            <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
-            <span class="text-sm text-muted-foreground mt-3">Loading versions...</span>
-          </div>
-
-          <div v-else>
-            <!-- Context Info Banner with enhanced design -->
-            <div v-if="context?.type === 'modpack'"
-              class="mb-5 p-4 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 shadow-sm">
-              <div class="flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-                  <Info class="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <span class="text-sm font-semibold text-primary">Modpack Compatibility Filter</span>
-                  <p class="text-xs text-muted-foreground mt-0.5">
-                    Showing versions for
-                    <span class="font-semibold text-foreground">{{ context.gameVersion }}</span>
-                    <span v-if="context.loader && isModContext"> + {{ context.loader }}</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Release Type Filters with modern toggle buttons -->
-            <div class="flex flex-wrap items-center gap-3 mb-5 p-3 rounded-xl bg-muted/30 border border-border/30">
-              <span class="text-sm text-muted-foreground font-medium">Filter:</span>
-              <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-                :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-muted/50'">
-                <input type="checkbox" v-model="filterRelease" class="sr-only" />
-                <div class="w-3.5 h-3.5 rounded-full bg-primary ring-2 ring-primary/30" />
-                <span class="text-sm font-medium"
-                  :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
-              </label>
-              <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-                :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'hover:bg-muted/50'">
-                <input type="checkbox" v-model="filterBeta" class="sr-only" />
-                <div class="w-3.5 h-3.5 rounded-full bg-blue-500 ring-2 ring-blue-500/30" />
-                <span class="text-sm font-medium"
-                  :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
-              </label>
-              <label class="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-                :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'hover:bg-muted/50'">
-                <input type="checkbox" v-model="filterAlpha" class="sr-only" />
-                <div class="w-3.5 h-3.5 rounded-full bg-orange-500 ring-2 ring-orange-500/30" />
-                <span class="text-sm font-medium"
-                  :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
-              </label>
-
-              <!-- Game Version & Loader Filters (only in library context) -->
-              <template v-if="!canChangeVersion">
-                <div class="h-5 w-px bg-border/50 mx-1" />
-
-                <!-- Game Version Filter -->
-                <div class="relative" v-if="availableGameVersions.length > 0">
-                  <select v-model="filterGameVersion"
-                    class="h-8 pl-3 pr-7 rounded-lg bg-muted/50 border-none text-sm font-medium appearance-none cursor-pointer focus:ring-1 focus:ring-primary transition-all"
-                    :class="filterGameVersion !== 'all' ? 'text-primary bg-primary/10 ring-1 ring-primary/30' : 'text-muted-foreground'">
-                    <option value="all">All Versions</option>
-                    <option v-for="v in availableGameVersions" :key="v" :value="v">{{ v }}</option>
-                  </select>
-                  <ChevronDown
-                    class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
-                </div>
-
-                <!-- Loader Filter (only for mods) -->
-                <div class="relative" v-if="isModContext && availableLoaders.length > 0">
-                  <select v-model="filterLoader"
-                    class="h-8 pl-3 pr-7 rounded-lg bg-muted/50 border-none text-sm font-medium appearance-none cursor-pointer focus:ring-1 focus:ring-primary transition-all"
-                    :class="filterLoader !== 'all'
-                      ? (filterLoader === 'Forge' ? 'text-orange-400 bg-orange-500/10 ring-1 ring-orange-500/30' : 'text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/30')
-                      : 'text-muted-foreground'">
-                    <option value="all">All Loaders</option>
-                    <option v-for="l in availableLoaders" :key="l" :value="l">{{ l }}</option>
-                  </select>
-                  <ChevronDown
-                    class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
-                </div>
-              </template>
-
-              <!-- File count -->
-              <span class="ml-auto text-xs text-muted-foreground">{{ filteredFiles.length }} files</span>
-            </div>
-
-            <!-- Info banner for readonly/linked modpack -->
-            <div v-if="context?.type === 'modpack' && isReadonly"
-              class="mb-4 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
-              <Lock class="w-5 h-5 text-amber-400 shrink-0" />
-              <p class="text-sm text-amber-300">
-                This modpack is in read-only mode. Version changes are disabled to maintain sync with the source.
-              </p>
-            </div>
-
-            <!-- Info banner for library context -->
-            <div v-else-if="!canChangeVersion"
-              class="mb-4 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
-              <Info class="w-5 h-5 text-blue-400 shrink-0" />
-              <p class="text-sm text-blue-300">
-                Version changes are only available when editing a modpack. Here you can browse available versions.
-              </p>
-            </div>
-
-            <!-- Files List - Empty State -->
-            <div v-if="filteredFiles.length === 0" class="text-center py-12">
-              <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
-                <Package class="w-10 h-10 text-muted-foreground/40" />
-              </div>
-              <p class="font-medium text-foreground">No compatible files found</p>
-              <p class="text-sm text-muted-foreground mt-1.5">Try enabling more release types or check CurseForge
-                directly</p>
-            </div>
-
-            <!-- Files List with enhanced cards -->
-            <div v-else class="space-y-2.5 max-h-[400px] overflow-y-auto pr-2">
-              <div v-for="file in filteredFiles" :key="file.id"
-                class="p-4 rounded-xl border-2 transition-all duration-200 group" :class="[
-                  canChangeVersion ? 'cursor-pointer' : 'cursor-default',
-                  canChangeVersion && selectedFileId === file.id
-                    ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10'
-                    : 'border-border/40 bg-muted/20',
-                  canChangeVersion && selectedFileId !== file.id ? 'hover:border-primary/40 hover:bg-muted/40' : '',
-                  file.id === currentFileId ? 'ring-2 ring-primary/20 ring-offset-2 ring-offset-background' : ''
-                ]" @click="canChangeVersion && (selectedFileId = file.id)">
-                <div class="flex items-start justify-between gap-4">
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2.5 flex-wrap">
-                      <span
-                        class="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
-                        {{ file.displayName }}
-                      </span>
-                      <span class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide shrink-0"
-                        :class="getReleaseTypeClass(file.releaseType)">
-                        {{ getReleaseTypeName(file.releaseType) }}
-                      </span>
-                      <span v-if="file.id === currentFileId"
-                        class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide bg-primary/20 text-primary shrink-0 flex items-center gap-1">
-                        <Check class="w-3 h-3" />
-                        Installed
-                      </span>
-                    </div>
-
-                    <div class="flex items-center gap-4 mt-2.5 text-xs text-muted-foreground">
-                      <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                        <Calendar class="w-3.5 h-3.5 text-primary/60" />
-                        {{ formatDate(file.fileDate) }}
-                      </span>
-                      <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                        <HardDrive class="w-3.5 h-3.5 text-blue-400/60" />
-                        {{ formatSize(file.fileLength) }}
-                      </span>
-                      <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                        <Download class="w-3.5 h-3.5 text-green-400/60" />
-                        {{ formatDownloads(file.downloadCount) }}
-                      </span>
-                    </div>
-
-                    <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                      <span
-                        v-for="gv in (file.gameVersions || []).filter((v: string) => /^1\.\d+/.test(v) || ['Forge', 'Fabric', 'NeoForge', 'Quilt'].includes(v)).slice(0, 5)"
-                        :key="gv" class="px-2 py-0.5 rounded-md text-[10px] font-medium" :class="['Forge', 'Fabric', 'NeoForge', 'Quilt'].includes(gv)
-                          ? (gv === 'Forge' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400')
-                          : 'bg-muted text-muted-foreground'">
-                        {{ gv }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Selection Indicator with animation (only in modpack context) -->
-                  <div v-if="canChangeVersion"
-                    class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200"
-                    :class="selectedFileId === file.id
-                      ? 'border-primary bg-primary scale-110'
-                      : 'border-muted-foreground/30 group-hover:border-primary/50'">
-                    <Check v-if="selectedFileId === file.id" class="w-3.5 h-3.5 text-primary-foreground" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Change Version Button with enhanced design -->
+          <Button
+            v-if="context?.type === 'modpack' && activeTab === 'files' && selectedFileId && selectedFileId !== currentFileId"
+            @click="handleVersionChange" :disabled="isChangingVersion"
+            class="px-5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20">
+            <Loader2 v-if="isChangingVersion" class="w-4 h-4 mr-2 animate-spin" />
+            <RefreshCw v-else class="w-4 h-4 mr-2" />
+            Change to Selected Version
+          </Button>
         </div>
       </div>
     </div>
-
-    <!-- Fullscreen footer -->
-    <div class="flex items-center justify-between w-full px-6 py-4 border-t border-border bg-muted/30 shrink-0">
-      <div class="text-xs text-muted-foreground flex items-center gap-2">
-        <Clock class="w-3.5 h-3.5" />
-        <span v-if="mod?.date_released">
-          Released {{ formatDate(mod.date_released) }}
-        </span>
-        <span v-else>—</span>
-      </div>
-
-      <div class="flex gap-3">
-        <Button variant="outline" @click="emit('close')" class="px-5">
-          Close
-        </Button>
-
-        <!-- Change Version Button with enhanced design -->
-        <Button
-          v-if="context?.type === 'modpack' && activeTab === 'files' && selectedFileId && selectedFileId !== currentFileId"
-          @click="handleVersionChange" :disabled="isChangingVersion"
-          class="px-5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20">
-          <Loader2 v-if="isChangingVersion" class="w-4 h-4 mr-2 animate-spin" />
-          <RefreshCw v-else class="w-4 h-4 mr-2" />
-          Change to Selected Version
-        </Button>
-      </div>
-    </div>
-  </div>
+  </Transition>
 
   <!-- Dialog mode -->
   <Dialog v-if="!fullScreen" :open="open" @close="emit('close')" size="6xl"
@@ -894,7 +1025,7 @@ onUnmounted(() => {
 
     <!-- Tabs with modern styling -->
     <div class="flex gap-1 bg-muted/30 p-1.5 mx-6 mt-4 rounded-xl">
-      <button v-for="tab in ['description', 'gallery', 'files'] as const" :key="tab"
+      <button v-for="tab in availableTabs" :key="tab"
         class="flex-1 px-4 py-2.5 text-sm font-medium transition-all duration-200 rounded-lg" :class="activeTab === tab
           ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="activeTab = tab">
@@ -1158,9 +1289,8 @@ onUnmounted(() => {
                   </div>
 
                   <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                    <span
-                      v-for="gv in (file.gameVersions || []).filter((v: string) => /^1\.\d+/.test(v) || ['Forge', 'Fabric', 'NeoForge', 'Quilt'].includes(v)).slice(0, 5)"
-                      :key="gv" class="px-2 py-0.5 rounded-md text-[10px] font-medium" :class="['Forge', 'Fabric', 'NeoForge', 'Quilt'].includes(gv)
+                    <span v-for="gv in getFileVersionTags(file.gameVersions)" :key="gv"
+                      class="px-2 py-0.5 rounded-md text-[10px] font-medium" :class="['Forge', 'Fabric', 'NeoForge', 'Quilt'].includes(gv)
                         ? (gv === 'Forge' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400')
                         : 'bg-muted text-muted-foreground'">
                       {{ gv }}

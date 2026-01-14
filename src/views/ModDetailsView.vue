@@ -44,11 +44,13 @@ onMounted(() => {
 </script>
 
 <template>
-    <div v-if="isLoading" class="h-screen w-screen flex items-center justify-center bg-background">
-        <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
+    <div class="h-full w-full relative">
+        <div v-if="isLoading" class="absolute inset-0 flex items-center justify-center bg-background">
+            <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"></div>
+        </div>
+        <ModDetailsModal v-else :open="true" :mod="mod" :full-screen="true" :context="{
+            type: contextType,
+            modpackId: modpackId,
+        }" @close="goBack" />
     </div>
-    <ModDetailsModal v-else :open="true" :mod="mod" :full-screen="true" :context="{
-        type: contextType,
-        modpackId: modpackId,
-    }" @close="goBack" />
 </template>

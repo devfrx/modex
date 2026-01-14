@@ -74,7 +74,7 @@ const importProgress = ref({
 });
 
 // Filters
-const showFilters = ref(false);
+const isFilterSidebarCollapsed = ref(true); // Start collapsed by default
 const filterRelease = ref(true);
 const filterBeta = ref(false);
 const filterAlpha = ref(false);
@@ -409,121 +409,115 @@ onMounted(async () => {
                 <h1 class="text-lg font-semibold">Browse Modpacks</h1>
             </div>
 
-            <div class="flex flex-1 md:flex-row flex-col overflow-hidden">
-                <!-- Mobile Filter Toggle -->
-                <button @click="showFilters = !showFilters"
-                    class="md:hidden flex items-center justify-between w-full p-3 border-b border-border bg-muted/30">
-                    <span class="flex items-center gap-2 text-sm font-medium">
-                        <Filter class="w-4 h-4 text-primary" />
-                        Filters
-                        <span v-if="selectedVersion || selectedLoader"
-                            class="px-1.5 py-0.5 text-xs bg-primary/20 text-primary rounded-full">
-                            {{ [selectedVersion, selectedLoader].filter(Boolean).length }}
-                        </span>
-                    </span>
-                    <ChevronDown class="w-4 h-4 transition-transform" :class="showFilters ? 'rotate-180' : ''" />
-                </button>
-
-                <!-- Sidebar Filters -->
-                <div class="flex-shrink-0 border-r border-border bg-muted/10 flex flex-col overflow-hidden transition-all duration-200"
-                    :class="[
-                        showFilters ? 'max-h-[50vh] md:max-h-none' : 'max-h-0 md:max-h-none',
-                        'md:w-64 w-full'
-                    ]">
-                    <div class="hidden md:block p-4 border-b border-border">
-                        <h3 class="font-semibold flex items-center gap-2">
+            <div class="flex flex-1 flex-col overflow-hidden">
+                <!-- Collapsible Filter Bar -->
+                <div class="border-b border-border bg-muted/10">
+                    <!-- Filter Toggle Header -->
+                    <button @click="isFilterSidebarCollapsed = !isFilterSidebarCollapsed"
+                        class="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
+                        <span class="flex items-center gap-2 text-sm font-medium">
                             <Filter class="w-4 h-4 text-primary" />
                             Filters
-                        </h3>
-                    </div>
+                            <!-- Active filters badges -->
+                            <span v-if="selectedVersion"
+                                class="px-2 py-0.5 text-xs rounded-full bg-primary/15 text-primary">
+                                {{ selectedVersion }}
+                            </span>
+                            <span v-if="selectedLoader" class="px-2 py-0.5 text-xs rounded-full"
+                                :class="selectedLoader.includes('forge') ? 'bg-orange-500/15 text-orange-400' : 'bg-blue-500/15 text-blue-400'">
+                                {{ selectedLoader }}
+                            </span>
+                        </span>
+                        <ChevronDown class="w-4 h-4 transition-transform duration-200"
+                            :class="!isFilterSidebarCollapsed ? 'rotate-180' : ''" />
+                    </button>
 
-                    <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 md:space-y-6 custom-scrollbar">
-                        <!-- Game Version -->
-                        <div class="space-y-2">
-                            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Game Version
-                            </label>
-                            <div class="relative">
-                                <select v-model="selectedVersion"
-                                    class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
-                                    <option value="" class="bg-popover text-popover-foreground">All Versions</option>
-                                    <option v-for="v in gameVersions" :key="v" :value="v"
-                                        class="bg-popover text-popover-foreground">
-                                        {{ v }}
-                                    </option>
-                                </select>
-                                <ChevronDown
-                                    class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-                            </div>
-                        </div>
+                    <!-- Expanded Filters Panel -->
+                    <div class="overflow-hidden transition-all duration-300"
+                        :class="isFilterSidebarCollapsed ? 'max-h-0' : 'max-h-[300px]'">
+                        <div class="p-4 pt-0 space-y-4">
+                            <!-- Row 1: Basic Filters -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <!-- Game Version -->
+                                <div class="space-y-1.5">
+                                    <label
+                                        class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Version</label>
+                                    <div class="relative">
+                                        <select v-model="selectedVersion"
+                                            class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none">
+                                            <option value="" class="bg-popover text-popover-foreground">All</option>
+                                            <option v-for="v in gameVersions" :key="v" :value="v"
+                                                class="bg-popover text-popover-foreground">{{ v }}</option>
+                                        </select>
+                                        <ChevronDown
+                                            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                                    </div>
+                                </div>
 
-                        <!-- Mod Loader -->
-                        <div class="space-y-2">
-                            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Mod Loader
-                            </label>
-                            <div class="relative">
-                                <select v-model="selectedLoader"
-                                    class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
-                                    <option value="" class="bg-popover text-popover-foreground">All Loaders</option>
-                                    <option v-for="l in loaders" :key="l" :value="l"
-                                        class="bg-popover text-popover-foreground">
-                                        {{ l.charAt(0).toUpperCase() + l.slice(1) }}
-                                    </option>
-                                </select>
-                                <ChevronDown
-                                    class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-                            </div>
-                        </div>
+                                <!-- Mod Loader -->
+                                <div class="space-y-1.5">
+                                    <label
+                                        class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Loader</label>
+                                    <div class="relative">
+                                        <select v-model="selectedLoader"
+                                            class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none">
+                                            <option value="" class="bg-popover text-popover-foreground">All</option>
+                                            <option v-for="l in loaders" :key="l" :value="l"
+                                                class="bg-popover text-popover-foreground">{{ l.charAt(0).toUpperCase()
+                                                + l.slice(1) }}</option>
+                                        </select>
+                                        <ChevronDown
+                                            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                                    </div>
+                                </div>
 
-                        <!-- Sort By -->
-                        <div class="space-y-2">
-                            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Sort By
-                            </label>
-                            <div class="relative">
-                                <select v-model="sortBy"
-                                    class="w-full h-9 pl-3 pr-8 rounded-md border border-input bg-background/50 text-sm focus:ring-1 focus:ring-primary appearance-none">
-                                    <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value"
-                                        class="bg-popover text-popover-foreground">
-                                        {{ opt.label }}
-                                    </option>
-                                </select>
-                                <ChevronDown
-                                    class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
-                            </div>
-                        </div>
+                                <!-- Sort By -->
+                                <div class="space-y-1.5">
+                                    <label
+                                        class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort
+                                        By</label>
+                                    <div class="relative">
+                                        <select v-model="sortBy"
+                                            class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none">
+                                            <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value"
+                                                class="bg-popover text-popover-foreground">{{ opt.label }}</option>
+                                        </select>
+                                        <ChevronDown
+                                            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
+                                    </div>
+                                </div>
 
-                        <!-- Release Channels -->
-                        <div class="space-y-2">
-                            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                Release Channels
-                            </label>
-                            <div class="flex flex-wrap gap-1.5">
-                                <label
-                                    class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
-                                    :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-muted/30 hover:bg-muted/50'">
-                                    <input type="checkbox" v-model="filterRelease" class="sr-only" />
-                                    <div class="w-3 h-3 rounded-full bg-primary ring-2 ring-primary/30" />
-                                    <span class="text-xs font-medium"
-                                        :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">Release</span>
-                                </label>
-                                <label
-                                    class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
-                                    :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'bg-muted/30 hover:bg-muted/50'">
-                                    <input type="checkbox" v-model="filterBeta" class="sr-only" />
-                                    <div class="w-3 h-3 rounded-full bg-blue-500 ring-2 ring-blue-500/30" />
-                                    <span class="text-xs font-medium"
-                                        :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">Beta</span>
-                                </label>
-                                <label
-                                    class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all select-none"
-                                    :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'bg-muted/30 hover:bg-muted/50'">
-                                    <input type="checkbox" v-model="filterAlpha" class="sr-only" />
-                                    <div class="w-3 h-3 rounded-full bg-orange-500 ring-2 ring-orange-500/30" />
-                                    <span class="text-xs font-medium"
-                                        :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">Alpha</span>
-                                </label>
+                                <!-- Release Channels -->
+                                <div class="space-y-1.5">
+                                    <label
+                                        class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Channels</label>
+                                    <div class="flex gap-1">
+                                        <label
+                                            class="flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all select-none"
+                                            :class="filterRelease ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-muted/50 hover:bg-muted'">
+                                            <input type="checkbox" v-model="filterRelease" class="sr-only" />
+                                            <div class="w-2 h-2 rounded-full bg-primary" />
+                                            <span class="text-xs"
+                                                :class="filterRelease ? 'text-primary' : 'text-muted-foreground'">R</span>
+                                        </label>
+                                        <label
+                                            class="flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all select-none"
+                                            :class="filterBeta ? 'bg-blue-500/15 ring-1 ring-blue-500/30' : 'bg-muted/50 hover:bg-muted'">
+                                            <input type="checkbox" v-model="filterBeta" class="sr-only" />
+                                            <div class="w-2 h-2 rounded-full bg-blue-500" />
+                                            <span class="text-xs"
+                                                :class="filterBeta ? 'text-blue-400' : 'text-muted-foreground'">B</span>
+                                        </label>
+                                        <label
+                                            class="flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-all select-none"
+                                            :class="filterAlpha ? 'bg-orange-500/15 ring-1 ring-orange-500/30' : 'bg-muted/50 hover:bg-muted'">
+                                            <input type="checkbox" v-model="filterAlpha" class="sr-only" />
+                                            <div class="w-2 h-2 rounded-full bg-orange-500" />
+                                            <span class="text-xs"
+                                                :class="filterAlpha ? 'text-orange-400' : 'text-muted-foreground'">A</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -617,7 +611,7 @@ onMounted(async () => {
                                                 <h3 class="font-medium text-foreground truncate">{{ modpack.name }}</h3>
                                                 <p class="text-xs text-muted-foreground line-clamp-2 mt-0.5">{{
                                                     modpack.summary
-                                                    }}
+                                                }}
                                                 </p>
                                             </div>
 

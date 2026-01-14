@@ -24,9 +24,13 @@ import {
     MousePointer,
     Globe,
     ArrowLeftRight,
+    Rocket,
 } from "lucide-vue-next";
+import WalkthroughModal from "@/components/ui/WalkthroughModal.vue";
+import Button from "@/components/ui/Button.vue";
 
 const activeSection = ref("getting-started");
+const showWalkthrough = ref(false);
 
 const sections = [
     { id: "getting-started", name: "Getting Started", icon: Zap },
@@ -138,6 +142,31 @@ const faqs = [
                         <p class="text-muted-foreground mt-2 text-base sm:text-lg">
                             Welcome to ModEx, the modern Minecraft mod manager. Let's get you set up!
                         </p>
+                    </div>
+
+                    <!-- Walkthrough Banner -->
+                    <div
+                        class="p-4 sm:p-5 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            <div class="flex items-center gap-3 flex-1">
+                                <div
+                                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                                    <Rocket class="w-5 h-5 sm:w-6 sm:h-6 text-amber-500" />
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-amber-400">Walkthrough Guidato</h3>
+                                    <p class="text-sm text-muted-foreground">
+                                        Segui la guida passo-passo per configurare API Key, GitHub Token e imparare a
+                                        condividere modpack.
+                                    </p>
+                                </div>
+                            </div>
+                            <Button variant="default" class="gap-2 shrink-0 w-full sm:w-auto"
+                                @click="showWalkthrough = true">
+                                <Rocket class="w-4 h-4" />
+                                Apri Walkthrough
+                            </Button>
+                        </div>
                     </div>
 
                     <div class="grid gap-4 sm:gap-6">
@@ -731,4 +760,7 @@ const faqs = [
             </div>
         </div>
     </div>
+
+    <!-- Walkthrough Modal -->
+    <WalkthroughModal :open="showWalkthrough" :hideDoNotShowAgain="true" @close="showWalkthrough = false" />
 </template>

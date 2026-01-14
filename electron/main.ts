@@ -14,6 +14,7 @@ import {
   net,
   shell,
 } from "electron";
+import { autoUpdater } from "electron-updater";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "fs-extra";
@@ -2780,12 +2781,67 @@ async function initializeBackend() {
     }
   );
 
+  // ========== AUTO-UPDATER SETUP ==========
+  
+  // Configure auto-updater
+  autoUpdater.autoDownload = false; // Don't auto-download, let user decide
+  autoUpdater.autoInstallOnAppQuit = true;
+  
+  // Send update events to renderer
+  autoUpdater.on("checking-for-update", () => {
+    console.log("[AutoUpdater] Checking for updates...");
+    win?.webContents.send("update:checking");
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    console.log("[AutoUpdater] Update available:", info.version);
+    win?.webContents.send("update:available", {
+      version: info.version,
+      releaseNotes: info.releaseNotes,
+      releaseDate: info.releaseDate,
+    });
+  });
+
+  autoUpdater.on("update-not-available", (info) => {
+    console.log("[AutoUpdater] No update available, current:", info.version);
+    win?.webContents.send("update:not-available", {
+      version: info.version,
+    });
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    console.log(`[AutoUpdater] Download progress: ${progress.percent.toFixed(1)}%`);
+    win?.webContents.send("update:download-progress", {
+      percent: progress.percent,
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total,
+    });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    console.log("[AutoUpdater] Update downloaded:", info.version);
+    win?.webContents.send("update:downloaded", {
+      version: info.version,
+      releaseNotes: info.releaseNotes,
+    });
+  });
+
+  autoUpdater.on("error", (error) => {
+    console.error("[AutoUpdater] Error:", error);
+    // Don't send error to renderer during download attempts - it's handled in the IPC handler
+    // Only send if it's an unexpected error (not during an active download/check operation)
+  });
+
   // ========== UPDATES IPC HANDLERS ==========
 
-  // Check for app updates from GitHub releases
+  // Check for app updates - always use GitHub API for reliability
   ipcMain.handle("updates:checkAppUpdate", async () => {
     try {
-      // Use /releases instead of /releases/latest to include pre-releases and drafts
+      const currentVersion = app.getVersion();
+      const isProduction = !VITE_DEV_SERVER_URL;
+      
+      // Always use GitHub API for checking (more reliable than electron-updater's parser)
       const response = await fetch(
         "https://api.github.com/repos/devfrx/modex/releases",
         {
@@ -2798,12 +2854,12 @@ async function initializeBackend() {
 
       if (!response.ok) {
         if (response.status === 404) {
-          const currentVersion = app.getVersion();
           return {
             hasUpdate: false,
             currentVersion,
             latestVersion: currentVersion,
             noReleases: true,
+            canAutoUpdate: isProduction,
           };
         }
         throw new Error(`GitHub API returned ${response.status}`);
@@ -2811,25 +2867,31 @@ async function initializeBackend() {
 
       const releases = await response.json();
       
-      // No releases found
       if (!Array.isArray(releases) || releases.length === 0) {
-        const currentVersion = app.getVersion();
         return {
           hasUpdate: false,
           currentVersion,
           latestVersion: currentVersion,
           noReleases: true,
+          canAutoUpdate: isProduction,
         };
       }
 
-      // Get the first non-draft release (can be pre-release)
+      // Find the first non-draft release
       const release = releases.find((r: any) => !r.draft) || releases[0];
+      
+      if (!release) {
+        return {
+          hasUpdate: false,
+          currentVersion,
+          latestVersion: currentVersion,
+          noReleases: true,
+          canAutoUpdate: isProduction,
+        };
+      }
+
       const latestVersion = release.tag_name?.replace(/^v/, "") || "";
-      const currentVersion = app.getVersion();
 
-      console.log(`[Updates] Current: ${currentVersion}, Latest: ${latestVersion}`);
-
-      // Simple version comparison (works for semver)
       const isNewer = latestVersion.localeCompare(currentVersion, undefined, {
         numeric: true,
         sensitivity: "base",
@@ -2839,18 +2901,164 @@ async function initializeBackend() {
         hasUpdate: isNewer,
         currentVersion,
         latestVersion,
-        releaseUrl: release.html_url || `https://github.com/devfrx/modex/releases/tag/${release.tag_name}`,
+        releaseUrl: release.html_url,
         releaseName: release.name || `v${latestVersion}`,
         releaseNotes: release.body || "",
         publishedAt: release.published_at,
         isPrerelease: release.prerelease || false,
+        canAutoUpdate: isProduction, // Can only auto-update in production builds
       };
     } catch (error: any) {
       console.error("[Updates] Failed to check for app updates:", error);
       return {
         hasUpdate: false,
+        currentVersion: app.getVersion(),
         error: error.message || "Failed to check for updates",
+        canAutoUpdate: !VITE_DEV_SERVER_URL,
       };
+    }
+  });
+
+  // Download the update using electron-updater or fallback to manual download
+  ipcMain.handle("updates:downloadUpdate", async (_, releaseInfo?: { version: string; releaseUrl?: string }) => {
+    try {
+      if (VITE_DEV_SERVER_URL) {
+        return { success: false, error: "Auto-update not available in development mode" };
+      }
+      
+      console.log("[Updates] Starting update download...");
+      
+      // Try electron-updater first
+      try {
+        // Need to check for updates first to populate the update info
+        const checkResult = await autoUpdater.checkForUpdates();
+        if (checkResult && checkResult.updateInfo) {
+          console.log("[Updates] electron-updater found update, downloading...");
+          await autoUpdater.downloadUpdate();
+          return { success: true, method: "auto" };
+        }
+      } catch (autoUpdateError: any) {
+        console.log("[Updates] electron-updater failed, trying manual download:", autoUpdateError.message);
+      }
+      
+      // Fallback: Download manually using GitHub API and our DownloadService
+      console.log("[Updates] Falling back to manual download...");
+      
+      // Get releases from GitHub (use /releases to include pre-releases)
+      const response = await fetch(
+        "https://api.github.com/repos/devfrx/modex/releases",
+        {
+          headers: {
+            "User-Agent": "ModEx-App",
+            Accept: "application/vnd.github.v3+json",
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`GitHub API returned ${response.status}`);
+      }
+      
+      const releases = await response.json();
+      
+      // Find the first non-draft release
+      const release = Array.isArray(releases) 
+        ? releases.find((r: any) => !r.draft) || releases[0]
+        : null;
+      
+      if (!release) {
+        return { success: false, error: "No releases found on GitHub." };
+      }
+      
+      // Find the Windows setup exe
+      const windowsAsset = release.assets?.find((asset: any) => 
+        asset.name.endsWith('.exe') && 
+        (asset.name.includes('Setup') || asset.name.includes('setup'))
+      );
+      
+      if (!windowsAsset) {
+        return { success: false, error: "No Windows installer found in the release." };
+      }
+      
+      // Download to temp folder
+      const os = await import("os");
+      const tempDir = path.join(os.tmpdir(), "modex-updates");
+      await fs.ensureDir(tempDir);
+      const downloadPath = path.join(tempDir, windowsAsset.name);
+      
+      // Use DownloadService
+      const downloadService = getDownloadService();
+      const downloadResult = await downloadService.downloadFile(
+        windowsAsset.browser_download_url,
+        downloadPath,
+        {
+          retries: 3,
+          onProgress: (progress) => {
+            win?.webContents.send("update:download-progress", {
+              percent: progress.percentage,
+              bytesPerSecond: progress.speed || 0,
+              transferred: progress.downloadedBytes,
+              total: progress.totalBytes,
+            });
+          },
+        }
+      );
+      
+      if (!downloadResult.success) {
+        throw new Error(downloadResult.error || "Download failed");
+      }
+      
+      console.log("[Updates] Manual download complete:", downloadPath);
+      
+      // Store the path for installation
+      (global as any).__pendingUpdatePath = downloadPath;
+      
+      // Notify renderer
+      win?.webContents.send("update:downloaded", {
+        version: release.tag_name?.replace(/^v/, "") || "unknown",
+        releaseNotes: release.body || "",
+        manualInstall: true,
+      });
+      
+      return { success: true, method: "manual", installerPath: downloadPath };
+    } catch (error: any) {
+      console.error("[Updates] Failed to download update:", error);
+      return { success: false, error: error.message || "Failed to download update" };
+    }
+  });
+
+  // Install the update and restart the app
+  ipcMain.handle("updates:installUpdate", async () => {
+    try {
+      console.log("[Updates] Installing update...");
+      
+      // Check if we have a manually downloaded installer
+      const manualInstallerPath = (global as any).__pendingUpdatePath;
+      
+      if (manualInstallerPath && await fs.pathExists(manualInstallerPath)) {
+        console.log("[Updates] Running manual installer:", manualInstallerPath);
+        
+        // Run the installer and quit the app
+        const { spawn } = await import("child_process");
+        spawn(manualInstallerPath, [], {
+          detached: true,
+          stdio: "ignore",
+        }).unref();
+        
+        // Quit the app after a short delay
+        setTimeout(() => {
+          app.quit();
+        }, 1000);
+        
+        return { success: true };
+      }
+      
+      // Use electron-updater's install
+      autoUpdater.quitAndInstall(false, true);
+      return { success: true };
+    } catch (error: any) {
+      console.error("[Updates] Failed to install update:", error);
+      return { success: false, error: error.message || "Failed to install update" };
     }
   });
 

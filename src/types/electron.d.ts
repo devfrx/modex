@@ -591,7 +591,24 @@ export interface ElectronAPI {
       noReleases?: boolean;
       error?: string;
       isPrerelease?: boolean;
+      canAutoUpdate?: boolean;
     }>;
+    /** Download the update in background */
+    downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
+    /** Install the downloaded update and restart */
+    installUpdate: () => Promise<{ success: boolean; error?: string }>;
+    /** Listen to update checking event */
+    onUpdateChecking: (callback: () => void) => () => void;
+    /** Listen to update available event */
+    onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string; releaseDate?: string }) => void) => () => void;
+    /** Listen to update not available event */
+    onUpdateNotAvailable: (callback: (info: { version: string }) => void) => () => void;
+    /** Listen to download progress event */
+    onDownloadProgress: (callback: (progress: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => () => void;
+    /** Listen to update downloaded event */
+    onUpdateDownloaded: (callback: (info: { version: string; releaseNotes?: string }) => void) => () => void;
+    /** Listen to update error event */
+    onUpdateError: (callback: (error: { message: string }) => void) => () => void;
     setApiKey: (apiKey: string) => Promise<{ success: boolean }>;
     getApiKey: () => Promise<string>;
     checkMod: (

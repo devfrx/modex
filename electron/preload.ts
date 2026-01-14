@@ -699,7 +699,49 @@ contextBridge.exposeInMainWorld("api", {
       noReleases?: boolean;
       error?: string;
       isPrerelease?: boolean;
+      canAutoUpdate?: boolean;
     }> => ipcRenderer.invoke("updates:checkAppUpdate"),
+    
+    /** Download the update in background */
+    downloadUpdate: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("updates:downloadUpdate"),
+    
+    /** Install the downloaded update and restart */
+    installUpdate: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("updates:installUpdate"),
+    
+    /** Listen to update events */
+    onUpdateChecking: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on("update:checking", listener);
+      return () => ipcRenderer.removeListener("update:checking", listener);
+    },
+    onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string; releaseDate?: string }) => void) => {
+      const listener = (_: any, info: any) => callback(info);
+      ipcRenderer.on("update:available", listener);
+      return () => ipcRenderer.removeListener("update:available", listener);
+    },
+    onUpdateNotAvailable: (callback: (info: { version: string }) => void) => {
+      const listener = (_: any, info: any) => callback(info);
+      ipcRenderer.on("update:not-available", listener);
+      return () => ipcRenderer.removeListener("update:not-available", listener);
+    },
+    onDownloadProgress: (callback: (progress: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => {
+      const listener = (_: any, progress: any) => callback(progress);
+      ipcRenderer.on("update:download-progress", listener);
+      return () => ipcRenderer.removeListener("update:download-progress", listener);
+    },
+    onUpdateDownloaded: (callback: (info: { version: string; releaseNotes?: string }) => void) => {
+      const listener = (_: any, info: any) => callback(info);
+      ipcRenderer.on("update:downloaded", listener);
+      return () => ipcRenderer.removeListener("update:downloaded", listener);
+    },
+    onUpdateError: (callback: (error: { message: string }) => void) => {
+      const listener = (_: any, error: any) => callback(error);
+      ipcRenderer.on("update:error", listener);
+      return () => ipcRenderer.removeListener("update:error", listener);
+    },
+    
     setApiKey: (apiKey: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke("updates:setApiKey", apiKey),
     getApiKey: (): Promise<string> =>

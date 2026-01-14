@@ -43,7 +43,7 @@ const WALKTHROUGH_STORAGE_KEY = "modex:walkthrough:dismissed";
 const steps = [
     {
         id: "welcome",
-        title: "Benvenuto in ModEx! 👋",
+        title: "Benvenuto in ModEx!",
         icon: Sparkles,
         color: "text-primary",
         bgColor: "bg-primary/10",
@@ -78,7 +78,7 @@ const steps = [
     },
     {
         id: "done",
-        title: "Tutto pronto! 🎮",
+        title: "Tutto pronto!",
         icon: Rocket,
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
@@ -453,7 +453,7 @@ onMounted(() => {
                         <div v-else-if="currentStepData.id === 'client-flow'" class="space-y-5">
                             <div class="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
                                 <p class="text-sm text-blue-200">
-                                    <strong>🎮 Sei un Client</strong> se vuoi ricevere un modpack condiviso da qualcun
+                                    <strong> Sei un Client</strong> se vuoi ricevere un modpack condiviso da qualcun
                                     altro.
                                 </p>
                             </div>

@@ -8,6 +8,7 @@ import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import MinecraftInstallations from "@/components/ui/MinecraftInstallations.vue";
+import UpdateManager from "@/components/ui/UpdateManager.vue";
 import {
   Settings as SettingsIcon,
   Database,
@@ -90,7 +91,6 @@ const cfApiKey = ref("");
 const githubToken = ref("");
 const githubUser = ref<{ login: string; avatarUrl: string } | null>(null);
 const isSavingGithubToken = ref(false);
-const isCheckingUpdate = ref(false);
 const currentTab = ref("general");
 
 // Instance Sync Settings
@@ -266,38 +266,11 @@ async function saveGistSettings() {
   }
 }
 
-async function checkForAppUpdates() {
-  isCheckingUpdate.value = true;
-  try {
-    const result = await window.api.updates.checkAppUpdate();
-
-    if (result.error) {
-      toast.error("Update check failed", result.error);
-    } else if (result.hasUpdate) {
-      toast.info(
-        `Update available: ${result.releaseName}`,
-        `A new version (${result.latestVersion}) is available.`,
-        10000
-      );
-      // Open the release page
-      window.open(result.releaseUrl, "_blank");
-    } else if (result.noReleases) {
-      toast.success("You're up to date", `Running v${result.currentVersion} (development build).`);
-    } else {
-      toast.success("You're up to date", `Running the latest version (v${result.currentVersion}).`);
-    }
-  } catch (error: any) {
-    toast.error("Update check failed", error.message || "Could not connect to GitHub.");
-  } finally {
-    isCheckingUpdate.value = false;
-  }
-}
-
 async function applyAccentColor(color: (typeof accentColors)[0]) {
   accentColor.value = color.name;
   localStorage.setItem("modex:accent", color.name);
   document.documentElement.style.setProperty("--primary", color.value);
-  
+
   // Set primary-foreground based on accent brightness
   // White/light colors need dark text, colored accents need light text
   if (color.name === "white") {
@@ -590,19 +563,7 @@ onMounted(() => {
               Updates
             </h3>
             <div class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50">
-              <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
-                <div>
-                  <div class="font-medium">App Updates</div>
-                  <div class="text-sm text-muted-foreground">
-                    Check for new versions
-                  </div>
-                </div>
-                <Button variant="outline" @click="checkForAppUpdates" :disabled="isCheckingUpdate"
-                  class="gap-2 w-full sm:w-auto">
-                  <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingUpdate }" />
-                  {{ isCheckingUpdate ? "Checking..." : "Check Now" }}
-                </Button>
-              </div>
+              <UpdateManager />
             </div>
           </section>
 

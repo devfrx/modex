@@ -78,6 +78,16 @@ const sortDir = ref<"asc" | "desc">("asc");
 // View Mode
 const viewMode = ref<"grid" | "list" | "compact">("grid");
 
+// Entering Animation State
+const enteringModpackId = ref<string | null>(null);
+const isEnteringAnimation = ref(false);
+const enteringCardStyle = ref<{ transform: string } | null>(null);
+const cardRefs: Record<string, HTMLElement> = {};
+
+function setCardRef(id: string, el: any) {
+  if (el) cardRefs[id] = el;
+}
+
 // Filter State
 const showFilters = ref(false);
 const selectedLoader = ref<string>("all");
@@ -686,7 +696,45 @@ async function resolveCFConflicts() {
   }
 }
 
-// Editor - Navigate to full-screen view
+// Editor - Navigate to full-screen view with immersive transition
+function openEditorWithAnimation(id: string) {
+  // Get the card element from refs
+  const cardEl = cardRefs[id];
+  let translateX = 0;
+  let translateY = 0;
+
+  if (cardEl) {
+    const rect = cardEl.getBoundingClientRect();
+    const cardCenterX = rect.left + rect.width / 2;
+    const cardCenterY = rect.top + rect.height / 2;
+    const screenCenterX = window.innerWidth / 2;
+    const screenCenterY = window.innerHeight / 2;
+    translateX = screenCenterX - cardCenterX;
+    translateY = screenCenterY - cardCenterY;
+  }
+
+  // Set the transform to move card to center while scaling
+  enteringCardStyle.value = {
+    transform: `translate(${translateX}px, ${translateY}px) scale(2)`
+  };
+
+  // Start entering animation
+  enteringModpackId.value = id;
+  isEnteringAnimation.value = true;
+
+  // Wait for animation to complete, then navigate
+  setTimeout(() => {
+    router.push(`/modpacks/${id}`);
+    // Reset state after navigation
+    setTimeout(() => {
+      enteringModpackId.value = null;
+      isEnteringAnimation.value = false;
+      enteringCardStyle.value = null;
+    }, 50);
+  }, 350);
+}
+
+// Simple editor open without animation (for list/compact views)
 function openEditor(id: string) {
   router.push(`/modpacks/${id}`);
 }
@@ -1029,6 +1077,11 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Entering Modpack Overlay - Immersive transition effect -->
+    <Transition name="entering-overlay">
+      <div v-if="isEnteringAnimation" class="entering-overlay fixed inset-0 z-40 pointer-events-none" />
+    </Transition>
+
     <!-- Unified Header -->
     <header class="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-sm z-20">
       <div class="px-4 sm:px-6 py-3">
@@ -1341,20 +1394,28 @@ onMounted(() => {
 
         <!-- Grid View -->
         <div v-if="viewMode === 'grid'"
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-          <ModpackCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
-            :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
-            :is-running="isModpackRunning(pack.id ?? '')" @delete="confirmDelete" @edit="openEditor"
-            @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
-            @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog"
-            @play="openPlayTab" />
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4"
+          :class="{ 'entering-modpack-grid': isEnteringAnimation }">
+          <div v-for="pack in sortedModpacks" :key="pack.id" :ref="(el) => setCardRef(pack.id, el)"
+            class="modpack-card-wrapper" :class="{
+              'card-entering': enteringModpackId === pack.id,
+              'card-fading-out': isEnteringAnimation && enteringModpackId !== pack.id
+            }" :style="enteringModpackId === pack.id && enteringCardStyle ? enteringCardStyle : {}">
+            <ModpackCard :modpack="pack" :selected="selectedModpackIds.has(pack.id)"
+              :favorite="favoriteModpacks.has(pack.id)" :is-running="isModpackRunning(pack.id ?? '')"
+              @delete="confirmDelete" @edit="openEditorWithAnimation" @toggle-select="toggleSelection"
+              @clone="cloneModpack" @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack"
+              @share="openShareExport" @convert="openConvertDialog" @play="openPlayTab" />
+          </div>
         </div>
 
         <!-- List View -->
-        <div v-else-if="viewMode === 'list'" class="space-y-1">
+        <div v-else-if="viewMode === 'list'" class="space-y-1"
+          :class="{ 'entering-modpack-list': isEnteringAnimation }">
           <!-- List Header -->
           <div
-            class="hidden sm:flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border">
+            class="hidden sm:flex items-center gap-3 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border"
+            :class="{ 'opacity-0': isEnteringAnimation }">
             <div class="w-5"></div>
             <div class="w-10"></div>
             <div class="flex-1">Name</div>
@@ -1365,19 +1426,29 @@ onMounted(() => {
             <div class="w-8"></div>
             <div class="w-8"></div>
           </div>
-          <ModpackListItem v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
-            :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)"
-            @delete="confirmDelete" @edit="openEditor" @toggle-select="toggleSelection" @clone="cloneModpack"
-            @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack" @share="openShareExport"
-            @convert="openConvertDialog" />
+          <div v-for="pack in sortedModpacks" :key="pack.id" class="list-item-wrapper" :class="{
+            'list-entering': enteringModpackId === pack.id,
+            'list-fading-out': isEnteringAnimation && enteringModpackId !== pack.id
+          }">
+            <ModpackListItem :modpack="pack" :selected="selectedModpackIds.has(pack.id)"
+              :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete" @edit="openEditor"
+              @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
+              @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog" />
+          </div>
         </div>
 
         <!-- Compact View -->
         <div v-else-if="viewMode === 'compact'"
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
-          <ModpackCompactCard v-for="pack in sortedModpacks" :key="pack.id" :modpack="pack"
-            :selected="selectedModpackIds.has(pack.id)" :favorite="favoriteModpacks.has(pack.id)" @edit="openEditor"
-            @toggle-select="toggleSelection" @toggle-favorite="toggleFavoriteModpack" />
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2"
+          :class="{ 'entering-modpack-grid': isEnteringAnimation }">
+          <div v-for="pack in sortedModpacks" :key="pack.id" class="compact-card-wrapper" :class="{
+            'card-entering': enteringModpackId === pack.id,
+            'card-fading-out': isEnteringAnimation && enteringModpackId !== pack.id
+          }">
+            <ModpackCompactCard :modpack="pack" :selected="selectedModpackIds.has(pack.id)"
+              :favorite="favoriteModpacks.has(pack.id)" @edit="openEditor" @toggle-select="toggleSelection"
+              @toggle-favorite="toggleFavoriteModpack" />
+          </div>
         </div>
 
         <!-- Empty Filtered State -->
@@ -1632,6 +1703,109 @@ onMounted(() => {
 .slide-enter-from,
 .slide-leave-to {
   transform: translateX(-100%);
+  opacity: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ENTERING MODPACK TRANSITION - Optimized for performance
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Wrapper for each card to enable individual transforms */
+.modpack-card-wrapper,
+.compact-card-wrapper,
+.list-item-wrapper {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* The card being entered - uses dynamic inline style for transform */
+.card-entering {
+  z-index: 100;
+  position: relative;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+  opacity: 0;
+}
+
+/* Other cards fade out quickly */
+.card-fading-out {
+  animation: card-fade-out 0.25s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes card-fade-out {
+  0% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* List view entering animation */
+.list-entering {
+  animation: list-zoom-enter 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  z-index: 100;
+  position: relative;
+}
+
+@keyframes list-zoom-enter {
+  0% {
+    transform: scale(1) translateZ(0);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1.05) translateZ(0);
+    opacity: 0;
+  }
+}
+
+.list-fading-out {
+  animation: list-fade-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes list-fade-out {
+  0% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Container states during animation */
+.entering-modpack-grid,
+.entering-modpack-list {
+  pointer-events: none;
+}
+
+/* Entering overlay - simple fade */
+.entering-overlay {
+  background: hsl(var(--background) / 0.8);
+  animation: overlay-fade-in 0.35s ease forwards;
+}
+
+@keyframes overlay-fade-in {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.entering-overlay-enter-active {
+  transition: opacity 0.3s ease;
+}
+
+.entering-overlay-leave-active {
+  transition: opacity 0.1s ease;
+}
+
+.entering-overlay-enter-from,
+.entering-overlay-leave-to {
   opacity: 0;
 }
 </style>

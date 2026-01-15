@@ -206,6 +206,27 @@ export class ConfigService {
     this.basePath = basePath;
   }
 
+  /**
+   * Validate that a relative path stays within the base directory (path traversal protection)
+   * @param basePath The base directory path
+   * @param relativePath The relative path to validate
+   * @returns The resolved full path if valid
+   * @throws Error if the path escapes the base directory
+   */
+  private validatePath(basePath: string, relativePath: string): string {
+    // Resolve the full path
+    const fullPath = path.resolve(basePath, relativePath);
+    const resolvedBase = path.resolve(basePath);
+    
+    // Check that the resolved path starts with the base path
+    // Using path.sep to ensure proper directory boundary matching
+    if (!fullPath.startsWith(resolvedBase + path.sep) && fullPath !== resolvedBase) {
+      throw new Error(`Invalid path: path traversal attempt detected`);
+    }
+    
+    return fullPath;
+  }
+
   // ==================== BROWSE ====================
 
   /**
@@ -434,7 +455,8 @@ export class ConfigService {
    * Read a config file's content
    */
   async readConfig(instancePath: string, configPath: string): Promise<ConfigContent> {
-    const fullPath = path.join(instancePath, configPath);
+    // Validate path to prevent path traversal attacks
+    const fullPath = this.validatePath(instancePath, configPath);
     
     if (!await fs.pathExists(fullPath)) {
       throw new Error(`Config file not found: ${configPath}`);
@@ -477,7 +499,8 @@ export class ConfigService {
    * Write content to a config file
    */
   async writeConfig(instancePath: string, configPath: string, content: string): Promise<void> {
-    const fullPath = path.join(instancePath, configPath);
+    // Validate path to prevent path traversal attacks
+    const fullPath = this.validatePath(instancePath, configPath);
     
     // Ensure parent directory exists
     await fs.ensureDir(path.dirname(fullPath));
@@ -495,7 +518,8 @@ export class ConfigService {
    * Delete a config file
    */
   async deleteConfig(instancePath: string, configPath: string): Promise<void> {
-    const fullPath = path.join(instancePath, configPath);
+    // Validate path to prevent path traversal attacks
+    const fullPath = this.validatePath(instancePath, configPath);
     
     if (await fs.pathExists(fullPath)) {
       await fs.remove(fullPath);
@@ -506,7 +530,8 @@ export class ConfigService {
    * Create a new config file
    */
   async createConfig(instancePath: string, configPath: string, content: string = ""): Promise<void> {
-    const fullPath = path.join(instancePath, configPath);
+    // Validate path to prevent path traversal attacks
+    const fullPath = this.validatePath(instancePath, configPath);
     
     if (await fs.pathExists(fullPath)) {
       throw new Error(`Config file already exists: ${configPath}`);
@@ -919,7 +944,8 @@ export class ConfigService {
    * Parse a config file into structured entries
    */
   async parseConfigStructured(instancePath: string, configPath: string): Promise<ParsedConfig> {
-    const fullPath = path.join(instancePath, configPath);
+    // Validate path to prevent path traversal attacks
+    const fullPath = this.validatePath(instancePath, configPath);
     
     if (!await fs.pathExists(fullPath)) {
       throw new Error(`Config file not found: ${configPath}`);
@@ -1410,7 +1436,8 @@ export class ConfigService {
     entries: ConfigEntry[],
     modpackId?: string
   ): Promise<{ success: boolean; modifications: ConfigModification[] }> {
-    const fullPath = path.join(instancePath, configPath);
+    // Validate path to prevent path traversal attacks
+    const fullPath = this.validatePath(instancePath, configPath);
     const ext = path.extname(configPath).toLowerCase().slice(1);
     const type = this.getConfigType(ext);
 
@@ -1445,28 +1472,33 @@ export class ConfigService {
     // Generate new content based on file type
     let newContent: string;
 
-    switch (type) {
-      case "json":
-      case "json5":
-        newContent = this.rebuildJson(originalContent, modifiedEntries);
-        break;
-      case "toml":
-        newContent = this.rebuildToml(originalContent, modifiedEntries);
-        break;
-      case "properties":
-      case "cfg":
-        newContent = this.rebuildProperties(originalContent, modifiedEntries);
-        break;
-      case "yaml":
-        newContent = this.rebuildYaml(originalContent, modifiedEntries);
-        break;
-      default:
-        // For unknown types, just use the value directly
-        if (modifiedEntries.length > 0) {
-          newContent = String(modifiedEntries[0].value);
-        } else {
-          newContent = originalContent;
-        }
+    try {
+      switch (type) {
+        case "json":
+        case "json5":
+          newContent = this.rebuildJson(originalContent, modifiedEntries);
+          break;
+        case "toml":
+          newContent = this.rebuildToml(originalContent, modifiedEntries);
+          break;
+        case "properties":
+        case "cfg":
+          newContent = this.rebuildProperties(originalContent, modifiedEntries);
+          break;
+        case "yaml":
+          newContent = this.rebuildYaml(originalContent, modifiedEntries);
+          break;
+        default:
+          // For unknown types, just use the value directly
+          if (modifiedEntries.length > 0) {
+            newContent = String(modifiedEntries[0].value);
+          } else {
+            newContent = originalContent;
+          }
+      }
+    } catch (error) {
+      console.error(`[ConfigService] Failed to rebuild ${type} config:`, error);
+      throw new Error(`Failed to parse config file: ${(error as Error).message}`);
     }
 
     console.log("[ConfigService] Content rebuild complete:", {
@@ -1781,7 +1813,8 @@ export class ConfigService {
 
     try {
       return JSON.parse(await fs.readFile(logPath, "utf-8"));
-    } catch {
+    } catch (error) {
+      console.warn(`[ConfigService] Failed to parse config modifications log:`, error);
       return [];
     }
   }

@@ -32,6 +32,8 @@ import { ModpackAnalyzerService, ModpackPreview, ModpackAnalysis } from "./servi
 import { InstanceService, ModexInstance, InstanceSyncResult } from "./services/InstanceService.js";
 import { ConfigService, ConfigFile, ConfigFolder, ConfigContent, ConfigExport } from "./services/ConfigService.js";
 import { GistService, GistInfo, GistOperationResult } from "./services/GistService.js";
+import { GameService, GameType, GameProfile, GameConfig } from "./services/GameService.js";
+import { HytaleService, HytaleMod, HytaleModpack, HytaleSyncResult } from "./services/HytaleService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +57,8 @@ let modpackAnalyzerService: ModpackAnalyzerService;
 let instanceService: InstanceService;
 let configService: ConfigService;
 let gistService: GistService;
+let gameService: GameService;
+let hytaleService: HytaleService;
 
 // Register custom protocol for local file access (thumbnails cache)
 protocol.registerSchemesAsPrivileged([
@@ -99,6 +103,8 @@ async function initializeBackend() {
   instanceService = new InstanceService(metadataManager.getBasePath());
   configService = new ConfigService(metadataManager.getBasePath());
   gistService = new GistService(metadataManager.getBasePath());
+  gameService = new GameService(metadataManager.getBasePath());
+  hytaleService = new HytaleService(metadataManager.getBasePath());
 
   // Connect instanceService to metadataManager for version control integration
   metadataManager.setInstanceService(instanceService);
@@ -107,6 +113,8 @@ async function initializeBackend() {
   await imageCacheService.initialize();
   await minecraftService.detectInstallations();
   await instanceService.initialize();
+  await gameService.initialize();
+  await hytaleService.initialize();
 
   // Register atom:// protocol for cached images
   protocol.handle("atom", (request) => {
@@ -247,6 +255,7 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("curseforge:search", async (_, options) => {
+    console.log("[Main] CurseForge search options:", JSON.stringify(options));
     const result = await curseforgeService.searchMods(options);
     return { mods: result.mods, pagination: result.pagination };
   });
@@ -278,8 +287,8 @@ async function initializeBackend() {
 
   ipcMain.handle(
     "curseforge:getCategories",
-    async (_, contentType?: string) => {
-      return curseforgeService.getCategories(contentType as any);
+    async (_, contentType?: string, gameType?: string) => {
+      return curseforgeService.getCategories(contentType as any, gameType as any);
     }
   );
 
@@ -299,6 +308,10 @@ async function initializeBackend() {
 
   ipcMain.handle("curseforge:getMinecraftVersions", async () => {
     return curseforgeService.getMinecraftVersions();
+  });
+
+  ipcMain.handle("curseforge:getGameClasses", async (_, gameType?: string) => {
+    return curseforgeService.fetchGameClasses(gameType as any);
   });
 
   ipcMain.handle("curseforge:getLoaderTypes", async () => {
@@ -4828,6 +4841,241 @@ async function initializeBackend() {
     if (!instance) throw new Error("Instance not found");
     await configService.rollbackConfigChanges(instance.path, changeSetId);
     return { success: true };
+  });
+
+  // ========== GAME PROFILES IPC HANDLERS ==========
+
+  ipcMain.handle("game:getProfiles", async () => {
+    return gameService.getProfiles();
+  });
+
+  ipcMain.handle("game:getProfilesByGameType", async (_, gameType: GameType) => {
+    return gameService.getProfilesByGameType(gameType);
+  });
+
+  ipcMain.handle("game:getProfile", async (_, id: string) => {
+    return gameService.getProfile(id);
+  });
+
+  ipcMain.handle("game:getDefaultProfile", async (_, gameType: GameType) => {
+    return gameService.getDefaultProfile(gameType);
+  });
+
+  ipcMain.handle("game:getGameConfig", async (_, gameType: GameType) => {
+    return gameService.getGameConfig(gameType);
+  });
+
+  ipcMain.handle("game:getActiveGameType", async () => {
+    return gameService.getActiveGameType();
+  });
+
+  ipcMain.handle("game:setActiveGameType", async (_, gameType: GameType) => {
+    await gameService.setActiveGameType(gameType);
+    // Also update CurseForge service to use the new game type
+    curseforgeService.setActiveGameType(gameType);
+  });
+
+  ipcMain.handle("game:createProfile", async (_, options: {
+    gameType: GameType;
+    name: string;
+    description?: string;
+    icon?: string;
+    launcherPath?: string;
+    modsPath?: string;
+  }) => {
+    return gameService.createProfile(options);
+  });
+
+  ipcMain.handle("game:updateProfile", async (_, id: string, updates: Partial<GameProfile>) => {
+    return gameService.updateProfile(id, updates);
+  });
+
+  ipcMain.handle("game:deleteProfile", async (_, id: string) => {
+    return gameService.deleteProfile(id);
+  });
+
+  ipcMain.handle("game:setDefaultProfile", async (_, id: string) => {
+    return gameService.setDefaultProfile(id);
+  });
+
+  ipcMain.handle("game:detectGame", async (_, gameType: GameType) => {
+    return gameService.detectGame(gameType);
+  });
+
+  ipcMain.handle("game:detectAllGames", async () => {
+    return gameService.detectAllGames();
+  });
+
+  ipcMain.handle("game:launchGame", async (_, profileId: string) => {
+    return gameService.launchGame(profileId);
+  });
+
+  ipcMain.handle("game:openModsFolder", async (_, profileId: string) => {
+    return gameService.openModsFolder(profileId);
+  });
+
+  // ========== HYTALE IPC HANDLERS ==========
+
+  ipcMain.handle("hytale:getConfig", async () => {
+    return hytaleService.getConfig();
+  });
+
+  ipcMain.handle("hytale:setConfig", async (_, config: { modsPath?: string; launcherPath?: string }) => {
+    return hytaleService.setConfig(config);
+  });
+
+  ipcMain.handle("hytale:scanMods", async () => {
+    return hytaleService.scanInstalledMods();
+  });
+
+  ipcMain.handle("hytale:getInstalledMods", async () => {
+    return hytaleService.getInstalledMods();
+  });
+
+  ipcMain.handle("hytale:installMod", async (_, sourceFilePath: string, metadata: {
+    id: string;
+    name: string;
+    version: string;
+    cfProjectId?: number;
+    cfFileId?: number;
+    logoUrl?: string;
+  }) => {
+    return hytaleService.installMod(sourceFilePath, metadata);
+  });
+
+  ipcMain.handle("hytale:removeMod", async (_, id: string) => {
+    return hytaleService.removeMod(id);
+  });
+
+  ipcMain.handle("hytale:toggleMod", async (_, id: string) => {
+    return hytaleService.toggleMod(id);
+  });
+
+  ipcMain.handle("hytale:getModpacks", async () => {
+    return hytaleService.getModpacks();
+  });
+
+  ipcMain.handle("hytale:getModpack", async (_, id: string) => {
+    return hytaleService.getModpack(id);
+  });
+
+  ipcMain.handle("hytale:getActiveModpack", async () => {
+    return hytaleService.getActiveModpack();
+  });
+
+  ipcMain.handle("hytale:createModpack", async (_, options: {
+    name: string;
+    description?: string;
+    imageUrl?: string;
+    modIds?: string[];
+  }) => {
+    return hytaleService.createModpack(options);
+  });
+
+  ipcMain.handle("hytale:updateModpack", async (_, id: string, updates: Partial<HytaleModpack>) => {
+    return hytaleService.updateModpack(id, updates);
+  });
+
+  ipcMain.handle("hytale:deleteModpack", async (_, id: string) => {
+    return hytaleService.deleteModpack(id);
+  });
+
+  ipcMain.handle("hytale:saveToModpack", async (_, modpackId: string) => {
+    return hytaleService.saveToModpack(modpackId);
+  });
+
+  ipcMain.handle("hytale:activateModpack", async (_, modpackId: string) => {
+    return hytaleService.activateModpack(modpackId);
+  });
+
+  ipcMain.handle("hytale:compareWithModpack", async (_, modpackId: string) => {
+    return hytaleService.compareWithModpack(modpackId);
+  });
+
+  ipcMain.handle("hytale:duplicateModpack", async (_, modpackId: string, newName: string) => {
+    return hytaleService.duplicateModpack(modpackId, newName);
+  });
+
+  ipcMain.handle("hytale:toggleModInModpack", async (_, modpackId: string, modId: string) => {
+    return hytaleService.toggleModInModpack(modpackId, modId);
+  });
+
+  ipcMain.handle("hytale:addModToModpack", async (_, modpackId: string, modId: string) => {
+    return hytaleService.addModToModpack(modpackId, modId);
+  });
+
+  ipcMain.handle("hytale:removeModFromModpack", async (_, modpackId: string, modId: string) => {
+    return hytaleService.removeModFromModpack(modpackId, modId);
+  });
+
+  ipcMain.handle("hytale:isInstalled", async () => {
+    return hytaleService.isInstalled();
+  });
+
+  ipcMain.handle("hytale:launch", async () => {
+    return hytaleService.launch();
+  });
+
+  ipcMain.handle("hytale:openModsFolder", async () => {
+    return hytaleService.openModsFolder();
+  });
+
+  ipcMain.handle("hytale:openModFolder", async (_, modId: string) => {
+    return hytaleService.openModFolder(modId);
+  });
+
+  ipcMain.handle("hytale:getStats", async () => {
+    return hytaleService.getStats();
+  });
+
+  // Hytale world management
+  ipcMain.handle("hytale:getWorlds", async () => {
+    return hytaleService.getWorlds();
+  });
+
+  ipcMain.handle("hytale:toggleSaveMod", async (_, saveId: string, modId: string, enabled: boolean) => {
+    return hytaleService.toggleSaveMod(saveId, modId, enabled);
+  });
+
+  ipcMain.handle("hytale:openSaveFolder", async (_, saveId: string) => {
+    return hytaleService.openSaveFolder(saveId);
+  });
+
+  ipcMain.handle("hytale:saveWorldModConfig", async (_, worldId: string, modConfigs: { modId: string; enabled: boolean }[]) => {
+    return hytaleService.saveWorldModConfig(worldId, modConfigs);
+  });
+
+  ipcMain.handle("hytale:getWorldModConfig", async (_, worldId: string) => {
+    return hytaleService.getWorldModConfig(worldId);
+  });
+
+  ipcMain.handle("hytale:applyWorldModConfig", async (_, worldId: string) => {
+    return hytaleService.applyWorldModConfig(worldId);
+  });
+
+  // Download a mod file for Hytale (actually downloads the file, unlike addToLibrary which is metadata-only)
+  ipcMain.handle("hytale:downloadModFile", async (_, downloadUrl: string, fileName: string) => {
+    try {
+      const tempDir = path.join(app.getPath("temp"), "modex-hytale-downloads");
+      await fs.ensureDir(tempDir);
+      const destPath = path.join(tempDir, fileName);
+      
+      // Use the download service for robust downloading
+      const downloadService = getDownloadService();
+      const result = await downloadService.downloadFile(downloadUrl, destPath, {
+        timeout: 120000, // 2 minute timeout for large mods
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error || "Download failed");
+      }
+      
+      console.log(`[Hytale] Downloaded mod file: ${fileName} -> ${destPath}`);
+      return destPath;
+    } catch (error: any) {
+      console.error("[Hytale] Error downloading mod file:", error);
+      throw error;
+    }
   });
 
   // ========== SYSTEM INFO IPC HANDLERS ==========

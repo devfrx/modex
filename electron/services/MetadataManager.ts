@@ -761,6 +761,12 @@ export class MetadataManager {
         continue;
       }
 
+      // Safety check - should never fail due to filter above, but TypeScript needs it
+      if (!mod.cf_project_id || !mod.cf_file_id) {
+        skipped++;
+        continue;
+      }
+
       try {
         const cfFile = await cfService.getFile(mod.cf_project_id, mod.cf_file_id);
         if (cfFile && cfFile.dependencies) {
@@ -5247,6 +5253,18 @@ ${modLinks}
 
     const mcVersion = modpack.minecraft_version;
     const loader = modpack.loader;
+    
+    // Cannot re-search without a target Minecraft version
+    if (!mcVersion) {
+      console.warn(`[Re-search] Modpack has no minecraft_version set, cannot search for compatible mods`);
+      return { 
+        found: 0, 
+        notFound: incompatible.length, 
+        added: [], 
+        stillIncompatible: incompatible.map(m => m.name) 
+      };
+    }
+    
     const added: string[] = [];
     const stillIncompatible: string[] = [];
 
@@ -6205,7 +6223,7 @@ ${modLinks}
             modEntry.project_id || modEntry.cf_project_id,
             modEntry.file_id || modEntry.cf_file_id
           );
-        } else if (modEntry.source === "modrinth" || modEntry.mr_project_id) {
+        } else if ((modEntry.source === "modrinth" || modEntry.mr_project_id) && modEntry.mr_project_id) {
           existingMod = await this.findModByMRIds(
             modEntry.mr_project_id,
             modEntry.mr_version_id
@@ -6229,12 +6247,22 @@ ${modLinks}
 
               if (cfMod && cfFile) {
                 // Convert to library format with content_type from manifest
+                // Map singular content_type from manifest to plural ContentType expected by modToLibraryFormat
+                const singularToPlural: Record<string, "mods" | "resourcepacks" | "shaders"> = {
+                  mod: "mods",
+                  resourcepack: "resourcepacks",
+                  shader: "shaders"
+                };
+                const contentTypeForApi = modEntry.content_type 
+                  ? singularToPlural[modEntry.content_type] || "mods" 
+                  : undefined;
+                
                 const modData = cfService.modToLibraryFormat(
                   cfMod,
                   cfFile,
                   manifest.modpack?.loader,
                   manifest.modpack?.minecraft_version,
-                  modEntry.content_type
+                  contentTypeForApi
                 );
 
                 // Add to library
@@ -6657,8 +6685,8 @@ ${modLinks}
     }
 
     const { partialData, manifest } = storedData;
-    const newModIds = [...partialData.newModIds];
-    const addedModNames = [...partialData.addedModNames];
+    const newModIds = [...(partialData.newModIds || [])];
+    const addedModNames = [...(partialData.addedModNames || [])];
     const errors: string[] = [];
 
     const mcVersion = manifest.minecraft?.version || "1.20.1";

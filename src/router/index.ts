@@ -12,6 +12,7 @@ import SettingsView from "@/views/SettingsView.vue";
 import SandboxView from "@/views/SandboxView.vue";
 import GuideView from "@/views/GuideView.vue";
 import StatsView from "@/views/StatsView.vue";
+import HytaleView from "@/views/HytaleView.vue";
 
 const routes: RouteRecordRaw[] = [
   { path: "/", redirect: "/home" },
@@ -27,6 +28,11 @@ const routes: RouteRecordRaw[] = [
   { path: "/sandbox", component: SandboxView },
   { path: "/settings", component: SettingsView },
   { path: "/guide", component: GuideView },
+  // Hytale routes
+  { path: "/hytale", component: HytaleView },
+  { path: "/hytale/browse", component: defineAsyncComponent(() => import("@/views/HytaleBrowseView.vue")) },
+  { path: "/hytale/worlds", component: defineAsyncComponent(() => import("@/views/HytaleWorldsView.vue")) },
+  { path: "/hytale/modpack/:id", component: defineAsyncComponent(() => import("@/views/HytaleModpackEditorView.vue")) },
 ];
 
 // Add dev-only routes

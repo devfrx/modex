@@ -29,6 +29,14 @@ import type {
   ConfigExport,
   ConfigBackup,
   ConfigComparison,
+  GameType,
+  GameProfile,
+  GameConfig,
+  HytaleMod,
+  HytaleModpack,
+  HytaleSyncResult,
+  HytaleStats,
+  HytaleWorld,
 } from "./index";
 
 // Re-export core types
@@ -42,6 +50,14 @@ export type {
   ModpackVersion,
   ModpackVersionHistory,
   ModpackChange,
+  GameType,
+  GameProfile,
+  GameConfig,
+  HytaleMod,
+  HytaleModpack,
+  HytaleSyncResult,
+  HytaleStats,
+  HytaleWorld,
 };
 
 // ==================== GIST TYPES ====================
@@ -116,6 +132,7 @@ export interface ElectronAPI {
       sortField?: number;
       sortOrder?: "asc" | "desc";
       contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks";
+      gameType?: GameType;
     }) => Promise<{ mods: CFMod[]; pagination: CFPagination }>;
     getMod: (modId: number) => Promise<CFMod | null>;
     getModFiles: (
@@ -126,7 +143,8 @@ export interface ElectronAPI {
       }
     ) => Promise<CFFile[]>;
     getCategories: (
-      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks"
+      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks",
+      gameType?: "minecraft" | "hytale"
     ) => Promise<CFCategory[]>;
     getPopular: (gameVersion?: string, modLoader?: string) => Promise<CFMod[]>;
     /** Get available mod loader versions for a Minecraft version */
@@ -1053,6 +1071,134 @@ export interface ElectronAPI {
 
     /** Rollback a specific config change set */
     rollbackChanges: (instanceId: string, changeSetId: string) => Promise<{ success: boolean }>;
+  };
+
+  // ========== GAME PROFILES ==========
+  game: {
+    /** Get all game profiles */
+    getProfiles: () => Promise<GameProfile[]>;
+    /** Get profiles for a specific game type */
+    getProfilesByGameType: (gameType: GameType) => Promise<GameProfile[]>;
+    /** Get a specific profile */
+    getProfile: (id: string) => Promise<GameProfile | null>;
+    /** Get the default profile for a game type */
+    getDefaultProfile: (gameType: GameType) => Promise<GameProfile | null>;
+    /** Get game configuration for a game type */
+    getGameConfig: (gameType: GameType) => Promise<GameConfig>;
+    /** Get the currently active game type */
+    getActiveGameType: () => Promise<GameType>;
+    /** Set the active game type */
+    setActiveGameType: (gameType: GameType) => Promise<void>;
+    /** Create a new profile */
+    createProfile: (options: {
+      gameType: GameType;
+      name: string;
+      description?: string;
+      icon?: string;
+      launcherPath?: string;
+      modsPath?: string;
+    }) => Promise<GameProfile>;
+    /** Update a profile */
+    updateProfile: (id: string, updates: Partial<Omit<GameProfile, "id" | "gameType" | "createdAt">>) => Promise<GameProfile | null>;
+    /** Delete a profile */
+    deleteProfile: (id: string) => Promise<boolean>;
+    /** Set a profile as default */
+    setDefaultProfile: (id: string) => Promise<boolean>;
+    /** Detect if a game is installed */
+    detectGame: (gameType: GameType) => Promise<{ installed: boolean; launcherPath?: string; modsPath?: string }>;
+    /** Detect all installed games */
+    detectAllGames: () => Promise<Record<GameType, { installed: boolean; launcherPath?: string; modsPath?: string }>>;
+    /** Launch a game with a specific profile */
+    launchGame: (profileId: string) => Promise<{ success: boolean; error?: string }>;
+    /** Open mods folder for a profile */
+    openModsFolder: (profileId: string) => Promise<boolean>;
+  };
+
+  // ========== HYTALE ==========
+  hytale: {
+    /** Get Hytale configuration */
+    getConfig: () => Promise<{ modsPath: string; launcherPath: string }>;
+    /** Set Hytale configuration */
+    setConfig: (config: { modsPath?: string; launcherPath?: string }) => Promise<void>;
+    /** Scan installed mods */
+    scanMods: () => Promise<HytaleMod[]>;
+    /** Get installed mods (from cache) */
+    getInstalledMods: () => Promise<HytaleMod[]>;
+    /** Install a mod from a downloaded file */
+    installMod: (sourceFilePath: string, metadata: {
+      id: string;
+      name: string;
+      version: string;
+      cfProjectId?: number;
+      cfFileId?: number;
+    }) => Promise<{ success: boolean; error?: string }>;
+    /** Remove a mod */
+    removeMod: (id: string) => Promise<boolean>;
+    /** Toggle a mod's enabled/disabled state */
+    toggleMod: (id: string) => Promise<{ enabled: boolean } | null>;
+    /** Get all modpacks */
+    getModpacks: () => Promise<HytaleModpack[]>;
+    /** Get a specific modpack */
+    getModpack: (id: string) => Promise<HytaleModpack | null>;
+    /** Get the currently active modpack */
+    getActiveModpack: () => Promise<HytaleModpack | null>;
+    /** Create a new modpack from current mods state */
+    createModpack: (options: {
+      name: string;
+      description?: string;
+      imageUrl?: string;
+      modIds?: string[];
+    }) => Promise<HytaleModpack>;
+    /** Update a modpack */
+    updateModpack: (id: string, updates: Partial<Omit<HytaleModpack, "id" | "createdAt">>) => Promise<HytaleModpack | null>;
+    /** Delete a modpack */
+    deleteModpack: (id: string) => Promise<boolean>;
+    /** Save current mods state to an existing modpack */
+    saveToModpack: (modpackId: string) => Promise<boolean>;
+    /** Activate a modpack - enables/disables mods to match saved state */
+    activateModpack: (modpackId: string) => Promise<HytaleSyncResult & { 
+      missingMods: string[]; 
+      newMods: string[];
+    }>;
+    /** Compare current folder state with a modpack */
+    compareWithModpack: (modpackId: string) => Promise<{
+      matching: Array<{ name: string; enabled: boolean }>;
+      different: Array<{ name: string; currentEnabled: boolean; modpackEnabled: boolean }>;
+      missingFromFolder: Array<{ name: string; enabled: boolean }>;
+      newInFolder: Array<{ name: string; enabled: boolean }>;
+    }>;
+    /** Duplicate a modpack with a new name */
+    duplicateModpack: (modpackId: string, newName: string) => Promise<HytaleModpack | null>;
+    /** Toggle a mod's enabled state within a modpack */
+    toggleModInModpack: (modpackId: string, modId: string) => Promise<boolean>;
+    /** Add a mod to a modpack */
+    addModToModpack: (modpackId: string, modId: string) => Promise<boolean>;
+    /** Remove a mod from a modpack */
+    removeModFromModpack: (modpackId: string, modId: string) => Promise<boolean>;
+    /** Check if Hytale is installed */
+    isInstalled: () => Promise<boolean>;
+    /** Launch Hytale */
+    launch: () => Promise<{ success: boolean; error?: string; pid?: number }>;
+    /** Open mods folder in explorer */
+    openModsFolder: () => Promise<boolean>;
+    /** Open a specific mod folder in explorer */
+    openModFolder: (modId: string) => Promise<boolean>;
+    /** Get stats about installed mods */
+    getStats: () => Promise<HytaleStats>;
+    /** Get all Hytale saves/worlds */
+    getWorlds: () => Promise<HytaleWorld[]>;
+    /** Toggle a mod for a specific save (updates config.json) */
+    toggleSaveMod: (saveId: string, modId: string, enabled: boolean) => Promise<boolean>;
+    /** Open a save folder in explorer */
+    openSaveFolder: (saveId: string) => Promise<boolean>;
+    /** Save mod configuration for a specific world */
+    saveWorldModConfig: (worldId: string, modConfigs: { modId: string; enabled: boolean }[]) => Promise<boolean>;
+    /** Get mod configuration for a specific world */
+    getWorldModConfig: (worldId: string) => Promise<{ modId: string; enabled: boolean }[]>;
+    /** Apply world-specific mod configuration before launching */
+    applyWorldModConfig: (worldId: string) => Promise<HytaleSyncResult>;
+    /** Download a mod file for Hytale installation */
+    downloadModFile: (downloadUrl: string, fileName: string) => Promise<string>;
   };
 
   // ========== EVENTS ==========

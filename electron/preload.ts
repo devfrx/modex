@@ -127,6 +127,7 @@ contextBridge.exposeInMainWorld("api", {
       sortField?: number;
       sortOrder?: "asc" | "desc";
       contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks";
+      gameType?: "minecraft" | "hytale";
     }): Promise<{ mods: any[]; pagination: any }> =>
       ipcRenderer.invoke("curseforge:search", options),
     getMod: (modId: number): Promise<any | null> =>
@@ -137,15 +138,18 @@ contextBridge.exposeInMainWorld("api", {
     ): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getModFiles", modId, options),
     getCategories: (
-      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks"
+      contentType?: "mods" | "resourcepacks" | "shaders" | "modpacks",
+      gameType?: "minecraft" | "hytale"
     ): Promise<any[]> =>
-      ipcRenderer.invoke("curseforge:getCategories", contentType),
+      ipcRenderer.invoke("curseforge:getCategories", contentType, gameType),
     getPopular: (gameVersion?: string, modLoader?: string): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getPopular", gameVersion, modLoader),
     getModLoaders: (gameVersion?: string): Promise<any[]> =>
       ipcRenderer.invoke("curseforge:getModLoaders", gameVersion),
     getMinecraftVersions: (): Promise<{ versionString: string; approved: boolean }[]> =>
       ipcRenderer.invoke("curseforge:getMinecraftVersions"),
+    getGameClasses: (gameType?: string): Promise<{ id: number; name: string; slug: string }[]> =>
+      ipcRenderer.invoke("curseforge:getGameClasses", gameType),
     getLoaderTypes: (): Promise<string[]> =>
       ipcRenderer.invoke("curseforge:getLoaderTypes"),
     addToLibrary: (
@@ -1766,6 +1770,85 @@ contextBridge.exposeInMainWorld("api", {
     /** Rollback a specific config change set */
     rollbackChanges: (instanceId: string, changeSetId: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke("config:rollbackChanges", instanceId, changeSetId),
+  },
+
+  // ========== GAME PROFILES ==========
+  game: {
+    getProfiles: () => ipcRenderer.invoke("game:getProfiles"),
+    getProfilesByGameType: (gameType: string) => ipcRenderer.invoke("game:getProfilesByGameType", gameType),
+    getProfile: (id: string) => ipcRenderer.invoke("game:getProfile", id),
+    getDefaultProfile: (gameType: string) => ipcRenderer.invoke("game:getDefaultProfile", gameType),
+    getGameConfig: (gameType: string) => ipcRenderer.invoke("game:getGameConfig", gameType),
+    getActiveGameType: () => ipcRenderer.invoke("game:getActiveGameType"),
+    setActiveGameType: (gameType: string) => ipcRenderer.invoke("game:setActiveGameType", gameType),
+    createProfile: (options: {
+      gameType: string;
+      name: string;
+      description?: string;
+      icon?: string;
+      launcherPath?: string;
+      modsPath?: string;
+    }) => ipcRenderer.invoke("game:createProfile", options),
+    updateProfile: (id: string, updates: Record<string, any>) => ipcRenderer.invoke("game:updateProfile", id, updates),
+    deleteProfile: (id: string) => ipcRenderer.invoke("game:deleteProfile", id),
+    setDefaultProfile: (id: string) => ipcRenderer.invoke("game:setDefaultProfile", id),
+    detectGame: (gameType: string) => ipcRenderer.invoke("game:detectGame", gameType),
+    detectAllGames: () => ipcRenderer.invoke("game:detectAllGames"),
+    launchGame: (profileId: string) => ipcRenderer.invoke("game:launchGame", profileId),
+    openModsFolder: (profileId: string) => ipcRenderer.invoke("game:openModsFolder", profileId),
+  },
+
+  // ========== HYTALE ==========
+  hytale: {
+    getConfig: () => ipcRenderer.invoke("hytale:getConfig"),
+    setConfig: (config: { modsPath?: string; launcherPath?: string }) => ipcRenderer.invoke("hytale:setConfig", config),
+    scanMods: () => ipcRenderer.invoke("hytale:scanMods"),
+    getInstalledMods: () => ipcRenderer.invoke("hytale:getInstalledMods"),
+    installMod: (sourceFilePath: string, metadata: {
+      id: string;
+      name: string;
+      version: string;
+      cfProjectId?: number;
+      cfFileId?: number;
+      logoUrl?: string;
+    }) => ipcRenderer.invoke("hytale:installMod", sourceFilePath, metadata),
+    removeMod: (id: string) => ipcRenderer.invoke("hytale:removeMod", id),
+    toggleMod: (id: string) => ipcRenderer.invoke("hytale:toggleMod", id),
+    getModpacks: () => ipcRenderer.invoke("hytale:getModpacks"),
+    getModpack: (id: string) => ipcRenderer.invoke("hytale:getModpack", id),
+    getActiveModpack: () => ipcRenderer.invoke("hytale:getActiveModpack"),
+    createModpack: (options: {
+      name: string;
+      description?: string;
+      imageUrl?: string;
+      modIds?: string[];
+    }) => ipcRenderer.invoke("hytale:createModpack", options),
+    updateModpack: (id: string, updates: Record<string, any>) => ipcRenderer.invoke("hytale:updateModpack", id, updates),
+    deleteModpack: (id: string) => ipcRenderer.invoke("hytale:deleteModpack", id),
+    saveToModpack: (modpackId: string) => ipcRenderer.invoke("hytale:saveToModpack", modpackId),
+    activateModpack: (modpackId: string) => ipcRenderer.invoke("hytale:activateModpack", modpackId),
+    compareWithModpack: (modpackId: string) => ipcRenderer.invoke("hytale:compareWithModpack", modpackId),
+    duplicateModpack: (modpackId: string, newName: string) => ipcRenderer.invoke("hytale:duplicateModpack", modpackId, newName),
+    toggleModInModpack: (modpackId: string, modId: string) => ipcRenderer.invoke("hytale:toggleModInModpack", modpackId, modId),
+    addModToModpack: (modpackId: string, modId: string) => ipcRenderer.invoke("hytale:addModToModpack", modpackId, modId),
+    removeModFromModpack: (modpackId: string, modId: string) => ipcRenderer.invoke("hytale:removeModFromModpack", modpackId, modId),
+    isInstalled: () => ipcRenderer.invoke("hytale:isInstalled"),
+    launch: () => ipcRenderer.invoke("hytale:launch"),
+    openModsFolder: () => ipcRenderer.invoke("hytale:openModsFolder"),
+    openModFolder: (modId: string) => ipcRenderer.invoke("hytale:openModFolder", modId),
+    getStats: () => ipcRenderer.invoke("hytale:getStats"),
+    // World management
+    getWorlds: () => ipcRenderer.invoke("hytale:getWorlds"),
+    toggleSaveMod: (saveId: string, modId: string, enabled: boolean) =>
+      ipcRenderer.invoke("hytale:toggleSaveMod", saveId, modId, enabled),
+    openSaveFolder: (saveId: string) => ipcRenderer.invoke("hytale:openSaveFolder", saveId),
+    saveWorldModConfig: (worldId: string, modConfigs: { modId: string; enabled: boolean }[]) => 
+      ipcRenderer.invoke("hytale:saveWorldModConfig", worldId, modConfigs),
+    getWorldModConfig: (worldId: string) => ipcRenderer.invoke("hytale:getWorldModConfig", worldId),
+    applyWorldModConfig: (worldId: string) => ipcRenderer.invoke("hytale:applyWorldModConfig", worldId),
+    // Download mod file (actually downloads the file for Hytale installation)
+    downloadModFile: (downloadUrl: string, fileName: string): Promise<string> =>
+      ipcRenderer.invoke("hytale:downloadModFile", downloadUrl, fileName),
   },
 
   // ========== EVENTS ==========

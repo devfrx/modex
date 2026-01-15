@@ -89,7 +89,7 @@ import UpdateAvailableBanner from "@/components/modpacks/UpdateAvailableBanner.v
 import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
 import ChangelogDialog from "@/components/mods/ChangelogDialog.vue";
-import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
+import type { Mod, Modpack, ModpackChange, RemoteUpdateResult, FrontendUpdateResult, ModexInstance, InstanceSyncResult, ConfigFile } from "@/types";
 import type { CFModLoader } from "@/types/electron";
 import DefaultModpackImage from "@/assets/modpack-placeholder.png";
 
@@ -530,7 +530,7 @@ const showRemoveIncompatibleDialog = ref(false);
 
 // Remote Updates
 const showReviewDialog = ref(false);
-const updateResult = ref<RemoteUpdateResult | null>(null);
+const updateResult = ref<FrontendUpdateResult | null>(null);
 const isCheckingUpdate = ref(false);
 const showProgressDialog = ref(false);
 const progressState = ref({

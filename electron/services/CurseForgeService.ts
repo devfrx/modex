@@ -139,13 +139,28 @@ export interface CFModLoader {
 
 // ==================== SERVICE ====================
 
-// Content Type Class IDs
+// Supported game types
+export type GameType = "minecraft" | "hytale";
+
+// Game IDs for CurseForge API
+export const GAME_IDS: Record<GameType, number> = {
+  minecraft: 432,
+  hytale: 70216, // Correct Hytale game ID
+} as const;
+
+// Content Type Class IDs per game
 export const CONTENT_CLASS_IDS = {
   mods: 6,
   resourcepacks: 12,
   shaders: 6552,
   modpacks: 4471,
 } as const;
+
+// Hytale content types - will be populated dynamically from API
+export type HytaleContentType = 'mods' | 'prefabs' | 'worlds' | 'bootstrap';
+
+// Dynamic class IDs cache for games (populated from API)
+const HYTALE_CLASS_IDS_CACHE: Record<string, number> = {};
 
 export type ContentType = keyof typeof CONTENT_CLASS_IDS;
 
@@ -161,14 +176,190 @@ export class CurseForgeService {
   private apiKey: string = "";
   private readonly apiUrl = "https://api.curseforge.com/v1";
   private readonly MINECRAFT_GAME_ID = 432;
+  private readonly HYTALE_GAME_ID = 70216; // Correct Hytale game ID
   private readonly MODS_CLASS_ID = 6; // Legacy - use CONTENT_CLASS_IDS instead
+  
+  /** Currently active game type */
+  private activeGameType: GameType = "minecraft";
+
+  /** Flag to track if Hytale classes have been loaded */
+  private hytaleClassesLoaded = false;
+  /** Hytale content class IDs (populated from API) */
+  private hytaleClassIds: Record<string, number> = {};
 
   // Simple in-memory cache
   private cache = new Map<string, { data: any; expires: number }>();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  
+  /** Default timeout for API requests in milliseconds */
+  private readonly API_TIMEOUT = 30000; // 30 seconds
 
   constructor(private configPath: string) {
     this.loadConfig();
+  }
+
+  /**
+   * Fetch with configurable timeout
+   * @param url URL to fetch
+   * @param options Fetch options
+   * @param timeout Timeout in milliseconds (defaults to API_TIMEOUT)
+   */
+  private async fetchWithTimeout(
+    url: string,
+    options: RequestInit = {},
+    timeout: number = this.API_TIMEOUT
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      return response;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`Request timeout after ${timeout}ms: ${url}`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // ==================== GAME TYPE ====================
+
+  /** Get the currently active game type */
+  getActiveGameType(): GameType {
+    return this.activeGameType;
+  }
+
+  /** Set the active game type */
+  setActiveGameType(gameType: GameType): void {
+    this.activeGameType = gameType;
+    this.clearCache(); // Clear cache when switching games
+  }
+
+  /** Get the CurseForge game ID for a game type */
+  getGameId(gameType?: GameType): number {
+    return GAME_IDS[gameType || this.activeGameType];
+  }
+
+  /** Check what content types are available for a game */
+  getAvailableContentTypes(gameType?: GameType): ContentType[] {
+    const game = gameType || this.activeGameType;
+    if (game === "hytale") {
+      // Hytale only has mods for now
+      return ["mods"];
+    }
+    // Minecraft has all content types
+    return ["mods", "resourcepacks", "shaders", "modpacks"];
+  }
+
+  /**
+   * Fetch game classes (content types) from CurseForge API
+   * This populates the class IDs for games like Hytale
+   */
+  async fetchGameClasses(gameType?: GameType): Promise<{ id: number; name: string; slug: string }[]> {
+    if (!this.apiKey) {
+      console.warn("[CurseForge] API key not set, cannot fetch game classes");
+      return [];
+    }
+
+    const game = gameType || this.activeGameType;
+    const gameId = this.getGameId(game);
+    
+    const cacheKey = `game-classes:${gameId}`;
+    const cached = this.getCached<{ id: number; name: string; slug: string }[]>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const url = `${this.apiUrl}/categories?gameId=${gameId}&classesOnly=true`;
+      console.log(`[CurseForge] Fetching game classes from: ${url}`);
+
+      const response = await this.fetchWithTimeout(url, {
+        headers: {
+          "x-api-key": this.apiKey,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.warn(`[CurseForge] Failed to fetch game classes: ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      const classes = (data.data || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+      }));
+
+      console.log(`[CurseForge] Game ${game} classes:`, classes);
+
+      // Cache the results
+      this.setCache(cacheKey, classes);
+
+      // Populate Hytale class IDs if this is Hytale
+      if (game === "hytale") {
+        for (const cls of classes) {
+          const slug = cls.slug.toLowerCase();
+          this.hytaleClassIds[slug] = cls.id;
+        }
+        this.hytaleClassesLoaded = true;
+        console.log(`[CurseForge] Hytale class IDs:`, this.hytaleClassIds);
+      }
+
+      return classes;
+    } catch (error) {
+      console.error(`[CurseForge] Error fetching game classes:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get the class ID for a content type for the specified game
+   */
+  async getClassIdForGame(contentType: string, gameType?: GameType): Promise<number> {
+    const game = gameType || this.activeGameType;
+    
+    if (game === "minecraft") {
+      // Minecraft uses static class IDs
+      if (contentType in CONTENT_CLASS_IDS) {
+        return CONTENT_CLASS_IDS[contentType as keyof typeof CONTENT_CLASS_IDS];
+      }
+      return CONTENT_CLASS_IDS.mods;
+    }
+
+    // For Hytale, fetch classes if not loaded
+    if (game === "hytale") {
+      if (!this.hytaleClassesLoaded) {
+        await this.fetchGameClasses("hytale");
+      }
+
+      // Try to find the class ID by content type slug
+      const slug = contentType.toLowerCase();
+      if (this.hytaleClassIds[slug]) {
+        return this.hytaleClassIds[slug];
+      }
+
+      // Fallback mappings for common names
+      if (slug === "mods" && this.hytaleClassIds["mods"]) {
+        return this.hytaleClassIds["mods"];
+      }
+
+      // If we still don't have a class ID, return the first available class
+      const classIds = Object.values(this.hytaleClassIds);
+      if (classIds.length > 0) {
+        console.log(`[CurseForge] Using first available Hytale class ID: ${classIds[0]}`);
+        return classIds[0];
+      }
+    }
+
+    // Default fallback
+    return CONTENT_CLASS_IDS.mods;
   }
 
   // ==================== CACHE ====================
@@ -241,7 +432,7 @@ export class CurseForgeService {
 
     console.log(`[CurseForge] Batch fetching ${modIds.length} mods`);
 
-    const response = await fetch(`${this.apiUrl}/mods`, {
+    const response = await this.fetchWithTimeout(`${this.apiUrl}/mods`, {
       method: "POST",
       headers: {
         "x-api-key": this.apiKey,
@@ -279,7 +470,7 @@ export class CurseForgeService {
 
     console.log(`[CurseForge] Batch fetching ${fileIds.length} files`);
 
-    const response = await fetch(`${this.apiUrl}/mods/files`, {
+    const response = await this.fetchWithTimeout(`${this.apiUrl}/mods/files`, {
       method: "POST",
       headers: {
         "x-api-key": this.apiKey,
@@ -370,7 +561,7 @@ export class CurseForgeService {
 
     const url = `${this.apiUrl}/mods/${modId}/description${params.toString() ? "?" + params : ""
       }`;
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       headers: {
         "x-api-key": this.apiKey,
         Accept: "application/json",
@@ -400,7 +591,7 @@ export class CurseForgeService {
     if (cached) return cached;
 
     const url = `${this.apiUrl}/mods/${modId}/files/${fileId}/changelog`;
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       headers: {
         "x-api-key": this.apiKey,
         Accept: "application/json",
@@ -426,7 +617,7 @@ export class CurseForgeService {
       throw new Error("CurseForge API key not set");
     }
 
-    const response = await fetch(
+    const response = await this.fetchWithTimeout(
       `${this.apiUrl}/mods/${modId}/files/${fileId}`,
       {
         headers: {
@@ -457,18 +648,29 @@ export class CurseForgeService {
     sortField?: number;
     sortOrder?: "asc" | "desc";
     contentType?: ContentType;
+    gameType?: GameType; // Optional: override active game type
   }): Promise<CFSearchResult> {
     if (!this.apiKey) {
       throw new Error("CurseForge API key not set");
     }
 
-    // Use content type class ID or default to mods
-    const classId = options.contentType
-      ? CONTENT_CLASS_IDS[options.contentType]
-      : this.MODS_CLASS_ID;
+    // Determine which game to search
+    const gameType = options.gameType || this.activeGameType;
+    const gameId = this.getGameId(gameType);
+
+    // Get the class ID for the content type and game
+    let classId: number;
+    if (gameType === "hytale") {
+      // For Hytale, get the class ID dynamically
+      classId = await this.getClassIdForGame(options.contentType || "mods", "hytale");
+    } else if (gameType === "minecraft" && options.contentType) {
+      classId = CONTENT_CLASS_IDS[options.contentType];
+    } else {
+      classId = this.MODS_CLASS_ID;
+    }
 
     const params = new URLSearchParams({
-      gameId: this.MINECRAFT_GAME_ID.toString(),
+      gameId: gameId.toString(),
       classId: classId.toString(),
       pageSize: (options.pageSize || 20).toString(),
       index: (options.index || 0).toString(),
@@ -484,8 +686,9 @@ export class CurseForgeService {
       params.append("gameVersion", options.gameVersion);
     }
 
-    // Only apply mod loader filter for mods (not for resourcepacks/shaders)
+    // Only apply mod loader filter for Minecraft mods (Hytale doesn't have mod loaders)
     if (
+      gameType === "minecraft" &&
       options.modLoader &&
       (!options.contentType || options.contentType === "mods")
     ) {
@@ -500,9 +703,9 @@ export class CurseForgeService {
     }
 
     const url = `${this.apiUrl}/mods/search?${params}`;
-    console.log("[CurseForge] Searching:", url);
+    console.log(`[CurseForge] Searching ${gameType}:`, url);
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       headers: {
         "x-api-key": this.apiKey,
         Accept: "application/json",
@@ -531,7 +734,7 @@ export class CurseForgeService {
       throw new Error("CurseForge API key not set");
     }
 
-    const response = await fetch(`${this.apiUrl}/mods/${modId}`, {
+    const response = await this.fetchWithTimeout(`${this.apiUrl}/mods/${modId}`, {
       headers: {
         "x-api-key": this.apiKey,
         Accept: "application/json",
@@ -576,7 +779,7 @@ export class CurseForgeService {
       }
     }
 
-    const response = await fetch(
+    const response = await this.fetchWithTimeout(
       `${this.apiUrl}/mods/${modId}/files?${params}`,
       {
         headers: {
@@ -599,7 +802,7 @@ export class CurseForgeService {
       throw new Error("CurseForge API key not set");
     }
 
-    const response = await fetch(
+    const response = await this.fetchWithTimeout(
       `${this.apiUrl}/mods/${modId}/files/${fileId}`,
       {
         headers: {
@@ -885,17 +1088,26 @@ export class CurseForgeService {
     return result.mods;
   }
 
-  async getCategories(contentType?: ContentType): Promise<CFCategory[]> {
+  async getCategories(contentType?: ContentType, gameType?: GameType): Promise<CFCategory[]> {
     if (!this.apiKey) {
       throw new Error("CurseForge API key not set");
     }
 
-    const classId = contentType
-      ? CONTENT_CLASS_IDS[contentType]
-      : this.MODS_CLASS_ID;
+    const game = gameType || this.activeGameType;
+    const gameId = this.getGameId(game);
+    
+    // Get the class ID for the content type and game
+    let classId: number;
+    if (game === "hytale") {
+      classId = await this.getClassIdForGame(contentType || "mods", "hytale");
+    } else if (game === "minecraft" && contentType) {
+      classId = CONTENT_CLASS_IDS[contentType];
+    } else {
+      classId = this.MODS_CLASS_ID;
+    }
 
-    const response = await fetch(
-      `${this.apiUrl}/categories?gameId=${this.MINECRAFT_GAME_ID}&classId=${classId}`,
+    const response = await this.fetchWithTimeout(
+      `${this.apiUrl}/categories?gameId=${gameId}&classId=${classId}`,
       {
         headers: {
           "x-api-key": this.apiKey,
@@ -913,6 +1125,59 @@ export class CurseForgeService {
   }
 
   /**
+   * Get game versions for the specified game from CurseForge
+   */
+  async getGameVersions(gameType?: GameType): Promise<{ versionString: string; approved: boolean }[]> {
+    const game = gameType || this.activeGameType;
+    
+    if (game === "minecraft") {
+      return this.getMinecraftVersions();
+    }
+    
+    // For Hytale, fetch versions from the game versions endpoint
+    return this.getHytaleVersions();
+  }
+
+  /**
+   * Get Hytale versions from CurseForge
+   */
+  async getHytaleVersions(): Promise<{ versionString: string; approved: boolean }[]> {
+    if (!this.apiKey) {
+      throw new Error("CurseForge API key not set");
+    }
+
+    const url = `${this.apiUrl}/games/${this.HYTALE_GAME_ID}/versions`;
+    console.log(`[CurseForge] Fetching Hytale versions from: ${url}`);
+
+    try {
+      const response = await this.fetchWithTimeout(url, {
+        headers: {
+          "x-api-key": this.apiKey,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.warn(`[CurseForge] Failed to fetch Hytale versions: ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      const versions = data.data || [];
+      console.log(`[CurseForge] Received ${versions.length} Hytale versions`);
+
+      // Map to consistent format
+      return versions.map((v: any) => ({
+        versionString: v.name || v.slug || String(v.id),
+        approved: true,
+      }));
+    } catch (error) {
+      console.error("[CurseForge] Error fetching Hytale versions:", error);
+      return [];
+    }
+  }
+
+  /**
    * Get all Minecraft versions from CurseForge
    */
   async getMinecraftVersions(): Promise<{ versionString: string; approved: boolean }[]> {
@@ -923,7 +1188,7 @@ export class CurseForgeService {
     const url = `${this.apiUrl}/minecraft/version?sortDescending=true`;
     console.log(`[CurseForge] Fetching Minecraft versions from: ${url}`);
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       headers: {
         "x-api-key": this.apiKey,
         Accept: "application/json",
@@ -984,7 +1249,7 @@ export class CurseForgeService {
 
     console.log(`[CurseForge] Fetching modloaders from: ${url}`);
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       headers: {
         "x-api-key": this.apiKey,
         Accept: "application/json",

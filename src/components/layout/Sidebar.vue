@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RouterLink } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import {
   Home,
   Library,
@@ -21,6 +21,11 @@ import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import { cn } from "@/lib/utils";
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useSidebar } from "@/composables/useSidebar";
+import { useGameProfile } from "@/composables/useGameProfile";
+import GameSelector from "@/components/layout/GameSelector.vue";
+
+const router = useRouter();
+const { activeGameType, isLoading: isGameLoading, setActiveGame, initialize: initGameProfile } = useGameProfile();
 
 // Check if in dev mode (must be in script, not template)
 const isDev = import.meta.env.DEV;
@@ -33,7 +38,20 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const { settings, enabledItems, toggleCollapsed } = useSidebar();
+const { settings, enabledItems, toggleCollapsed, setActiveGame: setSidebarGame } = useSidebar();
+
+// Handle game change from GameSelector
+async function handleGameChange(gameType: "minecraft" | "hytale") {
+  await setActiveGame(gameType);
+  // Update sidebar to show game-specific items
+  setSidebarGame(gameType);
+  // Navigate to appropriate view based on game
+  if (gameType === "hytale") {
+    router.push("/hytale");
+  } else {
+    router.push("/");
+  }
+}
 
 // Icon mapping
 const iconMap: Record<string, any> = {
@@ -124,8 +142,11 @@ function handleNavClick() {
 // Interval reference for cleanup
 let statsInterval: ReturnType<typeof setInterval> | null = null;
 
-onMounted(() => {
+onMounted(async () => {
   loadStats();
+  await initGameProfile();
+  // Sync sidebar with active game
+  setSidebarGame(activeGameType.value);
   // Refresh stats periodically
   statsInterval = setInterval(loadStats, 5000);
   // Listen for storage changes from other components
@@ -168,6 +189,12 @@ onUnmounted(() => {
         aria-label="Close menu" v-if="!settings.collapsed">
         <X class="w-4 h-4" />
       </button>
+    </div>
+
+    <!-- Game Selector -->
+    <div class="px-3 py-2 border-b border-border/30" :class="settings.collapsed ? 'px-2' : ''">
+      <GameSelector :current-game="activeGameType" :disabled="isGameLoading" :collapsed="settings.collapsed"
+        @change="handleGameChange" />
     </div>
 
     <nav class="flex-1 p-2 space-y-0.5 overflow-auto" :class="settings.collapsed ? 'px-2' : 'px-3'">

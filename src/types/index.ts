@@ -5,6 +5,77 @@
  * This enables lightweight storage and native export to modpack formats.
  */
 
+// ==================== GAME TYPES ====================
+
+/** Supported game types */
+export type GameType = "minecraft" | "hytale";
+
+/** Game profile configuration */
+export interface GameProfile {
+  /** Unique profile ID */
+  id: string;
+  
+  /** Game type */
+  gameType: GameType;
+  
+  /** Display name */
+  name: string;
+  
+  /** Profile description */
+  description?: string;
+  
+  /** Profile icon (emoji or path) */
+  icon?: string;
+  
+  /** Whether this is the default profile for this game type */
+  isDefault?: boolean;
+  
+  /** Game installation path */
+  gamePath?: string;
+  
+  /** Launcher executable path */
+  launcherPath?: string;
+  
+  /** Mods directory */
+  modsPath: string;
+  
+  /** Creation timestamp */
+  createdAt: string;
+  
+  /** Last used timestamp */
+  lastUsed?: string;
+}
+
+/** Game-specific configuration */
+export interface GameConfig {
+  /** CurseForge Game ID */
+  cfGameId: number;
+  
+  /** CurseForge Mods Class ID */
+  cfModsClassId: number;
+  
+  /** Whether the game uses separate instances (like Minecraft) */
+  usesInstances: boolean;
+  
+  /** Whether the game has mod loaders */
+  hasModLoaders: boolean;
+  
+  /** Available mod loaders (empty for games without mod loaders) */
+  modLoaders: string[];
+  
+  /** Whether the game supports resource packs */
+  supportsResourcePacks: boolean;
+  
+  /** Whether the game supports shaders */
+  supportsShaders: boolean;
+  
+  /** Display name */
+  displayName: string;
+  
+  /** Game icon (emoji) */
+  icon: string;
+}
+
 // ==================== MOD ====================
 
 export interface Mod {
@@ -20,14 +91,17 @@ export interface Mod {
   /** File/version string (e.g., "1.2.3", "0.15.0+1.20.1") */
   version: string;
 
-  /** Minecraft version (e.g., "1.20.1", "1.21.1") */
+  /** Game version (e.g., "1.20.1" for Minecraft) - kept as game_version for backwards compatibility */
   game_version: string;
 
-  /** List of compatible Minecraft versions (primarily for shaders/resourcepacks) */
+  /** List of compatible game versions (primarily for shaders/resourcepacks) */
   game_versions?: string[];
 
-  /** Mod loader (forge, fabric, quilt, neoforge) */
+  /** Mod loader (forge, fabric, quilt, neoforge) - empty for games without mod loaders */
   loader: string;
+  
+  /** Which game this mod is for */
+  gameType?: GameType;
 
   /** Content type: mod, resourcepack, or shader */
   content_type?: "mod" | "resourcepack" | "shader";
@@ -274,7 +348,12 @@ export interface ModexManifest {
     version: string;
     minecraft_version?: string;
     loader?: string;
+    loader_version?: string;
     description?: string;
+    /** CurseForge project ID (if imported from CF) */
+    cf_project_id?: number;
+    /** CurseForge file ID (specific version imported) */
+    cf_file_id?: number;
   };
   mods: ModexManifestMod[];
   /** Internal mod IDs of disabled mods (for backwards compatibility) */
@@ -285,9 +364,25 @@ export interface ModexManifest {
     mr_project_id?: string;
     name: string;
   }>;
+  /** Internal mod IDs of locked mods (for backwards compatibility) */
+  locked_mods?: string[];
+  /** Locked mods by project ID (stable cross-import identifiers) */
+  locked_mods_by_project?: Array<{
+    cf_project_id?: number;
+    mr_project_id?: string;
+    name: string;
+  }>;
+  /** Mods that failed to import due to incompatibility */
+  incompatible_mods?: Array<{
+    cf_project_id: number;
+    name: string;
+    reason: string;
+  }>;
   stats: {
     mod_count: number;
     disabled_count?: number;
+    locked_count?: number;
+    notes_count?: number;
   };
   /** Mod notes (maps internal mod ID to note text) */
   mod_notes?: Record<string, string>;
@@ -311,6 +406,10 @@ export interface ModexManifestMod {
   content_type?: "mod" | "resourcepack" | "shader";
   cf_project_id?: number;
   cf_file_id?: number;
+  /** Alias for cf_project_id (backwards compatibility with external formats) */
+  project_id?: number;
+  /** Alias for cf_file_id (backwards compatibility with external formats) */
+  file_id?: number;
   mr_project_id?: string;
   mr_version_id?: string;
   description?: string;
@@ -341,9 +440,40 @@ export interface ModUpdateInfo {
 
 // ==================== REMOTE UPDATE RESULT ====================
 
-/** Result of checking for remote updates from a Gist or remote manifest */
+/** Structured changes from remote update check (returned by backend) */
+export interface RemoteUpdateChanges {
+  added: number;
+  removed: number;
+  updated: number;
+  addedMods: Array<{ name: string; version: string }>;
+  removedMods: string[];
+  updatedMods: string[];
+  enabledMods: string[];
+  disabledMods: string[];
+  lockedMods: string[];
+  unlockedMods: string[];
+  notesAdded: Array<{ modName: string; note: string }>;
+  notesRemoved: Array<{ modName: string; note: string }>;
+  notesChanged: Array<{ modName: string; oldNote: string; newNote: string }>;
+  hasVersionHistoryChanges: boolean;
+  loaderChanged?: { from?: string; to?: string };
+  loaderVersionChanged?: { from?: string; to?: string };
+  minecraftVersionChanged?: { from?: string; to?: string };
+}
+
+/** Result of checking for remote updates from a Gist or remote manifest (backend) */
 export interface RemoteUpdateResult {
   hasUpdate: boolean;
+  /** Changes structured object from backend analysis */
+  changes?: RemoteUpdateChanges;
+  remoteManifest?: ModexManifest;
+  error?: string;
+}
+
+/** Frontend-specific update result with pre-computed changes array for UI display */
+export interface FrontendUpdateResult {
+  hasUpdate: boolean;
+  /** Changes array computed from RemoteUpdateChanges for UI display */
   changes: ModpackChange[];
   remoteManifest?: ModexManifest;
   error?: string;
@@ -862,4 +992,160 @@ export interface ConfigChangeSet {
   description?: string;
   /** Applied to version control */
   committed: boolean;
+}
+
+// ==================== HYTALE TYPES ====================
+
+/** Hytale mod configuration */
+export interface HytaleMod {
+  /** Unique ID for ModEx (matches library mod ID format: "cf-file-{fileId}" or "hytale-{name}") */
+  id: string;
+  
+  /** Hytale's internal mod ID (e.g., "JarHax:EyeSpy") - used in config.json */
+  hytaleModId?: string;
+  
+  /** Display name */
+  name: string;
+  
+  /** File or folder name in mods folder (JAR file or folder name) */
+  folderName: string;
+  
+  /** Mod version */
+  version: string;
+  
+  /** CurseForge project ID */
+  cfProjectId?: number;
+  
+  /** CurseForge file ID */
+  cfFileId?: number;
+  
+  /** Logo URL from CurseForge */
+  logoUrl?: string;
+  
+  /** Whether the mod exists in global mods folder */
+  isInstalled: boolean;
+  
+  /** Whether the mod is disabled (.disabled extension or config.json) */
+  isDisabled: boolean;
+  
+  /** File/folder size in bytes */
+  folderSize?: number;
+  
+  /** Installation timestamp */
+  installedAt?: string;
+  
+  /** Mod author (from mod.json if available) */
+  author?: string;
+  
+  /** Mod description (from mod.json if available) */
+  description?: string;
+}
+
+/** Single mod entry in a Hytale modpack */
+export interface HytaleModpackEntry {
+  /** ModEx ID (cf-file-xxx or hytale-xxx) */
+  modId: string;
+  
+  /** Hytale's internal mod ID (e.g., "JarHax:EyeSpy") for config.json */
+  hytaleModId?: string;
+  
+  /** Display name for UI */
+  name: string;
+  
+  /** Whether this mod should be enabled when modpack is activated */
+  enabled: boolean;
+  
+  /** File name in mods folder (for fallback matching) */
+  fileName: string;
+  
+  /** Version at time of saving */
+  version?: string;
+}
+
+/** Hytale virtual modpack - a saved configuration of mods */
+export interface HytaleModpack {
+  /** Unique ID */
+  id: string;
+  
+  /** Display name */
+  name: string;
+  
+  /** Description */
+  description?: string;
+  
+  /** Cover image URL or path */
+  imageUrl?: string;
+  
+  /** 
+   * List of mod entries with full metadata.
+   * Each entry contains the mod ID, name, and enabled state.
+   */
+  mods: HytaleModpackEntry[];
+  
+  /** 
+   * @deprecated Legacy field - map of filenames to enabled state.
+   * Kept for backward compatibility with older modpacks.
+   */
+  modStates?: Record<string, boolean>;
+  
+  /** 
+   * @deprecated Legacy field - list of enabled mod IDs
+   */
+  modIds?: string[];
+  
+  /** 
+   * @deprecated Legacy field - list of disabled mod IDs  
+   */
+  disabledModIds?: string[];
+  
+  /** Creation timestamp */
+  createdAt: string;
+  
+  /** Last updated timestamp */
+  updatedAt: string;
+  
+  /** Last activated timestamp */
+  lastActivated?: string;
+  
+  /** Whether this is the currently active modpack */
+  isActive: boolean;
+}
+
+/** Sync result for Hytale mods */
+export interface HytaleSyncResult {
+  success: boolean;
+  installed: number;
+  removed: number;
+  disabled: number;
+  enabled: number;
+  errors: string[];
+  /** Mods in modpack that are not installed in the folder */
+  missingMods?: string[];
+  /** Mods in folder that are not tracked by the modpack */
+  newMods?: string[];
+}
+
+/** Hytale stats */
+export interface HytaleStats {
+  totalMods: number;
+  enabledMods: number;
+  disabledMods: number;
+  totalSize: number;
+  modpackCount: number;
+}
+
+/** Hytale world/save with mod configuration */
+export interface HytaleWorld {
+  id: string;
+  name: string;
+  path: string;
+  /** Path to the mods folder within this save */
+  modsPath: string;
+  lastPlayed?: string;
+  /** Mod IDs enabled in config.json */
+  enabledMods: string[];
+  /** Mod IDs disabled in config.json */
+  disabledMods: string[];
+  /** Mod data folders present in this save's mods folder */
+  modDataFolders: string[];
 }

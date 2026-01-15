@@ -49,9 +49,12 @@ import {
 // Sidebar settings
 const {
   settings: sidebarSettings,
+  activeGame: sidebarActiveGame,
+  allItemsForGame,
   setPosition,
   setCollapsed,
   toggleItemEnabled,
+  setActiveGame: setSidebarGame,
   resetSettings: resetSidebarSettings,
   defaultItems,
 } = useSidebar();
@@ -1021,11 +1024,28 @@ onMounted(() => {
               Navigation Items
             </h3>
             <p class="text-sm text-muted-foreground">
-              Toggle which items appear in the sidebar navigation.
+              Toggle which items appear in the sidebar navigation for
+              <span class="font-medium text-foreground capitalize">{{ sidebarActiveGame }}</span>.
             </p>
 
+            <!-- Game switcher for sidebar items -->
+            <div class="flex gap-2 p-1 bg-muted/50 rounded-lg w-fit">
+              <button @click="setSidebarGame('minecraft')"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors" :class="sidebarActiveGame === 'minecraft'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'">
+                Minecraft
+              </button>
+              <button @click="setSidebarGame('hytale')"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors" :class="sidebarActiveGame === 'hytale'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'">
+                Hytale
+              </button>
+            </div>
+
             <div class="space-y-2">
-              <div v-for="item in sidebarSettings.items" :key="item.id"
+              <div v-for="item in allItemsForGame" :key="item.id"
                 class="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
                 <div class="flex items-center gap-3">
                   <component :is="sidebarIconMap[item.icon] || Package" class="w-5 h-5 text-muted-foreground" />

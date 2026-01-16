@@ -581,6 +581,11 @@ export interface AppConfig {
     showSyncConfirmation?: boolean;
     /** Default config sync mode when syncing */
     defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+    /** 
+     * Instant sync: immediately apply mod changes to instance files.
+     * Eliminates the need for manual "Sync" operations.
+     */
+    instantSync?: boolean;
   };
 }
 

@@ -40,6 +40,9 @@ const syncProgress = ref<{
   item?: string;
 } | null>(null);
 
+// Singleton promise to prevent concurrent loadInstances calls
+let loadingPromise: Promise<ModexInstance[]> | null = null;
+
 // Computed
 const instanceCount = computed(() => instances.value.length);
 const readyInstances = computed(() => 
@@ -51,18 +54,28 @@ const installingInstances = computed(() =>
 
 /**
  * Load all instances from backend
+ * Uses loadingPromise to deduplicate concurrent calls
  */
 async function loadInstances(): Promise<ModexInstance[]> {
+  // If already loading, return the existing promise
+  if (loadingPromise) return loadingPromise;
+
   isLoading.value = true;
-  try {
-    instances.value = await window.api.instances.getAll();
-    return instances.value;
-  } catch (error) {
-    console.error("[useInstances] Error loading instances:", error);
-    return [];
-  } finally {
-    isLoading.value = false;
-  }
+  
+  loadingPromise = (async () => {
+    try {
+      instances.value = await window.api.instances.getAll();
+      return instances.value;
+    } catch (error) {
+      console.error("[useInstances] Error loading instances:", error);
+      return [];
+    } finally {
+      isLoading.value = false;
+      loadingPromise = null;
+    }
+  })();
+  
+  return loadingPromise;
 }
 
 /**

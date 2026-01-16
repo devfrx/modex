@@ -66,6 +66,7 @@ const syncSettings = ref({
   autoSyncBeforeLaunch: true,
   showSyncConfirmation: true,
   defaultConfigSyncMode: "new_only" as "overwrite" | "new_only" | "skip",
+  instantSync: true, // New: Apply changes immediately to instance files
 });
 
 // Gist Settings
@@ -305,6 +306,7 @@ async function loadSyncSettings() {
       autoSyncBeforeLaunch: settings.autoSyncBeforeLaunch ?? true,
       showSyncConfirmation: settings.showSyncConfirmation ?? true,
       defaultConfigSyncMode: settings.defaultConfigSyncMode ?? "new_only",
+      instantSync: settings.instantSync ?? true,
     };
   } catch (err) {
     console.error("Failed to load sync settings:", err);
@@ -319,6 +321,7 @@ async function saveSyncSettings() {
       autoSyncBeforeLaunch: syncSettings.value.autoSyncBeforeLaunch,
       showSyncConfirmation: syncSettings.value.showSyncConfirmation,
       defaultConfigSyncMode: syncSettings.value.defaultConfigSyncMode,
+      instantSync: syncSettings.value.instantSync,
     };
     await window.api.settings.setInstanceSync(settingsToSave);
     toast.success("Saved ✓", "Sync preferences updated.");
@@ -542,6 +545,39 @@ onMounted(() => {
               Sync Settings
             </h3>
             <div class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50 space-y-5">
+              <!-- Instant Sync (File Operations) -->
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+                <div>
+                  <div class="font-medium flex items-center gap-2">
+                    Instant file sync
+                    <span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-primary/15 text-primary uppercase">
+                      Recommended
+                    </span>
+                  </div>
+                  <div class="text-sm text-muted-foreground">
+                    Apply mod changes instantly to the instance folder.<br />
+                    <span class="text-xs text-muted-foreground/80">
+                      Eliminates the need for manual "Sync" operations.
+                    </span>
+                  </div>
+                </div>
+                <button @click="
+                  syncSettings.instantSync = !syncSettings.instantSync;
+                saveSyncSettings();
+                " class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 flex-shrink-0"
+                  :class="syncSettings.instantSync
+                    ? 'bg-primary'
+                    : 'bg-muted'
+                    ">
+                  <span
+                    class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
+                    :class="syncSettings.instantSync
+                      ? 'translate-x-6'
+                      : 'translate-x-1'
+                      " />
+                </button>
+              </div>
+
               <!-- Auto Sync Before Launch -->
               <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                 <div>

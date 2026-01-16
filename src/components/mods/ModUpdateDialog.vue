@@ -17,7 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "updated", newFileId: number): void;
+  (e: "updated", newFileId: number, newModId?: string): void;
 }>();
 
 const toast = useToast();
@@ -111,7 +111,7 @@ async function applyUpdate() {
     );
     if (result.success) {
       toast.success("Updated ✓", `${props.mod.name} is now up to date.`);
-      emit("updated", updateInfo.value.newFileId);
+      emit("updated", updateInfo.value.newFileId, result.newModId);
       emit("close");
     } else {
       toast.error("Couldn't update", result.error || "Unknown error");

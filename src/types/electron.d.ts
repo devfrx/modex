@@ -151,6 +151,8 @@ export interface ElectronAPI {
     getModLoaders: (gameVersion?: string) => Promise<CFModLoader[]>;
     /** Get all available Minecraft versions */
     getMinecraftVersions: () => Promise<{ versionString: string; approved: boolean }[]>;
+    /** Get game class IDs (mod categories by game type) */
+    getGameClasses: (gameType?: string) => Promise<{ id: number; name: string; slug: string }[]>;
     /** Get unique loader types (forge, fabric, neoforge, quilt) */
     getLoaderTypes: () => Promise<string[]>;
     /** Add a mod from CurseForge to library (metadata only, no download) */
@@ -258,6 +260,42 @@ export interface ElectronAPI {
       modId: string,
       locked: boolean
     ) => Promise<boolean>;
+    
+    // ========== DIRECT FILE OPERATIONS (Auto-sync to instance) ==========
+    // These methods perform database operations AND immediately sync files to the instance
+    // Use these instead of the non-Direct versions to eliminate the need for manual sync
+    
+    /** Add mod and immediately sync file to instance */
+    addModDirect: (
+      modpackId: string,
+      modId: string
+    ) => Promise<boolean>;
+    
+    /** Add multiple mods and immediately sync files to instance */
+    addModsBatchDirect: (
+      modpackId: string,
+      modIds: string[]
+    ) => Promise<number>;
+    
+    /** Remove mod and immediately delete file from instance */
+    removeModDirect: (
+      modpackId: string,
+      modId: string
+    ) => Promise<boolean>;
+    
+    /** Toggle mod enabled state and immediately rename file in instance */
+    toggleModDirect: (
+      modpackId: string,
+      modId: string
+    ) => Promise<{ enabled: boolean } | null>;
+    
+    /** Set mod enabled state and immediately rename file in instance */
+    setModEnabledDirect: (
+      modpackId: string,
+      modId: string,
+      enabled: boolean
+    ) => Promise<boolean>;
+    
     /** Update all locked mod IDs */
     updateLockedMods: (
       modpackId: string,
@@ -757,12 +795,16 @@ export interface ElectronAPI {
       autoImportConfigsAfterGame: boolean;
       showSyncConfirmation: boolean;
       defaultConfigSyncMode: "overwrite" | "new_only" | "skip";
+      /** Instant sync: immediately apply mod changes to instance files */
+      instantSync: boolean;
     }>;
     setInstanceSync: (settings: {
       autoSyncBeforeLaunch?: boolean;
       autoImportConfigsAfterGame?: boolean;
       showSyncConfirmation?: boolean;
       defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+      /** Instant sync: immediately apply mod changes to instance files */
+      instantSync?: boolean;
     }) => Promise<{ success: boolean }>;
     getGist: () => Promise<{
       defaultManifestMode: "full" | "current";
@@ -1134,6 +1176,7 @@ export interface ElectronAPI {
       version: string;
       cfProjectId?: number;
       cfFileId?: number;
+      logoUrl?: string;
     }) => Promise<{ success: boolean; error?: string }>;
     /** Remove a mod */
     removeMod: (id: string) => Promise<boolean>;

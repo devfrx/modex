@@ -293,6 +293,38 @@ contextBridge.exposeInMainWorld("api", {
       locked: boolean
     ): Promise<boolean> =>
       ipcRenderer.invoke("modpacks:setModLocked", modpackId, modId, locked),
+    
+    // ========== DIRECT FILE OPERATIONS (Auto-sync to instance) ==========
+    // These methods perform database operations AND immediately sync files to the instance
+    // Use these instead of the non-Direct versions to eliminate the need for manual sync
+    
+    /** Add mod and immediately sync file to instance */
+    addModDirect: (modpackId: string, modId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:addModDirect", modpackId, modId),
+    
+    /** Add multiple mods and immediately sync files to instance */
+    addModsBatchDirect: (modpackId: string, modIds: string[]): Promise<number> =>
+      ipcRenderer.invoke("modpacks:addModsBatchDirect", modpackId, modIds),
+    
+    /** Remove mod and immediately delete file from instance */
+    removeModDirect: (modpackId: string, modId: string): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:removeModDirect", modpackId, modId),
+    
+    /** Toggle mod enabled state and immediately rename file in instance */
+    toggleModDirect: (
+      modpackId: string,
+      modId: string
+    ): Promise<{ enabled: boolean } | null> =>
+      ipcRenderer.invoke("modpacks:toggleModDirect", modpackId, modId),
+    
+    /** Set mod enabled state and immediately rename file in instance */
+    setModEnabledDirect: (
+      modpackId: string,
+      modId: string,
+      enabled: boolean
+    ): Promise<boolean> =>
+      ipcRenderer.invoke("modpacks:setModEnabledDirect", modpackId, modId, enabled),
+    
     updateLockedMods: (
       modpackId: string,
       lockedModIds: string[]
@@ -1447,6 +1479,8 @@ contextBridge.exposeInMainWorld("api", {
       autoImportConfigsAfterGame: boolean;
       showSyncConfirmation: boolean;
       defaultConfigSyncMode: "overwrite" | "new_only" | "skip";
+      /** Instant sync: immediately apply mod changes to instance files */
+      instantSync: boolean;
     }> => ipcRenderer.invoke("settings:getInstanceSync"),
 
     setInstanceSync: (settings: {
@@ -1454,6 +1488,8 @@ contextBridge.exposeInMainWorld("api", {
       autoImportConfigsAfterGame?: boolean;
       showSyncConfirmation?: boolean;
       defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+      /** Instant sync: immediately apply mod changes to instance files */
+      instantSync?: boolean;
     }): Promise<{ success: boolean }> =>
       ipcRenderer.invoke("settings:setInstanceSync", settings),
 

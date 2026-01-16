@@ -135,6 +135,13 @@ interface AppConfig {
     showSyncConfirmation?: boolean;
     /** Default config sync mode when syncing */
     defaultConfigSyncMode?: "overwrite" | "new_only" | "skip";
+    /** 
+     * Instant sync: immediately apply mod changes to instance files.
+     * When enabled, adding/removing/toggling mods will instantly update the instance folder.
+     * This eliminates the need for manual "Sync" operations.
+     * Default: true
+     */
+    instantSync?: boolean;
   };
   /** Gist publishing settings */
   gistSettings?: {
@@ -485,6 +492,8 @@ export class MetadataManager {
       autoImportConfigsAfterGame: config.instanceSync?.autoImportConfigsAfterGame ?? false,
       showSyncConfirmation: config.instanceSync?.showSyncConfirmation ?? true,
       defaultConfigSyncMode: config.instanceSync?.defaultConfigSyncMode ?? "new_only",
+      // Instant sync enabled by default - eliminates manual sync confusion
+      instantSync: config.instanceSync?.instantSync ?? true,
     };
   }
 
@@ -1090,21 +1099,23 @@ export class MetadataManager {
   }
 
   async deleteModpack(id: string): Promise<boolean> {
-    const modpackPath = this.getModpackPath(id);
+    return this.withModpackLock(id, async () => {
+      const modpackPath = this.getModpackPath(id);
 
-    if (!(await fs.pathExists(modpackPath))) return false;
+      if (!(await fs.pathExists(modpackPath))) return false;
 
-    try {
-      await fs.remove(modpackPath);
-      // Also delete version history
-      await this.deleteVersionHistory(id);
-      // Also delete overrides
-      await this.deleteOverrides(id);
-      return true;
-    } catch (error) {
-      console.error(`Failed to delete modpack ${id}:`, error);
-      return false;
-    }
+      try {
+        await fs.remove(modpackPath);
+        // Also delete version history
+        await this.deleteVersionHistory(id);
+        // Also delete overrides
+        await this.deleteOverrides(id);
+        return true;
+      } catch (error) {
+        console.error(`Failed to delete modpack ${id}:`, error);
+        return false;
+      }
+    });
   }
 
   async cloneModpack(id: string, newName: string): Promise<string | null> {

@@ -148,9 +148,19 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
     if (!modpackId.value) return;
     if (isLoadingInstance.value) return; // prevent race conditions
 
+    // Capture values before async operations to prevent stale data
+    const currentModpackId = modpackId.value;
+
     isLoadingInstance.value = true;
     try {
-      const inst = await window.api.instances.getByModpack(modpackId.value);
+      const inst = await window.api.instances.getByModpack(currentModpackId);
+      
+      // Check if modpackId changed during async operation
+      if (modpackId.value !== currentModpackId) {
+        console.log('[useModpackInstance] modpackId changed during load, discarding results');
+        return;
+      }
+      
       instance.value = inst;
 
       if (inst) {
@@ -164,10 +174,10 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
           };
         }
 
-        // Check sync status
+        // Check sync status (using captured modpackId)
         instanceSyncStatus.value = await window.api.instances.checkSyncStatus(
           inst.id,
-          modpackId.value
+          currentModpackId
         );
 
         // Load system memory info (used for RAM slider limits)

@@ -79,8 +79,9 @@ const checkingUpdates = ref<Record<string, boolean>>({});
 const updateAvailable = ref<Record<string, UpdateInfo | null>>({});
 const isCheckingAllUpdates = ref(false);
 // recentlyUpdatedMods and recentlyAddedMods are shared with useModpackMods
-const recentlyUpdatedMods = ref<Set<string>>(new Set()); // Mod IDs updated in last 5 min
-const recentlyAddedMods = ref<Set<string>>(new Set()); // Mod IDs added in last 5 min
+// Badges persist until user manually dismisses them
+const recentlyUpdatedMods = ref<Set<string>>(new Set()); // Mod IDs recently updated
+const recentlyAddedMods = ref<Set<string>>(new Set()); // Mod IDs recently added
 
 // Mod Details Modal state
 const showModDetailsModal = ref(false);
@@ -197,6 +198,13 @@ const {
   getModNote,
   markAsRecentlyUpdated,
   markAsRecentlyAdded,
+  // Dismiss badges methods
+  dismissNewMod,
+  dismissUpdatedMod,
+  dismissAllNewMods,
+  dismissAllUpdatedMods,
+  dismissAllBadges,
+  hasNewOrUpdatedMods,
   confirmDependencyImpactAction,
   cancelDependencyImpactAction,
 } = useModpackMods({
@@ -760,7 +768,7 @@ const installedProjectFiles = computed(() => {
   }
   return map;
 });
-const RECENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+// Removed RECENT_THRESHOLD_MS - badges are now dismissed manually by user
 const isLibraryCollapsed = ref(true); // Collapsible library panel - collapsed by default
 
 // CurseForge Browse Dialog State
@@ -775,21 +783,15 @@ async function handleCFModAdded(mod: Mod | null, addedIds?: string[]) {
   await loadData();
   emit("update");
 
-  // Mark as recently added - handle single mod or bulk add
+  // Mark as recently added - handle single mod or bulk add (no timeout - user must manually dismiss)
   if (mod?.id) {
     // Single mod added
     recentlyAddedMods.value.add(mod.id);
-    setTimeout(() => {
-      recentlyAddedMods.value.delete(mod.id);
-    }, RECENT_THRESHOLD_MS);
     toast.success("Added ✓", `${mod.name} is now in your pack`);
   } else if (addedIds && addedIds.length > 0) {
     // Bulk add - mark all added mods as new
     for (const modId of addedIds) {
       recentlyAddedMods.value.add(modId);
-      setTimeout(() => {
-        recentlyAddedMods.value.delete(modId);
-      }, RECENT_THRESHOLD_MS);
     }
   }
 }
@@ -821,13 +823,9 @@ async function handleModDetailsVersionChange(fileId: number) {
       props.modpackId
     );
     if (result.success) {
-      // Mark as recently updated
-      recentlyUpdatedMods.value.add(modDetailsTarget.value.id);
-      setTimeout(() => {
-        if (modDetailsTarget.value) {
-          recentlyUpdatedMods.value.delete(modDetailsTarget.value.id);
-        }
-      }, RECENT_THRESHOLD_MS);
+      // Mark as recently updated using the NEW mod ID
+      const updatedModId = result.newModId || modDetailsTarget.value.id;
+      recentlyUpdatedMods.value.add(updatedModId);
 
       // Clear any cached update status
       if (updateAvailable.value[modDetailsTarget.value.id]) {
@@ -1710,11 +1708,8 @@ async function handleAddModFromAnalysis(cfProjectId: number, fileId?: number) {
       // Add to modpack
       await window.api.modpacks.addMod(props.modpackId, addedMod.id);
 
-      // Mark as recently added
+      // Mark as recently added (no timeout - user must manually dismiss)
       recentlyAddedMods.value.add(addedMod.id);
-      setTimeout(() => {
-        recentlyAddedMods.value.delete(addedMod.id);
-      }, RECENT_THRESHOLD_MS);
 
       await loadData();
       emit("update");
@@ -3151,6 +3146,15 @@ watch(
                         <Icon name="Plus" class="w-3 h-3" />
                         Just Added ({{ recentlyAddedCount }})
                       </button>
+                      <!-- Dismiss All Badges Button -->
+                      <div v-if="recentlyUpdatedCount > 0 || recentlyAddedCount > 0" class="h-px bg-border my-1"></div>
+                      <button v-if="recentlyUpdatedCount > 0 || recentlyAddedCount > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                        @click="dismissAllBadges(); showModsFilterMenu = false"
+                        title="Mark all new and updated mods as read">
+                        <Icon name="CheckCheck" class="w-3 h-3" />
+                        Dismiss All Badges
+                      </button>
                     </div>
                     <div v-if="showModsFilterMenu" class="fixed inset-0 z-40" @click="showModsFilterMenu = false"></div>
                   </div>
@@ -3335,14 +3339,18 @@ watch(
                         <!-- Status Badges -->
                         <div class="flex items-center gap-1 shrink-0">
                           <span v-if="recentlyUpdatedMods.has(mod.id)"
-                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium group/badge cursor-pointer hover:bg-primary/25 transition-colors"
+                            @click.stop="dismissUpdatedMod(mod.id)" title="Click to dismiss">
                             <Icon name="ArrowUpCircle" class="w-2.5 h-2.5" />
                             Updated
+                            <Icon name="X" class="w-2 h-2 opacity-0 group-hover/badge:opacity-100 transition-opacity" />
                           </span>
                           <span v-else-if="recentlyAddedMods.has(mod.id)"
-                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 font-medium">
+                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 font-medium group/badge cursor-pointer hover:bg-emerald-500/25 transition-colors"
+                            @click.stop="dismissNewMod(mod.id)" title="Click to dismiss">
                             <Icon name="Plus" class="w-2.5 h-2.5" />
                             New
+                            <Icon name="X" class="w-2 h-2 opacity-0 group-hover/badge:opacity-100 transition-opacity" />
                           </span>
                           <span v-if="!mod.isCompatible"
                             class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium">
@@ -4832,7 +4840,8 @@ watch(
 
     <ModUpdateDialog :open="showSingleModUpdateDialog" :mod="selectedUpdateMod" :modpack-id="modpackId"
       :minecraft-version="modpack?.minecraft_version" :loader="modpack?.loader"
-      @close="showSingleModUpdateDialog = false" @updated="handleSingleModUpdated" />
+      @close="showSingleModUpdateDialog = false"
+      @updated="(fileId, newModId) => handleSingleModUpdated(fileId, newModId)" />
 
     <!-- CurseForge Browse Dialog -->
     <CurseForgeSearch :open="showCFSearch" :game-version="modpack?.minecraft_version" :mod-loader="modpack?.loader"

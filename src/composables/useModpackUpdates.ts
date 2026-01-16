@@ -2,7 +2,7 @@ import { ref, computed, type Ref } from "vue";
 import type { Mod, Modpack } from "@/types";
 import { useToast } from "./useToast";
 
-const RECENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+// Removed RECENT_THRESHOLD_MS - badges are now dismissed manually by user
 
 export interface UpdateInfo {
   id: number;
@@ -162,11 +162,10 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
         modpackId.value
       );
       if (result.success) {
-        // Mark as recently updated
-        recentlyUpdatedMods.value.add(mod.id);
-        setTimeout(() => {
-          recentlyUpdatedMods.value.delete(mod.id);
-        }, RECENT_THRESHOLD_MS);
+        // Mark as recently updated using the NEW mod ID (not the old one)
+        // After loadData(), the mod list will have the newModId, not the old mod.id
+        const updatedModId = result.newModId || mod.id;
+        recentlyUpdatedMods.value.add(updatedModId);
 
         delete updateAvailable.value[mod.id];
         await loadData();
@@ -207,10 +206,9 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
           modpackId.value
         );
         if (result.success) {
-          recentlyUpdatedMods.value.add(mod.id);
-          setTimeout(() => {
-            recentlyUpdatedMods.value.delete(mod.id);
-          }, RECENT_THRESHOLD_MS);
+          // Mark as recently updated using the NEW mod ID
+          const updatedModId = result.newModId || mod.id;
+          recentlyUpdatedMods.value.add(updatedModId);
           delete updateAvailable.value[mod.id];
           successCount++;
         } else {
@@ -264,11 +262,9 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
         modpackId.value
       );
       if (result.success) {
-        // Mark as recently updated
-        recentlyUpdatedMods.value.add(versionPickerMod.value.libraryModId);
-        setTimeout(() => {
-          recentlyUpdatedMods.value.delete(versionPickerMod.value?.libraryModId || "");
-        }, RECENT_THRESHOLD_MS);
+        // Mark as recently updated using the NEW mod ID
+        const updatedModId = result.newModId || versionPickerMod.value.libraryModId;
+        recentlyUpdatedMods.value.add(updatedModId);
 
         // Clear any cached update status
         if (updateAvailable.value[versionPickerMod.value.libraryModId]) {
@@ -295,15 +291,12 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
     showSingleModUpdateDialog.value = true;
   }
 
-  // Handle single mod updated event
-  function handleSingleModUpdated(): void {
+  // Handle single mod updated event - receives newModId from dialog
+  function handleSingleModUpdated(newFileId?: number, newModId?: string): void {
     if (selectedUpdateMod.value) {
-      recentlyUpdatedMods.value.add(selectedUpdateMod.value.id);
-      setTimeout(() => {
-        if (selectedUpdateMod.value) {
-          recentlyUpdatedMods.value.delete(selectedUpdateMod.value.id);
-        }
-      }, RECENT_THRESHOLD_MS);
+      // Use newModId if available, otherwise fall back to the old mod id
+      const updatedModId = newModId || selectedUpdateMod.value.id;
+      recentlyUpdatedMods.value.add(updatedModId);
     }
   }
 

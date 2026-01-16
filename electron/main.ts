@@ -562,7 +562,40 @@ async function initializeBackend() {
         throw new Error('Invalid modpack or mod id');
       }
       await guardLinkedModpack(modpackId, "add mod");
-      return metadataManager.addModToModpack(modpackId, modId);
+      
+      // Check if instant sync is enabled
+      const syncSettings = await metadataManager.getInstanceSyncSettings();
+      
+      // Add to database
+      const result = await metadataManager.addModToModpack(modpackId, modId);
+      
+      if (syncSettings.instantSync) {
+        // Get mod details and sync to instance
+        const mod = await metadataManager.getModById(modId);
+        if (mod) {
+          try {
+            await syncModToInstance(modpackId, {
+              id: mod.id,
+              name: mod.name,
+              filename: mod.filename,
+              cf_project_id: mod.cf_project_id,
+              cf_file_id: mod.cf_file_id,
+              content_type: mod.content_type
+            });
+          } catch (syncError) {
+            // Rollback database change on sync failure
+            console.error(`[InstantSync] Failed to sync mod ${modId}, rolling back:`, syncError);
+            try {
+              await metadataManager.removeModFromModpack(modpackId, modId);
+            } catch (rollbackError) {
+              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+            }
+            throw new Error(`Failed to sync mod to instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+          }
+        }
+      }
+      
+      return result;
     }
   );
 
@@ -576,7 +609,46 @@ async function initializeBackend() {
         throw new Error('Invalid modIds: must be an array');
       }
       await guardLinkedModpack(modpackId, "add mods");
-      return metadataManager.addModsToModpackBatch(modpackId, modIds);
+      
+      // Check if instant sync is enabled
+      const syncSettings = await metadataManager.getInstanceSyncSettings();
+      
+      // Add to database
+      const result = await metadataManager.addModsToModpackBatch(modpackId, modIds);
+      
+      if (syncSettings.instantSync) {
+        // Sync all mods to instance
+        const mods = await Promise.all(modIds.map(id => metadataManager.getModById(id)));
+        const validMods = mods.filter((m): m is NonNullable<typeof m> => m != null);
+        const syncedModIds: string[] = [];
+        
+        try {
+          for (const mod of validMods) {
+            await syncModToInstance(modpackId, {
+              id: mod.id,
+              name: mod.name,
+              filename: mod.filename,
+              cf_project_id: mod.cf_project_id,
+              cf_file_id: mod.cf_file_id,
+              content_type: mod.content_type
+            });
+            syncedModIds.push(mod.id);
+          }
+        } catch (syncError) {
+          // Rollback: remove all synced mods from database
+          console.error(`[InstantSync] Failed to sync batch, rolling back ${syncedModIds.length} mods:`, syncError);
+          try {
+            for (const modId of syncedModIds) {
+              await metadataManager.removeModFromModpack(modpackId, modId);
+            }
+          } catch (rollbackError) {
+            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+          }
+          throw new Error(`Failed to sync mods to instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+        }
+      }
+      
+      return result;
     }
   );
 
@@ -631,7 +703,36 @@ async function initializeBackend() {
         throw new Error('Invalid modId: must be a non-empty string');
       }
       await guardLinkedModpack(modpackId, "remove mod");
-      return metadataManager.removeModFromModpack(modpackId, modId);
+      
+      // Get mod details before removing (for instant sync and potential rollback)
+      const mod = await metadataManager.getModById(modId);
+      
+      // Check if instant sync is enabled
+      const syncSettings = await metadataManager.getInstanceSyncSettings();
+      
+      // Remove from database
+      const result = await metadataManager.removeModFromModpack(modpackId, modId);
+      
+      if (syncSettings.instantSync && mod) {
+        try {
+          // Remove from instance immediately
+          await removeModFromInstance(modpackId, {
+            filename: mod.filename,
+            content_type: mod.content_type
+          });
+        } catch (syncError) {
+          // Rollback database change on sync failure
+          console.error(`[InstantSync] Failed to remove mod ${modId} from instance, rolling back:`, syncError);
+          try {
+            await metadataManager.addModToModpack(modpackId, modId);
+          } catch (rollbackError) {
+            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+          }
+          throw new Error(`Failed to remove mod from instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+        }
+      }
+      
+      return result;
     }
   );
 
@@ -645,7 +746,37 @@ async function initializeBackend() {
         throw new Error('Invalid modId: must be a non-empty string');
       }
       await guardLinkedModpack(modpackId, "toggle mod");
-      return metadataManager.toggleModInModpack(modpackId, modId);
+      
+      // Get mod details for instant sync
+      const mod = await metadataManager.getModById(modId);
+      
+      // Check if instant sync is enabled
+      const syncSettings = await metadataManager.getInstanceSyncSettings();
+      
+      // Toggle in database
+      const result = await metadataManager.toggleModInModpack(modpackId, modId);
+      
+      if (syncSettings.instantSync && mod && result) {
+        try {
+          // Toggle in instance immediately
+          await toggleModInInstance(modpackId, {
+            filename: mod.filename,
+            content_type: mod.content_type
+          }, result.enabled);
+        } catch (syncError) {
+          // Rollback database change on sync failure
+          console.error(`[InstantSync] Failed to toggle mod ${modId} in instance, rolling back:`, syncError);
+          try {
+            // Toggle back to previous state
+            await metadataManager.toggleModInModpack(modpackId, modId);
+          } catch (rollbackError) {
+            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+          }
+          throw new Error(`Failed to toggle mod in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+        }
+      }
+      
+      return result;
     }
   );
 
@@ -662,7 +793,37 @@ async function initializeBackend() {
         throw new Error('Invalid enabled: must be a boolean');
       }
       await guardLinkedModpack(modpackId, "change mod state");
-      return metadataManager.setModEnabledInModpack(modpackId, modId, enabled);
+      
+      // Get mod details for instant sync
+      const mod = await metadataManager.getModById(modId);
+      
+      // Check if instant sync is enabled
+      const syncSettings = await metadataManager.getInstanceSyncSettings();
+      
+      // Update in database
+      const result = await metadataManager.setModEnabledInModpack(modpackId, modId, enabled);
+      
+      if (syncSettings.instantSync && mod) {
+        try {
+          // Toggle in instance immediately
+          await toggleModInInstance(modpackId, {
+            filename: mod.filename,
+            content_type: mod.content_type
+          }, enabled);
+        } catch (syncError) {
+          // Rollback database change on sync failure
+          console.error(`[InstantSync] Failed to set mod ${modId} enabled=${enabled} in instance, rolling back:`, syncError);
+          try {
+            // Revert to opposite state
+            await metadataManager.setModEnabledInModpack(modpackId, modId, !enabled);
+          } catch (rollbackError) {
+            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+          }
+          throw new Error(`Failed to update mod state in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+        }
+      }
+      
+      return result;
     }
   );
 
@@ -706,6 +867,515 @@ async function initializeBackend() {
       }
       await guardLinkedModpack(modpackId, "change mod lock state");
       return metadataManager.setModLocked(modpackId, modId, locked);
+    }
+  );
+
+  // ========== DIRECT FILE OPERATIONS (Auto-sync to instance) ==========
+  // These handlers perform the database operation AND immediately sync the file to the instance
+  // This eliminates the need for manual "Sync" operations
+
+  /**
+   * Check if instant sync should proceed for an instance
+   * Returns false if:
+   * - No instance linked
+   * - Instance is installing/syncing
+   * - Game is currently running on this instance
+   */
+  async function canInstantSync(modpackId: string): Promise<{ canSync: boolean; instance?: any; reason?: string }> {
+    const instance = await instanceService.getInstanceByModpack(modpackId);
+    if (!instance) {
+      return { canSync: false, reason: "no_instance" };
+    }
+
+    // Don't sync if instance is currently installing/syncing
+    if (instance.state === "installing") {
+      console.log(`[DirectSync] Skipping - instance ${instance.id} is currently installing`);
+      return { canSync: false, instance, reason: "installing" };
+    }
+
+    // Don't sync if game is running on this instance
+    const runningGame = instanceService.getRunningGame(instance.id);
+    if (runningGame) {
+      console.log(`[DirectSync] Skipping - game is running on instance ${instance.id}`);
+      return { canSync: false, instance, reason: "game_running" };
+    }
+
+    return { canSync: true, instance };
+  }
+
+  /**
+   * Helper to sync a single mod file to the instance
+   * Used by direct file operation handlers
+   * 
+   * Handles edge cases:
+   * - No instance linked: silently skip
+   * - Instance installing: silently skip
+   * - Game running: silently skip
+   * - No download URL (local mods): silently skip
+   * - File already exists: silently skip
+   * - Network errors: log and return error
+   * - File system errors: log and return error
+   */
+  async function syncModToInstance(modpackId: string, mod: { id: string; name: string; filename: string; cf_project_id?: number; cf_file_id?: number; content_type?: string }): Promise<{ success: boolean; error?: string; skipped?: boolean; reason?: string }> {
+    try {
+      const { canSync, instance, reason } = await canInstantSync(modpackId);
+      if (!canSync) {
+        return { success: true, skipped: true, reason };
+      }
+
+      // Determine destination folder based on content_type
+      let destFolder: string;
+      switch (mod.content_type) {
+        case "resourcepack":
+          destFolder = path.join(instance.path, "resourcepacks");
+          break;
+        case "shader":
+          destFolder = path.join(instance.path, "shaderpacks");
+          break;
+        default:
+          destFolder = path.join(instance.path, "mods");
+      }
+      await fs.ensureDir(destFolder);
+
+      const destPath = path.join(destFolder, mod.filename);
+      const disabledDestPath = destPath + ".disabled";
+
+      // Skip if already exists
+      if (await fs.pathExists(destPath) || await fs.pathExists(disabledDestPath)) {
+        console.log(`[DirectSync] Skipping ${mod.name} - already exists`);
+        return { success: true, skipped: true, reason: "already_exists" };
+      }
+
+      // Build download URL - support both CurseForge and Modrinth
+      let downloadUrl: string | undefined;
+      if (mod.cf_project_id && mod.cf_file_id) {
+        // CurseForge URL
+        const fileIdStr = mod.cf_file_id.toString();
+        const part1 = fileIdStr.substring(0, 4);
+        const part2 = fileIdStr.substring(4);
+        downloadUrl = `https://edge.forgecdn.net/files/${part1}/${part2}/${encodeURIComponent(mod.filename)}`;
+      }
+      // TODO: Add Modrinth URL support when mr_project_id/mr_version_id are available
+
+      if (!downloadUrl) {
+        console.log(`[DirectSync] No download URL for ${mod.name} (local mod or missing CF IDs)`);
+        return { success: true, skipped: true, reason: "no_download_url" };
+      }
+
+      // Download the file with timeout
+      console.log(`[DirectSync] Downloading ${mod.filename}...`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      
+      try {
+        const response = await fetch(downloadUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        
+        if (!response.ok) {
+          throw new Error(`Download failed: HTTP ${response.status}`);
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        await fs.writeFile(destPath, buffer);
+        console.log(`[DirectSync] Downloaded ${mod.filename} (${buffer.length} bytes)`);
+
+        return { success: true };
+      } catch (fetchError: any) {
+        clearTimeout(timeout);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Download timed out');
+        }
+        throw fetchError;
+      }
+    } catch (error: any) {
+      console.error(`[DirectSync] Error syncing ${mod.name}:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Helper to remove a mod file from the instance
+   * 
+   * Handles edge cases:
+   * - No instance: silently skip
+   * - Instance installing: silently skip
+   * - Game running: silently skip (files may be locked)
+   * - File doesn't exist: silently skip
+   * - File locked: return error
+   */
+  async function removeModFromInstance(modpackId: string, mod: { filename: string; content_type?: string }): Promise<{ success: boolean; error?: string; skipped?: boolean; reason?: string }> {
+    try {
+      const { canSync, instance, reason } = await canInstantSync(modpackId);
+      if (!canSync) {
+        return { success: true, skipped: true, reason };
+      }
+
+      // Determine folder based on content_type
+      let folder: string;
+      switch (mod.content_type) {
+        case "resourcepack":
+          folder = path.join(instance.path, "resourcepacks");
+          break;
+        case "shader":
+          folder = path.join(instance.path, "shaderpacks");
+          break;
+        default:
+          folder = path.join(instance.path, "mods");
+      }
+
+      const filePath = path.join(folder, mod.filename);
+      const disabledPath = filePath + ".disabled";
+
+      // Remove both enabled and disabled versions
+      let removed = false;
+      if (await fs.pathExists(filePath)) {
+        await fs.remove(filePath);
+        console.log(`[DirectSync] Removed ${mod.filename}`);
+        removed = true;
+      }
+      if (await fs.pathExists(disabledPath)) {
+        await fs.remove(disabledPath);
+        console.log(`[DirectSync] Removed ${mod.filename}.disabled`);
+        removed = true;
+      }
+
+      if (!removed) {
+        return { success: true, skipped: true, reason: "file_not_found" };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      // Check for EBUSY (file locked)
+      if (error.code === 'EBUSY' || error.code === 'EPERM') {
+        console.error(`[DirectSync] File is locked (game running?): ${mod.filename}`);
+        return { success: false, error: 'File is locked - is the game running?' };
+      }
+      console.error(`[DirectSync] Error removing file:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Helper to toggle mod enabled/disabled state in the instance
+   * 
+   * Handles edge cases:
+   * - No instance: silently skip
+   * - Instance installing: silently skip
+   * - Game running: silently skip (files may be locked)
+   * - File doesn't exist: silently skip
+   * - File locked: return error
+   */
+  async function toggleModInInstance(modpackId: string, mod: { filename: string; content_type?: string }, enabled: boolean): Promise<{ success: boolean; error?: string; skipped?: boolean; reason?: string }> {
+    try {
+      const { canSync, instance, reason } = await canInstantSync(modpackId);
+      if (!canSync) {
+        return { success: true, skipped: true, reason };
+      }
+
+      // Determine folder based on content_type
+      let folder: string;
+      switch (mod.content_type) {
+        case "resourcepack":
+          folder = path.join(instance.path, "resourcepacks");
+          break;
+        case "shader":
+          folder = path.join(instance.path, "shaderpacks");
+          break;
+        default:
+          folder = path.join(instance.path, "mods");
+      }
+
+      const enabledPath = path.join(folder, mod.filename);
+      const disabledPath = enabledPath + ".disabled";
+
+      if (enabled) {
+        // Enable: rename .disabled to normal
+        if (await fs.pathExists(disabledPath)) {
+          await fs.rename(disabledPath, enabledPath);
+          console.log(`[DirectSync] Enabled ${mod.filename}`);
+        } else if (!await fs.pathExists(enabledPath)) {
+          // File doesn't exist at all - can't toggle
+          return { success: true, skipped: true, reason: "file_not_found" };
+        }
+      } else {
+        // Disable: rename to .disabled
+        if (await fs.pathExists(enabledPath)) {
+          await fs.rename(enabledPath, disabledPath);
+          console.log(`[DirectSync] Disabled ${mod.filename}`);
+        } else if (!await fs.pathExists(disabledPath)) {
+          // File doesn't exist at all - can't toggle
+          return { success: true, skipped: true, reason: "file_not_found" };
+        }
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      // Check for EBUSY (file locked)
+      if (error.code === 'EBUSY' || error.code === 'EPERM') {
+        console.error(`[DirectSync] File is locked (game running?): ${mod.filename}`);
+        return { success: false, error: 'File is locked - is the game running?' };
+      }
+      console.error(`[DirectSync] Error toggling mod:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Helper to update a mod in the instance (remove old version, add new version)
+   * 
+   * Handles edge cases:
+   * - No instance: silently skip
+   * - Instance installing: silently skip
+   * - Game running: silently skip (files may be locked)
+   * - Old file doesn't exist: still try to add new file
+   * - Download fails: return error
+   */
+  async function updateModInInstance(
+    modpackId: string, 
+    oldMod: { filename: string; content_type?: string },
+    newMod: { id: string; name: string; filename: string; cf_project_id?: number; cf_file_id?: number; content_type?: string },
+    isDisabled: boolean
+  ): Promise<{ success: boolean; error?: string; skipped?: boolean; reason?: string }> {
+    try {
+      const { canSync, instance, reason } = await canInstantSync(modpackId);
+      if (!canSync) {
+        return { success: true, skipped: true, reason };
+      }
+
+      // Determine folder based on content_type
+      let folder: string;
+      switch (oldMod.content_type || newMod.content_type) {
+        case "resourcepack":
+          folder = path.join(instance.path, "resourcepacks");
+          break;
+        case "shader":
+          folder = path.join(instance.path, "shaderpacks");
+          break;
+        default:
+          folder = path.join(instance.path, "mods");
+      }
+
+      // Remove old file (both enabled and disabled versions)
+      const oldEnabledPath = path.join(folder, oldMod.filename);
+      const oldDisabledPath = oldEnabledPath + ".disabled";
+      
+      if (await fs.pathExists(oldEnabledPath)) {
+        await fs.remove(oldEnabledPath);
+        console.log(`[DirectSync] Removed old version: ${oldMod.filename}`);
+      }
+      if (await fs.pathExists(oldDisabledPath)) {
+        await fs.remove(oldDisabledPath);
+        console.log(`[DirectSync] Removed old disabled version: ${oldMod.filename}.disabled`);
+      }
+
+      // Build download URL for new file
+      let downloadUrl: string | undefined;
+      if (newMod.cf_project_id && newMod.cf_file_id) {
+        const fileIdStr = newMod.cf_file_id.toString();
+        const part1 = fileIdStr.substring(0, 4);
+        const part2 = fileIdStr.substring(4);
+        downloadUrl = `https://edge.forgecdn.net/files/${part1}/${part2}/${encodeURIComponent(newMod.filename)}`;
+      }
+
+      if (!downloadUrl) {
+        console.log(`[DirectSync] No download URL for ${newMod.name} (local mod or missing CF IDs)`);
+        return { success: true, skipped: true, reason: "no_download_url" };
+      }
+
+      // Download new file with timeout
+      console.log(`[DirectSync] Downloading new version: ${newMod.filename}...`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      
+      try {
+        const response = await fetch(downloadUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        
+        if (!response.ok) {
+          throw new Error(`Download failed: HTTP ${response.status}`);
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        
+        // Write as enabled or disabled based on the mod's state
+        const newPath = path.join(folder, newMod.filename);
+        const destPath = isDisabled ? newPath + ".disabled" : newPath;
+        
+        await fs.writeFile(destPath, buffer);
+        console.log(`[DirectSync] Downloaded ${newMod.filename} (${buffer.length} bytes)${isDisabled ? ' [disabled]' : ''}`);
+
+        return { success: true };
+      } catch (fetchError: any) {
+        clearTimeout(timeout);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Download timed out');
+        }
+        throw fetchError;
+      }
+    } catch (error: any) {
+      if (error.code === 'EBUSY' || error.code === 'EPERM') {
+        console.error(`[DirectSync] File is locked (game running?)`);
+        return { success: false, error: 'File is locked - is the game running?' };
+      }
+      console.error(`[DirectSync] Error updating mod in instance:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Add mod with auto-sync to instance
+  ipcMain.handle(
+    "modpacks:addModDirect",
+    async (_, modpackId: string, modId: string) => {
+      if (!modpackId || !modId) {
+        throw new Error('Invalid modpack or mod id');
+      }
+      await guardLinkedModpack(modpackId, "add mod");
+      
+      // Add to database
+      const result = await metadataManager.addModToModpack(modpackId, modId);
+      
+      // Get mod details for syncing
+      const mod = await metadataManager.getModById(modId);
+      if (mod) {
+        // Sync to instance immediately
+        await syncModToInstance(modpackId, {
+          id: mod.id,
+          name: mod.name,
+          filename: mod.filename,
+          cf_project_id: mod.cf_project_id,
+          cf_file_id: mod.cf_file_id,
+          content_type: mod.content_type
+        });
+      }
+      
+      return result;
+    }
+  );
+
+  // Add multiple mods with auto-sync to instance
+  ipcMain.handle(
+    "modpacks:addModsBatchDirect",
+    async (_, modpackId: string, modIds: string[]) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!Array.isArray(modIds)) {
+        throw new Error('Invalid modIds: must be an array');
+      }
+      await guardLinkedModpack(modpackId, "add mods");
+      
+      // Add to database
+      const result = await metadataManager.addModsToModpackBatch(modpackId, modIds);
+      
+      // Sync all mods to instance in parallel
+      const mods = await Promise.all(modIds.map(id => metadataManager.getModById(id)));
+      await Promise.all(
+        mods.filter((m): m is NonNullable<typeof m> => m != null).map(mod =>
+          syncModToInstance(modpackId, {
+            id: mod.id,
+            name: mod.name,
+            filename: mod.filename,
+            cf_project_id: mod.cf_project_id,
+            cf_file_id: mod.cf_file_id,
+            content_type: mod.content_type
+          })
+        )
+      );
+      
+      return result;
+    }
+  );
+
+  // Remove mod with auto-sync to instance
+  ipcMain.handle(
+    "modpacks:removeModDirect",
+    async (_, modpackId: string, modId: string) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!modId || typeof modId !== 'string') {
+        throw new Error('Invalid modId: must be a non-empty string');
+      }
+      await guardLinkedModpack(modpackId, "remove mod");
+      
+      // Get mod details before removing
+      const mod = await metadataManager.getModById(modId);
+      
+      // Remove from database
+      const result = await metadataManager.removeModFromModpack(modpackId, modId);
+      
+      // Remove from instance immediately
+      if (mod) {
+        await removeModFromInstance(modpackId, {
+          filename: mod.filename,
+          content_type: mod.content_type
+        });
+      }
+      
+      return result;
+    }
+  );
+
+  // Toggle mod with auto-sync to instance
+  ipcMain.handle(
+    "modpacks:toggleModDirect",
+    async (_, modpackId: string, modId: string) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!modId || typeof modId !== 'string') {
+        throw new Error('Invalid modId: must be a non-empty string');
+      }
+      await guardLinkedModpack(modpackId, "toggle mod");
+      
+      // Get mod details
+      const mod = await metadataManager.getModById(modId);
+      
+      // Toggle in database
+      const result = await metadataManager.toggleModInModpack(modpackId, modId);
+      
+      // Toggle in instance immediately
+      if (mod && result) {
+        await toggleModInInstance(modpackId, {
+          filename: mod.filename,
+          content_type: mod.content_type
+        }, result.enabled);
+      }
+      
+      return result;
+    }
+  );
+
+  // Set mod enabled state with auto-sync to instance
+  ipcMain.handle(
+    "modpacks:setModEnabledDirect",
+    async (_, modpackId: string, modId: string, enabled: boolean) => {
+      if (!modpackId || typeof modpackId !== 'string') {
+        throw new Error('Invalid modpackId: must be a non-empty string');
+      }
+      if (!modId || typeof modId !== 'string') {
+        throw new Error('Invalid modId: must be a non-empty string');
+      }
+      if (typeof enabled !== 'boolean') {
+        throw new Error('Invalid enabled: must be a boolean');
+      }
+      await guardLinkedModpack(modpackId, "change mod state");
+      
+      // Get mod details
+      const mod = await metadataManager.getModById(modId);
+      
+      // Update in database
+      const result = await metadataManager.setModEnabledInModpack(modpackId, modId, enabled);
+      
+      // Toggle in instance immediately
+      if (mod) {
+        await toggleModInInstance(modpackId, {
+          filename: mod.filename,
+          content_type: mod.content_type
+        }, enabled);
+      }
+      
+      return result;
     }
   );
 
@@ -3354,10 +4024,18 @@ async function initializeBackend() {
         }
 
         // Replace old mod ID with new mod ID in the specified modpack or all modpacks
+        // Track which modpacks were updated for instant sync
+        const updatedModpacks: Array<{ id: string; isDisabled: boolean }> = [];
+        
         if (modpackId) {
           // Update only the specified modpack
+          const modpack = await metadataManager.getModpackById(modpackId);
+          const isDisabled = modpack?.disabled_mod_ids?.includes(modId) || false;
+          
           await metadataManager.replaceModInModpack(modpackId, modId, newMod.id);
           console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${modpackId}`);
+          
+          updatedModpacks.push({ id: modpackId, isDisabled });
         } else {
           // Update all modpacks that contain this mod (skip linked ones)
           const modpacks = await metadataManager.getAllModpacks();
@@ -3368,8 +4046,36 @@ async function initializeBackend() {
                 console.log(`[Update] Skipping linked modpack ${mp.id}`);
                 continue;
               }
+              const isDisabled = mp.disabled_mod_ids?.includes(modId) || false;
               await metadataManager.replaceModInModpack(mp.id, modId, newMod.id);
               console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${mp.id}`);
+              
+              updatedModpacks.push({ id: mp.id, isDisabled });
+            }
+          }
+        }
+
+        // Instant sync: update files in all affected instances
+        const settings = await metadataManager.getInstanceSyncSettings();
+        if (settings.instantSync !== false) {
+          for (const { id: mpId, isDisabled } of updatedModpacks) {
+            const syncResult = await updateModInInstance(
+              mpId,
+              { filename: oldMod.filename, content_type: oldMod.content_type },
+              {
+                id: newMod.id,
+                name: newMod.name,
+                filename: newMod.filename,
+                cf_project_id: newMod.cf_project_id,
+                cf_file_id: newMod.cf_file_id,
+                content_type: newMod.content_type
+              },
+              isDisabled
+            );
+            if (syncResult.success && !syncResult.skipped) {
+              console.log(`[Update] Instant synced update to instance for modpack ${mpId}`);
+            } else if (syncResult.error) {
+              console.warn(`[Update] Instant sync failed for modpack ${mpId}: ${syncResult.error}`);
             }
           }
         }

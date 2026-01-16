@@ -275,7 +275,7 @@ const iconMap: Record<string, string> = {
   'Dice6': 'ph:dice-six-fill',
   'Target': 'ph:target-fill',
   'Crosshair': 'ph:crosshair-bold',
-  'Pickaxe': 'ph:pickaxe-fill',
+  'Pickaxe': 'arcticons:minecraft-pickaxe',
   'Sword': 'ph:sword-fill',
   'Shield': 'ph:shield-fill',
 

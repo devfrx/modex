@@ -25,6 +25,9 @@ const installedGames = ref<Record<GameType, boolean>>({
 const isLoading = ref(false);
 const isInitialized = ref(false);
 
+// Singleton promise to prevent multiple concurrent initializations
+let initPromise: Promise<void> | null = null;
+
 // Computed
 const currentGameConfig = computed(() => gameConfigs.value[activeGameType.value]);
 const currentProfiles = computed(() => 
@@ -58,41 +61,51 @@ const gameDisplayInfo: Record<GameType, {
 
 /**
  * Initialize game profiles and detect installations
+ * Uses initPromise to deduplicate concurrent calls
  */
 async function initialize(): Promise<void> {
   if (isInitialized.value) return;
   
+  // If already initializing, return the existing promise
+  if (initPromise) return initPromise;
+  
   isLoading.value = true;
-  try {
-    // Load active game type
-    activeGameType.value = await window.api.game.getActiveGameType();
-    
-    // Detect installed games
-    const detection = await window.api.game.detectAllGames();
-    installedGames.value = {
-      minecraft: detection.minecraft?.installed || false,
-      hytale: detection.hytale?.installed || false,
-    };
-    
-    // Load game configs
-    for (const gameType of ["minecraft", "hytale"] as GameType[]) {
-      gameConfigs.value[gameType] = await window.api.game.getGameConfig(gameType);
+  
+  initPromise = (async () => {
+    try {
+      // Load active game type
+      activeGameType.value = await window.api.game.getActiveGameType();
+      
+      // Detect installed games
+      const detection = await window.api.game.detectAllGames();
+      installedGames.value = {
+        minecraft: detection.minecraft?.installed || false,
+        hytale: detection.hytale?.installed || false,
+      };
+      
+      // Load game configs
+      for (const gameType of ["minecraft", "hytale"] as GameType[]) {
+        gameConfigs.value[gameType] = await window.api.game.getGameConfig(gameType);
+      }
+      
+      // Load all profiles
+      profiles.value = await window.api.game.getProfiles();
+      
+      isInitialized.value = true;
+      console.log("[useGameProfile] Initialized:", {
+        activeGameType: activeGameType.value,
+        installedGames: installedGames.value,
+        profileCount: profiles.value.length,
+      });
+    } catch (error) {
+      console.error("[useGameProfile] Error initializing:", error);
+    } finally {
+      isLoading.value = false;
+      initPromise = null;
     }
-    
-    // Load all profiles
-    profiles.value = await window.api.game.getProfiles();
-    
-    isInitialized.value = true;
-    console.log("[useGameProfile] Initialized:", {
-      activeGameType: activeGameType.value,
-      installedGames: installedGames.value,
-      profileCount: profiles.value.length,
-    });
-  } catch (error) {
-    console.error("[useGameProfile] Error initializing:", error);
-  } finally {
-    isLoading.value = false;
-  }
+  })();
+  
+  return initPromise;
 }
 
 /**
@@ -159,7 +172,12 @@ async function updateProfile(
   if (updated) {
     const index = profiles.value.findIndex(p => p.id === id);
     if (index !== -1) {
-      profiles.value[index] = updated;
+      // Fix: Create new array to ensure Vue reactivity
+      profiles.value = [
+        ...profiles.value.slice(0, index),
+        updated,
+        ...profiles.value.slice(index + 1)
+      ];
     }
   }
   return updated;
@@ -185,12 +203,11 @@ async function setDefaultProfile(id: string): Promise<boolean> {
   
   const success = await window.api.game.setDefaultProfile(id);
   if (success) {
-    // Update local state
-    profiles.value.forEach(p => {
-      if (p.gameType === profile.gameType) {
-        p.isDefault = p.id === id;
-      }
-    });
+    // Fix: Create new array to ensure Vue reactivity
+    profiles.value = profiles.value.map(p => ({
+      ...p,
+      isDefault: p.gameType === profile.gameType ? p.id === id : p.isDefault
+    }));
   }
   return success;
 }

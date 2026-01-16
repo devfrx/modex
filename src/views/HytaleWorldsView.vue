@@ -12,21 +12,7 @@
 
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
-import {
-    Globe,
-    ArrowLeft,
-    Loader2,
-    Package,
-    FolderOpen,
-    Check,
-    X,
-    RefreshCw,
-    Plus,
-    AlertCircle,
-    Link,
-    ToggleLeft,
-    ToggleRight,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import { useHytale } from "@/composables/useHytale";
 import { useToast } from "@/composables/useToast";
@@ -44,8 +30,8 @@ const isLoading = ref(true);
 const saves = ref<HytaleSave[]>([]);
 const selectedSave = ref<HytaleSave | null>(null);
 
-// Get all available global mods
-const allMods = computed(() => installedMods.value);
+// Get all available global mods (only enabled ones - disabled mods shouldn't appear in world config)
+const allMods = computed(() => installedMods.value.filter(mod => !mod.isDisabled));
 
 // Load saves from Hytale
 async function loadSaves() {
@@ -167,7 +153,7 @@ onMounted(async () => {
         <div class="border-b border-border/50 bg-card/50 backdrop-blur-sm px-6 py-4">
             <div class="flex items-center gap-4">
                 <button @click="router.push('/hytale')" class="p-2 hover:bg-muted rounded-lg transition-colors">
-                    <ArrowLeft class="w-5 h-5" />
+                    <Icon name="ArrowLeft" class="w-5 h-5" />
                 </button>
                 <div class="flex-1">
                     <h1 class="text-xl font-semibold">Save Mod Configuration</h1>
@@ -176,7 +162,7 @@ onMounted(async () => {
                     </p>
                 </div>
                 <Button @click="loadSaves" variant="outline" size="sm" :disabled="isLoading">
-                    <RefreshCw class="w-4 h-4 mr-2" :class="{ 'animate-spin': isLoading }" />
+                    <Icon name="RefreshCw" :class="`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`" />
                     Refresh
                 </Button>
             </div>
@@ -185,7 +171,7 @@ onMounted(async () => {
         <!-- Loading State -->
         <div v-if="isLoading || isHytaleLoading" class="flex-1 flex items-center justify-center">
             <div class="flex flex-col items-center gap-4">
-                <Loader2 class="w-12 h-12 text-primary animate-spin" />
+                <Icon name="Loader2" class="w-12 h-12 text-primary animate-spin" />
                 <p class="text-muted-foreground">Loading saves...</p>
             </div>
         </div>
@@ -193,7 +179,7 @@ onMounted(async () => {
         <!-- No Saves State -->
         <div v-else-if="saves.length === 0" class="flex-1 flex items-center justify-center">
             <div class="flex flex-col items-center gap-4 text-center px-6">
-                <Globe class="w-16 h-16 text-muted-foreground" />
+                <Icon name="Globe" class="w-16 h-16 text-muted-foreground" />
                 <h2 class="text-xl font-semibold">No Saves Found</h2>
                 <p class="text-muted-foreground max-w-md">
                     No Hytale saves were found. Create a world in Hytale first.
@@ -215,7 +201,7 @@ onMounted(async () => {
                         class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors" :class="selectedSave?.id === save.id
                             ? 'bg-primary/10 text-primary border border-primary/30'
                             : 'hover:bg-muted'">
-                        <Globe class="w-5 h-5 shrink-0" />
+                        <Icon name="Globe" class="w-5 h-5 shrink-0" />
                         <div class="flex-1 min-w-0">
                             <p class="font-medium truncate">{{ save.name }}</p>
                             <p class="text-xs text-muted-foreground truncate">
@@ -232,7 +218,7 @@ onMounted(async () => {
                 <div class="p-4 border-b border-border/30 bg-card/30 flex items-center justify-between">
                     <div>
                         <h2 class="text-lg font-semibold flex items-center gap-2">
-                            <Globe class="w-5 h-5 text-primary" />
+                            <Icon name="Globe" class="w-5 h-5 text-primary" />
                             {{ selectedSave.name }}
                         </h2>
                         <p class="text-sm text-muted-foreground">
@@ -241,7 +227,7 @@ onMounted(async () => {
                     </div>
                     <div class="flex items-center gap-2">
                         <Button variant="outline" size="sm" @click="openSaveFolder">
-                            <FolderOpen class="w-4 h-4 mr-2" />
+                            <Icon name="FolderOpen" class="w-4 h-4 mr-2" />
                             Open Folder
                         </Button>
                     </div>
@@ -249,7 +235,7 @@ onMounted(async () => {
 
                 <!-- Info Banner -->
                 <div class="mx-4 mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-3">
-                    <ToggleLeft class="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                    <Icon name="ToggleLeft" class="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                     <div class="text-sm">
                         <p class="font-medium text-foreground">How it works</p>
                         <p class="text-muted-foreground">
@@ -269,7 +255,7 @@ onMounted(async () => {
                             class="flex items-center gap-4 p-3 bg-card border border-border/50 rounded-lg hover:border-border transition-colors">
                             <!-- Mod Icon -->
                             <div class="w-10 h-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
-                                <Package class="w-5 h-5 text-muted-foreground" />
+                                <Icon name="Package" class="w-5 h-5 text-muted-foreground" />
                             </div>
 
                             <!-- Mod Info -->
@@ -283,8 +269,8 @@ onMounted(async () => {
                             <!-- Status -->
                             <span :class="isModEnabledInSave(mod.id) ? 'text-green-500' : 'text-muted-foreground'"
                                 class="text-xs flex items-center gap-1">
-                                <ToggleRight v-if="isModEnabledInSave(mod.id)" class="w-3 h-3" />
-                                <ToggleLeft v-else class="w-3 h-3" />
+                                <Icon v-if="isModEnabledInSave(mod.id)" name="ToggleRight" class="w-3 h-3" />
+                                <Icon v-else name="ToggleLeft" class="w-3 h-3" />
                                 {{ isModEnabledInSave(mod.id) ? 'Enabled' : 'Disabled' }}
                             </span>
 
@@ -301,7 +287,7 @@ onMounted(async () => {
 
                     <!-- Empty Mods Hint -->
                     <div v-if="allMods.length === 0" class="text-center py-12 text-muted-foreground">
-                        <Package class="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <Icon name="Package" class="w-12 h-12 mx-auto mb-4 opacity-50" />
                         <p>No mods installed in global folder</p>
                         <Button class="mt-4" @click="router.push('/hytale/browse')">
                             Browse Mods
@@ -313,7 +299,7 @@ onMounted(async () => {
             <!-- No Save Selected -->
             <div v-else class="flex-1 flex items-center justify-center">
                 <div class="text-center text-muted-foreground">
-                    <Globe class="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <Icon name="Globe" class="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>Select a save to manage mods</p>
                 </div>
             </div>

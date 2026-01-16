@@ -563,8 +563,8 @@ export class HytaleService {
 
   /** 
    * Install a mod from a downloaded file.
-   * Hytale supports both JAR files (copied directly) and folders.
-   * ZIP files are extracted, JAR files are copied as-is.
+   * Hytale supports both JAR and ZIP files (copied directly) and folders.
+   * ZIP and JAR files are copied as-is (not extracted) since they work like archives.
    */
   async installMod(
     sourceFilePath: string,
@@ -576,26 +576,26 @@ export class HytaleService {
       cfFileId?: number;
       logoUrl?: string;
     }
-  ): Promise<{ success: boolean; error?: string; folderName?: string }> {
+  ): Promise<{ success: boolean; error?: string; folderName?: string; mod?: HytaleMod }> {
     try {
       await fs.ensureDir(this.modsPath);
       
       const filename = path.basename(sourceFilePath);
       const ext = path.extname(filename).toLowerCase();
       
-      // JAR files: Copy directly to mods folder (Hytale supports JAR mods)
-      if (ext === ".jar") {
+      // JAR and ZIP files: Copy directly to mods folder (Hytale supports both as archive mods)
+      if (ext === ".jar" || ext === ".zip") {
         const destPath = path.join(this.modsPath, filename);
         
         // Check if already exists
         if (await fs.pathExists(destPath)) {
-          console.log("[HytaleService] Mod JAR already installed:", filename);
+          console.log(`[HytaleService] Mod ${ext.toUpperCase()} already installed:`, filename);
           return { success: true, folderName: filename };
         }
         
-        // Copy JAR file directly
+        // Copy file directly (no extraction - both work as archives)
         await fs.copy(sourceFilePath, destPath);
-        console.log(`[HytaleService] Copied JAR mod to: ${destPath}`);
+        console.log(`[HytaleService] Copied ${ext.toUpperCase()} mod to: ${destPath}`);
         
         // Save metadata to cache for future scans
         if (metadata.cfProjectId || metadata.logoUrl) {
@@ -606,14 +606,14 @@ export class HytaleService {
           });
         }
         
-        // Read hytaleModId from JAR
+        // Read hytaleModId from JAR/ZIP
         const jarModInfo = await this.readModInfoFromJar(destPath);
         
         // Update cache with hytaleModId
         const stat = await fs.stat(destPath);
         const mod: HytaleMod = {
           id: metadata.id,
-          hytaleModId: jarModInfo.hytaleModId, // Set hytaleModId from JAR manifest
+          hytaleModId: jarModInfo.hytaleModId, // Set hytaleModId from JAR/ZIP manifest
           name: jarModInfo.name || metadata.name,
           folderName: filename,
           version: jarModInfo.version || metadata.version,
@@ -629,53 +629,8 @@ export class HytaleService {
         };
         this.installedMods.set(mod.id, mod);
         
-        console.log(`[HytaleService] Installed JAR mod: ${filename} (hytaleModId: ${mod.hytaleModId})`);
-        return { success: true, folderName: filename };
-      }
-      
-      // ZIP files: Extract to folder
-      if (ext === ".zip") {
-        const modFolderName = metadata.name.replace(/[<>:"/\\|?*]/g, "_");
-        const destFolder = path.join(this.modsPath, modFolderName);
-        
-        // Check if already exists
-        if (await fs.pathExists(destFolder)) {
-          console.log("[HytaleService] Mod already installed:", modFolderName);
-          return { success: true, folderName: modFolderName };
-        }
-
-        // Extract the ZIP
-        await this.extractModZip(sourceFilePath, destFolder);
-        console.log(`[HytaleService] Extracted mod to: ${destFolder}`);
-        
-        // Save mod metadata for future reference
-        await this.saveModMetadata(destFolder, metadata);
-        
-        // Read mod info from folder (includes hytaleModId)
-        const folderModInfo = await this.readModInfo(destFolder);
-        
-        // Update cache
-        const stat = await fs.stat(destFolder);
-        const mod: HytaleMod = {
-          id: metadata.id,
-          hytaleModId: folderModInfo.hytaleModId,
-          name: folderModInfo.name || metadata.name,
-          folderName: modFolderName,
-          version: folderModInfo.version || metadata.version,
-          cfProjectId: metadata.cfProjectId,
-          cfFileId: metadata.cfFileId,
-          logoUrl: metadata.logoUrl, // Save logo URL from CurseForge
-          isInstalled: true,
-          isDisabled: false,
-          folderSize: await this.getFolderSize(destFolder),
-          installedAt: new Date().toISOString(),
-          author: folderModInfo.author,
-          description: folderModInfo.description,
-        };
-        this.installedMods.set(mod.id, mod);
-
-        console.log(`[HytaleService] Installed folder mod: ${modFolderName} (hytaleModId: ${mod.hytaleModId})`);
-        return { success: true, folderName: modFolderName };
+        console.log(`[HytaleService] Installed ${ext.toUpperCase()} mod: ${filename} (hytaleModId: ${mod.hytaleModId})`);
+        return { success: true, folderName: filename, mod };
       }
       
       // Other formats: Copy as folder
@@ -723,7 +678,7 @@ export class HytaleService {
       this.installedMods.set(mod.id, mod);
 
       console.log(`[HytaleService] Installed mod: ${modFolderName}`);
-      return { success: true, folderName: modFolderName };
+      return { success: true, folderName: modFolderName, mod };
     } catch (error: any) {
       console.error("[HytaleService] Error installing mod:", error);
       return { success: false, error: error.message };

@@ -3,13 +3,7 @@ import { ref, computed } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import { ModpackChange } from "@/types";
-import {
-  RefreshCw,
-  ArrowRight,
-  AlertTriangle,
-  Download,
-  History,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -69,7 +63,7 @@ async function handleConfirm() {
               </span>
             </div>
           </div>
-          <Download class="w-8 h-8 text-primary/50" />
+          <Icon name="Download" class="w-8 h-8 text-primary/50" />
         </div>
       </div>
 
@@ -103,7 +97,7 @@ async function handleConfirm() {
               <span class="font-medium truncate min-w-0 flex-1">{{ mod.modName }}</span>
               <div class="flex items-center gap-2 text-xs opacity-70 shrink-0">
                 <span class="line-through truncate max-w-[100px]">{{ mod.previousVersion }}</span>
-                <ArrowRight class="w-3 h-3 shrink-0" />
+                <Icon name="ArrowRight" class="w-3 h-3 shrink-0" />
                 <span class="text-blue-600 font-bold truncate max-w-[100px]">{{
                   mod.newVersion
                 }}</span>
@@ -197,7 +191,7 @@ async function handleConfirm() {
           <div class="space-y-1">
             <div v-for="change in versionControlChanges" :key="change.modId"
               class="p-2 rounded bg-purple-500/5 border border-purple-500/10 text-sm flex items-center gap-2 overflow-hidden">
-              <History class="w-4 h-4 text-purple-500 shrink-0" />
+              <Icon name="History" class="w-4 h-4 text-purple-500 shrink-0" />
               <span class="font-medium truncate min-w-0 flex-1">{{ change.modName }}</span>
               <span class="text-xs text-purple-600/70 shrink-0">Changes available</span>
             </div>
@@ -213,7 +207,7 @@ async function handleConfirm() {
       <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-border/50">
         <Button variant="ghost" @click="$emit('close')">Cancel</Button>
         <Button @click="handleConfirm" :disabled="isUpdating">
-          <RefreshCw v-if="isUpdating" class="w-4 h-4 mr-2 animate-spin" />
+          <Icon v-if="isUpdating" name="RefreshCw" class="w-4 h-4 mr-2 animate-spin" />
           {{ isUpdating ? "Updating..." : "Confirm Update" }}
         </Button>
       </div>

@@ -2,22 +2,7 @@
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import Button from "@/components/ui/Button.vue";
-import {
-    Package,
-    Layers,
-    ArrowRight,
-    Plus,
-    Folder,
-    BarChart3,
-    Compass,
-    Settings,
-    Play,
-    Globe,
-    Loader2,
-    Zap,
-    Download,
-    Users,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import type { Modpack } from "@/types/electron";
 
@@ -73,7 +58,7 @@ onMounted(loadData);
     <div class="h-full flex flex-col bg-background overflow-hidden">
         <!-- Loading State -->
         <div v-if="isLoading" class="flex-1 flex items-center justify-center">
-            <Loader2 class="w-8 h-8 text-primary animate-spin" />
+            <Icon name="Loader2" class="w-8 h-8 text-primary animate-spin" />
         </div>
 
         <!-- Main Content -->
@@ -101,17 +86,17 @@ onMounted(loadData);
                         <div class="hidden sm:flex items-center gap-3">
                             <div
                                 class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border/50">
-                                <Package class="w-3.5 h-3.5 text-primary" />
+                                <Icon name="Package" class="w-3.5 h-3.5 text-primary" />
                                 <span class="text-sm font-medium">{{ modpacks.length }} Packs</span>
                             </div>
                             <div
                                 class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border/50">
-                                <Layers class="w-3.5 h-3.5 text-primary" />
+                                <Icon name="Layers" class="w-3.5 h-3.5 text-primary" />
                                 <span class="text-sm font-medium">{{ totalMods }} Mods</span>
                             </div>
                             <div
                                 class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border/50">
-                                <Download class="w-3.5 h-3.5 text-primary" />
+                                <Icon name="Download" class="w-3.5 h-3.5 text-primary" />
                                 <span class="text-sm font-medium">{{ formatSize(totalSize) }}</span>
                             </div>
                         </div>
@@ -133,11 +118,11 @@ onMounted(loadData);
                             <!-- CTA Buttons -->
                             <div class="flex flex-wrap gap-3">
                                 <Button size="lg" @click="navigate('/modpacks?create=true')" class="gap-2 px-6">
-                                    <Plus class="w-4 h-4" />
+                                    <Icon name="Plus" class="w-4 h-4" />
                                     Create Modpack
                                 </Button>
                                 <Button variant="outline" size="lg" @click="navigate('/library')" class="gap-2 px-6">
-                                    <Compass class="w-4 h-4" />
+                                    <Icon name="Compass" class="w-4 h-4" />
                                     Browse Mods
                                 </Button>
                             </div>
@@ -149,7 +134,7 @@ onMounted(loadData);
                                 class="group p-5 rounded-xl bg-card border border-border/50 hover:border-primary/40 hover:bg-card/80 transition-all text-left">
                                 <div
                                     class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
-                                    <Package class="w-5 h-5 text-primary" />
+                                    <Icon name="Package" class="w-5 h-5 text-primary" />
                                 </div>
                                 <h3 class="font-semibold text-foreground mb-1">Modpacks</h3>
                                 <p class="text-xs text-muted-foreground">Manage your collections</p>
@@ -159,30 +144,20 @@ onMounted(loadData);
                                 class="group p-5 rounded-xl bg-card border border-border/50 hover:border-primary/40 hover:bg-card/80 transition-all text-left">
                                 <div
                                     class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
-                                    <Folder class="w-5 h-5 text-primary" />
+                                    <Icon name="Folder" class="w-5 h-5 text-primary" />
                                 </div>
                                 <h3 class="font-semibold text-foreground mb-1">Library</h3>
                                 <p class="text-xs text-muted-foreground">All your mods</p>
                             </button>
 
-                            <button @click="navigate('/sandbox')"
+                            <button @click="navigate('/guide')"
                                 class="group p-5 rounded-xl bg-card border border-border/50 hover:border-primary/40 hover:bg-card/80 transition-all text-left">
                                 <div
                                     class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
-                                    <Zap class="w-5 h-5 text-primary" />
+                                    <Icon name="BookOpen" class="w-5 h-5 text-primary" />
                                 </div>
-                                <h3 class="font-semibold text-foreground mb-1">Sandbox</h3>
-                                <p class="text-xs text-muted-foreground">Visualize dependencies</p>
-                            </button>
-
-                            <button @click="navigate('/stats')"
-                                class="group p-5 rounded-xl bg-card border border-border/50 hover:border-primary/40 hover:bg-card/80 transition-all text-left">
-                                <div
-                                    class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
-                                    <BarChart3 class="w-5 h-5 text-primary" />
-                                </div>
-                                <h3 class="font-semibold text-foreground mb-1">Statistics</h3>
-                                <p class="text-xs text-muted-foreground">Insights & analytics</p>
+                                <h3 class="font-semibold text-foreground mb-1">Guide</h3>
+                                <p class="text-xs text-muted-foreground">Learn how to use Modex</p>
                             </button>
                         </div>
                     </div>
@@ -197,7 +172,7 @@ onMounted(loadData);
                         <Button variant="ghost" size="sm" @click="navigate('/modpacks')"
                             class="gap-1.5 text-muted-foreground hover:text-foreground">
                             View All
-                            <ArrowRight class="w-4 h-4" />
+                            <Icon name="ArrowRight" class="w-4 h-4" />
                         </Button>
                     </div>
 
@@ -224,7 +199,7 @@ onMounted(loadData);
                                 </div>
                                 <Button variant="ghost" size="sm"
                                     class="opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Play class="w-4 h-4" />
+                                    <Icon name="Play" class="w-4 h-4" />
                                 </Button>
                             </div>
                         </div>
@@ -238,7 +213,7 @@ onMounted(loadData);
                     <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
-                                <Zap class="w-5 h-5 text-green-500" />
+                                <Icon name="Zap" class="w-5 h-5 text-green-500" />
                             </div>
                             <div>
                                 <h4 class="font-medium text-foreground text-sm">Fast & Light</h4>
@@ -248,7 +223,7 @@ onMounted(loadData);
 
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                                <Globe class="w-5 h-5 text-blue-500" />
+                                <Icon name="Globe" class="w-5 h-5 text-blue-500" />
                             </div>
                             <div>
                                 <h4 class="font-medium text-foreground text-sm">Cloud Sync</h4>
@@ -259,7 +234,7 @@ onMounted(loadData);
                         <div class="flex items-center gap-3">
                             <div
                                 class="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
-                                <Users class="w-5 h-5 text-purple-500" />
+                                <Icon name="Users" class="w-5 h-5 text-purple-500" />
                             </div>
                             <div>
                                 <h4 class="font-medium text-foreground text-sm">Collaborate</h4>
@@ -270,7 +245,7 @@ onMounted(loadData);
                         <div class="flex items-center gap-3">
                             <div
                                 class="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
-                                <Download class="w-5 h-5 text-orange-500" />
+                                <Icon name="Download" class="w-5 h-5 text-orange-500" />
                             </div>
                             <div>
                                 <h4 class="font-medium text-foreground text-sm">Auto Updates</h4>
@@ -289,7 +264,7 @@ onMounted(loadData);
                     </p>
                     <Button variant="ghost" size="sm" @click="navigate('/settings')"
                         class="gap-1.5 text-muted-foreground">
-                        <Settings class="w-4 h-4" />
+                        <Icon name="Settings" class="w-4 h-4" />
                         Settings
                     </Button>
                 </div>

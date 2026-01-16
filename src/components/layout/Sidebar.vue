@@ -1,22 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, useRouter } from "vue-router";
-import {
-  Home,
-  Library,
-  Package,
-  Settings,
-  Star,
-  Clock,
-  FolderTree,
-  LayoutGrid,
-  X,
-  BookOpen,
-  BarChart3,
-  Search,
-  PanelLeftClose,
-  PanelLeft,
-  Zap,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import { cn } from "@/lib/utils";
 import { ref, onMounted, onUnmounted, computed } from "vue";
@@ -53,21 +37,7 @@ async function handleGameChange(gameType: "minecraft" | "hytale") {
   }
 }
 
-// Icon mapping
-const iconMap: Record<string, any> = {
-  Home,
-  Library,
-  Package,
-  FolderTree,
-  BarChart3,
-  LayoutGrid,
-  BookOpen,
-};
 
-// Get icon component for an item
-function getIcon(iconName: string) {
-  return iconMap[iconName] || Package;
-}
 
 // Trigger global search by dispatching Ctrl+K event
 function triggerSearch() {
@@ -187,7 +157,7 @@ onUnmounted(() => {
       <button @click="emit('close')"
         class="sm:hidden p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Close menu" v-if="!settings.collapsed">
-        <X class="w-4 h-4" />
+        <Icon name="X" class="w-4 h-4" />
       </button>
     </div>
 
@@ -204,7 +174,7 @@ onUnmounted(() => {
           'text-muted-foreground hover:bg-muted hover:text-foreground',
         ]" active-class="!bg-primary/10 !text-primary !font-medium !border-l-2 !border-primary !rounded-l-none"
         @click="handleNavClick" :title="settings.collapsed ? item.name : undefined">
-        <component :is="getIcon(item.icon)" class="w-4 h-4 transition-colors duration-150 shrink-0" />
+        <Icon :name="item.icon" class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed" class="flex-1">{{ item.name }}</span>
         <span v-if="!settings.collapsed && getItemCount(item.id)"
           class="text-caption bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
@@ -219,7 +189,7 @@ onUnmounted(() => {
         class="w-full flex items-center rounded-md bg-muted/50 border border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-border/60 transition-all duration-150 text-sm"
         :class="settings.collapsed ? 'justify-center p-2' : 'gap-2 px-3 py-1.5'" @click="triggerSearch"
         :title="settings.collapsed ? 'Search (Ctrl+K)' : undefined">
-        <Search class="w-3.5 h-3.5 shrink-0" />
+        <Icon name="Search" class="w-3.5 h-3.5 shrink-0" />
         <template v-if="!settings.collapsed">
           <span class="flex-1 text-left text-xs">Search...</span>
           <span class="flex items-center gap-0.5 text-micro text-muted-foreground">
@@ -238,7 +208,7 @@ onUnmounted(() => {
           'text-warning hover:bg-warning/10 hover:text-warning',
         ]" active-class="!bg-warning/10 !text-warning" @click="handleNavClick"
         :title="settings.collapsed ? 'Dev Playground' : undefined">
-        <Zap class="w-4 h-4 transition-colors duration-150 shrink-0" />
+        <Icon name="Zap" class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed">Dev</span>
       </RouterLink>
 
@@ -247,7 +217,7 @@ onUnmounted(() => {
         class="w-full flex items-center gap-3 rounded-md transition-all duration-150 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         :class="settings.collapsed ? 'px-0 py-2 justify-center' : 'px-3 py-2'"
         :title="settings.collapsed ? 'Expand' : 'Minimize'">
-        <component :is="settings.collapsed ? PanelLeft : PanelLeftClose" class="w-4 h-4 shrink-0" />
+        <Icon :name="settings.collapsed ? 'PanelLeft' : 'PanelLeftClose'" class="w-4 h-4 shrink-0" />
         <span v-if="!settings.collapsed" class="text-sm">Minimize</span>
       </button>
 
@@ -257,7 +227,7 @@ onUnmounted(() => {
           'text-muted-foreground hover:bg-muted hover:text-foreground',
         ]" active-class="!bg-primary/10 !text-primary !font-medium !border-l-2 !border-primary !rounded-l-none"
         @click="handleNavClick" :title="settings.collapsed ? 'Settings' : undefined">
-        <Settings class="w-4 h-4 transition-colors duration-150 shrink-0" />
+        <Icon name="Settings" class="w-4 h-4 transition-colors duration-150 shrink-0" />
         <span v-if="!settings.collapsed">Settings</span>
       </RouterLink>
     </div>

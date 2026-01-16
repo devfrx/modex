@@ -6,33 +6,7 @@ import Input from "@/components/ui/Input.vue";
 import { useDialog } from "@/composables/useDialog";
 import { useToast } from "@/composables/useToast";
 import type { ModpackVersion, ModpackVersionHistory, ModpackChange } from "@/types/electron";
-import {
-    GitBranch,
-    GitCommit,
-    Plus,
-    Minus,
-    RefreshCw,
-    RotateCcw,
-    ChevronDown,
-    ChevronUp,
-    Save,
-    Clock,
-    Sparkles,
-    ToggleLeft,
-    ToggleRight,
-    Loader2,
-    Settings,
-    FileCode,
-    AlertTriangle,
-    Undo2,
-    Lock,
-    LockOpen,
-    Globe,
-    Box,
-    MessageSquare,
-    MessageSquarePlus,
-    MessageSquareDashed,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const props = defineProps<{
     modpackId: string;
@@ -438,22 +412,26 @@ function formatDate(dateString: string): string {
 }
 
 // Get change icon
-function getChangeIcon(type: ModpackChange["type"], modId?: string) {
+function getChangeIcon(type: ModpackChange["type"], modId?: string): string {
     // Config changes have special icon
-    if (modId === "_configs_") return FileCode;
+    if (modId === "_configs_") return "FileCode";
     // Loader changes have special icon
-    if (modId === "_loader_") return Box;
+    if (modId === "_loader_") return "Box";
 
     switch (type) {
-        case "add": return Plus;
-        case "remove": return Minus;
-        case "update": return RefreshCw;
-        case "enable": return ToggleRight;
-        case "disable": return ToggleLeft;
-        case "lock": return Lock;
-        case "unlock": return LockOpen;
-        case "version_control": return GitBranch;
-        case "loader_change": return Box;
+        case "add": return "Plus";
+        case "remove": return "Minus";
+        case "update": return "RefreshCw";
+        case "enable": return "ToggleRight";
+        case "disable": return "ToggleLeft";
+        case "lock": return "Lock";
+        case "unlock": return "LockOpen";
+        case "version_control": return "GitBranch";
+        case "loader_change": return "Box";
+        case "note_add": return "StickyNote";
+        case "note_remove": return "StickyNote";
+        case "note_change": return "StickyNote";
+        default: return "Circle";
     }
 }
 
@@ -474,6 +452,9 @@ function getChangeColor(type: ModpackChange["type"], modId?: string): string {
         case "unlock": return "text-emerald-500 bg-emerald-500/10";
         case "version_control": return "text-violet-500 bg-violet-500/10";
         case "loader_change": return "text-orange-500 bg-orange-500/10";
+        case "note_add": return "text-sky-500 bg-sky-500/10";
+        case "note_remove": return "text-red-500 bg-red-500/10";
+        case "note_change": return "text-blue-500 bg-blue-500/10";
         default: return "text-muted-foreground bg-muted";
     }
 }
@@ -500,7 +481,7 @@ watch(() => props.modpackId, () => {
         <div class="flex items-center justify-between mb-6">
             <div>
                 <div class="flex items-center gap-2 mb-1">
-                    <GitBranch class="w-5 h-5 text-primary" />
+                    <Icon name="GitBranch" class="w-5 h-5 text-primary" />
                     <h3 class="text-lg font-semibold">Version History</h3>
                 </div>
                 <p class="text-sm text-muted-foreground">
@@ -510,13 +491,13 @@ watch(() => props.modpackId, () => {
 
             <Button v-if="hasVersionControl && !props.isLinked" size="sm" class="gap-1.5"
                 @click="showCommitDialog = true" :disabled="isLoading">
-                <Save class="w-4 h-4" />
+                <Icon name="Save" class="w-4 h-4" />
                 Save Version
             </Button>
             <!-- Remote locked indicator -->
             <div v-else-if="hasVersionControl && props.isLinked"
                 class="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Lock class="w-4 h-4" />
+                <Icon name="Lock" class="w-4 h-4" />
                 <span>Managed by remote</span>
             </div>
         </div>
@@ -535,7 +516,7 @@ watch(() => props.modpackId, () => {
         <div v-else-if="!hasVersionControl" class="flex-1 flex items-center justify-center">
             <div class="text-center max-w-sm">
                 <div class="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <Sparkles class="w-7 h-7 text-primary" />
+                    <Icon name="Sparkles" class="w-7 h-7 text-primary" />
                 </div>
                 <h4 class="font-semibold mb-2">Enable Version Control</h4>
                 <p class="text-sm text-muted-foreground mb-4">
@@ -544,13 +525,13 @@ watch(() => props.modpackId, () => {
                 <!-- Remote locked -->
                 <div v-if="props.isLinked" class="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 mb-4">
                     <div class="flex items-center gap-2 text-amber-500 text-sm">
-                        <Lock class="w-4 h-4" />
+                        <Icon name="Lock" class="w-4 h-4" />
                         <span>Version control is managed by the remote source</span>
                     </div>
                 </div>
                 <Button @click="initializeVersionControl" :disabled="isLoading || props.isLinked" class="gap-1.5">
-                    <Lock v-if="props.isLinked" class="w-4 h-4" />
-                    <GitBranch v-else class="w-4 h-4" />
+                    <Icon v-if="props.isLinked" name="Lock" class="w-4 h-4" />
+                    <Icon v-else name="GitBranch" class="w-4 h-4" />
                     {{ props.isLinked ? 'Locked' : 'Enable Now' }}
                 </Button>
             </div>
@@ -563,7 +544,7 @@ watch(() => props.modpackId, () => {
                 class="mb-4 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
                 <div class="flex items-start gap-3">
                     <div class="p-1.5 rounded-lg bg-amber-500/15">
-                        <AlertTriangle class="w-4 h-4 text-amber-500" />
+                        <Icon name="AlertTriangle" class="w-4 h-4 text-amber-500" />
                     </div>
                     <div class="flex-1 min-w-0">
                         <h4 class="font-medium text-amber-500 mb-1">
@@ -574,9 +555,9 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.modsAdded.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('added')">
-                                    <Plus class="w-3.5 h-3.5 text-emerald-500" />
+                                    <Icon name="Plus" class="w-3.5 h-3.5 text-emerald-500" />
                                     <span>{{ unsavedChanges.changes.modsAdded.length }} mods added</span>
-                                    <component :is="expandedChangeSections.has('added') ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedChangeSections.has('added') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -598,9 +579,9 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.modsRemoved.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('removed')">
-                                    <Minus class="w-3.5 h-3.5 text-red-500" />
+                                    <Icon name="Minus" class="w-3.5 h-3.5 text-red-500" />
                                     <span>{{ unsavedChanges.changes.modsRemoved.length }} mods removed</span>
-                                    <component :is="expandedChangeSections.has('removed') ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedChangeSections.has('removed') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -621,9 +602,9 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.modsUpdated?.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('updated')">
-                                    <RefreshCw class="w-3.5 h-3.5 text-blue-500" />
+                                    <Icon name="RefreshCw" class="w-3.5 h-3.5 text-blue-500" />
                                     <span>{{ unsavedChanges.changes.modsUpdated.length }} mods updated</span>
-                                    <component :is="expandedChangeSections.has('updated') ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedChangeSections.has('updated') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 space-y-1">
@@ -651,7 +632,7 @@ watch(() => props.modpackId, () => {
                             <!-- Loader Changed -->
                             <div v-if="unsavedChanges.changes.loaderChanged" class="space-y-1">
                                 <div class="flex items-center gap-1.5">
-                                    <Box class="w-3.5 h-3.5 text-orange-500" />
+                                    <Icon name="Box" class="w-3.5 h-3.5 text-orange-500" />
                                     <span>Loader changed</span>
                                 </div>
                                 <div class="ml-5 flex items-center gap-2 text-xs">
@@ -668,9 +649,9 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.modsEnabled.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('enabled')">
-                                    <ToggleRight class="w-3.5 h-3.5 text-emerald-500" />
+                                    <Icon name="ToggleRight" class="w-3.5 h-3.5 text-emerald-500" />
                                     <span>{{ unsavedChanges.changes.modsEnabled.length }} mods enabled</span>
-                                    <component :is="expandedChangeSections.has('enabled') ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedChangeSections.has('enabled') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -692,9 +673,9 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.modsDisabled.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('disabled')">
-                                    <ToggleLeft class="w-3.5 h-3.5 text-amber-500" />
+                                    <Icon name="ToggleLeft" class="w-3.5 h-3.5 text-amber-500" />
                                     <span>{{ unsavedChanges.changes.modsDisabled.length }} mods disabled</span>
-                                    <component :is="expandedChangeSections.has('disabled') ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedChangeSections.has('disabled') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -716,9 +697,9 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.modsLocked?.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('locked')">
-                                    <Lock class="w-3.5 h-3.5 text-amber-500" />
+                                    <Icon name="Lock" class="w-3.5 h-3.5 text-amber-500" />
                                     <span>{{ unsavedChanges.changes.modsLocked.length }} mods locked</span>
-                                    <component :is="expandedChangeSections.has('locked') ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedChangeSections.has('locked') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -740,9 +721,9 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.modsUnlocked?.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('unlocked')">
-                                    <LockOpen class="w-3.5 h-3.5 text-emerald-500" />
+                                    <Icon name="LockOpen" class="w-3.5 h-3.5 text-emerald-500" />
                                     <span>{{ unsavedChanges.changes.modsUnlocked.length }} mods unlocked</span>
-                                    <component :is="expandedChangeSections.has('unlocked') ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedChangeSections.has('unlocked') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -763,10 +744,10 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.configsChanged" class="flex flex-col gap-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('configs')">
-                                    <Settings class="w-3.5 h-3.5 text-purple-500" />
+                                    <Icon name="Settings" class="w-3.5 h-3.5 text-purple-500" />
                                     <span>{{ configChangeCount }} config change{{ configChangeCount !== 1 ? 's' : ''
-                                    }}</span>
-                                    <component :is="expandedChangeSections.has('configs') ? ChevronUp : ChevronDown"
+                                        }}</span>
+                                    <Icon :name="expandedChangeSections.has('configs') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <!-- Config change details -->
@@ -777,7 +758,7 @@ watch(() => props.modpackId, () => {
                                         :key="idx"
                                         class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
                                         <span v-if="cfg.line" class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
-                                        }}</span>
+                                            }}</span>
                                         <span class="text-white/60 truncate max-w-[100px]" :title="cfg.filePath">{{
                                             getFileName(cfg.filePath) }}</span>
                                         <span class="text-white/80 font-medium truncate max-w-[80px]">{{
@@ -800,9 +781,10 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.notesAdded?.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('notesAdded')">
-                                    <MessageSquarePlus class="w-3.5 h-3.5 text-blue-500" />
-                                    <span>{{ unsavedChanges.changes.notesAdded.length }} note{{ unsavedChanges.changes.notesAdded.length !== 1 ? 's' : '' }} added</span>
-                                    <component :is="expandedChangeSections.has('notesAdded') ? ChevronUp : ChevronDown"
+                                    <Icon name="MessageSquarePlus" class="w-3.5 h-3.5 text-blue-500" />
+                                    <span>{{ unsavedChanges.changes.notesAdded.length }} note{{
+                                        unsavedChanges.changes.notesAdded.length !== 1 ? 's' : '' }} added</span>
+                                    <Icon :name="expandedChangeSections.has('notesAdded') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -824,16 +806,17 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.notesRemoved?.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('notesRemoved')">
-                                    <MessageSquareDashed class="w-3.5 h-3.5 text-red-500" />
-                                    <span>{{ unsavedChanges.changes.notesRemoved.length }} note{{ unsavedChanges.changes.notesRemoved.length !== 1 ? 's' : '' }} removed</span>
-                                    <component :is="expandedChangeSections.has('notesRemoved') ? ChevronUp : ChevronDown"
+                                    <Icon name="MessageSquareDashed" class="w-3.5 h-3.5 text-red-500" />
+                                    <span>{{ unsavedChanges.changes.notesRemoved.length }} note{{
+                                        unsavedChanges.changes.notesRemoved.length !== 1 ? 's' : '' }} removed</span>
+                                    <Icon
+                                        :name="expandedChangeSections.has('notesRemoved') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
                                     <span
                                         v-for="mod in (expandedChangeSections.has('notesRemoved') ? unsavedChanges.changes.notesRemoved : unsavedChanges.changes.notesRemoved.slice(0, 5))"
-                                        :key="mod.id"
-                                        class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                                        :key="mod.id" class="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
                                         {{ mod.name }}
                                     </span>
                                     <button
@@ -848,9 +831,11 @@ watch(() => props.modpackId, () => {
                             <div v-if="unsavedChanges.changes.notesChanged?.length > 0" class="space-y-1">
                                 <div class="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
                                     @click="toggleChangeSection('notesChanged')">
-                                    <MessageSquare class="w-3.5 h-3.5 text-yellow-500" />
-                                    <span>{{ unsavedChanges.changes.notesChanged.length }} note{{ unsavedChanges.changes.notesChanged.length !== 1 ? 's' : '' }} edited</span>
-                                    <component :is="expandedChangeSections.has('notesChanged') ? ChevronUp : ChevronDown"
+                                    <Icon name="MessageSquare" class="w-3.5 h-3.5 text-yellow-500" />
+                                    <span>{{ unsavedChanges.changes.notesChanged.length }} note{{
+                                        unsavedChanges.changes.notesChanged.length !== 1 ? 's' : '' }} edited</span>
+                                    <Icon
+                                        :name="expandedChangeSections.has('notesChanged') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
                                 <div class="ml-5 flex flex-wrap gap-1">
@@ -872,17 +857,17 @@ watch(() => props.modpackId, () => {
                         <div v-if="!props.isLinked" class="flex items-center gap-2 mt-3">
                             <Button size="sm" variant="outline" class="gap-1.5 h-8" @click="revertChanges"
                                 :disabled="isReverting">
-                                <Undo2 v-if="!isReverting" class="w-3.5 h-3.5" />
-                                <Loader2 v-else class="w-3.5 h-3.5 animate-spin" />
+                                <Icon v-if="!isReverting" name="Undo2" class="w-3.5 h-3.5" />
+                                <Icon v-else name="Loader2" class="w-3.5 h-3.5 animate-spin" />
                                 {{ isReverting ? 'Reverting...' : 'Revert All' }}
                             </Button>
                             <Button size="sm" class="gap-1.5 h-8" @click="showCommitDialog = true">
-                                <Save class="w-3.5 h-3.5" />
+                                <Icon name="Save" class="w-3.5 h-3.5" />
                                 Save Version
                             </Button>
                         </div>
                         <div v-else class="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
-                            <Lock class="w-4 h-4" />
+                            <Icon name="Lock" class="w-4 h-4" />
                             <span>Version control is managed by the remote source</span>
                         </div>
                     </div>
@@ -911,7 +896,7 @@ watch(() => props.modpackId, () => {
 
                             <!-- Header -->
                             <div class="flex items-center gap-3 p-3 cursor-pointer" @click="toggleExpanded(version.id)">
-                                <GitCommit class="w-4 h-4 text-muted-foreground shrink-0" />
+                                <Icon name="GitCommit" class="w-4 h-4 text-muted-foreground shrink-0" />
 
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center gap-2 flex-wrap">
@@ -936,10 +921,10 @@ watch(() => props.modpackId, () => {
                                     <Button v-if="version.id !== currentVersionId && !props.isLinked" size="sm"
                                         variant="ghost" class="h-7 w-7 p-0" @click.stop="rollbackTo(version)"
                                         title="Rollback to this version">
-                                        <RotateCcw class="w-3.5 h-3.5" />
+                                        <Icon name="RotateCcw" class="w-3.5 h-3.5" />
                                     </Button>
 
-                                    <component :is="expandedVersions.has(version.id) ? ChevronUp : ChevronDown"
+                                    <Icon :name="expandedVersions.has(version.id) ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-4 h-4 text-muted-foreground" />
                                 </div>
                             </div>
@@ -951,7 +936,7 @@ watch(() => props.modpackId, () => {
                                     <!-- Stats -->
                                     <div class="flex items-center gap-4 text-xs">
                                         <span class="text-muted-foreground">
-                                            <Clock class="w-3 h-3 inline mr-1" />
+                                            <Icon name="Clock" class="w-3 h-3 inline mr-1" />
                                             {{ new Date(version.created_at).toLocaleString() }}
                                         </span>
                                         <span class="text-muted-foreground">
@@ -971,7 +956,7 @@ watch(() => props.modpackId, () => {
                                                 :key="idx" class="flex items-center gap-2 text-sm">
                                                 <div class="w-5 h-5 rounded flex items-center justify-center shrink-0"
                                                     :class="getChangeColor(change.type, change.modId)">
-                                                    <component :is="getChangeIcon(change.type, change.modId)"
+                                                    <Icon :name="getChangeIcon(change.type, change.modId)"
                                                         class="w-3 h-3" />
                                                 </div>
                                                 <span class="truncate flex-1">
@@ -1005,11 +990,11 @@ watch(() => props.modpackId, () => {
                                             class="mt-3">
                                             <div class="flex items-center gap-2 text-xs text-purple-400 mb-2 cursor-pointer hover:text-purple-300"
                                                 @click.stop="toggleChangeSection(`config-${version.id}`)">
-                                                <Settings class="w-3 h-3" />
+                                                <Icon name="Settings" class="w-3 h-3" />
                                                 <span>{{ version.config_changes.length }} config change{{
                                                     version.config_changes.length !== 1 ? 's' : '' }}</span>
-                                                <component
-                                                    :is="expandedChangeSections.has(`config-${version.id}`) ? ChevronUp : ChevronDown"
+                                                <Icon
+                                                    :name="expandedChangeSections.has(`config-${version.id}`) ? 'ChevronUp' : 'ChevronDown'"
                                                     class="w-3 h-3 ml-auto" />
                                             </div>
                                             <div class="ml-5 space-y-1 text-xs"
@@ -1041,7 +1026,7 @@ watch(() => props.modpackId, () => {
                                         <!-- Config snapshot indicator (for versions without detailed changes) -->
                                         <div v-else-if="version.config_snapshot_id"
                                             class="mt-2 flex items-center gap-2 text-xs text-purple-400">
-                                            <Settings class="w-3 h-3" />
+                                            <Icon name="Settings" class="w-3 h-3" />
                                             <span>Config snapshot saved</span>
                                         </div>
                                     </div>
@@ -1067,7 +1052,7 @@ watch(() => props.modpackId, () => {
                 <!-- Instance sync notice -->
                 <div v-if="instanceId"
                     class="flex items-start gap-2 p-3 bg-primary-500/10 border border-primary-500/30 rounded-lg text-sm">
-                    <RefreshCw class="w-4 h-4 text-primary-400 mt-0.5 shrink-0" />
+                    <Icon name="RefreshCw" class="w-4 h-4 text-primary-400 mt-0.5 shrink-0" />
                     <div>
                         <p class="text-primary-300 font-medium">Instance configs will be included</p>
                         <p class="text-gray-400 text-xs">Your config modifications from the game instance will be saved
@@ -1091,7 +1076,7 @@ watch(() => props.modpackId, () => {
             <template #footer>
                 <Button variant="outline" @click="showCommitDialog = false">Cancel</Button>
                 <Button @click="createVersion" :disabled="!commitMessage.trim() || isLoading" class="gap-1.5">
-                    <Save class="w-4 h-4" />
+                    <Icon name="Save" class="w-4 h-4" />
                     Save Version
                 </Button>
             </template>
@@ -1106,7 +1091,7 @@ watch(() => props.modpackId, () => {
                         <!-- Header -->
                         <div class="flex items-center gap-3 mb-6">
                             <div class="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
-                                <Loader2 class="w-4 h-4 text-primary animate-spin" />
+                                <Icon name="Loader2" class="w-4 h-4 text-primary animate-spin" />
                             </div>
                             <div>
                                 <h3 class="font-semibold">{{ progressTitle }}</h3>
@@ -1129,7 +1114,8 @@ watch(() => props.modpackId, () => {
                                         stroke="currentColor" stroke-width="3">
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
-                                    <Loader2 v-else-if="idx === progressStep" class="w-3 h-3 animate-spin" />
+                                    <Icon v-else-if="idx === progressStep" name="Loader2"
+                                        class="w-3 h-3 animate-spin" />
                                     <span v-else class="w-1.5 h-1.5 rounded-full bg-current"></span>
                                 </div>
                                 <span :class="idx <= progressStep ? 'text-foreground' : 'text-muted-foreground'">

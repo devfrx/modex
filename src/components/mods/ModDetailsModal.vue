@@ -2,32 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import {
-  X,
-  ExternalLink,
-  Download,
-  Calendar,
-  User,
-  Tag,
-  Loader2,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  Image as ImageIcon,
-  FileText,
-  Layers,
-  Sparkles,
-  Package,
-  Check,
-  Info,
-  AlertTriangle,
-  RefreshCw,
-  Clock,
-  HardDrive,
-  Globe,
-  ArrowLeft,
-  Lock,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { Mod } from "@/types";
 import { useToast } from "@/composables/useToast";
 
@@ -208,9 +183,9 @@ const selectedScreenshot = computed(() => {
 const contentTypeConfig = computed(() => {
   const contentType = props.mod?.content_type || "mod";
   const configs = {
-    mod: { label: "Mod", icon: Layers, class: "bg-primary/15 text-primary ring-primary/30" },
-    resourcepack: { label: "Resource Pack", icon: ImageIcon, class: "bg-blue-500/15 text-blue-400 ring-blue-500/30" },
-    shader: { label: "Shader", icon: Sparkles, class: "bg-pink-500/15 text-pink-400 ring-pink-500/30" },
+    mod: { label: "Mod", icon: "Layers", class: "bg-primary/15 text-primary ring-primary/30" },
+    resourcepack: { label: "Resource Pack", icon: "Image", class: "bg-blue-500/15 text-blue-400 ring-blue-500/30" },
+    shader: { label: "Shader", icon: "Sparkles", class: "bg-pink-500/15 text-pink-400 ring-pink-500/30" },
   };
   return configs[contentType] || configs.mod;
 });
@@ -465,14 +440,14 @@ watch(() => props.open, (isOpen) => {
         <!-- Back button floating -->
         <Button variant="ghost" size="sm" @click="emit('close')"
           class="absolute top-4 left-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
-          <ArrowLeft class="w-4 h-4" />
+          <Icon name="ArrowLeft" class="w-4 h-4" />
           Back
         </Button>
 
         <!-- External link button floating -->
         <Button variant="ghost" size="sm" @click="openCurseForge" title="Open on CurseForge"
           class="absolute top-4 right-4 z-10 gap-2 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border border-border/50">
-          <ExternalLink class="w-4 h-4" />
+          <Icon name="ExternalLink" class="w-4 h-4" />
           <span class="hidden sm:inline">CurseForge</span>
         </Button>
 
@@ -484,7 +459,7 @@ watch(() => props.open, (isOpen) => {
             <img v-if="mod?.logo_url || mod?.thumbnail_url" :src="mod.logo_url || mod.thumbnail_url" :alt="mod?.name"
               class="w-full h-full object-cover" />
             <div v-else class="w-full h-full flex items-center justify-center bg-muted">
-              <component :is="contentTypeConfig.icon" class="w-5 h-5 text-muted-foreground/40" />
+              <Icon :name="contentTypeConfig.icon" class="w-5 h-5 text-muted-foreground/40" />
             </div>
           </div>
 
@@ -520,7 +495,7 @@ watch(() => props.open, (isOpen) => {
                   class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
                 <div v-else
                   class="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
-                  <component :is="contentTypeConfig.icon" class="w-14 h-14 text-muted-foreground/40" />
+                  <Icon :name="contentTypeConfig.icon" class="w-14 h-14 text-muted-foreground/40" />
                 </div>
               </div>
             </div>
@@ -531,7 +506,7 @@ watch(() => props.open, (isOpen) => {
               <div class="flex items-center gap-3 flex-wrap mb-2">
                 <span class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 ring-1 shrink-0"
                   :class="contentTypeConfig.class">
-                  <component :is="contentTypeConfig.icon" class="w-3.5 h-3.5" />
+                  <Icon :name="contentTypeConfig.icon" class="w-3.5 h-3.5" />
                   {{ contentTypeConfig.label }}
                 </span>
                 <h1 class="text-2xl sm:text-3xl font-bold text-foreground tracking-tight truncate">{{ mod?.name }}</h1>
@@ -539,7 +514,7 @@ watch(() => props.open, (isOpen) => {
 
               <!-- Author -->
               <div class="flex items-center gap-2 text-muted-foreground mb-4">
-                <User class="w-4 h-4 text-primary/70" />
+                <Icon name="User" class="w-4 h-4 text-primary/70" />
                 <span class="font-medium">by {{ mod?.author || "Unknown" }}</span>
               </div>
 
@@ -547,14 +522,14 @@ watch(() => props.open, (isOpen) => {
               <div class="flex items-center gap-3 flex-wrap">
                 <div v-if="mod?.download_count"
                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
-                  <Download class="w-4 h-4 text-green-400" />
+                  <Icon name="Download" class="w-4 h-4 text-green-400" />
                   <span class="text-sm font-semibold text-foreground">{{ formatDownloads(mod.download_count) }}</span>
                   <span class="text-xs text-muted-foreground">downloads</span>
                 </div>
 
                 <div v-if="mod?.game_version"
                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
-                  <Tag class="w-4 h-4 text-blue-400" />
+                  <Icon name="Tag" class="w-4 h-4 text-blue-400" />
                   <span class="text-sm font-semibold text-foreground">{{ mod.game_version }}</span>
                 </div>
 
@@ -570,7 +545,7 @@ watch(() => props.open, (isOpen) => {
 
                 <div v-if="mod?.date_released"
                   class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/60 backdrop-blur-sm border border-border/40 shadow-sm">
-                  <Calendar class="w-4 h-4 text-muted-foreground" />
+                  <Icon name="Calendar" class="w-4 h-4 text-muted-foreground" />
                   <span class="text-sm text-muted-foreground">{{ formatDate(mod.date_released) }}</span>
                 </div>
               </div>
@@ -634,9 +609,9 @@ watch(() => props.open, (isOpen) => {
               :class="activeTab === tab
                 ? 'bg-background text-foreground shadow-md border border-border/50'
                 : 'text-muted-foreground hover:text-foreground hover:bg-background/50'" @click="activeTab = tab">
-              <FileText v-if="tab === 'description'" class="w-4 h-4" />
-              <ImageIcon v-else-if="tab === 'gallery'" class="w-4 h-4" />
-              <Package v-else class="w-4 h-4" />
+              <Icon v-if="tab === 'description'" name="FileText" class="w-4 h-4" />
+              <Icon v-else-if="tab === 'gallery'" name="Image" class="w-4 h-4" />
+              <Icon v-else name="Package" class="w-4 h-4" />
               <span class="capitalize">{{ tab }}</span>
               <span v-if="tab === 'gallery' && screenshots.length > 0" class="text-xs px-1.5 py-0.5 rounded-full"
                 :class="activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'">
@@ -655,7 +630,7 @@ watch(() => props.open, (isOpen) => {
           <!-- Description Tab -->
           <div v-if="activeTab === 'description'" class="min-h-[300px]">
             <div v-if="isLoadingDescription" class="flex flex-col items-center justify-center py-16">
-              <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
+              <Icon name="Loader2" class="w-8 h-8 animate-spin text-primary/60" />
               <span class="text-sm text-muted-foreground mt-3">Loading description...</span>
             </div>
             <div v-else
@@ -668,7 +643,7 @@ watch(() => props.open, (isOpen) => {
             <div v-if="screenshots.length === 0"
               class="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-                <ImageIcon class="w-10 h-10 opacity-40" />
+                <Icon name="Image" class="w-10 h-10 opacity-40" />
               </div>
               <p class="font-medium">No screenshots available</p>
               <p class="text-sm mt-1 opacity-70">This mod hasn't uploaded any images yet</p>
@@ -698,12 +673,12 @@ watch(() => props.open, (isOpen) => {
                 <button v-if="screenshots.length > 1"
                   class="absolute left-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
                   @click.stop="prevScreenshot">
-                  <ChevronLeft class="w-5 h-5" />
+                  <Icon name="ChevronLeft" class="w-5 h-5" />
                 </button>
                 <button v-if="screenshots.length > 1"
                   class="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
                   @click.stop="nextScreenshot">
-                  <ChevronRight class="w-5 h-5" />
+                  <Icon name="ChevronRight" class="w-5 h-5" />
                 </button>
 
                 <!-- Image counter badge -->
@@ -739,7 +714,7 @@ watch(() => props.open, (isOpen) => {
           <!-- Files Tab -->
           <div v-else-if="activeTab === 'files'" class="min-h-[300px]">
             <div v-if="isLoadingFiles" class="flex flex-col items-center justify-center py-16">
-              <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
+              <Icon name="Loader2" class="w-8 h-8 animate-spin text-primary/60" />
               <span class="text-sm text-muted-foreground mt-3">Loading versions...</span>
             </div>
 
@@ -749,7 +724,7 @@ watch(() => props.open, (isOpen) => {
                 class="mb-5 p-4 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 shadow-sm">
                 <div class="flex items-center gap-2.5">
                   <div class="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-                    <Info class="w-4 h-4 text-primary" />
+                    <Icon name="Info" class="w-4 h-4 text-primary" />
                   </div>
                   <div>
                     <span class="text-sm font-semibold text-primary">Modpack Compatibility Filter</span>
@@ -799,7 +774,7 @@ watch(() => props.open, (isOpen) => {
                       <option value="all">All Versions</option>
                       <option v-for="v in availableGameVersions" :key="v" :value="v">{{ v }}</option>
                     </select>
-                    <ChevronDown
+                    <Icon name="ChevronDown"
                       class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
                   </div>
 
@@ -813,7 +788,7 @@ watch(() => props.open, (isOpen) => {
                       <option value="all">All Loaders</option>
                       <option v-for="l in availableLoaders" :key="l" :value="l">{{ l }}</option>
                     </select>
-                    <ChevronDown
+                    <Icon name="ChevronDown"
                       class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
                   </div>
                 </template>
@@ -825,7 +800,7 @@ watch(() => props.open, (isOpen) => {
               <!-- Info banner for readonly/linked modpack -->
               <div v-if="context?.type === 'modpack' && isReadonly"
                 class="mb-4 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
-                <Lock class="w-5 h-5 text-amber-400 shrink-0" />
+                <Icon name="Lock" class="w-5 h-5 text-amber-400 shrink-0" />
                 <p class="text-sm text-amber-300">
                   This modpack is in read-only mode. Version changes are disabled to maintain sync with the source.
                 </p>
@@ -834,7 +809,7 @@ watch(() => props.open, (isOpen) => {
               <!-- Info banner for library context -->
               <div v-else-if="!canChangeVersion"
                 class="mb-4 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
-                <Info class="w-5 h-5 text-blue-400 shrink-0" />
+                <Icon name="Info" class="w-5 h-5 text-blue-400 shrink-0" />
                 <p class="text-sm text-blue-300">
                   Version changes are only available when editing a modpack. Here you can browse available versions.
                 </p>
@@ -843,7 +818,7 @@ watch(() => props.open, (isOpen) => {
               <!-- Files List - Empty State -->
               <div v-if="filteredFiles.length === 0" class="text-center py-12">
                 <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
-                  <Package class="w-10 h-10 text-muted-foreground/40" />
+                  <Icon name="Package" class="w-10 h-10 text-muted-foreground/40" />
                 </div>
                 <p class="font-medium text-foreground">No compatible files found</p>
                 <p class="text-sm text-muted-foreground mt-1.5">Try enabling more release types or check CurseForge
@@ -874,22 +849,22 @@ watch(() => props.open, (isOpen) => {
                         </span>
                         <span v-if="file.id === currentFileId"
                           class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide bg-primary/20 text-primary shrink-0 flex items-center gap-1">
-                          <Check class="w-3 h-3" />
+                          <Icon name="Check" class="w-3 h-3" />
                           Installed
                         </span>
                       </div>
 
                       <div class="flex items-center gap-4 mt-2.5 text-xs text-muted-foreground">
                         <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                          <Calendar class="w-3.5 h-3.5 text-primary/60" />
+                          <Icon name="Calendar" class="w-3.5 h-3.5 text-primary/60" />
                           {{ formatDate(file.fileDate) }}
                         </span>
                         <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                          <HardDrive class="w-3.5 h-3.5 text-blue-400/60" />
+                          <Icon name="HardDrive" class="w-3.5 h-3.5 text-blue-400/60" />
                           {{ formatSize(file.fileLength) }}
                         </span>
                         <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                          <Download class="w-3.5 h-3.5 text-green-400/60" />
+                          <Icon name="Download" class="w-3.5 h-3.5 text-green-400/60" />
                           {{ formatDownloads(file.downloadCount) }}
                         </span>
                       </div>
@@ -910,7 +885,8 @@ watch(() => props.open, (isOpen) => {
                       :class="selectedFileId === file.id
                         ? 'border-primary bg-primary scale-110'
                         : 'border-muted-foreground/30 group-hover:border-primary/50'">
-                      <Check v-if="selectedFileId === file.id" class="w-3.5 h-3.5 text-primary-foreground" />
+                      <Icon v-if="selectedFileId === file.id" name="Check"
+                        class="w-3.5 h-3.5 text-primary-foreground" />
                     </div>
                   </div>
                 </div>
@@ -923,7 +899,7 @@ watch(() => props.open, (isOpen) => {
       <!-- Fullscreen footer -->
       <div class="flex items-center justify-between w-full px-6 py-4 border-t border-border bg-muted/30 shrink-0">
         <div class="text-xs text-muted-foreground flex items-center gap-2">
-          <Clock class="w-3.5 h-3.5" />
+          <Icon name="Clock" class="w-3.5 h-3.5" />
           <span v-if="mod?.date_released">
             Released {{ formatDate(mod.date_released) }}
           </span>
@@ -940,8 +916,8 @@ watch(() => props.open, (isOpen) => {
             v-if="context?.type === 'modpack' && activeTab === 'files' && selectedFileId && selectedFileId !== currentFileId"
             @click="handleVersionChange" :disabled="isChangingVersion"
             class="px-5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20">
-            <Loader2 v-if="isChangingVersion" class="w-4 h-4 mr-2 animate-spin" />
-            <RefreshCw v-else class="w-4 h-4 mr-2" />
+            <Icon v-if="isChangingVersion" name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
+            <Icon v-else name="RefreshCw" class="w-4 h-4 mr-2" />
             Change to Selected Version
           </Button>
         </div>
@@ -972,7 +948,7 @@ watch(() => props.open, (isOpen) => {
                 class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-300" />
               <div v-else
                 class="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
-                <component :is="contentTypeConfig.icon" class="w-10 h-10 text-muted-foreground/50" />
+                <Icon :name="contentTypeConfig.icon" class="w-10 h-10 text-muted-foreground/50" />
               </div>
             </div>
           </div>
@@ -983,24 +959,24 @@ watch(() => props.open, (isOpen) => {
               <h2 class="text-2xl font-bold text-foreground tracking-tight">{{ mod?.name }}</h2>
               <span class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 ring-1"
                 :class="contentTypeConfig.class">
-                <component :is="contentTypeConfig.icon" class="w-3.5 h-3.5" />
+                <Icon :name="contentTypeConfig.icon" class="w-3.5 h-3.5" />
                 {{ contentTypeConfig.label }}
               </span>
             </div>
 
             <div class="flex items-center gap-2 mt-3 flex-wrap">
               <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-                <User class="w-3.5 h-3.5 text-primary/70" />
+                <Icon name="User" class="w-3.5 h-3.5 text-primary/70" />
                 <span class="font-medium">{{ mod?.author || "Unknown" }}</span>
               </div>
               <div v-if="mod?.download_count"
                 class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-                <Download class="w-3.5 h-3.5 text-green-500/70" />
+                <Icon name="Download" class="w-3.5 h-3.5 text-green-500/70" />
                 <span class="font-medium">{{ formatDownloads(mod.download_count) }}</span>
               </div>
               <div v-if="mod?.game_version"
                 class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-                <Tag class="w-3.5 h-3.5 text-blue-500/70" />
+                <Icon name="Tag" class="w-3.5 h-3.5 text-blue-500/70" />
                 <span class="font-medium">{{ mod.game_version }}</span>
               </div>
               <span v-if="mod?.loader && isModContext" class="px-2.5 py-1 rounded-lg text-xs font-semibold"
@@ -1017,7 +993,7 @@ watch(() => props.open, (isOpen) => {
           <!-- External Link Button -->
           <Button variant="ghost" size="icon" @click="openCurseForge" title="Open on CurseForge"
             class="shrink-0 hover:bg-primary/10 hover:text-primary transition-colors">
-            <ExternalLink class="w-4 h-4" />
+            <Icon name="ExternalLink" class="w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -1030,9 +1006,9 @@ watch(() => props.open, (isOpen) => {
           ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="activeTab = tab">
         <span class="flex items-center justify-center gap-2">
-          <FileText v-if="tab === 'description'" class="w-4 h-4" />
-          <ImageIcon v-else-if="tab === 'gallery'" class="w-4 h-4" />
-          <Package v-else class="w-4 h-4" />
+          <Icon v-if="tab === 'description'" name="FileText" class="w-4 h-4" />
+          <Icon v-else-if="tab === 'gallery'" name="Image" class="w-4 h-4" />
+          <Icon v-else name="Package" class="w-4 h-4" />
           <span class="capitalize">{{ tab }}</span>
           <span v-if="tab === 'gallery' && screenshots.length > 0" class="text-xs px-1.5 py-0.5 rounded-full"
             :class="activeTab === tab ? 'bg-primary/15 text-primary' : 'bg-muted-foreground/20 text-muted-foreground'">
@@ -1051,7 +1027,7 @@ watch(() => props.open, (isOpen) => {
       <!-- Description Tab -->
       <div v-if="activeTab === 'description'" class="min-h-[300px]">
         <div v-if="isLoadingDescription" class="flex flex-col items-center justify-center py-16">
-          <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
+          <Icon name="Loader2" class="w-8 h-8 animate-spin text-primary/60" />
           <span class="text-sm text-muted-foreground mt-3">Loading description...</span>
         </div>
         <div v-else
@@ -1064,7 +1040,7 @@ watch(() => props.open, (isOpen) => {
         <div v-if="screenshots.length === 0"
           class="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-            <ImageIcon class="w-10 h-10 opacity-40" />
+            <Icon name="Image" class="w-10 h-10 opacity-40" />
           </div>
           <p class="font-medium">No screenshots available</p>
           <p class="text-sm mt-1 opacity-70">This mod hasn't uploaded any images yet</p>
@@ -1093,12 +1069,12 @@ watch(() => props.open, (isOpen) => {
             <button v-if="screenshots.length > 1"
               class="absolute left-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
               @click.stop="prevScreenshot">
-              <ChevronLeft class="w-5 h-5" />
+              <Icon name="ChevronLeft" class="w-5 h-5" />
             </button>
             <button v-if="screenshots.length > 1"
               class="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 hover:scale-110 transition-all duration-200 shadow-lg"
               @click.stop="nextScreenshot">
-              <ChevronRight class="w-5 h-5" />
+              <Icon name="ChevronRight" class="w-5 h-5" />
             </button>
 
             <!-- Image counter badge -->
@@ -1133,7 +1109,7 @@ watch(() => props.open, (isOpen) => {
       <!-- Files Tab -->
       <div v-else-if="activeTab === 'files'" class="min-h-[300px]">
         <div v-if="isLoadingFiles" class="flex flex-col items-center justify-center py-16">
-          <Loader2 class="w-8 h-8 animate-spin text-primary/60" />
+          <Icon name="Loader2" class="w-8 h-8 animate-spin text-primary/60" />
           <span class="text-sm text-muted-foreground mt-3">Loading versions...</span>
         </div>
 
@@ -1143,7 +1119,7 @@ watch(() => props.open, (isOpen) => {
             class="mb-5 p-4 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 shadow-sm">
             <div class="flex items-center gap-2.5">
               <div class="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-                <Info class="w-4 h-4 text-primary" />
+                <Icon name="Info" class="w-4 h-4 text-primary" />
               </div>
               <div>
                 <span class="text-sm font-semibold text-primary">Modpack Compatibility Filter</span>
@@ -1193,7 +1169,7 @@ watch(() => props.open, (isOpen) => {
                   <option value="all">All Versions</option>
                   <option v-for="v in availableGameVersions" :key="v" :value="v">{{ v }}</option>
                 </select>
-                <ChevronDown
+                <Icon name="ChevronDown"
                   class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
               </div>
 
@@ -1207,7 +1183,7 @@ watch(() => props.open, (isOpen) => {
                   <option value="all">All Loaders</option>
                   <option v-for="l in availableLoaders" :key="l" :value="l">{{ l }}</option>
                 </select>
-                <ChevronDown
+                <Icon name="ChevronDown"
                   class="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-50" />
               </div>
             </template>
@@ -1219,7 +1195,7 @@ watch(() => props.open, (isOpen) => {
           <!-- Info banner for readonly/linked modpack -->
           <div v-if="context?.type === 'modpack' && isReadonly"
             class="mb-4 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
-            <Lock class="w-5 h-5 text-amber-400 shrink-0" />
+            <Icon name="Lock" class="w-5 h-5 text-amber-400 shrink-0" />
             <p class="text-sm text-amber-300">
               This modpack is in read-only mode. Version changes are disabled to maintain sync with the source.
             </p>
@@ -1228,7 +1204,7 @@ watch(() => props.open, (isOpen) => {
           <!-- Info banner for library context -->
           <div v-else-if="!canChangeVersion"
             class="mb-4 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
-            <Info class="w-5 h-5 text-blue-400 shrink-0" />
+            <Icon name="Info" class="w-5 h-5 text-blue-400 shrink-0" />
             <p class="text-sm text-blue-300">
               Version changes are only available when editing a modpack. Here you can browse available versions.
             </p>
@@ -1237,7 +1213,7 @@ watch(() => props.open, (isOpen) => {
           <!-- Files List - Empty State -->
           <div v-if="filteredFiles.length === 0" class="text-center py-12">
             <div class="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
-              <Package class="w-10 h-10 text-muted-foreground/40" />
+              <Icon name="Package" class="w-10 h-10 text-muted-foreground/40" />
             </div>
             <p class="font-medium text-foreground">No compatible files found</p>
             <p class="text-sm text-muted-foreground mt-1.5">Try enabling more release types or check CurseForge directly
@@ -1268,22 +1244,22 @@ watch(() => props.open, (isOpen) => {
                     </span>
                     <span v-if="file.id === currentFileId"
                       class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide bg-primary/20 text-primary shrink-0 flex items-center gap-1">
-                      <Check class="w-3 h-3" />
+                      <Icon name="Check" class="w-3 h-3" />
                       Installed
                     </span>
                   </div>
 
                   <div class="flex items-center gap-4 mt-2.5 text-xs text-muted-foreground">
                     <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                      <Calendar class="w-3.5 h-3.5 text-primary/60" />
+                      <Icon name="Calendar" class="w-3.5 h-3.5 text-primary/60" />
                       {{ formatDate(file.fileDate) }}
                     </span>
                     <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                      <HardDrive class="w-3.5 h-3.5 text-blue-400/60" />
+                      <Icon name="HardDrive" class="w-3.5 h-3.5 text-blue-400/60" />
                       {{ formatSize(file.fileLength) }}
                     </span>
                     <span class="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                      <Download class="w-3.5 h-3.5 text-green-400/60" />
+                      <Icon name="Download" class="w-3.5 h-3.5 text-green-400/60" />
                       {{ formatDownloads(file.downloadCount) }}
                     </span>
                   </div>
@@ -1304,7 +1280,7 @@ watch(() => props.open, (isOpen) => {
                   :class="selectedFileId === file.id
                     ? 'border-primary bg-primary scale-110'
                     : 'border-muted-foreground/30 group-hover:border-primary/50'">
-                  <Check v-if="selectedFileId === file.id" class="w-3.5 h-3.5 text-primary-foreground" />
+                  <Icon v-if="selectedFileId === file.id" name="Check" class="w-3.5 h-3.5 text-primary-foreground" />
                 </div>
               </div>
             </div>
@@ -1317,7 +1293,7 @@ watch(() => props.open, (isOpen) => {
     <template #footer>
       <div class="flex items-center justify-between w-full px-6 py-4 border-t border-border/30 bg-muted/5">
         <div class="text-xs text-muted-foreground flex items-center gap-2">
-          <Clock class="w-3.5 h-3.5" />
+          <Icon name="Clock" class="w-3.5 h-3.5" />
           <span v-if="mod?.date_released">
             Released {{ formatDate(mod.date_released) }}
           </span>
@@ -1334,8 +1310,8 @@ watch(() => props.open, (isOpen) => {
             v-if="context?.type === 'modpack' && activeTab === 'files' && selectedFileId && selectedFileId !== currentFileId"
             @click="handleVersionChange" :disabled="isChangingVersion"
             class="px-5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20">
-            <Loader2 v-if="isChangingVersion" class="w-4 h-4 mr-2 animate-spin" />
-            <RefreshCw v-else class="w-4 h-4 mr-2" />
+            <Icon v-if="isChangingVersion" name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
+            <Icon v-else name="RefreshCw" class="w-4 h-4 mr-2" />
             Change to Selected Version
           </Button>
         </div>
@@ -1353,13 +1329,13 @@ watch(() => props.open, (isOpen) => {
         <button
           class="absolute top-6 right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all hover:scale-110 hover:rotate-90"
           @click.stop="showLightbox = false">
-          <X class="w-6 h-6" />
+          <Icon name="X" class="w-6 h-6" />
         </button>
 
         <button v-if="screenshots.length > 1"
           class="absolute left-6 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all hover:scale-110"
           @click.stop="prevScreenshot">
-          <ChevronLeft class="w-8 h-8" />
+          <Icon name="ChevronLeft" class="w-8 h-8" />
         </button>
 
         <Transition enter-active-class="transition-all duration-300 ease-out"
@@ -1373,7 +1349,7 @@ watch(() => props.open, (isOpen) => {
         <button v-if="screenshots.length > 1"
           class="absolute right-6 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all hover:scale-110"
           @click.stop="nextScreenshot">
-          <ChevronRight class="w-8 h-8" />
+          <Icon name="ChevronRight" class="w-8 h-8" />
         </button>
 
         <!-- Image Counter & Title -->

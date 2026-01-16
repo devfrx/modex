@@ -1,20 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import {
-  Gamepad2,
-  FolderOpen,
-  Trash2,
-  Star,
-  RefreshCw,
-  Plus,
-  Play,
-  Settings,
-  ChevronRight,
-  Loader2,
-  HardDrive,
-  ExternalLink,
-  CheckCircle
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import { useMinecraft, type MinecraftInstallation } from "@/composables/useMinecraft";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
@@ -194,7 +180,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
       <div class="flex items-center gap-3">
         <div
           class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center">
-          <Gamepad2 class="w-5 h-5 text-primary" />
+          <Icon name="Gamepad2" class="w-5 h-5 text-primary" />
         </div>
         <div>
           <h3 class="font-semibold text-foreground">Minecraft Installations</h3>
@@ -207,14 +193,14 @@ async function handleLaunch(installation: MinecraftInstallation) {
       <div class="flex items-center gap-2">
         <Button variant="ghost" size="sm" @click="showLauncherConfig = true; loadLauncherPaths()"
           title="Configure Launcher Paths">
-          <Settings class="w-4 h-4" />
+          <Icon name="Settings" class="w-4 h-4" />
         </Button>
         <Button variant="ghost" size="sm" :disabled="isScanning" @click="scanInstallations">
-          <RefreshCw class="w-4 h-4" :class="isScanning && 'animate-spin'" />
+          <Icon name="RefreshCw" class="w-4 h-4" :class="isScanning && 'animate-spin'" />
           <span class="hidden sm:inline ml-2">Rescan</span>
         </Button>
         <Button variant="secondary" size="sm" @click="showAddDialog = true">
-          <Plus class="w-4 h-4" />
+          <Icon name="Plus" class="w-4 h-4" />
           <span class="hidden sm:inline ml-2">Add Custom</span>
         </Button>
       </div>
@@ -222,20 +208,20 @@ async function handleLaunch(installation: MinecraftInstallation) {
 
     <!-- Loading State -->
     <div v-if="isLoading" class="flex items-center justify-center py-12">
-      <Loader2 class="w-6 h-6 animate-spin text-primary" />
+      <Icon name="Loader2" class="w-6 h-6 animate-spin text-primary" />
     </div>
 
     <!-- Empty State -->
     <div v-else-if="!hasInstallations" class="text-center py-10 border border-dashed border-border/50 rounded-lg">
-      <Gamepad2 class="w-10 h-10 mx-auto text-muted-foreground mb-3 opacity-50" />
+      <Icon name="Gamepad2" class="w-10 h-10 mx-auto text-muted-foreground mb-3 opacity-50" />
       <p class="text-muted-foreground text-sm mb-4">No Minecraft installations found</p>
       <div class="flex justify-center gap-2">
         <Button variant="secondary" size="sm" @click="scanInstallations">
-          <RefreshCw class="w-3.5 h-3.5 mr-2" />
+          <Icon name="RefreshCw" class="w-3.5 h-3.5 mr-2" />
           Scan Again
         </Button>
         <Button variant="default" size="sm" @click="showAddDialog = true">
-          <Plus class="w-3.5 h-3.5 mr-2" />
+          <Icon name="Plus" class="w-3.5 h-3.5 mr-2" />
           Add Custom
         </Button>
       </div>
@@ -275,7 +261,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
 
             <div class="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
               <span v-if="installation.version" class="flex items-center gap-1">
-                <HardDrive class="w-3 h-3" />
+                <Icon name="HardDrive" class="w-3 h-3" />
                 {{ installation.version }}
               </span>
               <span v-if="installation.loader" class="capitalize">
@@ -290,22 +276,22 @@ async function handleLaunch(installation: MinecraftInstallation) {
           <!-- Actions -->
           <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button variant="ghost" size="icon" title="Open mods folder" @click="openModsFolder(installation.id)">
-              <FolderOpen class="w-4 h-4" />
+              <Icon name="FolderOpen" class="w-4 h-4" />
             </Button>
 
             <Button variant="ghost" size="icon" title="Set as default" :disabled="installation.isDefault"
               @click="setDefault(installation.id)">
-              <Star class="w-4 h-4" :class="installation.isDefault && 'fill-yellow-500 text-yellow-500'" />
+              <Icon name="Star" class="w-4 h-4" :class="installation.isDefault && 'fill-yellow-500 text-yellow-500'" />
             </Button>
 
             <Button variant="ghost" size="icon" title="Launch Minecraft" @click="handleLaunch(installation)">
-              <Play class="w-4 h-4" />
+              <Icon name="Play" class="w-4 h-4" />
             </Button>
 
             <Button v-if="installation.type === 'custom'" variant="ghost" size="icon"
               class="text-red-400 hover:text-red-300 hover:bg-red-500/10" title="Remove"
               @click="removeInstallation(installation.id)">
-              <Trash2 class="w-4 h-4" />
+              <Icon name="Trash2" class="w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -331,7 +317,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
           <div class="flex gap-2">
             <Input v-model="newInstallation.path" placeholder="C:\Users\...\minecraft" class="flex-1" />
             <Button variant="secondary" @click="handleSelectPath">
-              <FolderOpen class="w-4 h-4" />
+              <Icon name="FolderOpen" class="w-4 h-4" />
             </Button>
           </div>
           <p class="text-xs text-muted-foreground mt-1">
@@ -346,7 +332,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
           <div class="flex gap-2">
             <Input v-model="newInstallation.modsPath" placeholder="Auto-detected from above" class="flex-1" />
             <Button variant="secondary" @click="handleSelectModsPath">
-              <FolderOpen class="w-4 h-4" />
+              <Icon name="FolderOpen" class="w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -358,7 +344,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
         </Button>
         <Button variant="default" :disabled="!newInstallation.name || !newInstallation.path || isAdding"
           @click="handleAddInstallation">
-          <Loader2 v-if="isAdding" class="w-4 h-4 mr-2 animate-spin" />
+          <Icon v-if="isAdding" name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
           Add Installation
         </Button>
       </template>
@@ -379,7 +365,7 @@ async function handleLaunch(installation: MinecraftInstallation) {
                 <div>
                   <div class="font-medium text-sm">{{ launcher.name }}</div>
                   <div v-if="launcherPaths[launcher.id]" class="text-xs text-emerald-400 flex items-center gap-1">
-                    <CheckCircle class="w-3 h-3" />
+                    <Icon name="CheckCircle" class="w-3 h-3" />
                     Custom path set
                   </div>
                   <div v-else class="text-xs text-muted-foreground italic">
@@ -390,12 +376,12 @@ async function handleLaunch(installation: MinecraftInstallation) {
 
               <div class="flex items-center gap-2">
                 <Button variant="secondary" size="sm" @click="handleSetLauncherPath(launcher.id)">
-                  <FolderOpen class="w-4 h-4" />
+                  <Icon name="FolderOpen" class="w-4 h-4" />
                   <span class="ml-1 hidden sm:inline">Browse</span>
                 </Button>
                 <Button v-if="launcherPaths[launcher.id]" variant="ghost" size="sm"
                   @click="handleClearLauncherPath(launcher.id)">
-                  <Trash2 class="w-4 h-4 text-red-400" />
+                  <Icon name="Trash2" class="w-4 h-4 text-red-400" />
                 </Button>
               </div>
             </div>

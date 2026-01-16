@@ -16,31 +16,7 @@ import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ProgressDialog from "@/components/ui/ProgressDialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
-import {
-  PackagePlus,
-  Download,
-  Trash2,
-  ArrowLeftRight,
-  BarChart3,
-  Heart,
-  Share2,
-  RefreshCw,
-  Search,
-  Copy,
-  Upload,
-  FolderOpen,
-  Merge,
-  Package,
-  Globe,
-  LayoutGrid,
-  List,
-  LayoutList,
-  Filter,
-  X,
-  Flame,
-  MoreHorizontal,
-  ChevronDown,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { Modpack, Mod } from "@/types/electron";
 import ModpackIcon from "@/assets/modex_modpack_icon2.png";
 
@@ -1071,7 +1047,7 @@ onMounted(() => {
     <div v-if="isDragging"
       class="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
       <div class="text-center">
-        <Download class="w-16 h-16 mx-auto text-primary mb-4" />
+        <Icon name="Download" class="w-16 h-16 mx-auto text-primary mb-4" />
         <p class="text-xl font-semibold">Drop modpack .zip here</p>
         <p class="text-muted-foreground">The modpack will be imported</p>
       </div>
@@ -1107,7 +1083,7 @@ onMounted(() => {
             <button class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all"
               :class="quickFilter === 'favorites' ? 'bg-rose-500/15 text-rose-400' : 'text-muted-foreground hover:text-foreground'"
               @click="quickFilter = 'favorites'; router.push('/modpacks?filter=favorites');">
-              <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
+              <Icon name="Heart" class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
               <span v-if="favoriteModpacks.size > 0">({{ favoriteModpacks.size }})</span>
             </button>
           </div>
@@ -1115,7 +1091,7 @@ onMounted(() => {
           <!-- Center: Search & Controls -->
           <div class="hidden md:flex items-center gap-2 flex-1 justify-center max-w-md">
             <div class="relative flex-1">
-              <Search
+              <Icon name="Search"
                 class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <input v-model="searchQuery" placeholder="Find a pack..."
                 class="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-muted/40 border border-border/50 focus:border-primary/50 focus:ring-0 outline-none transition-colors" />
@@ -1123,7 +1099,7 @@ onMounted(() => {
 
             <button @click="showFilters = !showFilters" class="relative p-2 rounded-lg transition-colors"
               :class="showFilters || activeFilterCount > 0 ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'">
-              <Filter class="w-4 h-4" />
+              <Icon name="Filter" class="w-4 h-4" />
               <span v-if="activeFilterCount > 0"
                 class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
                 {{ activeFilterCount }}
@@ -1133,15 +1109,15 @@ onMounted(() => {
             <div class="flex items-center p-0.5 bg-muted/40 rounded-lg">
               <button @click="viewMode = 'grid'" class="p-1.5 rounded-md transition-colors"
                 :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
-                <LayoutGrid class="w-3.5 h-3.5" />
+                <Icon name="LayoutGrid" class="w-3.5 h-3.5" />
               </button>
               <button @click="viewMode = 'list'" class="p-1.5 rounded-md transition-colors"
                 :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
-                <List class="w-3.5 h-3.5" />
+                <Icon name="List" class="w-3.5 h-3.5" />
               </button>
               <button @click="viewMode = 'compact'" class="p-1.5 rounded-md transition-colors"
                 :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
-                <LayoutList class="w-3.5 h-3.5" />
+                <Icon name="LayoutList" class="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -1167,15 +1143,16 @@ onMounted(() => {
           <div class="flex items-center gap-2 ml-auto shrink-0">
             <Button @click="showCreateDialog = true" :disabled="!isElectron()" size="sm"
               class="gap-1.5 h-8 px-3 text-xs">
-              <PackagePlus class="w-4 h-4" />
+              <Icon name="PackagePlus" class="w-4 h-4" />
               <span class="hidden xs:inline">New Pack</span>
             </Button>
 
             <div class="relative hidden sm:block">
               <Button @click="showActionsMenu = !showActionsMenu" :disabled="!isElectron()" variant="outline" size="sm"
                 class="gap-1.5 h-8 px-2.5">
-                <MoreHorizontal class="w-4 h-4" />
-                <ChevronDown class="w-3 h-3 transition-transform" :class="showActionsMenu ? 'rotate-180' : ''" />
+                <Icon name="MoreHorizontal" class="w-4 h-4" />
+                <Icon name="ChevronDown" class="w-3 h-3 transition-transform"
+                  :class="showActionsMenu ? 'rotate-180' : ''" />
               </Button>
 
               <!-- Dropdown menu -->
@@ -1185,27 +1162,27 @@ onMounted(() => {
                   <button
                     class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
                     @click="importCurseForgeModpack(); showActionsMenu = false">
-                    <Download class="w-4 h-4" />
+                    <Icon name="Download" class="w-4 h-4" />
                     Import ZIP
                   </button>
                   <button
                     class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
                     @click="router.push('/modpacks/browse'); showActionsMenu = false">
-                    <Globe class="w-4 h-4" />
+                    <Icon name="Globe" class="w-4 h-4" />
                     Browse CurseForge
                   </button>
                   <div class="h-px bg-border my-1"></div>
                   <button
                     class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
                     @click="openShareImport(); showActionsMenu = false">
-                    <Share2 class="w-4 h-4" />
+                    <Icon name="Share2" class="w-4 h-4" />
                     Share / Import .modex
                   </button>
                   <button
                     class="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground"
                     :disabled="modpacks.length < 2" :class="modpacks.length < 2 ? 'opacity-50 cursor-not-allowed' : ''"
                     @click="showCompare = true; showActionsMenu = false">
-                    <ArrowLeftRight class="w-4 h-4" />
+                    <Icon name="ArrowLeftRight" class="w-4 h-4" />
                     Compare Packs
                   </button>
                 </div>
@@ -1218,7 +1195,7 @@ onMounted(() => {
             <!-- Mobile: Simple import button -->
             <Button @click="importCurseForgeModpack" :disabled="!isElectron()" variant="secondary" size="sm"
               class="gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs sm:hidden">
-              <Download class="w-3.5 h-3.5" />
+              <Icon name="Download" class="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
@@ -1227,7 +1204,8 @@ onMounted(() => {
         <div class="md:hidden px-3 pb-3">
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Icon name="Search"
+                class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input v-model="searchQuery" placeholder="Search packs..."
                 class="w-full pl-8 pr-3 py-2 text-sm rounded-md bg-muted/50 border-none focus:ring-1 focus:ring-primary outline-none transition-all" />
             </div>
@@ -1235,7 +1213,7 @@ onMounted(() => {
               class="relative flex items-center justify-center p-2 rounded-md transition-all" :class="showFilters || activeFilterCount > 0
                 ? 'bg-primary/20 text-primary'
                 : 'bg-muted/50 text-muted-foreground'">
-              <Filter class="w-4 h-4" />
+              <Icon name="Filter" class="w-4 h-4" />
               <span v-if="activeFilterCount > 0"
                 class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-caption flex items-center justify-center">
                 {{ activeFilterCount }}
@@ -1245,12 +1223,12 @@ onMounted(() => {
               <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
                 :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
                 title="Grid View">
-                <LayoutGrid class="w-3.5 h-3.5" />
+                <Icon name="LayoutGrid" class="w-3.5 h-3.5" />
               </button>
               <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
                 :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
                 title="List View">
-                <List class="w-3.5 h-3.5" />
+                <Icon name="List" class="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -1273,7 +1251,7 @@ onMounted(() => {
     <div v-else-if="modpacks.length === 0" class="flex items-center justify-center flex-1 bg-background">
       <div class="text-center max-w-sm flex flex-col items-center">
         <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-6">
-          <Package class="w-8 h-8 text-muted-foreground" />
+          <Icon name="Package" class="w-8 h-8 text-muted-foreground" />
         </div>
 
         <h3 class="text-xl font-bold mb-2">No packs yet</h3>
@@ -1284,7 +1262,7 @@ onMounted(() => {
         <!-- Single primary CTA -->
         <Button @click="showCreateDialog = true" size="lg"
           class="gap-2 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all mb-4">
-          <PackagePlus class="w-5 h-5" />
+          <Icon name="PackagePlus" class="w-5 h-5" />
           Create Your First Pack
         </Button>
 
@@ -1308,11 +1286,11 @@ onMounted(() => {
             class="absolute md:relative right-0 top-0 bottom-0 w-72 md:w-full h-full border-l md:border-l-0 md:border-r border-border bg-card p-4 overflow-y-auto flex flex-col">
             <div class="flex items-center justify-between mb-4">
               <h3 class="font-semibold text-sm flex items-center gap-2">
-                <Filter class="w-4 h-4" />
+                <Icon name="Filter" class="w-4 h-4" />
                 Filters
               </h3>
               <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
-                <X class="w-4 h-4" />
+                <Icon name="X" class="w-4 h-4" />
               </button>
             </div>
 
@@ -1330,13 +1308,13 @@ onMounted(() => {
                   <button @click="sourceFilter = 'curseforge'"
                     class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
                     :class="sourceFilter === 'curseforge' ? 'bg-orange-500/20 text-orange-400' : 'hover:bg-muted'">
-                    <Flame class="w-3 h-3 text-orange-500" />
+                    <Icon name="Flame" class="w-3 h-3 text-orange-500" />
                     CurseForge
                   </button>
                   <button @click="sourceFilter = 'local'"
                     class="w-full px-3 py-2 text-xs text-left rounded-md transition-all flex items-center gap-2"
                     :class="sourceFilter === 'local' ? 'bg-blue-500/20 text-blue-400' : 'hover:bg-muted'">
-                    <Package class="w-3 h-3 text-blue-500" />
+                    <Icon name="Package" class="w-3 h-3 text-blue-500" />
                     Local
                   </button>
                 </div>
@@ -1371,7 +1349,7 @@ onMounted(() => {
                 <button v-if="activeFilterCount > 0"
                   class="w-full px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all flex items-center justify-center gap-2"
                   @click="clearFilters">
-                  <X class="w-3.5 h-3.5" />
+                  <Icon name="X" class="w-3.5 h-3.5" />
                   Clear All Filters
                 </button>
                 <p v-else class="text-xs text-muted-foreground text-center">No active filters</p>
@@ -1454,7 +1432,7 @@ onMounted(() => {
         <!-- Empty Filtered State -->
         <div v-if="sortedModpacks.length === 0 && modpacks.length > 0"
           class="flex flex-col items-center justify-center py-16 text-center">
-          <Filter class="w-12 h-12 text-muted-foreground/30 mb-4" />
+          <Icon name="Filter" class="w-12 h-12 text-muted-foreground/30 mb-4" />
           <h3 class="text-lg font-medium mb-2">No matches</h3>
           <p class="text-sm text-muted-foreground mb-4">Try a different search or clear filters</p>
           <Button variant="outline" size="sm" @click="clearFilters">
@@ -1469,29 +1447,29 @@ onMounted(() => {
       @clear="clearSelection">
       <Button variant="secondary" size="sm" class="gap-2" @click="exportSelectedModpacks"
         title="Export all as CurseForge">
-        <Upload class="w-4 h-4" />
+        <Icon name="Upload" class="w-4 h-4" />
         Export
       </Button>
       <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size !== 2"
         @click="openCompareWithSelected" title="Compare selected modpacks">
-        <ArrowLeftRight class="w-4 h-4" />
+        <Icon name="ArrowLeftRight" class="w-4 h-4" />
         Compare
       </Button>
       <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size < 2"
         @click="mergeSelectedModpacks" title="Merge into new modpack">
-        <Merge class="w-4 h-4" />
+        <Icon name="Merge" class="w-4 h-4" />
         Merge
       </Button>
       <Button variant="secondary" size="sm" class="gap-2" @click="openSelectedFolders" title="Open all in Explorer">
-        <FolderOpen class="w-4 h-4" />
+        <Icon name="FolderOpen" class="w-4 h-4" />
         Folders
       </Button>
       <Button variant="secondary" size="sm" class="gap-2" @click="duplicateSelectedModpacks">
-        <Copy class="w-4 h-4" />
+        <Icon name="Copy" class="w-4 h-4" />
         Duplicate
       </Button>
       <Button variant="destructive" size="sm" class="gap-2" @click="confirmBulkDelete">
-        <Trash2 class="w-4 h-4" />
+        <Icon name="Trash2" class="w-4 h-4" />
         Delete
       </Button>
     </BulkActionBar>
@@ -1616,7 +1594,7 @@ onMounted(() => {
     <Dialog :open="showMergeDialog" @close="showMergeDialog = false">
       <template #header>
         <h2 class="text-xl font-bold flex items-center gap-2">
-          <Merge class="w-5 h-5" />
+          <Icon name="Merge" class="w-5 h-5" />
           Merge Modpacks
         </h2>
       </template>
@@ -1648,7 +1626,7 @@ onMounted(() => {
             Cancel
           </Button>
           <Button @click="confirmMerge" :disabled="!mergeModpackName.trim()">
-            <Package class="w-4 h-4 mr-2" />
+            <Icon name="Package" class="w-4 h-4 mr-2" />
             Create Merged Modpack
           </Button>
         </div>
@@ -1659,7 +1637,7 @@ onMounted(() => {
     <Dialog :open="showMergeSummary" @close="showMergeSummary = false" maxWidth="2xl">
       <template #header>
         <h2 class="text-xl font-bold flex items-center gap-2 text-green-500">
-          <Package class="w-5 h-5" />
+          <Icon name="Package" class="w-5 h-5" />
           Merge Complete!
         </h2>
       </template>

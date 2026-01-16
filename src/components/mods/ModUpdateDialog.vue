@@ -3,15 +3,7 @@ import { ref, watch, computed } from "vue";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import {
-  RefreshCw,
-  Download,
-  ExternalLink,
-  FileText,
-  AlertCircle,
-  CheckCircle,
-  ArrowRight,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import type { ModUpdateInfo } from "@/types/electron";
 
@@ -143,7 +135,7 @@ function openChangelog() {
     <div class="space-y-6 py-4">
       <!-- Loading State -->
       <div v-if="isLoading" class="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-        <RefreshCw class="w-8 h-8 animate-spin mb-3 text-primary" />
+        <Icon name="RefreshCw" class="w-8 h-8 animate-spin mb-3 text-primary" />
         <p>Controllo aggiornamenti su CurseForge...</p>
       </div>
 
@@ -152,7 +144,7 @@ function openChangelog() {
         <!-- Update Available -->
         <div v-if="hasUpdate" class="space-y-6">
           <div class="flex items-center justify-center p-4 rounded-full bg-emerald-500/10 w-16 h-16 mx-auto">
-            <Download class="w-8 h-8 text-emerald-500" />
+            <Icon name="Download" class="w-8 h-8 text-emerald-500" />
           </div>
 
           <div class="text-center space-y-2">
@@ -170,7 +162,7 @@ function openChangelog() {
                 {{ mod.version }}
               </div>
             </div>
-            <ArrowRight class="w-4 h-4 text-muted-foreground" />
+            <Icon name="ArrowRight" class="w-4 h-4 text-muted-foreground" />
             <div class="text-center">
               <div class="text-xs text-muted-foreground mb-1">Nuova</div>
               <div
@@ -193,7 +185,7 @@ function openChangelog() {
         <!-- No Update -->
         <div v-else class="text-center py-6">
           <div class="flex items-center justify-center p-4 rounded-full bg-secondary w-16 h-16 mx-auto mb-4">
-            <CheckCircle class="w-8 h-8 text-muted-foreground" />
+            <Icon name="CheckCircle" class="w-8 h-8 text-muted-foreground" />
           </div>
           <h3 class="font-medium text-lg">Nessun aggiornamento</h3>
           <p class="text-muted-foreground mt-2">
@@ -210,7 +202,7 @@ function openChangelog() {
     <template #footer>
       <div class="flex justify-between w-full">
         <Button v-if="hasUpdate" variant="ghost" @click="openChangelog" class="gap-2">
-          <FileText class="w-4 h-4" /> Vedi Changelog
+          <Icon name="FileText" class="w-4 h-4" /> Vedi Changelog
         </Button>
         <div v-else></div>
         <!-- Spacer -->
@@ -218,8 +210,8 @@ function openChangelog() {
         <div class="flex gap-2">
           <Button variant="ghost" @click="$emit('close')">Chiudi</Button>
           <Button v-if="hasUpdate" @click="applyUpdate" :disabled="isUpdating" class="gap-2">
-            <RefreshCw v-if="isUpdating" class="w-4 h-4 animate-spin" />
-            <Download v-else class="w-4 h-4" />
+            <Icon v-if="isUpdating" name="RefreshCw" class="w-4 h-4 animate-spin" />
+            <Icon v-else name="Download" class="w-4 h-4" />
             {{ isUpdating ? "Aggiornamento..." : "Aggiorna Ora" }}
           </Button>
         </div>

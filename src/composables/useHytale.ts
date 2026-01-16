@@ -27,6 +27,32 @@ const disabledMods = computed(() => installedMods.value.filter(m => m.isDisabled
 const modCount = computed(() => installedMods.value.length);
 const modpackCount = computed(() => modpacks.value.length);
 
+// Map of installed CF project IDs to their file IDs and mod info
+const installedProjectFiles = computed(() => {
+  const map = new Map<number, { fileId: number; mod: HytaleMod }>();
+  for (const mod of installedMods.value) {
+    if (mod.cfProjectId && mod.cfFileId) {
+      map.set(mod.cfProjectId, { fileId: mod.cfFileId, mod });
+    }
+  }
+  return map;
+});
+
+// Check if a mod is installed by CF project ID
+function isModInstalledByCfId(cfProjectId: number): boolean {
+  return installedProjectFiles.value.has(cfProjectId);
+}
+
+// Get installed mod info by CF project ID
+function getInstalledModByCfId(cfProjectId: number): HytaleMod | null {
+  return installedProjectFiles.value.get(cfProjectId)?.mod || null;
+}
+
+// Get installed file ID by CF project ID
+function getInstalledFileIdByCfId(cfProjectId: number): number | null {
+  return installedProjectFiles.value.get(cfProjectId)?.fileId || null;
+}
+
 /**
  * Initialize Hytale state
  */
@@ -360,6 +386,7 @@ export function useHytale() {
     disabledMods,
     modCount,
     modpackCount,
+    installedProjectFiles,
     
     // Methods
     initialize,
@@ -376,5 +403,8 @@ export function useHytale() {
     launch,
     openModsFolder,
     setConfig,
+    isModInstalledByCfId,
+    getInstalledModByCfId,
+    getInstalledFileIdByCfId,
   };
 }

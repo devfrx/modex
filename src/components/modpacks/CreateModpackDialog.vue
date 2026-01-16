@@ -3,7 +3,7 @@ import { ref, watch, computed } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
-import { ImagePlus, X, Lock, Loader2 } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { CFModLoader } from "@/types/electron";
 
 const props = defineProps<{
@@ -340,7 +340,7 @@ function create() {
           class="flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
           @click="selectImage">
           <div class="flex flex-col items-center text-muted-foreground">
-            <ImagePlus class="w-6 h-6 mb-1" />
+            <Icon name="ImagePlus" class="w-6 h-6 mb-1" />
             <span class="text-xs">Click to select</span>
           </div>
         </div>
@@ -349,7 +349,7 @@ function create() {
           <button
             class="absolute top-1 right-1 p-1 bg-background/80 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
             @click="removeImage">
-            <X class="w-4 h-4" />
+            <Icon name="X" class="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -371,7 +371,7 @@ function create() {
       <div class="space-y-2">
         <label class="text-sm font-medium flex items-center gap-2">
           Minecraft Version
-          <Lock v-if="isVersionLocked" class="w-3 h-3 text-muted-foreground" />
+          <Icon v-if="isVersionLocked" name="Lock" class="w-3 h-3 text-muted-foreground" />
         </label>
         <select v-model="form.minecraft_version" :disabled="isVersionLocked"
           class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
@@ -388,7 +388,7 @@ function create() {
       <div class="space-y-2">
         <label class="text-sm font-medium flex items-center gap-2">
           Loader
-          <Lock v-if="isLoaderLocked" class="w-3 h-3 text-muted-foreground" />
+          <Icon v-if="isLoaderLocked" name="Lock" class="w-3 h-3 text-muted-foreground" />
         </label>
         <select v-model="form.loader" :disabled="isLoaderLocked"
           class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
@@ -405,7 +405,7 @@ function create() {
       <div class="space-y-2">
         <label class="text-sm font-medium flex items-center gap-2">
           {{loaders.find(l => l.value === form.loader)?.label || 'Loader'}} Version
-          <Loader2 v-if="isLoadingLoaderVersions" class="w-3 h-3 animate-spin text-muted-foreground" />
+          <Icon v-if="isLoadingLoaderVersions" name="Loader2" class="w-3 h-3 animate-spin text-muted-foreground" />
         </label>
         <select v-model="form.loader_version" :disabled="isLoadingLoaderVersions || filteredLoaderVersions.length === 0"
           class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">

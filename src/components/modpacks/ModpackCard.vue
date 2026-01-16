@@ -1,23 +1,5 @@
 <script setup lang="ts">
-import {
-  Trash2,
-  Edit,
-  Check,
-  Copy,
-  FolderOpen,
-  Heart,
-  Share2,
-  RefreshCw,
-  Flame,
-  Link2,
-  Link2Off,
-  Play,
-  MoreVertical,
-  CircleDot,
-  Package,
-  CloudOff,
-  Cloud,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import { ref, computed } from "vue";
 import DefaultModpackImage from "@/assets/modpack-placeholder.png";
 
@@ -110,18 +92,18 @@ const imageUrl = computed(() => {
             <span class="live-dot" />
           </span>
           <span v-if="modpack.cf_project_id" class="badge-source">
-            <Flame class="w-3 h-3" />
+            <Icon name="Flame" class="w-3 h-3" />
           </span>
           <template v-if="modpack.cloudStatus === 'error'">
             <span class="badge-error">
-              <CloudOff class="w-3 h-3" />
+              <Icon name="CloudOff" class="w-3 h-3" />
             </span>
           </template>
           <span v-else-if="modpack.cloudStatus === 'published'" class="badge-cloud">
-            <Cloud class="w-3 h-3" />
+            <Icon name="Cloud" class="w-3 h-3" />
           </span>
           <span v-else-if="modpack.cloudStatus === 'subscribed' || modpack.remote_source?.url" class="badge-sync">
-            <Link2 class="w-3 h-3" />
+            <Icon name="Link2" class="w-3 h-3" />
           </span>
         </div>
       </div>
@@ -137,11 +119,11 @@ const imageUrl = computed(() => {
 
         <div class="rest-footer">
           <span class="rest-mods">
-            <Package class="w-3.5 h-3.5" />
+            <Icon name="Package" class="w-3.5 h-3.5" />
             {{ modpack.modCount }}
           </span>
           <span v-if="modpack.hasUnsavedChanges" class="rest-unsaved">
-            <CircleDot class="w-3 h-3" />
+            <Icon name="CircleDot" class="w-3 h-3" />
             <span>Unsaved</span>
           </span>
         </div>
@@ -149,12 +131,12 @@ const imageUrl = computed(() => {
 
       <!-- Selection indicator -->
       <div class="rest-select" :class="{ 'is-checked': selected }">
-        <Check v-if="selected" class="w-3.5 h-3.5" />
+        <Icon v-if="selected" name="Check" class="w-3.5 h-3.5" />
       </div>
 
       <!-- Favorite heart -->
       <button class="rest-fav" :class="{ 'is-active': favorite }" @click.stop="$emit('toggle-favorite', modpack.id)">
-        <Heart class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
+        <Icon name="Heart" class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
       </button>
     </div>
 
@@ -170,12 +152,12 @@ const imageUrl = computed(() => {
 
       <!-- Favorite (same position as rest state) -->
       <button class="hover-fav" :class="{ 'is-active': favorite }" @click.stop="$emit('toggle-favorite', modpack.id)">
-        <Heart class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
+        <Icon name="Heart" class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
       </button>
 
       <!-- Selection (same position as rest state) -->
       <div class="hover-select" :class="{ 'is-checked': selected }" @click.stop="$emit('toggle-select', modpack.id)">
-        <Check v-if="selected" class="w-3.5 h-3.5" />
+        <Icon v-if="selected" name="Check" class="w-3.5 h-3.5" />
       </div>
 
       <!-- Live indicator -->
@@ -187,26 +169,26 @@ const imageUrl = computed(() => {
       <!-- Cloud/Sync Status (visible in hover) -->
       <div class="hover-cloud-status">
         <span v-if="modpack.cf_project_id" class="status-badge status-cf" title="CurseForge">
-          <Flame class="w-3.5 h-3.5" />
+          <Icon name="Flame" class="w-3.5 h-3.5" />
         </span>
         <template v-if="modpack.cloudStatus === 'error'">
           <span v-if="modpack.remote_source?.url" class="status-badge status-error" title="Sync Error">
-            <Link2Off class="w-3.5 h-3.5" />
+            <Icon name="Link2Off" class="w-3.5 h-3.5" />
           </span>
           <span v-else class="status-badge status-error" title="Cloud Error">
-            <CloudOff class="w-3.5 h-3.5" />
+            <Icon name="CloudOff" class="w-3.5 h-3.5" />
           </span>
         </template>
         <span v-else-if="modpack.cloudStatus === 'published'" class="status-badge status-published"
           title="Published to Cloud">
-          <Cloud class="w-3.5 h-3.5" />
+          <Icon name="Cloud" class="w-3.5 h-3.5" />
         </span>
         <span v-else-if="modpack.cloudStatus === 'subscribed' || modpack.remote_source?.url"
           class="status-badge status-synced" title="Synced from Remote">
-          <Link2 class="w-3.5 h-3.5" />
+          <Icon name="Link2" class="w-3.5 h-3.5" />
         </span>
         <span v-if="modpack.hasUnsavedChanges" class="status-badge status-unsaved" title="Unsaved Changes">
-          <CircleDot class="w-3.5 h-3.5" />
+          <Icon name="CircleDot" class="w-3.5 h-3.5" />
         </span>
       </div>
 
@@ -221,7 +203,7 @@ const imageUrl = computed(() => {
       <!-- Action dock -->
       <div class="hover-dock" @click.stop>
         <button v-if="!isRunning" class="dock-play" @click.stop="$emit('play', modpack.id)">
-          <Play class="w-5 h-5 fill-current" />
+          <Icon name="Play" class="w-5 h-5 fill-current" />
         </button>
         <div v-else class="dock-running">
           <span class="running-pulse" />
@@ -230,19 +212,19 @@ const imageUrl = computed(() => {
         <div class="dock-divider" />
 
         <button class="dock-btn" @click.stop="$emit('edit', modpack.id)" title="Edit">
-          <Edit class="w-4 h-4" />
+          <Icon name="Edit" class="w-4 h-4" />
         </button>
         <button class="dock-btn" @click.stop="$emit('share', modpack.id, modpack.name)" title="Share">
-          <Share2 class="w-4 h-4" />
+          <Icon name="Share2" class="w-4 h-4" />
         </button>
         <button class="dock-btn" @click.stop="$emit('open-folder', modpack.id)" title="Open Folder">
-          <FolderOpen class="w-4 h-4" />
+          <Icon name="FolderOpen" class="w-4 h-4" />
         </button>
 
         <!-- More menu -->
         <div class="dock-more">
           <button class="dock-btn" @click.stop="showMenu = !showMenu">
-            <MoreVertical class="w-4 h-4" />
+            <Icon name="MoreVertical" class="w-4 h-4" />
           </button>
 
           <Transition enter-active-class="transition duration-200 ease-out"
@@ -251,16 +233,16 @@ const imageUrl = computed(() => {
             leave-to-class="opacity-0 translate-y-2 scale-95">
             <div v-if="showMenu" class="dock-menu">
               <button class="menu-item" @click.stop="$emit('clone', modpack.id); showMenu = false;">
-                <Copy class="w-4 h-4" />
+                <Icon name="Copy" class="w-4 h-4" />
                 <span>Duplicate</span>
               </button>
               <button class="menu-item" @click.stop="$emit('convert', modpack.id); showMenu = false;">
-                <RefreshCw class="w-4 h-4" />
+                <Icon name="RefreshCw" class="w-4 h-4" />
                 <span>Convert Loader</span>
               </button>
               <div class="menu-sep" />
               <button class="menu-item menu-danger" @click.stop="$emit('delete', modpack.id); showMenu = false;">
-                <Trash2 class="w-4 h-4" />
+                <Icon name="Trash2" class="w-4 h-4" />
                 <span>Delete</span>
               </button>
             </div>

@@ -1,23 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
-import {
-    Search,
-    Download,
-    ChevronDown,
-    ChevronUp,
-    Loader2,
-    ExternalLink,
-    Star,
-    X,
-    Package,
-    Users,
-    Calendar,
-    FileText,
-    RefreshCw,
-    Filter,
-    ArrowDownToLine,
-    ArrowLeft,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ChangelogDialog from "@/components/mods/ChangelogDialog.vue";
@@ -388,6 +371,10 @@ watch([selectedVersion, selectedLoader, sortBy], () => {
 
 onMounted(async () => {
     hasApiKey.value = await window.api.curseforge.hasApiKey();
+    // Load initial popular modpacks
+    if (hasApiKey.value) {
+        await search();
+    }
 });
 </script>
 
@@ -402,7 +389,7 @@ onMounted(async () => {
             <!-- Fullscreen Header with Back Button -->
             <div v-if="fullScreen" class="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
                 <Button variant="ghost" size="sm" @click="emit('close')" class="gap-2">
-                    <ArrowLeft class="w-4 h-4" />
+                    <Icon name="ArrowLeft" class="w-4 h-4" />
                     Back
                 </Button>
                 <div class="h-4 w-px bg-border"></div>
@@ -416,7 +403,7 @@ onMounted(async () => {
                     <button @click="isFilterSidebarCollapsed = !isFilterSidebarCollapsed"
                         class="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
                         <span class="flex items-center gap-2 text-sm font-medium">
-                            <Filter class="w-4 h-4 text-primary" />
+                            <Icon name="Filter" class="w-4 h-4 text-primary" />
                             Filters
                             <!-- Active filters badges -->
                             <span v-if="selectedVersion"
@@ -428,7 +415,7 @@ onMounted(async () => {
                                 {{ selectedLoader }}
                             </span>
                         </span>
-                        <ChevronDown class="w-4 h-4 transition-transform duration-200"
+                        <Icon name="ChevronDown" class="w-4 h-4 transition-transform duration-200"
                             :class="!isFilterSidebarCollapsed ? 'rotate-180' : ''" />
                     </button>
 
@@ -449,7 +436,7 @@ onMounted(async () => {
                                             <option v-for="v in gameVersions" :key="v" :value="v"
                                                 class="bg-popover text-popover-foreground">{{ v }}</option>
                                         </select>
-                                        <ChevronDown
+                                        <Icon name="ChevronDown"
                                             class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                                     </div>
                                 </div>
@@ -464,9 +451,9 @@ onMounted(async () => {
                                             <option value="" class="bg-popover text-popover-foreground">All</option>
                                             <option v-for="l in loaders" :key="l" :value="l"
                                                 class="bg-popover text-popover-foreground">{{ l.charAt(0).toUpperCase()
-                                                + l.slice(1) }}</option>
+                                                    + l.slice(1) }}</option>
                                         </select>
-                                        <ChevronDown
+                                        <Icon name="ChevronDown"
                                             class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                                     </div>
                                 </div>
@@ -482,7 +469,7 @@ onMounted(async () => {
                                             <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value"
                                                 class="bg-popover text-popover-foreground">{{ opt.label }}</option>
                                         </select>
-                                        <ChevronDown
+                                        <Icon name="ChevronDown"
                                             class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                                     </div>
                                 </div>
@@ -529,15 +516,16 @@ onMounted(async () => {
                     <div
                         class="p-3 md:p-4 border-b border-border flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
                         <div class="relative flex-1">
-                            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Icon name="Search"
+                                class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <input v-model="searchQuery" type="text" placeholder="Search modpacks..."
                                 class="w-full h-9 sm:h-10 pl-10 pr-4 rounded-lg border bg-input/50 focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all text-sm"
                                 @keyup.enter="search()" />
                         </div>
 
                         <Button @click="search()" :disabled="isSearching" size="sm" class="gap-2">
-                            <Loader2 v-if="isSearching" class="w-4 h-4 animate-spin" />
-                            <Search v-else class="w-4 h-4" />
+                            <Icon v-if="isSearching" name="Loader2" class="w-4 h-4 animate-spin" />
+                            <Icon v-else name="Search" class="w-4 h-4" />
                             Search
                         </Button>
 
@@ -545,7 +533,7 @@ onMounted(async () => {
                             <div class="h-8 w-px bg-border mx-1 hidden sm:block"></div>
 
                             <Button variant="ghost" size="icon" @click="emit('close')" title="Close">
-                                <X class="w-5 h-5" />
+                                <Icon name="X" class="w-5 h-5" />
                             </Button>
                         </template>
                     </div>
@@ -555,7 +543,7 @@ onMounted(async () => {
                         <div class="text-center p-8">
                             <div
                                 class="w-12 h-12 mx-auto rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                                <Package class="w-6 h-6 text-primary" />
+                                <Icon name="Package" class="w-6 h-6 text-primary" />
                             </div>
                             <h3 class="text-lg font-semibold mb-2">CurseForge API Key Required</h3>
                             <p class="text-muted-foreground text-sm mb-4">
@@ -570,7 +558,7 @@ onMounted(async () => {
                         <div v-if="isSearching && searchResults.length === 0"
                             class="flex items-center justify-center h-full">
                             <div class="flex flex-col items-center gap-3">
-                                <Loader2 class="w-6 h-6 animate-spin text-primary" />
+                                <Icon name="Loader2" class="w-6 h-6 animate-spin text-primary" />
                                 <p class="text-muted-foreground text-sm">Searching modpacks...</p>
                             </div>
                         </div>
@@ -581,7 +569,7 @@ onMounted(async () => {
                             <div class="text-center">
                                 <div
                                     class="w-12 h-12 mx-auto rounded-lg bg-muted/30 flex items-center justify-center mb-4">
-                                    <Package class="w-6 h-6 text-muted-foreground" />
+                                    <Icon name="Package" class="w-6 h-6 text-muted-foreground" />
                                 </div>
                                 <h3 class="text-lg font-semibold mb-2">No modpacks found</h3>
                                 <p class="text-muted-foreground text-sm">Try adjusting your search or filters</p>
@@ -600,7 +588,7 @@ onMounted(async () => {
                                         <img v-if="modpack.logo?.thumbnailUrl" :src="modpack.logo.thumbnailUrl"
                                             :alt="modpack.name" class="w-full h-full object-cover" />
                                         <div v-else class="w-full h-full flex items-center justify-center">
-                                            <Package class="w-6 h-6 text-muted-foreground/50" />
+                                            <Icon name="Package" class="w-6 h-6 text-muted-foreground/50" />
                                         </div>
                                     </div>
 
@@ -611,7 +599,7 @@ onMounted(async () => {
                                                 <h3 class="font-medium text-foreground truncate">{{ modpack.name }}</h3>
                                                 <p class="text-xs text-muted-foreground line-clamp-2 mt-0.5">{{
                                                     modpack.summary
-                                                }}
+                                                    }}
                                                 </p>
                                             </div>
 
@@ -620,25 +608,25 @@ onMounted(async () => {
                                                 <Button @click.stop="quickImport(modpack)"
                                                     :disabled="importingModpackId === modpack.id" size="sm"
                                                     class="gap-1.5 h-8">
-                                                    <Loader2
+                                                    <Icon
                                                         v-if="importingModpackId === modpack.id && importingFileId === -1"
-                                                        class="w-3.5 h-3.5 animate-spin" />
-                                                    <Download v-else class="w-3.5 h-3.5" />
+                                                        name="Loader2" class="w-3.5 h-3.5 animate-spin" />
+                                                    <Icon v-else name="Download" class="w-3.5 h-3.5" />
                                                     Import
                                                 </Button>
 
                                                 <!-- Expand -->
                                                 <Button variant="ghost" size="icon" class="h-8 w-8"
                                                     @click="toggleExpand(modpack.id)">
-                                                    <ChevronUp v-if="expandedModpackId === modpack.id"
+                                                    <Icon v-if="expandedModpackId === modpack.id" name="ChevronUp"
                                                         class="w-3.5 h-3.5" />
-                                                    <ChevronDown v-else class="w-3.5 h-3.5" />
+                                                    <Icon v-else name="ChevronDown" class="w-3.5 h-3.5" />
                                                 </Button>
 
                                                 <!-- External Link -->
                                                 <Button variant="ghost" size="icon" class="h-8 w-8"
                                                     @click="openCurseForgePage(modpack.slug)">
-                                                    <ExternalLink class="w-3.5 h-3.5" />
+                                                    <Icon name="ExternalLink" class="w-3.5 h-3.5" />
                                                 </Button>
                                             </div>
                                         </div>
@@ -646,15 +634,15 @@ onMounted(async () => {
                                         <!-- Stats -->
                                         <div class="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                                             <span class="flex items-center gap-1">
-                                                <Download class="w-3 h-3" />
+                                                <Icon name="Download" class="w-3 h-3" />
                                                 {{ formatNumber(modpack.downloadCount) }}
                                             </span>
                                             <span class="flex items-center gap-1">
-                                                <Users class="w-3 h-3" />
+                                                <Icon name="Users" class="w-3 h-3" />
                                                 {{ getAuthorNames(modpack) }}
                                             </span>
                                             <span class="flex items-center gap-1">
-                                                <Calendar class="w-3 h-3" />
+                                                <Icon name="Calendar" class="w-3 h-3" />
                                                 {{ formatDate(modpack.dateModified) }}
                                             </span>
                                         </div>
@@ -665,7 +653,7 @@ onMounted(async () => {
                                 <div v-if="expandedModpackId === modpack.id"
                                     class="border-t border-border/30 bg-background/30">
                                     <div v-if="isLoadingFiles" class="p-4 flex items-center justify-center">
-                                        <Loader2 class="w-4 h-4 animate-spin text-primary" />
+                                        <Icon name="Loader2" class="w-4 h-4 animate-spin text-primary" />
                                     </div>
 
                                     <div v-else-if="filteredFiles.length === 0"
@@ -707,14 +695,14 @@ onMounted(async () => {
                                                 <Button variant="ghost" size="icon"
                                                     class="h-8 w-8 text-muted-foreground mr-1" title="View Changelog"
                                                     @click.stop="viewChangelog(modpack, file)">
-                                                    <FileText class="w-4 h-4" />
+                                                    <Icon name="FileText" class="w-4 h-4" />
                                                 </Button>
                                                 <Button @click="importModpack(modpack, file)"
                                                     :disabled="importingModpackId === modpack.id" size="sm"
                                                     variant="ghost" class="h-8 w-24 ml-2 text-xs">
-                                                    <Loader2 v-if="importingFileId === file.id"
+                                                    <Icon v-if="importingFileId === file.id" name="Loader2"
                                                         class="w-3 h-3 animate-spin mr-1.5" />
-                                                    <ArrowDownToLine v-else class="w-3 h-3 mr-1.5" />
+                                                    <Icon v-else name="ArrowDownToLine" class="w-3 h-3 mr-1.5" />
                                                     Import
                                                 </Button>
                                             </div>
@@ -726,8 +714,8 @@ onMounted(async () => {
                             <!-- Load More -->
                             <div v-if="hasMoreResults" class="flex justify-center py-4">
                                 <Button @click="loadMore" :disabled="isSearching" variant="secondary" class="gap-1.5">
-                                    <Loader2 v-if="isSearching" class="w-3.5 h-3.5 animate-spin" />
-                                    <RefreshCw v-else class="w-3.5 h-3.5" />
+                                    <Icon v-if="isSearching" name="Loader2" class="w-3.5 h-3.5 animate-spin" />
+                                    <Icon v-else name="RefreshCw" class="w-3.5 h-3.5" />
                                     Load More
                                 </Button>
                             </div>
@@ -750,7 +738,7 @@ onMounted(async () => {
                 <div
                     class="bg-card/95 border border-border/50 rounded-lg p-6 max-w-md w-full mx-4 text-center shadow-2xl shadow-black/20">
                     <div class="w-12 h-12 mx-auto rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                        <Loader2 class="w-6 h-6 animate-spin text-primary" />
+                        <Icon name="Loader2" class="w-6 h-6 animate-spin text-primary" />
                     </div>
                     <h3 class="font-semibold text-lg mb-2">Importing Modpack</h3>
 

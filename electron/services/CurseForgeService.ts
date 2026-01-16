@@ -757,6 +757,7 @@ export class CurseForgeService {
       modLoader?: string;
       pageSize?: number;
       index?: number;
+      gameId?: number;
     }
   ): Promise<CFFile[]> {
     if (!this.apiKey) {

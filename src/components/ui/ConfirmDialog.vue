@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import Dialog from "./Dialog.vue";
 import Button from "./Button.vue";
-import { AlertTriangle, Trash2, Info, AlertCircle } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const props = withDefaults(
     defineProps<{
@@ -63,18 +63,18 @@ const variantClasses = computed(() => {
     }
 });
 
-const IconComponent = computed(() => {
+const iconName = computed(() => {
     switch (props.icon) {
         case "trash":
-            return Trash2;
+            return "Trash2";
         case "warning":
-            return AlertTriangle;
+            return "AlertTriangle";
         case "info":
-            return Info;
+            return "Info";
         case "alert":
-            return AlertCircle;
+            return "AlertCircle";
         default:
-            return AlertTriangle;
+            return "AlertTriangle";
     }
 });
 
@@ -96,7 +96,7 @@ function handleConfirm() {
             <div class="flex items-start gap-4">
                 <div :class="[variantClasses.bg, variantClasses.border]"
                     class="flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center">
-                    <component :is="IconComponent" :class="variantClasses.text" class="w-6 h-6" />
+                    <Icon :name="iconName" :class="variantClasses.text" class="w-6 h-6" />
                 </div>
                 <div class="flex-1 min-w-0 pt-1">
                     <h2 class="text-xl font-bold mb-2">{{ title }}</h2>

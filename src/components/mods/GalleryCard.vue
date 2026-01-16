@@ -1,18 +1,5 @@
 <script setup lang="ts">
-import {
-  Heart,
-  AlertTriangle,
-  Layers,
-  Image,
-  Sparkles,
-  Globe,
-  Package,
-  Trash2,
-  Info,
-  Check,
-  RefreshCw,
-  ChevronDown,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { Mod } from "@/types/electron";
 import Button from "@/components/ui/Button.vue";
 
@@ -51,17 +38,17 @@ function openCurseForge() {
 const contentTypeConfig = {
   mod: {
     label: "Mod",
-    icon: Layers,
+    icon: "Layers",
     class: "bg-primary/15 text-primary border-primary/30",
   },
   resourcepack: {
     label: "Resource",
-    icon: Image,
+    icon: "Image",
     class: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   },
   shader: {
     label: "Shader",
-    icon: Sparkles,
+    icon: "Sparkles",
     class: "bg-pink-500/15 text-pink-400 border-pink-500/30",
   },
 };
@@ -96,7 +83,7 @@ function handleImageError(e: Event) {
 
       <!-- Fallback Icon when no image -->
       <div v-if="!hasThumbnail" class="absolute inset-0 flex items-center justify-center">
-        <component :is="typeConfig.icon" class="w-16 h-16 text-muted-foreground/30 transition-colors duration-300" />
+        <Icon :name="typeConfig.icon" class="w-16 h-16 text-muted-foreground/30 transition-colors duration-300" />
       </div>
 
       <!-- Gradient Overlay -->
@@ -108,7 +95,7 @@ function handleImageError(e: Event) {
         class="absolute top-3 left-3 z-20 p-1.5 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 hover:bg-black/50 transition-all duration-200"
         :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         @click.stop="$emit('toggle-favorite', mod.id)" title="Toggle favorite">
-        <Heart class="w-4 h-4 transition-colors" :class="favorite
+        <Icon name="Heart" class="w-4 h-4 transition-colors" :class="favorite
           ? 'fill-rose-500 text-rose-500'
           : 'text-white/70 hover:text-rose-500'
           " />
@@ -119,14 +106,14 @@ function handleImageError(e: Event) {
         <!-- Duplicate Warning -->
         <div v-if="isDuplicate" class="p-1.5 rounded-full bg-orange-500/20 backdrop-blur-sm"
           title="Potential duplicate">
-          <AlertTriangle class="w-3.5 h-3.5 text-orange-400" />
+          <Icon name="AlertTriangle" class="w-3.5 h-3.5 text-orange-400" />
         </div>
 
         <!-- Usage Badge -->
         <div v-if="usageCount && usageCount > 0"
           class="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/20 backdrop-blur-sm text-primary text-[10px] font-medium border border-primary/30"
           title="Used in modpacks">
-          <Package class="w-3 h-3" />
+          <Icon name="Package" class="w-3 h-3" />
           <span>{{ usageCount }}</span>
         </div>
 
@@ -138,7 +125,7 @@ function handleImageError(e: Event) {
               ? 'bg-primary border-primary'
               : 'bg-black/30 border-white/30 hover:border-primary/50'
               ">
-            <Check v-if="selected" class="w-3.5 h-3.5 text-primary-foreground" />
+            <Icon v-if="selected" name="Check" class="w-3.5 h-3.5 text-primary-foreground" />
           </div>
         </div>
       </div>
@@ -148,7 +135,7 @@ function handleImageError(e: Event) {
         class="absolute top-3 left-1/2 -translate-x-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <span class="px-2 py-0.5 rounded-full text-[10px] font-medium border backdrop-blur-sm flex items-center gap-1"
           :class="typeConfig.class">
-          <component :is="typeConfig.icon" class="w-3 h-3" />
+          <Icon :name="typeConfig.icon" class="w-3 h-3" />
           {{ typeConfig.label }}
         </span>
       </div>
@@ -203,9 +190,9 @@ function handleImageError(e: Event) {
             class="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold transition-all mr-1" :class="isGroupExpanded
               ? 'bg-primary text-primary-foreground'
               : 'bg-white/20 text-white/80 hover:bg-primary hover:text-primary-foreground'">
-            <Layers class="w-3 h-3" />
+            <Icon name="Layers" class="w-3 h-3" />
             <span>{{ groupVariantCount }}</span>
-            <ChevronDown class="w-3 h-3 transition-transform" :class="{ 'rotate-180': isGroupExpanded }" />
+            <Icon name="ChevronDown" class="w-3 h-3 transition-transform" :class="{ 'rotate-180': isGroupExpanded }" />
           </button>
           <!-- Variant indicator for sub-items -->
           <div v-else-if="isVariant"
@@ -217,23 +204,23 @@ function handleImageError(e: Event) {
           <Button v-if="mod.cf_project_id" variant="ghost" size="icon"
             class="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
             @click.stop="$emit('request-update', mod)" title="Check for Update">
-            <RefreshCw class="w-3.5 h-3.5" />
+            <Icon name="RefreshCw" class="w-3.5 h-3.5" />
           </Button>
           <Button v-if="mod.slug" variant="ghost" size="icon"
             class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50" @click.stop="openCurseForge"
             title="View on CurseForge">
-            <Globe class="w-3.5 h-3.5" />
+            <Icon name="Globe" class="w-3.5 h-3.5" />
           </Button>
           <Button variant="ghost" size="icon"
             class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
             @click.stop="$emit('show-details', mod)" title="Details">
-            <Info class="w-3.5 h-3.5" />
+            <Icon name="Info" class="w-3.5 h-3.5" />
           </Button>
           <div class="flex-1" />
           <Button variant="ghost" size="icon"
             class="h-7 w-7 text-white/60 hover:text-destructive hover:bg-destructive/10"
             @click.stop="$emit('delete', mod.id)" title="Delete">
-            <Trash2 class="w-3.5 h-3.5" />
+            <Icon name="Trash2" class="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>

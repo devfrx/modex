@@ -4,17 +4,7 @@ import { useRouter } from "vue-router";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import {
-  Share2,
-  Download,
-  Upload,
-  Copy,
-  Check,
-  RefreshCw,
-  Link,
-  AlertTriangle,
-  Key,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Input from "@/components/ui/Input.vue";
 
 const router = useRouter();
@@ -92,7 +82,7 @@ watch(
     if (isOpen) {
       // Check for API key
       hasApiKey.value = await window.api.curseforge.hasApiKey();
-      
+
       // Reset state
       shareCode.value = null;
       checksum.value = null;
@@ -181,7 +171,7 @@ async function importModex() {
         importProgress.value = null;
         return;
       }
-      
+
       // Check if conflicts need resolution
       if (result.requiresResolution && result.conflicts) {
         console.log(`[Frontend] ${result.conflicts.length} conflicts detected, showing dialog`);
@@ -370,14 +360,14 @@ function formatBytes(bytes: number): string {
           ? 'border-primary text-primary'
           : 'border-transparent text-muted-foreground hover:text-foreground'
           " @click="activeTab = 'export'">
-          <Upload class="inline w-4 h-4 mr-1.5" />
+          <Icon name="Upload" class="inline w-4 h-4 mr-1.5" />
           Export
         </button>
         <button class="flex-1 py-2 px-4 text-sm font-medium transition-colors border-b-2" :class="activeTab === 'import'
           ? 'border-primary text-primary'
           : 'border-transparent text-muted-foreground hover:text-foreground'
           " @click="activeTab = 'import'">
-          <Download class="inline w-4 h-4 mr-1.5" />
+          <Icon name="Download" class="inline w-4 h-4 mr-1.5" />
           Import
         </button>
       </div>
@@ -399,8 +389,8 @@ function formatBytes(bytes: number): string {
               {{ shareCode }}
             </div>
             <Button variant="outline" size="sm" @click="copyCode">
-              <Check v-if="copied" class="w-4 h-4 text-green-500" />
-              <Copy v-else class="w-4 h-4" />
+              <Icon v-if="copied" name="Check" class="w-4 h-4 text-green-500" />
+              <Icon v-else name="Copy" class="w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -440,8 +430,8 @@ function formatBytes(bytes: number): string {
 
         <!-- Export Button -->
         <Button class="w-full" @click="exportModex" :disabled="isExporting">
-          <RefreshCw v-if="isExporting" class="w-4 h-4 mr-2 animate-spin" />
-          <Share2 v-else class="w-4 h-4 mr-2" />
+          <Icon v-if="isExporting" name="RefreshCw" class="w-4 h-4 mr-2 animate-spin" />
+          <Icon v-else name="Share2" class="w-4 h-4 mr-2" />
           {{ isExporting ? "Exporting..." : "Export as .modex" }}
         </Button>
 
@@ -462,7 +452,7 @@ function formatBytes(bytes: number): string {
         <!-- API Key Warning -->
         <div v-if="!hasApiKey" class="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
           <div class="flex items-start gap-3">
-            <AlertTriangle class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <Icon name="AlertTriangle" class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div class="flex-1">
               <div class="text-sm font-medium text-amber-600 dark:text-amber-400">
                 CurseForge API Key Required
@@ -471,11 +461,9 @@ function formatBytes(bytes: number): string {
                 Import functionality requires a CurseForge API key to fetch mod metadata.
                 Please add your API key in Settings.
               </p>
-              <button 
-                @click="goToSettings"
-                class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 rounded-md transition-colors"
-              >
-                <Key class="w-3.5 h-3.5" />
+              <button @click="goToSettings"
+                class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 rounded-md transition-colors">
+                <Icon name="Key" class="w-3.5 h-3.5" />
                 Go to Settings
               </button>
             </div>
@@ -486,12 +474,12 @@ function formatBytes(bytes: number): string {
         <div class="flex gap-2">
           <Button variant="outline" class="flex-1" :class="!urlImportMode ? 'ring-2 ring-primary' : ''"
             @click="urlImportMode = false" :disabled="!hasApiKey">
-            <Download class="w-4 h-4 mr-2" />
+            <Icon name="Download" class="w-4 h-4 mr-2" />
             From File
           </Button>
           <Button variant="outline" class="flex-1" :class="urlImportMode ? 'ring-2 ring-primary' : ''"
             @click="urlImportMode = true" :disabled="!hasApiKey">
-            <Link class="w-4 h-4 mr-2" />
+            <Icon name="Link" class="w-4 h-4 mr-2" />
             From URL
           </Button>
         </div>
@@ -507,8 +495,8 @@ function formatBytes(bytes: number): string {
 
           <!-- Import Button -->
           <Button class="w-full" @click="importModex" :disabled="isImporting">
-            <RefreshCw v-if="isImporting" class="w-4 h-4 mr-2 animate-spin" />
-            <Download v-else class="w-4 h-4 mr-2" />
+            <Icon v-if="isImporting" name="RefreshCw" class="w-4 h-4 mr-2 animate-spin" />
+            <Icon v-else name="Download" class="w-4 h-4 mr-2" />
             {{ isImporting ? "Importing..." : "Select .modex file" }}
           </Button>
         </template>
@@ -529,8 +517,8 @@ function formatBytes(bytes: number): string {
           </div>
 
           <Button class="w-full" @click="importFromUrl" :disabled="isImportingUrl || !importUrl.trim()">
-            <RefreshCw v-if="isImportingUrl" class="w-4 h-4 mr-2 animate-spin" />
-            <Link v-else class="w-4 h-4 mr-2" />
+            <Icon v-if="isImportingUrl" name="RefreshCw" class="w-4 h-4 mr-2 animate-spin" />
+            <Icon v-else name="Link" class="w-4 h-4 mr-2" />
             {{ isImportingUrl ? "Importing..." : "Import from URL" }}
           </Button>
         </template>
@@ -751,7 +739,7 @@ function formatBytes(bytes: number): string {
           Cancel
         </Button>
         <Button @click="resolveConflicts" :disabled="isImporting">
-          <RefreshCw v-if="isImporting" class="w-4 h-4 mr-2 animate-spin" />
+          <Icon v-if="isImporting" name="RefreshCw" class="w-4 h-4 mr-2 animate-spin" />
           {{ isImporting ? "Applying..." : "Apply Choices" }}
         </Button>
       </div>

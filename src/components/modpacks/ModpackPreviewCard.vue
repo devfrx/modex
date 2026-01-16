@@ -1,19 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import {
-  Package,
-  HardDrive,
-  Cpu,
-  Clock,
-  AlertTriangle,
-  Lightbulb,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  FileArchive,
-  Settings,
-  Layers
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 
 interface ModpackAnalysis {
@@ -143,7 +130,7 @@ const compatibilityBadge = computed(() => {
       <!-- Minecraft Version -->
       <div class="p-3 rounded-lg bg-muted/30 border border-border">
         <div class="flex items-center gap-2 text-muted-foreground mb-1">
-          <Package class="w-4 h-4" />
+          <Icon name="Package" class="w-4 h-4" />
           <span class="text-xs">Minecraft</span>
         </div>
         <div class="font-medium text-foreground">{{ preview.minecraftVersion || "Unknown" }}</div>
@@ -166,7 +153,7 @@ const compatibilityBadge = computed(() => {
       <!-- Mod Count -->
       <div class="p-3 rounded-lg bg-muted/30 border border-border">
         <div class="flex items-center gap-2 text-muted-foreground mb-1">
-          <Layers class="w-4 h-4" />
+          <Icon name="Layers" class="w-4 h-4" />
           <span class="text-xs">Mods</span>
         </div>
         <div class="font-medium text-foreground">{{ preview.modCount }}</div>
@@ -175,7 +162,7 @@ const compatibilityBadge = computed(() => {
       <!-- Total Size -->
       <div class="p-3 rounded-lg bg-muted/30 border border-border">
         <div class="flex items-center gap-2 text-muted-foreground mb-1">
-          <FileArchive class="w-4 h-4" />
+          <Icon name="FileArchive" class="w-4 h-4" />
           <span class="text-xs">Size</span>
         </div>
         <div class="font-medium text-foreground">
@@ -187,7 +174,7 @@ const compatibilityBadge = computed(() => {
     <!-- Performance Analysis -->
     <div class="p-4 border-t border-border">
       <h4 class="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-        <Cpu class="w-4 h-4" />
+        <Icon name="Cpu" class="w-4 h-4" />
         Performance Analysis
       </h4>
 
@@ -195,7 +182,7 @@ const compatibilityBadge = computed(() => {
         <!-- RAM Requirement -->
         <div class="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
           <div class="flex items-center gap-2 text-blue-400 mb-2">
-            <HardDrive class="w-4 h-4" />
+            <Icon name="HardDrive" class="w-4 h-4" />
             <span class="text-xs font-medium">RAM Required</span>
           </div>
           <div class="text-xl font-bold text-foreground">
@@ -209,7 +196,7 @@ const compatibilityBadge = computed(() => {
         <!-- Performance Impact -->
         <div class="p-3 rounded-lg" :class="impactLevel.bg + ' border border-current/20'">
           <div class="flex items-center gap-2 mb-2" :class="impactLevel.color">
-            <Cpu class="w-4 h-4" />
+            <Icon name="Cpu" class="w-4 h-4" />
             <span class="text-xs font-medium">Performance Impact</span>
           </div>
           <div class="text-xl font-bold text-foreground">{{ impactLevel.label }}</div>
@@ -222,7 +209,7 @@ const compatibilityBadge = computed(() => {
         <!-- Load Time -->
         <div class="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
           <div class="flex items-center gap-2 text-purple-400 mb-2">
-            <Clock class="w-4 h-4" />
+            <Icon name="Clock" class="w-4 h-4" />
             <span class="text-xs font-medium">Load Time Impact</span>
           </div>
           <div class="text-xl font-bold text-foreground">
@@ -238,7 +225,7 @@ const compatibilityBadge = computed(() => {
       <!-- Extra Info -->
       <div class="flex flex-wrap gap-2 text-xs">
         <div v-if="preview.overridesCount > 0" class="px-2 py-1 rounded bg-muted border border-border">
-          <Settings class="w-3 h-3 inline mr-1" />
+          <Icon name="Settings" class="w-3 h-3 inline mr-1" />
           {{ preview.overridesCount }} override files
         </div>
         <div v-if="preview.configFilesCount > 0" class="px-2 py-1 rounded bg-muted border border-border">
@@ -258,13 +245,13 @@ const compatibilityBadge = computed(() => {
     <!-- Warnings -->
     <div v-if="preview.analysis.warnings.length > 0" class="p-4 border-t border-border bg-orange-500/5">
       <h4 class="text-sm font-medium text-orange-400 mb-2 flex items-center gap-2">
-        <AlertTriangle class="w-4 h-4" />
+        <Icon name="AlertTriangle" class="w-4 h-4" />
         Warnings
       </h4>
       <ul class="space-y-1.5">
         <li v-for="(warning, i) in preview.analysis.warnings" :key="i"
           class="text-xs text-orange-300/80 flex items-start gap-2">
-          <XCircle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <Icon name="XCircle" class="w-3.5 h-3.5 shrink-0 mt-0.5" />
           {{ warning }}
         </li>
       </ul>
@@ -273,13 +260,13 @@ const compatibilityBadge = computed(() => {
     <!-- Recommendations -->
     <div v-if="preview.analysis.recommendations.length > 0" class="p-4 border-t border-border bg-blue-500/5">
       <h4 class="text-sm font-medium text-blue-400 mb-2 flex items-center gap-2">
-        <Lightbulb class="w-4 h-4" />
+        <Icon name="Lightbulb" class="w-4 h-4" />
         Recommendations
       </h4>
       <ul class="space-y-1.5">
         <li v-for="(rec, i) in preview.analysis.recommendations" :key="i"
           class="text-xs text-blue-300/80 flex items-start gap-2">
-          <CheckCircle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <Icon name="CheckCircle" class="w-3.5 h-3.5 shrink-0 mt-0.5" />
           {{ rec }}
         </li>
       </ul>
@@ -291,7 +278,7 @@ const compatibilityBadge = computed(() => {
         Cancel
       </Button>
       <Button variant="default" :disabled="isLoading" @click="$emit('import')">
-        <Loader2 v-if="isLoading" class="w-4 h-4 mr-2 animate-spin" />
+        <Icon v-if="isLoading" name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
         Import Modpack
       </Button>
     </div>

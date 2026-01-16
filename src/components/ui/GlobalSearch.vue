@@ -1,41 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRouter } from "vue-router";
-import {
-    Search,
-    X,
-    Package,
-    Folder,
-    Box,
-    BarChart3,
-    Home,
-    Settings,
-    BookOpen,
-    LayoutGrid,
-    FolderTree,
-    ArrowRight,
-    Command,
-    MoreHorizontal,
-    Eye,
-    PlusCircle,
-    Heart,
-    Copy,
-    Trash2,
-    Edit,
-    FolderOpen,
-    Share2,
-    ExternalLink,
-    Globe,
-    Play,
-    Image,
-    Sparkles,
-    Download,
-    RefreshCw,
-    Gamepad2,
-    Layers,
-    FileText,
-    Plus,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { Mod, Modpack, ModexInstance } from "@/types";
 import { useToast } from "@/composables/useToast";
 import { useInstances } from "@/composables/useInstances";
@@ -63,36 +29,33 @@ type ResultType = "mod" | "modpack" | "instance" | "resourcepack" | "shader" | "
 
 // Quick navigation items
 const quickNav = [
-    { id: "home", name: "Home", icon: Home, route: "/home", type: "nav" },
-    { id: "library", name: "Library", icon: Folder, route: "/library", type: "nav" },
-    { id: "modpacks", name: "Modpacks", icon: Package, route: "/modpacks", type: "nav" },
-    { id: "organize", name: "Organize", icon: FolderTree, route: "/organize", type: "nav" },
-    { id: "stats", name: "Statistics", icon: BarChart3, route: "/stats", type: "nav" },
-    { id: "sandbox", name: "Sandbox", icon: LayoutGrid, route: "/sandbox", type: "nav" },
-    { id: "guide", name: "Guide", icon: BookOpen, route: "/guide", type: "nav" },
-    { id: "settings", name: "Settings", icon: Settings, route: "/settings", type: "nav" },
+    { id: "home", name: "Home", icon: "Home", route: "/home", type: "nav" },
+    { id: "library", name: "Library", icon: "Folder", route: "/library", type: "nav" },
+    { id: "modpacks", name: "Modpacks", icon: "Package", route: "/modpacks", type: "nav" },
+    { id: "guide", name: "Guide", icon: "BookOpen", route: "/guide", type: "nav" },
+    { id: "settings", name: "Settings", icon: "Settings", route: "/settings", type: "nav" },
 ];
 
 // Quick actions
 const quickActions = [
-    { id: "create-modpack", name: "Create New Modpack", icon: Plus, action: "create-modpack", type: "action" },
-    { id: "browse-mods", name: "Browse CurseForge Mods", icon: Globe, route: "/library?action=browse", type: "action" },
-    { id: "browse-modpacks", name: "Browse CurseForge Modpacks", icon: Package, route: "/modpacks?action=browse", type: "action" },
-    { id: "import-modpack", name: "Import Modpack", icon: Download, action: "import-modpack", type: "action" },
+    { id: "create-modpack", name: "Create New Modpack", icon: "Plus", action: "create-modpack", type: "action" },
+    { id: "browse-mods", name: "Browse CurseForge Mods", icon: "Globe", route: "/library?action=browse", type: "action" },
+    { id: "browse-modpacks", name: "Browse CurseForge Modpacks", icon: "Package", route: "/modpacks?action=browse", type: "action" },
+    { id: "import-modpack", name: "Import Modpack", icon: "Download", action: "import-modpack", type: "action" },
 ];
 
 // Icon map for different content types
-function getIconForType(type: ResultType, contentType?: string) {
+function getIconForType(type: ResultType, contentType?: string): string {
     if (type === "mod") {
-        if (contentType === "resourcepack") return Image;
-        if (contentType === "shader") return Sparkles;
-        return Box;
+        if (contentType === "resourcepack") return "Image";
+        if (contentType === "shader") return "Sparkles";
+        return "Box";
     }
-    if (type === "resourcepack") return Image;
-    if (type === "shader") return Sparkles;
-    if (type === "modpack") return Package;
-    if (type === "instance") return Gamepad2;
-    return Layers;
+    if (type === "resourcepack") return "Image";
+    if (type === "shader") return "Sparkles";
+    if (type === "modpack") return "Package";
+    if (type === "instance") return "Gamepad2";
+    return "Layers";
 }
 
 // Color class for different content types
@@ -115,7 +78,7 @@ const searchResults = computed(() => {
         id: string;
         name: string;
         type: ResultType;
-        icon: any;
+        icon: string;
         route?: string;
         action?: string;
         subtitle?: string;
@@ -184,7 +147,7 @@ const searchResults = computed(() => {
             id: `pack-${pack.id}`,
             name: pack.name,
             type: "modpack",
-            icon: Package,
+            icon: "Package",
             route: `/modpacks?id=${pack.id}`,
             subtitle: `${pack.loader || "Unknown"} • ${pack.minecraft_version || "Unknown"}`,
             data: pack,
@@ -201,7 +164,7 @@ const searchResults = computed(() => {
             id: `instance-${inst.id}`,
             name: inst.name,
             type: "instance",
-            icon: Gamepad2,
+            icon: "Gamepad2",
             subtitle: `Instance • ${inst.loader || "Unknown"} ${inst.loaderVersion || ""} • ${inst.minecraftVersion || "Unknown"}`,
             data: inst,
         });
@@ -560,7 +523,7 @@ defineExpose({ open, close });
                     class="relative w-full max-w-lg bg-card/95 backdrop-blur-xl border border-border/50 rounded-lg shadow-2xl shadow-black/30 overflow-hidden">
                     <!-- Search Input -->
                     <div class="flex items-center px-4 border-b border-border/50">
-                        <Search class="w-4 h-4 text-muted-foreground shrink-0" />
+                        <Icon name="Search" class="w-4 h-4 text-muted-foreground shrink-0" />
                         <input ref="inputRef" v-model="searchQuery" type="text"
                             placeholder="Search mods, modpacks, or navigate..."
                             class="flex-1 px-3 py-3 bg-transparent outline-none ring-0 border-0 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
@@ -571,7 +534,7 @@ defineExpose({ open, close });
                         </div>
                         <button @click="close"
                             class="ml-2 p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                            <X class="w-3.5 h-3.5" />
+                            <Icon name="X" class="w-3.5 h-3.5" />
                         </button>
                     </div>
 
@@ -599,12 +562,12 @@ defineExpose({ open, close });
                                         : 'hover:bg-muted/50 text-foreground'" @click="handleSelect(result)"
                                     @mouseenter="selectedIndex = index" style="width: calc(100% - 12px)">
                                     <div class="p-1.5 rounded-md shrink-0 bg-amber-500/10 text-amber-400">
-                                        <component :is="result.icon" class="w-3.5 h-3.5" />
+                                        <Icon :name="result.icon" class="w-3.5 h-3.5" />
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="text-sm font-medium truncate">{{ result.name }}</div>
                                     </div>
-                                    <ArrowRight v-if="selectedIndex === index"
+                                    <Icon v-if="selectedIndex === index" name="ArrowRight"
                                         class="w-3.5 h-3.5 text-primary shrink-0" />
                                 </div>
 
@@ -623,12 +586,12 @@ defineExpose({ open, close });
                                     @mouseenter="selectedIndex = index + quickActions.length"
                                     style="width: calc(100% - 12px)">
                                     <div class="p-1.5 rounded-md shrink-0 bg-muted/50 text-muted-foreground">
-                                        <component :is="result.icon" class="w-3.5 h-3.5" />
+                                        <Icon :name="result.icon" class="w-3.5 h-3.5" />
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="text-sm font-medium truncate">{{ result.name }}</div>
                                     </div>
-                                    <ArrowRight v-if="selectedIndex === (index + quickActions.length)"
+                                    <Icon v-if="selectedIndex === (index + quickActions.length)" name="ArrowRight"
                                         class="w-3.5 h-3.5 text-primary shrink-0" />
                                 </div>
                             </template>
@@ -645,7 +608,7 @@ defineExpose({ open, close });
                                     style="width: calc(100% - 12px)">
                                     <div class="p-1.5 rounded-md shrink-0"
                                         :class="getColorClassForType(result.type as ResultType, result.contentType)">
-                                        <component :is="result.icon" class="w-3.5 h-3.5" />
+                                        <Icon :name="result.icon" class="w-3.5 h-3.5" />
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="text-sm font-medium truncate">{{ result.name }}</div>
@@ -663,9 +626,9 @@ defineExpose({ open, close });
                                         @click.stop="openContextMenu($event, result)"
                                         class="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
                                         :class="{ 'opacity-100': selectedIndex === index }">
-                                        <MoreHorizontal class="w-3.5 h-3.5" />
+                                        <Icon name="MoreHorizontal" class="w-3.5 h-3.5" />
                                     </button>
-                                    <ArrowRight v-else-if="selectedIndex === index"
+                                    <Icon v-else-if="selectedIndex === index" name="ArrowRight"
                                         class="w-3.5 h-3.5 text-primary shrink-0" />
                                 </div>
                             </template>
@@ -688,7 +651,7 @@ defineExpose({ open, close });
                             </span>
                         </div>
                         <div class="flex items-center gap-1">
-                            <Command class="w-3 h-3" />
+                            <Icon name="Command" class="w-3 h-3" />
                             <span>K to toggle</span>
                         </div>
                     </div>
@@ -703,34 +666,34 @@ defineExpose({ open, close });
                         <template v-if="contextMenuTarget.type === 'mod'">
                             <button @click="handleContextAction('view')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Eye class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Eye" class="w-3.5 h-3.5 text-muted-foreground" />
                                 View Details
                             </button>
                             <button @click="handleContextAction('add-to-modpack')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <PlusCircle class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="PlusCircle" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Add to Modpack
                             </button>
                             <button @click="handleContextAction('favorite')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Heart class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Heart" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Toggle Favorite
                             </button>
                             <button @click="handleContextAction('open-source')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <ExternalLink class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="ExternalLink" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Open Source Page
                             </button>
                             <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('copy-name')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Copy class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Copy" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Copy Name
                             </button>
                             <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('delete')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors">
-                                <Trash2 class="w-3.5 h-3.5" />
+                                <Icon name="Trash2" class="w-3.5 h-3.5" />
                                 Delete from Library
                             </button>
                         </template>
@@ -739,40 +702,40 @@ defineExpose({ open, close });
                         <template v-else-if="contextMenuTarget.type === 'modpack'">
                             <button @click="handleContextAction('play')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-primary/10 text-primary transition-colors font-medium">
-                                <Play class="w-3.5 h-3.5" />
+                                <Icon name="Play" class="w-3.5 h-3.5" />
                                 Play
                             </button>
                             <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('edit')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Edit class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Edit" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Edit Modpack
                             </button>
                             <button @click="handleContextAction('export')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Download class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Download" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Export
                             </button>
                             <button @click="handleContextAction('open-folder')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <FolderOpen class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="FolderOpen" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Open Folder
                             </button>
                             <button @click="handleContextAction('clone')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Copy class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Copy" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Clone
                             </button>
                             <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('copy-name')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Copy class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Copy" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Copy Name
                             </button>
                             <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('delete')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors">
-                                <Trash2 class="w-3.5 h-3.5" />
+                                <Icon name="Trash2" class="w-3.5 h-3.5" />
                                 Delete
                             </button>
                         </template>
@@ -781,24 +744,24 @@ defineExpose({ open, close });
                         <template v-else-if="contextMenuTarget.type === 'instance'">
                             <button @click="handleContextAction('play')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-primary/10 text-primary transition-colors font-medium">
-                                <Play class="w-3.5 h-3.5" />
+                                <Icon name="Play" class="w-3.5 h-3.5" />
                                 Launch
                             </button>
                             <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('open-folder')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <FolderOpen class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="FolderOpen" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Open Folder
                             </button>
                             <button @click="handleContextAction('copy-name')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                                <Copy class="w-3.5 h-3.5 text-muted-foreground" />
+                                <Icon name="Copy" class="w-3.5 h-3.5 text-muted-foreground" />
                                 Copy Name
                             </button>
                             <div class="my-1 border-t border-border/50"></div>
                             <button @click="handleContextAction('delete')"
                                 class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors">
-                                <Trash2 class="w-3.5 h-3.5" />
+                                <Icon name="Trash2" class="w-3.5 h-3.5" />
                                 Delete Instance
                             </button>
                         </template>

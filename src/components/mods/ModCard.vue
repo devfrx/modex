@@ -1,20 +1,5 @@
 <script setup lang="ts">
-import {
-    Box,
-    Trash2,
-    Check,
-    Info,
-    Heart,
-    AlertTriangle,
-    Layers,
-    Image,
-    Sparkles,
-    Globe,
-    Package,
-    RefreshCw,
-    ChevronDown,
-    MoreVertical,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import { computed, ref } from "vue";
 import type { Mod } from "@/types/electron";
 
@@ -58,9 +43,9 @@ function handleImageError(e: Event) {
 
 // Content type config
 const contentTypeConfig = {
-    mod: { label: "Mod", icon: Layers, class: "type-mod" },
-    resourcepack: { label: "Resource", icon: Image, class: "type-resource" },
-    shader: { label: "Shader", icon: Sparkles, class: "type-shader" },
+    mod: { label: "Mod", icon: "Layers", class: "type-mod" },
+    resourcepack: { label: "Resource", icon: "Image", class: "type-resource" },
+    shader: { label: "Shader", icon: "Sparkles", class: "type-shader" },
 };
 
 const contentType = props.mod.content_type || "mod";
@@ -97,24 +82,24 @@ const imageUrl = computed(() => {
             <div class="rest-image">
                 <img v-if="showThumbnail && imageUrl" :src="imageUrl" alt="" @error="handleImageError" />
                 <div v-else class="rest-image-placeholder">
-                    <Box class="w-8 h-8 text-muted-foreground/30" />
+                    <Icon name="Box" class="w-8 h-8 text-muted-foreground/30" />
                 </div>
                 <div class="rest-image-fade" />
 
                 <!-- Status badges -->
                 <div class="rest-badges">
                     <span v-if="isDuplicate" class="badge-warning" title="Potential duplicate">
-                        <AlertTriangle class="w-3 h-3" />
+                        <Icon name="AlertTriangle" class="w-3 h-3" />
                     </span>
                     <span v-if="usageCount && usageCount > 0" class="badge-usage" title="Used in modpacks">
-                        <Package class="w-2.5 h-2.5" />
+                        <Icon name="Package" class="w-2.5 h-2.5" />
                         <span>{{ usageCount }}</span>
                     </span>
                 </div>
 
                 <!-- Type badge -->
                 <div class="rest-type" :class="typeConfig.class">
-                    <component :is="typeConfig.icon" class="w-3 h-3" />
+                    <Icon :name="typeConfig.icon" class="w-3 h-3" />
                     <span>{{ typeConfig.label }}</span>
                 </div>
             </div>
@@ -137,20 +122,20 @@ const imageUrl = computed(() => {
                 <!-- Group indicator -->
                 <button v-if="groupVariantCount && groupVariantCount > 0" class="rest-group-btn"
                     :class="{ 'is-expanded': isGroupExpanded }" @click.stop="$emit('toggle-group')">
-                    <Layers class="w-3 h-3" />
+                    <Icon name="Layers" class="w-3 h-3" />
                     <span>{{ groupVariantCount }} versions</span>
-                    <ChevronDown class="w-3 h-3 chevron" />
+                    <Icon name="ChevronDown" class="w-3 h-3 chevron" />
                 </button>
             </div>
 
             <!-- Selection checkbox -->
             <div class="rest-select" :class="{ 'is-checked': selected }">
-                <Check v-if="selected" class="w-3.5 h-3.5" />
+                <Icon v-if="selected" name="Check" class="w-3.5 h-3.5" />
             </div>
 
             <!-- Favorite button -->
             <button class="rest-fav" :class="{ 'is-active': favorite }" @click.stop="$emit('toggle-favorite', mod.id)">
-                <Heart class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
+                <Icon name="Heart" class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
             </button>
         </div>
 
@@ -162,24 +147,24 @@ const imageUrl = computed(() => {
             <div class="hover-backdrop">
                 <img v-if="showThumbnail && imageUrl" :src="imageUrl" alt="" @error="handleImageError" />
                 <div v-else class="hover-backdrop-placeholder">
-                    <Box class="w-12 h-12 text-white/10" />
+                    <Icon name="Box" class="w-12 h-12 text-white/10" />
                 </div>
                 <div class="hover-overlay" />
             </div>
 
             <!-- Favorite -->
             <button class="hover-fav" :class="{ 'is-active': favorite }" @click.stop="$emit('toggle-favorite', mod.id)">
-                <Heart class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
+                <Icon name="Heart" class="w-4 h-4" :fill="favorite ? 'currentColor' : 'none'" />
             </button>
 
             <!-- Selection -->
             <div class="hover-select" :class="{ 'is-checked': selected }" @click.stop="$emit('toggle-select', mod.id)">
-                <Check v-if="selected" class="w-3.5 h-3.5" />
+                <Icon v-if="selected" name="Check" class="w-3.5 h-3.5" />
             </div>
 
             <!-- Duplicate warning -->
             <div v-if="isDuplicate" class="hover-warning">
-                <AlertTriangle class="w-3.5 h-3.5" />
+                <Icon name="AlertTriangle" class="w-3.5 h-3.5" />
                 <span>Duplicate</span>
             </div>
 
@@ -199,7 +184,7 @@ const imageUrl = computed(() => {
             <!-- Action dock -->
             <div class="hover-dock" @click.stop>
                 <button class="dock-primary" @click.stop="$emit('show-details', mod)">
-                    <Info class="w-4 h-4" />
+                    <Icon name="Info" class="w-4 h-4" />
                     <span>Details</span>
                 </button>
 
@@ -207,16 +192,16 @@ const imageUrl = computed(() => {
 
                 <button v-if="mod.cf_project_id" class="dock-btn" @click.stop="$emit('request-update', mod)"
                     title="Check Update">
-                    <RefreshCw class="w-4 h-4" />
+                    <Icon name="RefreshCw" class="w-4 h-4" />
                 </button>
                 <button v-if="mod.slug" class="dock-btn" @click.stop="openCurseForge" title="CurseForge">
-                    <Globe class="w-4 h-4" />
+                    <Icon name="Globe" class="w-4 h-4" />
                 </button>
 
                 <!-- More menu -->
                 <div class="dock-more">
                     <button class="dock-btn" @click.stop="showMenu = !showMenu">
-                        <MoreVertical class="w-4 h-4" />
+                        <Icon name="MoreVertical" class="w-4 h-4" />
                     </button>
 
                     <Transition enter-active-class="transition duration-200 ease-out"
@@ -228,7 +213,7 @@ const imageUrl = computed(() => {
                         <div v-if="showMenu" class="dock-menu">
                             <button class="menu-item menu-danger"
                                 @click.stop="$emit('delete', mod.id); showMenu = false;">
-                                <Trash2 class="w-4 h-4" />
+                                <Icon name="Trash2" class="w-4 h-4" />
                                 <span>Delete from Library</span>
                             </button>
                         </div>
@@ -241,6 +226,14 @@ const imageUrl = computed(() => {
                 <span class="variant-dot" />
                 {{ mod.game_version }} • {{ mod.loader }}
             </div>
+
+            <!-- Group expand button (visible on hover when group has variants) -->
+            <button v-if="groupVariantCount && groupVariantCount > 0" class="hover-group-btn"
+                :class="{ 'is-expanded': isGroupExpanded }" @click.stop="$emit('toggle-group')">
+                <Icon name="Layers" class="w-3.5 h-3.5" />
+                <span>{{ groupVariantCount }} versions</span>
+                <Icon name="ChevronDown" class="w-3.5 h-3.5 chevron" />
+            </button>
 
             <!-- Animated border -->
             <div class="hover-glow-border" />
@@ -941,6 +934,53 @@ const imageUrl = computed(() => {
     height: 6px;
     border-radius: 50%;
     background: currentColor;
+}
+
+/* Hover - Group expand button */
+.hover-group-btn {
+    position: absolute;
+    bottom: 60px;
+    left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: hsl(var(--muted) / 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border) / 0.5);
+    color: hsl(var(--foreground));
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s;
+    z-index: 10;
+}
+
+.mod-card:hover .hover-group-btn {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.hover-group-btn:hover {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+.hover-group-btn.is-expanded {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
+}
+
+.hover-group-btn .chevron {
+    transition: transform 0.2s ease;
+}
+
+.hover-group-btn.is-expanded .chevron {
+    transform: rotate(180deg);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

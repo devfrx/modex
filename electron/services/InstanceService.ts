@@ -3033,8 +3033,8 @@ export class InstanceService {
         let newContent = "";
 
         await new Promise<void>((resolve, reject) => {
-          stream.on("data", (chunk: string) => {
-            newContent += chunk;
+          stream.on("data", (chunk: string | Buffer) => {
+            newContent += chunk.toString();
           });
           stream.on("end", resolve);
           stream.on("error", (err) => {

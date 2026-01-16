@@ -3,15 +3,7 @@ import { computed, watch, nextTick, ref } from 'vue';
 import { useDialog, type DialogVariant, type DialogIcon, type ConfirmOptions, type AlertOptions, type InputOptions, type SelectOptions } from '@/composables/useDialog';
 import Dialog from './Dialog.vue';
 import Button from './Button.vue';
-import {
-    Trash2,
-    AlertTriangle,
-    Info,
-    AlertCircle,
-    HelpCircle,
-    CheckCircle2,
-    Edit3,
-} from 'lucide-vue-next';
+import Icon from './Icon.vue';
 
 const {
     isOpen,
@@ -44,15 +36,15 @@ const buttonText = computed(() => (dialogOptions.value as AlertOptions).buttonTe
 const cancelText = computed(() => (dialogOptions.value as ConfirmOptions | InputOptions).cancelText || 'Cancel');
 const confirmText = computed(() => (dialogOptions.value as ConfirmOptions | InputOptions).confirmText || 'Confirm');
 
-const iconComponent = computed(() => {
+const iconName = computed(() => {
     switch (dialogIcon.value) {
-        case 'trash': return Trash2;
-        case 'warning': return AlertTriangle;
-        case 'info': return Info;
-        case 'alert': return AlertCircle;
-        case 'question': return HelpCircle;
-        case 'success': return CheckCircle2;
-        case 'edit': return Edit3;
+        case 'trash': return 'Trash2';
+        case 'warning': return 'AlertTriangle';
+        case 'info': return 'Info';
+        case 'alert': return 'AlertCircle';
+        case 'question': return 'HelpCircle';
+        case 'success': return 'CheckCircle2';
+        case 'edit': return 'Edit3';
         default: return null;
     }
 });
@@ -111,10 +103,10 @@ function handleInputKeydown(e: KeyboardEvent) {
     <Dialog :open="isOpen" @close="handleCancel" @keydown="handleKeydown">
         <template #header>
             <div class="flex items-center gap-3">
-                <div v-if="iconComponent && dialogIcon !== 'none'"
+                <div v-if="iconName && dialogIcon !== 'none'"
                     class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                     :class="variantClasses.iconBg">
-                    <component :is="iconComponent" class="w-5 h-5" :class="variantClasses.iconText" />
+                    <Icon :name="iconName" class="w-5 h-5" :class="variantClasses.iconText" />
                 </div>
                 <div>
                     <h3 class="text-lg font-semibold">{{ dialogOptions.title }}</h3>

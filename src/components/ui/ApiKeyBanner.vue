@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { AlertTriangle, X, Key, ExternalLink } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const router = useRouter();
 
@@ -59,7 +59,7 @@ onMounted(() => {
     <div class="px-4 py-2.5 flex items-center justify-between gap-4">
       <div class="flex items-center gap-3 flex-1 min-w-0">
         <div class="flex-shrink-0 p-1.5 rounded-full bg-white/20">
-          <AlertTriangle class="w-4 h-4 text-white" />
+          <Icon name="AlertTriangle" class="w-4 h-4 text-white" />
         </div>
 
         <div class="flex-1 min-w-0">
@@ -73,7 +73,7 @@ onMounted(() => {
       <div class="flex items-center gap-2 flex-shrink-0">
         <button @click="goToSettings"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-orange-600 bg-white rounded-md hover:bg-orange-50 transition-colors shadow-sm">
-          <Key class="w-3.5 h-3.5" />
+          <Icon name="Key" class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">Connect Now</span>
           <span class="sm:hidden">Connect</span>
         </button>
@@ -81,7 +81,7 @@ onMounted(() => {
         <button @click="dismiss"
           class="p-1.5 text-white/80 hover:text-white hover:bg-white/20 rounded-md transition-colors"
           aria-label="Dismiss banner">
-          <X class="w-4 h-4" />
+          <Icon name="X" class="w-4 h-4" />
         </button>
       </div>
     </div>

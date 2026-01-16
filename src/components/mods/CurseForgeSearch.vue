@@ -1,41 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
-import {
-  Search,
-  Download,
-  Plus,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  ExternalLink,
-  Star,
-  X,
-  AlertTriangle,
-  FolderOpen,
-  CheckSquare,
-  Square,
-  Check,
-  Filter,
-  ArrowDownToLine,
-  Package,
-  Image,
-  Sparkles,
-  Layers,
-  FileText,
-  ArrowLeft,
-  Eye,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import ModDetailsModal from "./ModDetailsModal.vue";
-import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
 import type { Modpack, CFMod, CFFile, CFFileIndex, CFCategory } from "@/types/electron";
 import type { Mod } from "@/types";
 
-const { folders: foldersList, moveModToFolder } = useFolderTree();
 const toast = useToast();
 
 const props = defineProps<{
@@ -147,7 +120,6 @@ const filterAlpha = ref(false);
 const selectedModIds = ref<Set<number>>(new Set()); // For Header selection (Quick Download)
 const selectedFileIds = ref<Set<number>>(new Set()); // For specific file selection
 const isSelectionMode = ref(false);
-const targetFolderId = ref<string | null>(null);
 const targetModpackId = ref<string | null>(null); // Target modpack for direct add
 const isAddingBulk = ref(false);
 
@@ -536,8 +508,6 @@ async function addSelectedMods() {
         );
 
         if (addedMod) {
-          if (targetFolderId.value)
-            moveModToFolder(addedMod.id, targetFolderId.value);
           successCount.value++;
         } else {
           failCount.value++;
@@ -645,8 +615,6 @@ async function executeBulkAdd() {
         );
         if (added) {
           addedModIds.push(added.id);
-          if (targetFolderId.value)
-            moveModToFolder(added.id, targetFolderId.value);
         }
       }
     }
@@ -667,8 +635,6 @@ async function executeBulkAdd() {
       );
       if (added) {
         addedModIds.push(added.id);
-        if (targetFolderId.value)
-          moveModToFolder(added.id, targetFolderId.value);
       }
     }
 
@@ -934,9 +900,6 @@ async function addFileToLibrary(mod: CFMod, file: CFFile) {
       selectedContentType.value
     );
     if (addedMod) {
-      if (targetFolderId.value)
-        moveModToFolder(addedMod.id, targetFolderId.value);
-
       // Add to modpack if selected
       if (targetModpackId.value) {
         try {
@@ -1010,9 +973,6 @@ async function quickDownload(mod: CFMod) {
       selectedContentType.value
     );
     if (addedMod) {
-      if (targetFolderId.value)
-        moveModToFolder(addedMod.id, targetFolderId.value);
-
       // Add to modpack if selected
       if (targetModpackId.value) {
         try {
@@ -1103,7 +1063,7 @@ function getReleaseColor(type: number) {
       <!-- Fullscreen Header with Back Button -->
       <div v-if="fullScreen" class="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
         <Button variant="ghost" size="sm" @click="emit('close')" class="gap-2">
-          <ArrowLeft class="w-4 h-4" />
+          <Icon name="ArrowLeft" class="w-4 h-4" />
           Back
         </Button>
         <div class="h-4 w-px bg-border"></div>
@@ -1117,7 +1077,7 @@ function getReleaseColor(type: number) {
           <button @click="isFilterSidebarCollapsed = !isFilterSidebarCollapsed"
             class="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
             <span class="flex items-center gap-2 text-sm font-medium">
-              <Filter class="w-4 h-4 text-primary" />
+              <Icon name="Filter" class="w-4 h-4 text-primary" />
               Filters
               <!-- Active filters badges -->
               <span v-if="selectedContentType !== 'mods'"
@@ -1135,7 +1095,7 @@ function getReleaseColor(type: number) {
                 {{categories.find(c => c.value === selectedCategory)?.label || selectedCategory}}
               </span>
             </span>
-            <ChevronDown class="w-4 h-4 transition-transform duration-200"
+            <Icon name="ChevronDown" class="w-4 h-4 transition-transform duration-200"
               :class="!isFilterSidebarCollapsed ? 'rotate-180' : ''" />
           </button>
 
@@ -1159,7 +1119,7 @@ function getReleaseColor(type: number) {
                         ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
                         : 'bg-muted/50 hover:bg-muted text-muted-foreground'" :disabled="lockFilters"
                       @click="!lockFilters && (selectedContentType = 'mods')">
-                      <Layers class="w-3 h-3" />
+                      <Icon name="Layers" class="w-3 h-3" />
                       Mods
                     </button>
                     <button
@@ -1168,7 +1128,7 @@ function getReleaseColor(type: number) {
                         ? 'bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30'
                         : 'bg-muted/50 hover:bg-muted text-muted-foreground'" :disabled="lockFilters"
                       @click="!lockFilters && (selectedContentType = 'resourcepacks')">
-                      <Image class="w-3 h-3" />
+                      <Icon name="Image" class="w-3 h-3" />
                       Packs
                     </button>
                     <button
@@ -1177,7 +1137,7 @@ function getReleaseColor(type: number) {
                         ? 'bg-pink-500/15 text-pink-500 ring-1 ring-pink-500/30'
                         : 'bg-muted/50 hover:bg-muted text-muted-foreground'" :disabled="lockFilters"
                       @click="!lockFilters && (selectedContentType = 'shaders')">
-                      <Sparkles class="w-3 h-3" />
+                      <Icon name="Sparkles" class="w-3 h-3" />
                       Shaders
                     </button>
                   </div>
@@ -1198,7 +1158,7 @@ function getReleaseColor(type: number) {
                       <option v-for="v in gameVersions.filter(Boolean)" :key="v" :value="v"
                         class="bg-popover text-popover-foreground">{{ v }}</option>
                     </select>
-                    <ChevronDown
+                    <Icon name="ChevronDown"
                       class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                   </div>
                 </div>
@@ -1217,7 +1177,7 @@ function getReleaseColor(type: number) {
                       <option v-for="l in modLoaders" :key="l.value" :value="l.value"
                         class="bg-popover text-popover-foreground">{{ l.label }}</option>
                     </select>
-                    <ChevronDown
+                    <Icon name="ChevronDown"
                       class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                   </div>
                 </div>
@@ -1232,7 +1192,7 @@ function getReleaseColor(type: number) {
                       <option v-for="c in categories" :key="c.value" :value="c.value"
                         class="bg-popover text-popover-foreground">{{ c.label }}</option>
                     </select>
-                    <ChevronDown
+                    <Icon name="ChevronDown"
                       class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                   </div>
                 </div>
@@ -1247,7 +1207,7 @@ function getReleaseColor(type: number) {
                       <option v-for="s in sortFields" :key="s.value" :value="s.value"
                         class="bg-popover text-popover-foreground">{{ s.label }}</option>
                     </select>
-                    <ChevronDown
+                    <Icon name="ChevronDown"
                       class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                   </div>
                 </div>
@@ -1293,7 +1253,7 @@ function getReleaseColor(type: number) {
                 <div class="space-y-1.5 min-w-[180px]">
                   <label
                     class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                    <Package class="w-3 h-3" />
+                    <Icon name="Package" class="w-3 h-3" />
                     Add to Modpack
                     <span v-if="lockedModpackId" class="text-[10px] text-amber-500">(locked)</span>
                   </label>
@@ -1306,7 +1266,7 @@ function getReleaseColor(type: number) {
                           {{ pack.name }}
                         </option>
                       </select>
-                      <ChevronDown
+                      <Icon name="ChevronDown"
                         class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                     </div>
                   </template>
@@ -1318,29 +1278,11 @@ function getReleaseColor(type: number) {
                         <option v-for="pack in compatibleModpacks" :key="pack.id" :value="pack.id">{{ pack.name }}
                         </option>
                       </select>
-                      <ChevronDown
+                      <Icon name="ChevronDown"
                         class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
                     </div>
                   </template>
                   <div v-else class="text-xs text-amber-500/80 italic">Set version & loader</div>
-                </div>
-
-                <!-- Target Folder -->
-                <div class="space-y-1.5 min-w-[140px]">
-                  <label
-                    class="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                    <FolderOpen class="w-3 h-3" />
-                    Folder
-                  </label>
-                  <div class="relative">
-                    <select v-model="targetFolderId"
-                      class="w-full h-8 pl-2 pr-6 rounded-md border border-input bg-background/50 text-xs focus:ring-1 focus:ring-primary appearance-none">
-                      <option :value="null">Library Root</option>
-                      <option v-for="f in foldersList" :key="f.id" :value="f.id">{{ f.name }}</option>
-                    </select>
-                    <ChevronDown
-                      class="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 pointer-events-none" />
-                  </div>
                 </div>
               </div>
             </div>
@@ -1353,7 +1295,7 @@ function getReleaseColor(type: number) {
           <div
             class="p-3 md:p-4 border-b border-border flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
             <div class="relative flex-1">
-              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Icon name="Search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input v-model="searchQuery" type="text" placeholder="Search mods..."
                 class="w-full h-9 sm:h-10 pl-10 pr-4 rounded-lg border bg-input/50 focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all text-sm"
                 @input="onSearchInput" @keyup.enter="searchMods" />
@@ -1367,8 +1309,8 @@ function getReleaseColor(type: number) {
               <Button @click="executeBulkAdd" :disabled="isAddingBulk ||
                 (selectedModIds.size === 0 && selectedFilesMap.size === 0)
                 " size="sm" class="gap-2 shadow-lg shadow-primary/20 flex-1 sm:flex-none">
-                <Loader2 v-if="isAddingBulk" class="w-4 h-4 animate-spin" />
-                <ArrowDownToLine v-else class="w-4 h-4" />
+                <Icon v-if="isAddingBulk" name="Loader2" class="w-4 h-4 animate-spin" />
+                <Icon v-else name="ArrowDownToLine" class="w-4 h-4" />
                 <span class="hidden xs:inline">Install</span> ({{
                   selectedModIds.size + selectedFilesMap.size
                 }})
@@ -1378,14 +1320,14 @@ function getReleaseColor(type: number) {
             </div>
 
             <Button v-else variant="outline" size="sm" @click="isSelectionMode = true" class="gap-2">
-              <CheckSquare class="w-4 h-4" /> <span class="hidden sm:inline">Select Multiple</span>
+              <Icon name="CheckSquare" class="w-4 h-4" /> <span class="hidden sm:inline">Select Multiple</span>
             </Button>
 
             <template v-if="!fullScreen">
               <div class="h-8 w-px bg-border mx-1"></div>
 
               <Button variant="ghost" size="icon" @click="emit('close')" title="Close">
-                <X class="w-5 h-5" />
+                <Icon name="X" class="w-5 h-5" />
               </Button>
             </template>
           </div>
@@ -1395,7 +1337,7 @@ function getReleaseColor(type: number) {
             <!-- API Warning -->
             <div v-if="!hasApiKey"
               class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-background/80 z-10">
-              <AlertTriangle class="w-12 h-12 text-yellow-500 mb-4" />
+              <Icon name="AlertTriangle" class="w-12 h-12 text-yellow-500 mb-4" />
               <h3 class="text-xl font-bold mb-2">API Key Required</h3>
               <p class="text-muted-foreground max-w-md mb-6">
                 You need a CurseForge API key to browse and download mods. Please
@@ -1407,7 +1349,7 @@ function getReleaseColor(type: number) {
 
             <!-- Loading -->
             <div v-if="isSearching" class="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
-              <Loader2 class="w-10 h-10 animate-spin text-primary" />
+              <Icon name="Loader2" class="w-10 h-10 animate-spin text-primary" />
             </div>
 
             <!-- List -->
@@ -1431,7 +1373,7 @@ function getReleaseColor(type: number) {
                       ? 'bg-primary border-primary text-primary-foreground'
                       : 'border-muted-foreground/30 bg-background'
                       ">
-                      <Check v-if="selectedModIds.has(mod.id)" class="w-3.5 h-3.5" />
+                      <Icon v-if="selectedModIds.has(mod.id)" name="Check" class="w-3.5 h-3.5" />
                     </div>
                   </button>
                   <!-- Disabled checkbox for installed mods in selection mode -->
@@ -1439,7 +1381,7 @@ function getReleaseColor(type: number) {
                     class="p-1 mr-1 opacity-50 cursor-not-allowed" title="Already installed">
                     <div
                       class="w-5 h-5 border rounded flex items-center justify-center border-muted-foreground/30 bg-muted/50">
-                      <Check class="w-3.5 h-3.5 text-muted-foreground" />
+                      <Icon name="Check" class="w-3.5 h-3.5 text-muted-foreground" />
                     </div>
                   </div>
 
@@ -1447,7 +1389,7 @@ function getReleaseColor(type: number) {
                   <div class="w-12 h-12 rounded-lg bg-muted border border-border overflow-hidden shrink-0">
                     <img v-if="mod.logo?.thumbnailUrl" :src="mod.logo.thumbnailUrl"
                       class="w-full h-full object-cover" />
-                    <Star v-else class="w-6 h-6 m-auto text-muted-foreground/30" />
+                    <Icon v-else name="Star" class="w-6 h-6 m-auto text-muted-foreground/30" />
                   </div>
 
                   <!-- Info -->
@@ -1456,7 +1398,7 @@ function getReleaseColor(type: number) {
                       <h4 class="font-bold text-base truncate">{{ mod.name }}</h4>
                       <span v-if="isModInstalled(mod.id)"
                         class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 flex items-center gap-0.5">
-                        <Check class="w-3 h-3" /> INSTALLED
+                        <Icon name="Check" class="w-3 h-3" /> INSTALLED
                       </span>
                     </div>
                     <p class="text-sm text-muted-foreground truncate">
@@ -1466,7 +1408,7 @@ function getReleaseColor(type: number) {
                     <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
                         formatDownloads(mod.downloadCount)
-                      }}</span>
+                          }}</span>
                         downloads</span>
                       <span class="w-1 h-1 rounded-full bg-border"></span>
                       <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>
@@ -1478,27 +1420,27 @@ function getReleaseColor(type: number) {
                   <!-- Actions -->
                   <div class="flex items-center gap-2" v-if="!isSelectionMode">
                     <Button variant="ghost" size="icon" @click.stop="viewModDetails(mod, $event)" title="View Details">
-                      <Eye class="w-4 h-4 text-muted-foreground" />
+                      <Icon name="Eye" class="w-4 h-4 text-muted-foreground" />
                     </Button>
                     <Button variant="ghost" size="icon" @click.stop="openModPage(mod)" title="View on CurseForge">
-                      <ExternalLink class="w-4 h-4 text-muted-foreground" />
+                      <Icon name="ExternalLink" class="w-4 h-4 text-muted-foreground" />
                     </Button>
                     <Button :class="isLatestFileInstalled(mod) ? '' : 'gap-1.5'" class="min-w-[90px]" size="sm"
                       :variant="isLatestFileInstalled(mod) ? 'secondary' : 'default'"
                       :disabled="isAddingMod === mod.id || isLatestFileInstalled(mod)" @click.stop="quickDownload(mod)">
-                      <Loader2 v-if="isAddingMod === mod.id" class="w-4 h-4 animate-spin" />
+                      <Icon v-if="isAddingMod === mod.id" name="Loader2" class="w-4 h-4 animate-spin" />
                       <template v-else-if="isLatestFileInstalled(mod)">
-                        <Check class="w-4 h-4 mr-1" />
+                        <Icon name="Check" class="w-4 h-4 mr-1" />
                         <span>Installed</span>
                       </template>
                       <template v-else>
-                        <ArrowDownToLine class="w-4 h-4" />
+                        <Icon name="ArrowDownToLine" class="w-4 h-4" />
                         <span>Latest</span>
                       </template>
                     </Button>
                   </div>
 
-                  <ChevronDown class="w-5 h-5 text-muted-foreground/50 transition-transform duration-300"
+                  <Icon name="ChevronDown" class="w-5 h-5 text-muted-foreground/50 transition-transform duration-300"
                     :class="{ 'rotate-180': expandedModId === mod.id }" />
                 </div>
 
@@ -1506,7 +1448,7 @@ function getReleaseColor(type: number) {
                 <div v-if="expandedModId === mod.id"
                   class="border-t border-border bg-muted/20 animate-in slide-in-from-top-2 duration-200">
                   <div v-if="isLoadingFiles" class="flex justify-center p-8">
-                    <Loader2 class="w-8 h-8 animate-spin text-muted-foreground/50" />
+                    <Icon name="Loader2" class="w-8 h-8 animate-spin text-muted-foreground/50" />
                   </div>
                   <div v-else-if="filteredModFiles.length === 0" class="p-8 text-center text-muted-foreground text-sm">
                     No files found matching current filters.
@@ -1527,7 +1469,7 @@ function getReleaseColor(type: number) {
                             ? 'bg-primary border-primary text-primary-foreground'
                             : 'border-muted-foreground/30 bg-background'
                             " @click.stop="toggleFileSelectionMap(file.id, mod.id)">
-                          <Check v-if="selectedFilesMap.has(file.id)" class="w-3 h-3" />
+                          <Icon v-if="selectedFilesMap.has(file.id)" name="Check" class="w-3 h-3" />
                         </button>
                       </div>
 
@@ -1583,7 +1525,7 @@ function getReleaseColor(type: number) {
                       <div v-if="!isSelectionMode" class="flex items-center">
                         <Button variant="ghost" size="icon" class="h-8 w-8 text-muted-foreground mr-1"
                           title="View Changelog" @click.stop="viewChangelog(mod, file)">
-                          <FileText class="w-4 h-4" />
+                          <Icon name="FileText" class="w-4 h-4" />
                         </Button>
 
                         <Button size="sm" :variant="isFileInstalled(mod.id, file.id)
@@ -1592,7 +1534,7 @@ function getReleaseColor(type: number) {
                           " class="h-8 w-24 ml-2 text-xs" :disabled="isFileInstalled(mod.id, file.id) ||
                             isAddingMod === mod.id
                             " @click="addFileToLibrary(mod, file)">
-                          <Check v-if="isFileInstalled(mod.id, file.id)" class="w-3 h-3 mr-1.5" />
+                          <Icon v-if="isFileInstalled(mod.id, file.id)" name="Check" class="w-3 h-3 mr-1.5" />
                           {{
                             isFileInstalled(mod.id, file.id)
                               ? "Installed"
@@ -1608,7 +1550,7 @@ function getReleaseColor(type: number) {
               <!-- Load More -->
               <div v-if="hasMore" class="flex justify-center py-6">
                 <Button variant="outline" @click="loadMore" :disabled="isSearching" class="min-w-[150px]">
-                  <Loader2 v-if="isSearching" class="w-4 h-4 animate-spin mr-2" />
+                  <Icon v-if="isSearching" name="Loader2" class="w-4 h-4 animate-spin mr-2" />
                   Load More
                 </Button>
               </div>
@@ -1618,7 +1560,7 @@ function getReleaseColor(type: number) {
             <div v-else-if="!isSearching && hasApiKey"
               class="flex flex-col items-center justify-center h-full text-muted-foreground">
               <div class="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Search class="w-8 h-8 opacity-50" />
+                <Icon name="Search" class="w-8 h-8 opacity-50" />
               </div>
               <p>No results found.</p>
             </div>

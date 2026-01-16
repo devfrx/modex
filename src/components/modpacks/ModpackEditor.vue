@@ -10,69 +10,7 @@ import { useModpackUpdates, type UpdateInfo } from "@/composables/useModpackUpda
 import { useModpackInstance } from "@/composables/useModpackInstance";
 import { useModpackGameLogs } from "@/composables/useModpackGameLogs";
 import { useModpackConfigSync } from "@/composables/useModpackConfigSync";
-import {
-  X,
-  Plus,
-  Trash2,
-  Search,
-  Download,
-  Check,
-  ImagePlus,
-  ArrowUpCircle,
-  ArrowLeft,
-  Lock,
-  LockOpen,
-  Save,
-  GitBranch,
-  Package,
-  Settings,
-  Layers,
-  AlertCircle,
-  AlertTriangle,
-  RefreshCw,
-  Share2,
-  Globe,
-  ToggleLeft,
-  ToggleRight,
-  Filter,
-  CheckSquare,
-  Square,
-  Image,
-  Sparkles,
-  History,
-  ExternalLink,
-  Info,
-  HelpCircle,
-  ChevronDown,
-  BookOpen,
-  Lightbulb,
-  Play,
-  Loader2,
-  FolderOpen,
-  FolderX,
-  FileCode,
-  Clock,
-  HardDrive,
-  Gamepad2,
-  Terminal,
-  ChevronUp,
-  Cpu,
-  MemoryStick,
-  Sliders,
-  Rocket,
-  FileWarning,
-  FolderSync,
-  FileEdit,
-  FolderTree,
-  FileText,
-  MessageSquare,
-  MessageSquarePlus,
-  MoreHorizontal,
-  Stethoscope,
-  Github,
-  Upload,
-  CloudUpload,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
@@ -1837,10 +1775,10 @@ const hasGistToken = ref(false);
 const gistExistsRemotely = ref(false);
 const isCheckingGistExists = ref(false);
 
-// Check for Gist token on mount and verify Gist exists
+// Check for Gist token on mount
 onMounted(async () => {
   hasGistToken.value = await window.api.gist.hasToken();
-  await checkGistExists();
+  // Note: checkGistExists is called after loadData() completes in the isOpen watcher
 });
 
 // Check if the linked Gist still exists remotely
@@ -2325,6 +2263,9 @@ watch(
         await loadInstance();
         await loadSyncSettings();
         await loadModifiedConfigs();
+
+        // Check gist exists after modpack data is loaded
+        await checkGistExists();
       } catch (err) {
         console.error("[ModpackEditor] Error during initial load:", err);
         loadError.value = (err as Error).message || "Failed to load modpack data";
@@ -2362,6 +2303,9 @@ watch(
       try {
         await loadData();
         await loadInstance();
+
+        // Check gist exists after modpack data is loaded
+        await checkGistExists();
       } catch (err) {
         console.error("[ModpackEditor] Error loading modpack on ID change:", err);
         loadError.value = (err as Error).message || "Failed to load modpack";
@@ -2393,7 +2337,7 @@ watch(
     <div v-if="loadError && !isLoading"
       class="bg-background border border-border/50 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col items-center gap-4">
       <div class="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
-        <AlertCircle class="w-8 h-8 text-destructive" />
+        <Icon name="AlertCircle" class="w-8 h-8 text-destructive" />
       </div>
       <div class="text-center">
         <h3 class="text-lg font-semibold text-foreground mb-2">Errore di Caricamento</h3>
@@ -2401,11 +2345,11 @@ watch(
       </div>
       <div class="flex gap-3">
         <Button variant="outline" @click="$emit('close')">
-          <X class="w-4 h-4 mr-2" />
+          <Icon name="X" class="w-4 h-4 mr-2" />
           Chiudi
         </Button>
         <Button @click="loadError = null; loadData()">
-          <RefreshCw class="w-4 h-4 mr-2" />
+          <Icon name="RefreshCw" class="w-4 h-4 mr-2" />
           Riprova
         </Button>
       </div>
@@ -2438,7 +2382,7 @@ watch(
             <!-- Back Button (full-screen mode only) -->
             <Button v-if="fullScreen" variant="ghost" size="sm"
               class="h-9 w-9 p-0 rounded-xl shrink-0 hover:bg-white/10 backdrop-blur-sm" @click="$emit('close')">
-              <ArrowLeft class="w-4 h-4" />
+              <Icon name="ArrowLeft" class="w-4 h-4" />
             </Button>
 
             <!-- Name & Meta -->
@@ -2454,7 +2398,7 @@ watch(
                 <span v-if="modpack?.remote_source?.url"
                   class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-xs font-medium border border-primary/30 backdrop-blur-sm"
                   title="This modpack is linked to a remote source">
-                  <Share2 class="w-3 h-3" />
+                  <Icon name="Share2" class="w-3 h-3" />
                   Linked
                 </span>
               </div>
@@ -2491,7 +2435,7 @@ watch(
                 </div>
                 <div
                   class="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 border border-border/40 backdrop-blur-sm">
-                  <Layers class="w-3.5 h-3.5 text-muted-foreground" />
+                  <Icon name="Layers" class="w-3.5 h-3.5 text-muted-foreground" />
                   <span class="text-xs font-medium text-muted-foreground">{{ currentMods.length }} mods</span>
                 </div>
               </div>
@@ -2503,7 +2447,7 @@ watch(
               <div class="relative hidden sm:block">
                 <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-xl hover:bg-white/10 backdrop-blur-sm"
                   @click="showImageMenu = !showImageMenu" title="Manage cover image">
-                  <ImagePlus class="w-4 h-4" />
+                  <Icon name="ImagePlus" class="w-4 h-4" />
                 </Button>
                 <!-- Click outside to close -->
                 <div v-if="showImageMenu" class="fixed inset-0 z-40" @click="showImageMenu = false"></div>
@@ -2511,13 +2455,13 @@ watch(
                   class="absolute right-0 top-full mt-1 w-40 py-1 bg-card border border-border rounded-xl shadow-xl z-50">
                   <button class="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 flex items-center gap-2"
                     @click="selectImage(); showImageMenu = false">
-                    <ImagePlus class="w-4 h-4" />
+                    <Icon name="ImagePlus" class="w-4 h-4" />
                     Set Image
                   </button>
                   <button v-if="modpack?.image_url"
                     class="w-full px-3 py-2 text-left text-sm hover:bg-destructive/10 text-destructive flex items-center gap-2"
                     @click="removeImage(); showImageMenu = false">
-                    <X class="w-4 h-4" />
+                    <Icon name="X" class="w-4 h-4" />
                     Remove Image
                   </button>
                 </div>
@@ -2525,14 +2469,14 @@ watch(
               <Button variant="outline" size="sm"
                 class="hidden md:flex h-9 px-4 gap-2 rounded-xl border-border/50 hover:bg-white/10 backdrop-blur-sm"
                 @click="$emit('export')">
-                <Download class="w-4 h-4" />
+                <Icon name="Download" class="w-4 h-4" />
                 <span class="font-medium">Export</span>
               </Button>
               <!-- Close button (modal mode only) -->
               <Button v-if="!fullScreen" variant="ghost" size="sm"
                 class="h-9 w-9 p-0 rounded-xl hover:bg-destructive/10 hover:text-destructive backdrop-blur-sm"
                 @click="$emit('close')">
-                <X class="w-4 h-4" />
+                <Icon name="X" class="w-4 h-4" />
               </Button>
             </div>
           </div>
@@ -2551,17 +2495,17 @@ watch(
               <!-- Primary Tabs -->
               <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'mods'">
-                <Layers class="w-3.5 h-3.5" />
+                <Icon name="Layers" class="w-3.5 h-3.5" />
                 <span>Resources</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'configs'">
-                <FileCode class="w-3.5 h-3.5" />
+                <Icon name="FileCode" class="w-3.5 h-3.5" />
                 <span>Configs</span>
               </button>
               <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
                 @click="activeTab = 'settings'">
-                <Settings class="w-3.5 h-3.5" />
+                <Icon name="Settings" class="w-3.5 h-3.5" />
                 <span>Details</span>
               </button>
 
@@ -2569,11 +2513,12 @@ watch(
               <div class="relative">
                 <button class="tab-pill" :class="isSecondaryTab ? 'tab-pill-active' : 'tab-pill-inactive'"
                   @click="toggleMoreMenu($event)">
-                  <MoreHorizontal class="w-3.5 h-3.5" />
+                  <Icon name="MoreHorizontal" class="w-3.5 h-3.5" />
                   <span class="hidden sm:inline">More</span>
                   <span v-if="versionUnsavedCount > 0 && !isSecondaryTab"
                     class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                  <ChevronDown class="w-3 h-3 transition-transform" :class="showMoreMenu ? 'rotate-180' : ''" />
+                  <Icon name="ChevronDown" class="w-3 h-3 transition-transform"
+                    :class="showMoreMenu ? 'rotate-180' : ''" />
                 </button>
               </div>
             </div>
@@ -2581,7 +2526,7 @@ watch(
             <!-- Cloud Sync Button - Separate from main tabs -->
             <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
               @click="activeTab = 'remote'" title="Sync with cloud & share your modpack">
-              <CloudUpload class="w-3.5 h-3.5" />
+              <Icon name="CloudUpload" class="w-3.5 h-3.5" />
               <span class="hidden sm:inline">Share</span>
               <span v-if="gistExistsRemotely || editForm.remote_url" class="w-2 h-2 rounded-full bg-primary"></span>
             </button>
@@ -2598,21 +2543,21 @@ watch(
                     class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
                     :class="activeTab === 'discover' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'discover'; showMoreMenu = false">
-                    <Sparkles class="w-4 h-4" />
+                    <Icon name="Sparkles" class="w-4 h-4" />
                     Add Mods
                   </button>
                   <button
                     class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
                     :class="activeTab === 'health' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'health'; showMoreMenu = false">
-                    <Stethoscope class="w-4 h-4" />
+                    <Icon name="Stethoscope" class="w-4 h-4" />
                     Diagnostics
                   </button>
                   <button
                     class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
                     :class="activeTab === 'versions' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                     @click="activeTab = 'versions'; showMoreMenu = false">
-                    <GitBranch class="w-4 h-4" />
+                    <Icon name="GitBranch" class="w-4 h-4" />
                     History
                     <span v-if="versionUnsavedCount > 0"
                       class="ml-auto px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
@@ -2632,13 +2577,14 @@ watch(
         <button @click="showHelp = !showHelp"
           class="w-full px-3 sm:px-6 py-2 flex items-center justify-between text-sm hover:bg-muted/30 transition-colors">
           <div class="flex items-center gap-2">
-            <HelpCircle class="w-4 h-4 text-primary" />
+            <Icon name="HelpCircle" class="w-4 h-4 text-primary" />
             <span class="text-muted-foreground">
               <span class="font-medium text-foreground">Need help?</span>
               <span class="hidden sm:inline"> Click to see how to use this section</span>
             </span>
           </div>
-          <ChevronDown :class="['w-4 h-4 text-muted-foreground transition-transform', showHelp && 'rotate-180']" />
+          <Icon name="ChevronDown"
+            :class="['w-4 h-4 text-muted-foreground transition-transform', showHelp && 'rotate-180']" />
         </button>
 
         <!-- Help Content (expanded) -->
@@ -2647,7 +2593,7 @@ watch(
           <div v-if="activeTab === 'configs'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <FileCode class="w-4 h-4 text-primary" />
+                <Icon name="FileCode" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1 min-w-0">
                 <h4 class="font-semibold text-foreground mb-2">Configs - Edit Game Settings</h4>
@@ -2658,7 +2604,7 @@ watch(
                 <!-- Understanding Config Locations -->
                 <div class="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                   <h5 class="font-medium text-blue-400 flex items-center gap-1.5 mb-2">
-                    <Info class="w-4 h-4" />
+                    <Icon name="Info" class="w-4 h-4" />
                     Understanding Config Locations
                   </h5>
                   <div class="text-sm text-muted-foreground space-y-2">
@@ -2672,7 +2618,7 @@ watch(
                 <!-- Config Changes Banner Explanation -->
                 <div class="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <h5 class="font-medium text-amber-400 flex items-center gap-1.5 mb-2">
-                    <FolderSync class="w-4 h-4" />
+                    <Icon name="FolderSync" class="w-4 h-4" />
                     "Config Changes Detected" Banner
                   </h5>
                   <div class="text-sm text-muted-foreground space-y-2">
@@ -2694,7 +2640,7 @@ watch(
                 <div class="grid md:grid-cols-2 gap-4 text-sm">
                   <div class="space-y-2">
                     <h5 class="font-medium text-foreground flex items-center gap-1.5">
-                      <FileEdit class="w-4 h-4 text-primary" />
+                      <Icon name="FileEdit" class="w-4 h-4 text-primary" />
                       Structured Editor
                     </h5>
                     <p class="text-muted-foreground">Edit TOML, JSON, and properties files with a friendly interface.
@@ -2702,7 +2648,7 @@ watch(
                   </div>
                   <div class="space-y-2">
                     <h5 class="font-medium text-foreground flex items-center gap-1.5">
-                      <FolderOpen class="w-4 h-4 text-primary" />
+                      <Icon name="FolderOpen" class="w-4 h-4 text-primary" />
                       Quick Access
                     </h5>
                     <p class="text-muted-foreground">Open config files in your default editor with one click.</p>
@@ -2716,7 +2662,7 @@ watch(
           <div v-else-if="activeTab === 'mods'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen class="w-4 h-4 text-primary" />
+                <Icon name="BookOpen" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1 min-w-0">
                 <h4 class="font-semibold text-foreground mb-2">Resources - Manage Your Mod Content</h4>
@@ -2763,7 +2709,7 @@ watch(
 
                 <div
                   class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
-                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <Icon name="Lightbulb" class="w-4 h-4 shrink-0 mt-0.5" />
                   <span><b>Tip:</b> Lock important mods to prevent accidental changes. Locked mods are excluded from
                     bulk actions like "Update All" and "Remove Incompatible"!</span>
                 </div>
@@ -2775,7 +2721,7 @@ watch(
           <div v-else-if="activeTab === 'discover'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen class="w-4 h-4 text-primary" />
+                <Icon name="BookOpen" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1">
                 <h4 class="font-semibold text-foreground mb-2">Discover - Find New Content</h4>
@@ -2795,7 +2741,7 @@ watch(
 
                 <div
                   class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
-                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <Icon name="Lightbulb" class="w-4 h-4 shrink-0 mt-0.5" />
                   <span><b>Tip:</b> The recommendations improve as you add more mods - it learns what categories you
                     like!</span>
                 </div>
@@ -2807,7 +2753,7 @@ watch(
           <div v-else-if="activeTab === 'health'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Stethoscope class="w-4 h-4 text-primary" />
+                <Icon name="Stethoscope" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1">
                 <h4 class="font-semibold text-foreground mb-2">Diagnostics - Find & Fix Issues</h4>
@@ -2839,7 +2785,7 @@ watch(
 
                 <div
                   class="mt-3 p-2 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary flex items-start gap-2">
-                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <Icon name="Lightbulb" class="w-4 h-4 shrink-0 mt-0.5" />
                   <span><b>Tip:</b> Click "Sync Deps" first to get the most accurate dependency information from
                     CurseForge!</span>
                 </div>
@@ -2851,7 +2797,7 @@ watch(
           <div v-else-if="activeTab === 'versions'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen class="w-4 h-4 text-primary" />
+                <Icon name="BookOpen" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1">
                 <h4 class="font-semibold text-foreground mb-2">History - Version Control</h4>
@@ -2884,7 +2830,7 @@ watch(
 
                 <div
                   class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
-                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <Icon name="Lightbulb" class="w-4 h-4 shrink-0 mt-0.5" />
                   <span><b>Tip:</b> Always write a descriptive message when saving - "Added Biomes O' Plenty" is better
                     than "update"!</span>
                 </div>
@@ -2896,7 +2842,7 @@ watch(
           <div v-else-if="activeTab === 'remote'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen class="w-4 h-4 text-primary" />
+                <Icon name="BookOpen" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1">
                 <h4 class="font-semibold text-foreground mb-2">Remote - Updates & Collaboration</h4>
@@ -2927,7 +2873,7 @@ watch(
 
                 <div
                   class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
-                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <Icon name="Lightbulb" class="w-4 h-4 shrink-0 mt-0.5" />
                   <span><b>Tip:</b> Use GitHub Gist to host your manifest for free sharing with friends!</span>
                 </div>
               </div>
@@ -2938,7 +2884,7 @@ watch(
           <div v-else-if="activeTab === 'settings'" class="help-content">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <BookOpen class="w-4 h-4 text-primary" />
+                <Icon name="BookOpen" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1">
                 <h4 class="font-semibold text-foreground mb-2">Settings - Modpack Configuration</h4>
@@ -2958,7 +2904,7 @@ watch(
 
                 <div
                   class="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-start gap-2">
-                  <Lightbulb class="w-4 h-4 shrink-0 mt-0.5" />
+                  <Icon name="Lightbulb" class="w-4 h-4 shrink-0 mt-0.5" />
                   <span><b>Why locked?</b> Changing Minecraft version or loader would make your mods incompatible.
                     Create a new modpack instead!</span>
                 </div>
@@ -2974,15 +2920,15 @@ watch(
         <template v-if="activeTab === 'configs'">
           <div class="flex-1 overflow-hidden flex flex-col">
             <div v-if="!instance" class="flex flex-col items-center justify-center h-full gap-4 p-6">
-              <FileCode class="w-16 h-16 text-muted-foreground/50" />
+              <Icon name="FileCode" class="w-16 h-16 text-muted-foreground/50" />
               <div class="text-center">
                 <h3 class="font-semibold text-lg">No Instance Found</h3>
                 <p class="text-sm text-muted-foreground">Create an instance using the Play button to manage configs</p>
               </div>
               <button @click="handleCreateInstance" :disabled="isCreatingInstance"
                 class="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium flex items-center gap-2">
-                <Loader2 v-if="isCreatingInstance" class="w-4 h-4 animate-spin" />
-                <Play v-else class="w-4 h-4" />
+                <Icon v-if="isCreatingInstance" name="Loader2" class="w-4 h-4 animate-spin" />
+                <Icon v-else name="Play" class="w-4 h-4" />
                 {{ isCreatingInstance ? 'Creating...' : 'Create Instance' }}
               </button>
             </div>
@@ -2994,7 +2940,7 @@ watch(
                 <button @click="showModifiedConfigsDetails = !showModifiedConfigsDetails"
                   class="w-full p-3 flex items-center justify-between hover:bg-primary/5 transition-colors duration-150">
                   <div class="flex items-center gap-3">
-                    <FolderSync class="w-4 h-4 text-primary" />
+                    <Icon name="FolderSync" class="w-4 h-4 text-primary" />
                     <div class="text-left">
                       <div class="font-medium text-sm text-primary">Config Changes Detected</div>
                       <div class="text-xs text-muted-foreground">
@@ -3006,11 +2952,11 @@ watch(
                     <button @click.stop="importSelectedConfigs"
                       :disabled="selectedConfigsForImport.size === 0 || isImportingConfigs"
                       class="px-3 py-1.5 rounded-md bg-primary/15 hover:bg-primary/25 text-primary text-sm font-medium flex items-center gap-1.5 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
-                      <Loader2 v-if="isImportingConfigs" class="w-3.5 h-3.5 animate-spin" />
-                      <Download v-else class="w-3.5 h-3.5" />
+                      <Icon v-if="isImportingConfigs" name="Loader2" class="w-3.5 h-3.5 animate-spin" />
+                      <Icon v-else name="Download" class="w-3.5 h-3.5" />
                       Import Selected
                     </button>
-                    <ChevronDown class="w-4 h-4 text-primary transition-transform duration-150"
+                    <Icon name="ChevronDown" class="w-4 h-4 text-primary transition-transform duration-150"
                       :class="{ 'rotate-180': showModifiedConfigsDetails }" />
                   </div>
                 </button>
@@ -3059,7 +3005,7 @@ watch(
                   </div>
 
                   <p class="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
-                    <Info class="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <Icon name="Info" class="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     Importing configs adds them to the modpack's overrides folder. This makes your customizations part
                     of the modpack.
                   </p>
@@ -3088,7 +3034,7 @@ watch(
                     ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
                     : 'hover:bg-muted/50 text-muted-foreground'
                     " @click="contentTypeTab = 'mods'">
-                  <Layers class="w-3.5 h-3.5" />
+                  <Icon name="Layers" class="w-3.5 h-3.5" />
                   Mods
                   <span class="text-[10px] px-1 py-0.5 rounded bg-primary/10">{{
                     contentTypeCounts.mods
@@ -3100,7 +3046,7 @@ watch(
                     ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
                     : 'hover:bg-muted/50 text-muted-foreground'
                     " @click="contentTypeTab = 'resourcepacks'">
-                  <Image class="w-3.5 h-3.5" />
+                  <Icon name="Image" class="w-3.5 h-3.5" />
                   Packs
                   <span class="text-[10px] px-1 py-0.5 rounded bg-primary/10">{{
                     contentTypeCounts.resourcepacks
@@ -3112,7 +3058,7 @@ watch(
                     ? 'bg-pink-500/15 text-pink-400 ring-1 ring-pink-500/30'
                     : 'hover:bg-muted/50 text-muted-foreground'
                     " @click="contentTypeTab = 'shaders'">
-                  <Sparkles class="w-3.5 h-3.5" />
+                  <Icon name="Sparkles" class="w-3.5 h-3.5" />
                   Shaders
                   <span class="text-[10px] px-1 py-0.5 rounded bg-primary/10">{{
                     contentTypeCounts.shaders
@@ -3135,7 +3081,7 @@ watch(
                       ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/40'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                     @click="modsFilter = 'incompatible'" title="Incompatible mods">
-                    <AlertCircle class="w-3 h-3" />
+                    <Icon name="AlertCircle" class="w-3 h-3" />
                     {{ incompatibleModCount }}
                   </button>
                   <!-- Updates available (most actionable) -->
@@ -3144,7 +3090,7 @@ watch(
                       ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                     @click="modsFilter = 'updates'" title="Updates available">
-                    <ArrowUpCircle class="w-3 h-3" />
+                    <Icon name="ArrowUpCircle" class="w-3 h-3" />
                     {{ updatesAvailableCount }}
                   </button>
                   <!-- Disabled mods -->
@@ -3153,7 +3099,7 @@ watch(
                       ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
                     @click="modsFilter = 'disabled'" title="Disabled mods">
-                    <ToggleLeft class="w-3 h-3" />
+                    <Icon name="ToggleLeft" class="w-3 h-3" />
                     {{ disabledModCount }}
                   </button>
                   <!-- Overflow: Less common filters in dropdown -->
@@ -3163,7 +3109,7 @@ watch(
                     <button
                       class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
                       @click="showModsFilterMenu = !showModsFilterMenu">
-                      <MoreHorizontal class="w-3 h-3" />
+                      <Icon name="MoreHorizontal" class="w-3 h-3" />
                     </button>
                     <div v-if="showModsFilterMenu"
                       class="absolute top-full right-0 mt-1 w-36 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 overflow-hidden">
@@ -3171,21 +3117,21 @@ watch(
                         class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
                         :class="modsFilter === 'warning' ? 'bg-amber-500/10 text-amber-400' : 'text-foreground'"
                         @click="modsFilter = 'warning'; showModsFilterMenu = false">
-                        <AlertTriangle class="w-3 h-3" />
+                        <Icon name="AlertTriangle" class="w-3 h-3" />
                         Warnings ({{ warningModCount }})
                       </button>
                       <button v-if="lockedModCount > 0"
                         class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
                         :class="modsFilter === 'locked' ? 'bg-amber-500/10 text-amber-400' : 'text-foreground'"
                         @click="modsFilter = 'locked'; showModsFilterMenu = false">
-                        <Lock class="w-3 h-3" />
+                        <Icon name="Lock" class="w-3 h-3" />
                         Locked ({{ lockedModCount }})
                       </button>
                       <button v-if="modsWithNotesCount > 0"
                         class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
                         :class="modsFilter === 'with-notes' ? 'bg-blue-500/10 text-blue-400' : 'text-foreground'"
                         @click="modsFilter = 'with-notes'; showModsFilterMenu = false">
-                        <MessageSquare class="w-3 h-3" />
+                        <Icon name="MessageSquare" class="w-3 h-3" />
                         With Notes ({{ modsWithNotesCount }})
                       </button>
                       <div
@@ -3195,14 +3141,14 @@ watch(
                         class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
                         :class="modsFilter === 'recent-updated' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                         @click="modsFilter = 'recent-updated'; showModsFilterMenu = false">
-                        <Check class="w-3 h-3" />
+                        <Icon name="Check" class="w-3 h-3" />
                         Just Updated ({{ recentlyUpdatedCount }})
                       </button>
                       <button v-if="recentlyAddedCount > 0"
                         class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
                         :class="modsFilter === 'recent-added' ? 'bg-primary/10 text-primary' : 'text-foreground'"
                         @click="modsFilter = 'recent-added'; showModsFilterMenu = false">
-                        <Plus class="w-3 h-3" />
+                        <Icon name="Plus" class="w-3 h-3" />
                         Just Added ({{ recentlyAddedCount }})
                       </button>
                     </div>
@@ -3216,7 +3162,7 @@ watch(
                     ? 'bg-primary/20 text-primary cursor-wait'
                     : 'bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary'"
                   :title="isCheckingAllUpdates ? 'Checking for updates...' : 'Check all resources for updates'">
-                  <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isCheckingAllUpdates }" />
+                  <Icon name="RefreshCw" class="w-3.5 h-3.5" :class="{ 'animate-spin': isCheckingAllUpdates }" />
                   <span>{{ isCheckingAllUpdates ? 'Checking...' : 'Check Updates' }}</span>
                 </button>
 
@@ -3225,7 +3171,7 @@ watch(
                   class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="!isLibraryCollapsed
                     ? 'bg-primary/20 text-primary'
                     : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'">
-                  <Package class="w-3.5 h-3.5" />
+                  <Icon name="Package" class="w-3.5 h-3.5" />
                   <span>Library</span>
                 </button>
 
@@ -3233,7 +3179,7 @@ watch(
                 <button v-if="!isLinked"
                   class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-orange-500 hover:bg-orange-600 text-white transition-colors shadow-sm"
                   @click="showCFSearch = true">
-                  <Globe class="w-3.5 h-3.5" />
+                  <Icon name="Globe" class="w-3.5 h-3.5" />
                   <span>CurseForge</span>
                 </button>
               </div>
@@ -3246,13 +3192,13 @@ watch(
                 <button v-if="updatesAvailableCount > 0 && !isLinked"
                   class="h-6 text-[10px] px-2.5 rounded flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
                   @click="updateAllMods">
-                  <ArrowUpCircle class="w-3 h-3" />
+                  <Icon name="ArrowUpCircle" class="w-3 h-3" />
                   Update All ({{ updatesAvailableCount }})
                 </button>
                 <button v-if="incompatibleModCount > 0 && !isLinked"
                   class="h-6 text-[10px] px-2.5 rounded flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
                   @click="removeIncompatibleMods">
-                  <Trash2 class="w-3 h-3" />
+                  <Icon name="Trash2" class="w-3 h-3" />
                   Remove Incompatible
                 </button>
               </div>
@@ -3278,13 +3224,13 @@ watch(
                   <!-- Center: Search Bar -->
                   <div class="flex-1 max-w-xs">
                     <div class="relative group">
-                      <Search
+                      <Icon name="Search"
                         class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors" />
                       <input v-model="searchQueryInstalled" placeholder="Search resources..."
                         class="w-full h-8 pl-9 pr-8 text-sm rounded-lg bg-background/80 border border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:text-muted-foreground/50" />
                       <button v-if="searchQueryInstalled" @click="searchQueryInstalled = ''"
                         class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                        <X class="w-3.5 h-3.5" />
+                        <Icon name="X" class="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -3364,15 +3310,15 @@ watch(
                           class="w-full h-full object-cover" alt="" loading="lazy"
                           @error="($event.target as HTMLImageElement).style.display = 'none'" />
                         <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/40">
-                          <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-4 h-4" />
-                          <Image v-else-if="mod.content_type === 'resourcepack'" class="w-4 h-4" />
-                          <Sparkles v-else class="w-4 h-4" />
+                          <Icon v-if="mod.content_type === 'mod' || !mod.content_type" name="Layers" class="w-4 h-4" />
+                          <Icon v-else-if="mod.content_type === 'resourcepack'" name="Image" class="w-4 h-4" />
+                          <Icon v-else name="Sparkles" class="w-4 h-4" />
                         </div>
                       </div>
                       <!-- Selection indicator overlay -->
                       <div v-if="selectedModIds.has(mod.id)"
                         class="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center ring-2 ring-background">
-                        <Check class="w-2.5 h-2.5 text-primary-foreground" />
+                        <Icon name="Check" class="w-2.5 h-2.5 text-primary-foreground" />
                       </div>
                     </div>
 
@@ -3390,23 +3336,23 @@ watch(
                         <div class="flex items-center gap-1 shrink-0">
                           <span v-if="recentlyUpdatedMods.has(mod.id)"
                             class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
-                            <ArrowUpCircle class="w-2.5 h-2.5" />
+                            <Icon name="ArrowUpCircle" class="w-2.5 h-2.5" />
                             Updated
                           </span>
                           <span v-else-if="recentlyAddedMods.has(mod.id)"
                             class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 font-medium">
-                            <Plus class="w-2.5 h-2.5" />
+                            <Icon name="Plus" class="w-2.5 h-2.5" />
                             New
                           </span>
                           <span v-if="!mod.isCompatible"
                             class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium">
-                            <AlertCircle class="w-2.5 h-2.5" />
+                            <Icon name="AlertCircle" class="w-2.5 h-2.5" />
                             Incompatible
                           </span>
                           <span v-else-if="mod.hasWarning"
                             class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 font-medium"
                             title="This mod uses a different loader but may work via compatibility layers">
-                            <AlertTriangle class="w-2.5 h-2.5" />
+                            <Icon name="AlertTriangle" class="w-2.5 h-2.5" />
                             Loader
                           </span>
                         </div>
@@ -3456,7 +3402,7 @@ watch(
                       <!-- Note Preview Row -->
                       <div v-if="getModNote(mod.id)"
                         class="flex items-center gap-1.5 text-[10px] text-blue-400/80 mt-1">
-                        <MessageSquare class="w-3 h-3 shrink-0" />
+                        <Icon name="MessageSquare" class="w-3 h-3 shrink-0" />
                         <span class="truncate italic" :title="getModNote(mod.id)">
                           {{ getModNote(mod.id) }}
                         </span>
@@ -3477,8 +3423,8 @@ watch(
                             ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-500/50'
                             : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-blue-400 border-border/40 hover:border-blue-500/50'"
                           :title="getModNote(mod.id) ? 'Edit note' : 'Add note'" @click.stop="openModNoteDialog(mod)">
-                          <MessageSquare v-if="getModNote(mod.id)" class="w-3.5 h-3.5" />
-                          <MessageSquarePlus v-else class="w-3.5 h-3.5" />
+                          <Icon v-if="getModNote(mod.id)" name="MessageSquare" class="w-3.5 h-3.5" />
+                          <Icon v-else name="MessageSquarePlus" class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Lock/Unlock Button (action) -->
@@ -3488,8 +3434,8 @@ watch(
                             ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 hover:border-amber-500/50'
                             : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-amber-500 border-border/40 hover:border-amber-500/50'"
                           :title="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" @click.stop="toggleModLocked(mod.id)">
-                          <Lock v-if="lockedModIds.has(mod.id)" class="w-3.5 h-3.5" />
-                          <LockOpen v-else class="w-3.5 h-3.5" />
+                          <Icon v-if="lockedModIds.has(mod.id)" name="Lock" class="w-3.5 h-3.5" />
+                          <Icon v-else name="LockOpen" class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Change Version Button -->
@@ -3501,7 +3447,7 @@ watch(
                           :disabled="lockedModIds.has(mod.id)"
                           :title="lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
                           @click.stop="!lockedModIds.has(mod.id) && openVersionPicker(mod)">
-                          <GitBranch class="w-3.5 h-3.5" />
+                          <Icon name="GitBranch" class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Remove Button -->
@@ -3513,14 +3459,14 @@ watch(
                           :disabled="lockedModIds.has(mod.id)"
                           :title="lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
                           @click.stop="!lockedModIds.has(mod.id) && removeMod(mod.id)">
-                          <Trash2 class="w-3.5 h-3.5" />
+                          <Icon name="Trash2" class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Managed indicator -->
                         <div v-if="isLinked"
                           class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/30 text-muted-foreground/40 border border-border/20"
                           title="Remote managed">
-                          <Lock class="w-3.5 h-3.5" />
+                          <Icon name="Lock" class="w-3.5 h-3.5" />
                         </div>
                       </div>
 
@@ -3529,7 +3475,7 @@ watch(
                         <!-- Checking Indicator (shows while checking) -->
                         <div v-if="!isLinked && mod.cf_project_id && checkingUpdates[mod.id]"
                           class="w-6 h-6 flex items-center justify-center rounded-md bg-primary/10" title="Checking...">
-                          <RefreshCw class="w-3.5 h-3.5 animate-spin text-primary/70" />
+                          <Icon name="RefreshCw" class="w-3.5 h-3.5 animate-spin text-primary/70" />
                         </div>
 
                         <!-- View Changelog (always visible when update available) -->
@@ -3537,7 +3483,7 @@ watch(
                           v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
                           class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/60 text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground transition-all duration-150"
                           title="View changelog" @click.stop="viewModChangelog(mod)">
-                          <FileText class="w-3.5 h-3.5" />
+                          <Icon name="FileText" class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Update Available (always visible when update available) -->
@@ -3546,20 +3492,20 @@ watch(
                           class="w-7 h-7 flex items-center justify-center rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 hover:border-primary/50 transition-all duration-150"
                           :title="`Update to ${updateAvailable[mod.id]?.displayName || 'latest version'}`"
                           @click.stop="quickUpdateMod(mod)">
-                          <ArrowUpCircle class="w-3.5 h-3.5" />
+                          <Icon name="ArrowUpCircle" class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Lock state icon (indicator only) -->
                         <div v-if="lockedModIds.has(mod.id)"
                           class="w-6 h-6 flex items-center justify-center text-amber-500" title="Locked">
-                          <Lock class="w-3.5 h-3.5" />
+                          <Icon name="Lock" class="w-3.5 h-3.5" />
                         </div>
 
                         <!-- Note indicator (always visible when note exists) -->
                         <button v-if="getModNote(mod.id)"
                           class="w-6 h-6 flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors"
                           :title="getModNote(mod.id)" @click.stop="openModNoteDialog(mod)">
-                          <MessageSquare class="w-3.5 h-3.5" />
+                          <Icon name="MessageSquare" class="w-3.5 h-3.5" />
                         </button>
                       </div>
 
@@ -3589,9 +3535,10 @@ watch(
                 <div v-if="filteredInstalledMods.length === 0"
                   class="flex flex-col items-center justify-center py-12 px-4">
                   <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-4">
-                    <Layers v-if="contentTypeTab === 'mods'" class="w-8 h-8 text-muted-foreground/40" />
-                    <Image v-else-if="contentTypeTab === 'resourcepacks'" class="w-8 h-8 text-muted-foreground/40" />
-                    <Sparkles v-else class="w-8 h-8 text-muted-foreground/40" />
+                    <Icon v-if="contentTypeTab === 'mods'" name="Layers" class="w-8 h-8 text-muted-foreground/40" />
+                    <Icon v-else-if="contentTypeTab === 'resourcepacks'" name="Image"
+                      class="w-8 h-8 text-muted-foreground/40" />
+                    <Icon v-else name="Sparkles" class="w-8 h-8 text-muted-foreground/40" />
                   </div>
                   <p class="text-sm font-medium text-muted-foreground mb-1">
                     {{ searchQueryInstalled ? "No matching items" : "Nothing here yet" }}
@@ -3617,7 +3564,7 @@ watch(
               <div class="shrink-0 px-3 py-2.5 border-b border-border/20 bg-muted/10">
                 <div class="flex items-center justify-between mb-2">
                   <div class="flex items-center gap-2">
-                    <Package class="w-3.5 h-3.5 text-primary" />
+                    <Icon name="Package" class="w-3.5 h-3.5 text-primary" />
                     <span class="text-xs font-medium">Library</span>
                     <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">{{
                       compatibleCount }}</span>
@@ -3628,11 +3575,12 @@ watch(
                   <button @click="isLibraryCollapsed = true"
                     class="w-5 h-5 rounded hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
                     title="Collapse">
-                    <X class="w-3 h-3" />
+                    <Icon name="X" class="w-3 h-3" />
                   </button>
                 </div>
                 <div class="relative">
-                  <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/60" />
+                  <Icon name="Search"
+                    class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/60" />
                   <input v-model="searchQueryAvailable" placeholder="Search..."
                     class="w-full h-7 pl-7 pr-3 text-xs rounded-lg bg-background/50 border border-border/30 focus:border-primary/40 focus:bg-background outline-none transition-all" />
                 </div>
@@ -3655,9 +3603,10 @@ watch(
                         class="w-full h-full object-cover" alt="" loading="lazy"
                         @error="($event.target as HTMLImageElement).style.display = 'none'" />
                       <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                        <Layers v-if="mod.content_type === 'mod' || !mod.content_type" class="w-3.5 h-3.5" />
-                        <Image v-else-if="mod.content_type === 'resourcepack'" class="w-3.5 h-3.5" />
-                        <Sparkles v-else class="w-3.5 h-3.5" />
+                        <Icon v-if="mod.content_type === 'mod' || !mod.content_type" name="Layers"
+                          class="w-3.5 h-3.5" />
+                        <Icon v-else-if="mod.content_type === 'resourcepack'" name="Image" class="w-3.5 h-3.5" />
+                        <Icon v-else name="Sparkles" class="w-3.5 h-3.5" />
                       </div>
                     </div>
 
@@ -3668,8 +3617,9 @@ watch(
                           @click.stop="openModDetails(mod)" title="Click for details">
                           {{ mod.name }}
                         </span>
-                        <AlertCircle v-if="!mod.isCompatible" class="w-2.5 h-2.5 text-red-500 shrink-0" />
-                        <AlertTriangle v-else-if="mod.hasWarning" class="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                        <Icon v-if="!mod.isCompatible" name="AlertCircle" class="w-2.5 h-2.5 text-red-500 shrink-0" />
+                        <Icon v-else-if="mod.hasWarning" name="AlertTriangle"
+                          class="w-2.5 h-2.5 text-amber-500 shrink-0" />
                       </div>
                       <div class="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <!-- Game Version -->
@@ -3716,11 +3666,11 @@ watch(
                         ? 'text-amber-500 hover:bg-amber-500/10'
                         : 'text-primary hover:bg-primary/10'" @click.stop="addMod(mod.id)"
                       :title="mod.hasWarning ? 'Add (different loader)' : 'Add'">
-                      <Plus class="w-3.5 h-3.5" />
+                      <Icon name="Plus" class="w-3.5 h-3.5" />
                     </button>
                     <div v-else-if="!mod.isCompatible"
                       class="w-6 h-6 flex items-center justify-center shrink-0 text-muted-foreground/20">
-                      <Lock class="w-3 h-3" />
+                      <Icon name="Lock" class="w-3 h-3" />
                     </div>
                   </div>
                 </div>
@@ -3728,7 +3678,7 @@ watch(
                 <!-- Empty State -->
                 <div v-if="filteredAvailableMods.length === 0"
                   class="flex flex-col items-center justify-center py-8 px-4">
-                  <Package class="w-8 h-8 text-muted-foreground/25 mb-2" />
+                  <Icon name="Package" class="w-8 h-8 text-muted-foreground/25 mb-2" />
                   <p class="text-xs text-muted-foreground">No items available</p>
                 </div>
               </div>
@@ -3766,7 +3716,7 @@ watch(
                 <div class="space-y-2">
                   <label class="text-sm font-medium flex items-center gap-1.5">
                     Name
-                    <Lock v-if="isLinked" class="w-3 h-3 text-muted-foreground" />
+                    <Icon v-if="isLinked" name="Lock" class="w-3 h-3 text-muted-foreground" />
                   </label>
                   <input v-model="editForm.name" type="text" :disabled="isLinked"
                     class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed" />
@@ -3776,7 +3726,7 @@ watch(
                 <div class="space-y-2">
                   <label class="text-sm font-medium flex items-center gap-1.5">
                     Version
-                    <Lock v-if="isLinked" class="w-3 h-3 text-muted-foreground" />
+                    <Icon v-if="isLinked" name="Lock" class="w-3 h-3 text-muted-foreground" />
                   </label>
                   <input v-model="editForm.version" type="text" :disabled="isLinked"
                     class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3788,7 +3738,7 @@ watch(
                   <div class="space-y-2">
                     <label class="text-sm font-medium flex items-center gap-1.5">
                       Minecraft Version
-                      <Lock v-if="isExistingModpack" class="w-3 h-3 text-muted-foreground" />
+                      <Icon v-if="isExistingModpack" name="Lock" class="w-3 h-3 text-muted-foreground" />
                     </label>
                     <select v-model="editForm.minecraft_version" :disabled="isExistingModpack"
                       class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -3802,7 +3752,7 @@ watch(
                   <div class="space-y-2">
                     <label class="text-sm font-medium flex items-center gap-1.5">
                       Mod Loader
-                      <Lock v-if="isExistingModpack" class="w-3 h-3 text-muted-foreground" />
+                      <Icon v-if="isExistingModpack" name="Lock" class="w-3 h-3 text-muted-foreground" />
                     </label>
                     <select v-model="editForm.loader" :disabled="isExistingModpack"
                       class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed capitalize">
@@ -3819,7 +3769,8 @@ watch(
                       {{ editForm.loader ? editForm.loader.charAt(0).toUpperCase() + editForm.loader.slice(1) : 'Loader'
                       }}
                       Version
-                      <Loader2 v-if="isLoadingLoaderVersions" class="w-3 h-3 animate-spin text-muted-foreground" />
+                      <Icon v-if="isLoadingLoaderVersions" name="Loader2"
+                        class="w-3 h-3 animate-spin text-muted-foreground" />
                       <!-- Show current version badge when set -->
                       <span v-if="editForm.loader_version && !isLoadingLoaderVersions"
                         class="ml-auto text-xs font-normal px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
@@ -3845,7 +3796,7 @@ watch(
                       <Button variant="outline" size="sm" @click="fetchLoaderVersions"
                         :disabled="isLoadingLoaderVersions || !editForm.minecraft_version || !editForm.loader"
                         title="Refresh available versions">
-                        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoadingLoaderVersions }" />
+                        <Icon name="RefreshCw" class="w-4 h-4" :class="{ 'animate-spin': isLoadingLoaderVersions }" />
                       </Button>
                     </div>
                     <p class="text-xs text-muted-foreground">
@@ -3863,7 +3814,7 @@ watch(
                 <div class="space-y-2">
                   <label class="text-sm font-medium flex items-center gap-1.5">
                     Description
-                    <Lock v-if="isLinked" class="w-3 h-3 text-muted-foreground" />
+                    <Icon v-if="isLinked" name="Lock" class="w-3 h-3 text-muted-foreground" />
                   </label>
                   <textarea v-model="editForm.description" rows="3" :disabled="isLinked"
                     class="w-full px-3 py-2 rounded-lg border border-border/50 bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3873,7 +3824,7 @@ watch(
                 <!-- Save Button -->
                 <div class="pt-2">
                   <Button @click="saveModpackInfo" :disabled="isSaving || isLinked" class="gap-2">
-                    <Save class="w-4 h-4" />
+                    <Icon name="Save" class="w-4 h-4" />
                     {{ isSaving ? "Saving..." : "Save Changes" }}
                   </Button>
                   <p v-if="isLinked" class="text-xs text-muted-foreground mt-2">
@@ -3892,7 +3843,7 @@ watch(
             <!-- CurseForge Updates Section (for CF imported modpacks) -->
             <div v-if="isCFModpack">
               <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Download class="w-5 h-5 text-primary" />
+                <Icon name="Download" class="w-5 h-5 text-primary" />
                 CurseForge Updates
               </h3>
 
@@ -3908,11 +3859,12 @@ watch(
                     </div>
                     <div class="flex items-center gap-2">
                       <Button variant="ghost" size="sm" @click="viewCFChangelog()" :disabled="isLoadingChangelog">
-                        <History class="w-3.5 h-3.5 mr-1.5" />
+                        <Icon name="History" class="w-3.5 h-3.5 mr-1.5" />
                         Changelog
                       </Button>
                       <Button variant="secondary" size="sm" @click="checkForCFUpdate" :disabled="isCheckingCFUpdate">
-                        <RefreshCw class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': isCheckingCFUpdate }" />
+                        <Icon name="RefreshCw" class="w-3.5 h-3.5 mr-1.5"
+                          :class="{ 'animate-spin': isCheckingCFUpdate }" />
                         Check Updates
                       </Button>
                     </div>
@@ -3924,7 +3876,7 @@ watch(
                     <div class="flex items-center justify-between">
                       <div>
                         <div class="font-medium text-primary text-sm flex items-center gap-2">
-                          <ArrowUpCircle class="w-4 h-4" />
+                          <Icon name="ArrowUpCircle" class="w-4 h-4" />
                           Update Available
                         </div>
                         <div class="text-xs text-muted-foreground mt-1">
@@ -3933,11 +3885,11 @@ watch(
                       </div>
                       <div class="flex items-center gap-2">
                         <Button variant="ghost" size="sm" @click="viewCFChangelog(cfUpdateInfo.latestFileId)">
-                          <History class="w-3.5 h-3.5 mr-1.5" />
+                          <Icon name="History" class="w-3.5 h-3.5 mr-1.5" />
                           View Changes
                         </Button>
                         <Button size="sm" @click="openCFUpdateDialog">
-                          <Download class="w-3.5 h-3.5 mr-1.5" />
+                          <Icon name="Download" class="w-3.5 h-3.5 mr-1.5" />
                           Apply Update
                         </Button>
                       </div>
@@ -3950,7 +3902,7 @@ watch(
             <!-- Incompatible Mods Section (for CF imported modpacks with incompatible mods) -->
             <div v-if="isCFModpack && modpack?.incompatible_mods?.length">
               <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <AlertTriangle class="w-5 h-5 text-amber-500" />
+                <Icon name="AlertTriangle" class="w-5 h-5 text-amber-500" />
                 Incompatible Mods ({{ modpack.incompatible_mods.length }})
               </h3>
 
@@ -3965,7 +3917,7 @@ watch(
                     </div>
                     <Button variant="secondary" size="sm" class="shrink-0 whitespace-nowrap"
                       @click="reSearchIncompatibleMods" :disabled="isReSearching">
-                      <RefreshCw class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': isReSearching }" />
+                      <Icon name="RefreshCw" class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': isReSearching }" />
                       {{ isReSearching ? 'Searching...' : 'Re-search' }}
                     </Button>
                   </div>
@@ -4007,7 +3959,7 @@ watch(
 
             <div>
               <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Globe class="w-5 h-5 text-primary" />
+                <Icon name="Globe" class="w-5 h-5 text-primary" />
                 Remote & Collaboration
               </h3>
 
@@ -4020,7 +3972,7 @@ watch(
                 <div v-if="!editForm.remote_url"
                   class="p-4 bg-gradient-to-r from-primary/5 to-transparent rounded-xl border border-primary/20">
                   <h4 class="text-sm font-semibold mb-3 flex items-center gap-2 text-primary">
-                    <CloudUpload class="w-4 h-4" />
+                    <Icon name="CloudUpload" class="w-4 h-4" />
                     Publisher / Host
                   </h4>
                   <p class="text-xs text-muted-foreground mb-4">
@@ -4030,7 +3982,7 @@ watch(
                   <!-- Publish to Gist -->
                   <div class="space-y-3">
                     <div class="flex items-center gap-2">
-                      <Github class="w-4 h-4" />
+                      <Icon name="Github" class="w-4 h-4" />
                       <span class="text-sm font-medium">GitHub Gist</span>
                     </div>
 
@@ -4040,7 +3992,7 @@ watch(
                       <div class="flex items-center justify-between">
                         <div>
                           <div class="text-sm font-medium text-green-500 flex items-center gap-2">
-                            <Check class="w-3.5 h-3.5" />
+                            <Icon name="Check" class="w-3.5 h-3.5" />
                             Published to Gist
                           </div>
                           <div class="text-xs text-muted-foreground mt-1">
@@ -4051,15 +4003,15 @@ watch(
                         </div>
                         <div class="flex gap-1">
                           <Button variant="ghost" size="sm" @click="copyGistUrl" title="Copy raw URL">
-                            <Share2 class="w-3.5 h-3.5" />
+                            <Icon name="Share2" class="w-3.5 h-3.5" />
                           </Button>
                           <Button variant="ghost" size="sm" @click="openGistInBrowser" title="Open in browser">
-                            <ExternalLink class="w-3.5 h-3.5" />
+                            <Icon name="ExternalLink" class="w-3.5 h-3.5" />
                           </Button>
                           <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive"
                             @click="deleteGistFromRemote" :disabled="isDeletingGist" title="Delete Gist from GitHub">
-                            <Trash2 v-if="!isDeletingGist" class="w-3.5 h-3.5" />
-                            <Loader2 v-else class="w-3.5 h-3.5 animate-spin" />
+                            <Icon v-if="!isDeletingGist" name="Trash2" class="w-3.5 h-3.5" />
+                            <Icon v-else name="Loader2" class="w-3.5 h-3.5 animate-spin" />
                           </Button>
                         </div>
                       </div>
@@ -4084,8 +4036,8 @@ watch(
                     <div class="flex flex-wrap gap-2">
                       <Button variant="default" size="sm" class="gap-2" @click="pushToGist()"
                         :disabled="isPushingToGist || !hasGistToken">
-                        <CloudUpload v-if="!isPushingToGist" class="w-3.5 h-3.5" />
-                        <Loader2 v-else class="w-3.5 h-3.5 animate-spin" />
+                        <Icon v-if="!isPushingToGist" name="CloudUpload" class="w-3.5 h-3.5" />
+                        <Icon v-else name="Loader2" class="w-3.5 h-3.5 animate-spin" />
                         {{ gistExistsRemotely ? 'Update Gist' : 'Create Gist' }}
                       </Button>
                     </div>
@@ -4102,11 +4054,11 @@ watch(
                     </p>
                     <div class="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" class="gap-2" @click="exportManifest('full')">
-                        <Share2 class="w-3.5 h-3.5" />
+                        <Icon name="Share2" class="w-3.5 h-3.5" />
                         Full History
                       </Button>
                       <Button variant="outline" size="sm" class="gap-2" @click="exportManifest('current')">
-                        <Share2 class="w-3.5 h-3.5" />
+                        <Icon name="Share2" class="w-3.5 h-3.5" />
                         Current Only
                       </Button>
                     </div>
@@ -4138,7 +4090,7 @@ watch(
                 <!-- Info message when modpack is linked (subscriber mode) -->
                 <div v-if="editForm.remote_url" class="p-4 bg-muted/20 rounded-xl border border-border/50">
                   <div class="flex items-start gap-3">
-                    <Info class="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+                    <Icon name="Info" class="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
                     <div>
                       <h4 class="text-sm font-medium mb-1">Publishing disabled</h4>
                       <p class="text-xs text-muted-foreground">
@@ -4155,7 +4107,7 @@ watch(
                 ═══════════════════════════════════════════════════════════════════ -->
                 <div class="p-4 bg-gradient-to-r from-blue-500/5 to-transparent rounded-xl border border-blue-500/20">
                   <h4 class="text-sm font-semibold mb-3 flex items-center gap-2 text-blue-500">
-                    <Download class="w-4 h-4" />
+                    <Icon name="Download" class="w-4 h-4" />
                     Subscriber / Client
                   </h4>
                   <p class="text-xs text-muted-foreground mb-4">
@@ -4168,7 +4120,7 @@ watch(
                     class="mb-4 p-3 bg-muted/20 rounded-lg border border-border/50 flex items-center justify-between">
                     <div class="text-sm">
                       <div class="font-medium flex items-center gap-2">
-                        <RefreshCw class="w-4 h-4 text-blue-500" />
+                        <Icon name="RefreshCw" class="w-4 h-4 text-blue-500" />
                         Sync Status
                       </div>
                       <div class="text-xs text-muted-foreground mt-1">
@@ -4181,7 +4133,7 @@ watch(
                       </div>
                     </div>
                     <Button variant="secondary" size="sm" @click="checkForRemoteUpdates" :disabled="isCheckingUpdate">
-                      <RefreshCw class="w-3.5 h-3.5 mr-2" :class="{ 'animate-spin': isCheckingUpdate }" />
+                      <Icon name="RefreshCw" class="w-3.5 h-3.5 mr-2" :class="{ 'animate-spin': isCheckingUpdate }" />
                       Check Now
                     </Button>
                   </div>
@@ -4195,7 +4147,7 @@ watch(
                           placeholder="https://gist.githubusercontent.com/..." @change="sanitizeRemoteUrl" />
                         <Button v-if="editForm.remote_url" variant="ghost" size="sm" @click="editForm.remote_url = ''"
                           title="Clear URL">
-                          <X class="w-4 h-4" />
+                          <Icon name="X" class="w-4 h-4" />
                         </Button>
                       </div>
                       <p class="text-xs text-muted-foreground">
@@ -4214,7 +4166,7 @@ watch(
                 <!-- Save Button -->
                 <div class="pt-4 border-t border-border/50">
                   <Button @click="saveModpackInfo" :disabled="isSaving" class="gap-2">
-                    <Save class="w-4 h-4" />
+                    <Icon name="Save" class="w-4 h-4" />
                     {{ isSaving ? "Saving..." : "Save Changes" }}
                   </Button>
                 </div>
@@ -4239,18 +4191,18 @@ watch(
           <div v-if="showSyncDetails && instanceSyncStatus?.needsSync" class="floating-sync-panel">
             <div class="sync-panel-header">
               <div class="flex items-center gap-2">
-                <AlertTriangle class="w-4 h-4 text-amber-400" />
+                <Icon name="AlertTriangle" class="w-4 h-4 text-amber-400" />
                 <span class="font-medium text-sm">{{ instanceSyncStatus.totalDifferences }} changes pending</span>
               </div>
               <button @click="showSyncDetails = false" class="sync-panel-close">
-                <X class="w-4 h-4" />
+                <Icon name="X" class="w-4 h-4" />
               </button>
             </div>
             <div class="sync-panel-content">
               <!-- Missing in Instance -->
               <div v-if="instanceSyncStatus.missingInInstance.length > 0" class="sync-section sync-section-add">
                 <div class="sync-section-title">
-                  <Plus class="w-3.5 h-3.5" />
+                  <Icon name="Plus" class="w-3.5 h-3.5" />
                   {{ instanceSyncStatus.missingInInstance.length }} to add
                 </div>
                 <div class="sync-section-items">
@@ -4268,7 +4220,7 @@ watch(
               <!-- Updates to Apply (new section) -->
               <div v-if="instanceSyncStatus.updatesToApply?.length > 0" class="sync-section sync-section-update">
                 <div class="sync-section-title">
-                  <RefreshCw class="w-3.5 h-3.5" />
+                  <Icon name="RefreshCw" class="w-3.5 h-3.5" />
                   {{ instanceSyncStatus.updatesToApply.length }} to update
                 </div>
                 <div class="sync-section-items">
@@ -4290,7 +4242,7 @@ watch(
               <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length > 0"
                 class="sync-section sync-section-remove">
                 <div class="sync-section-title">
-                  <Trash2 class="w-3.5 h-3.5" />
+                  <Icon name="Trash2" class="w-3.5 h-3.5" />
                   {{instanceSyncStatus.extraInInstance.filter(i => i.type === 'mod').length}} mods to remove
                 </div>
                 <div class="sync-section-items">
@@ -4309,7 +4261,7 @@ watch(
               <div v-if="instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 0"
                 class="sync-section sync-section-extra">
                 <div class="sync-section-title">
-                  <Package class="w-3.5 h-3.5" />
+                  <Icon name="Package" class="w-3.5 h-3.5" />
                   {{instanceSyncStatus.extraInInstance.filter(i => i.type !== 'mod').length}} extra files (preserved)
                 </div>
                 <div class="sync-section-items">
@@ -4328,7 +4280,7 @@ watch(
               <!-- Loader Version Mismatch -->
               <div v-if="instanceSyncStatus.loaderVersionMismatch" class="sync-section sync-section-loader">
                 <div class="sync-section-title">
-                  <RefreshCw class="w-3.5 h-3.5" />
+                  <Icon name="RefreshCw" class="w-3.5 h-3.5" />
                   Loader update available
                 </div>
                 <div class="text-[11px] text-muted-foreground">
@@ -4339,7 +4291,7 @@ watch(
               <!-- Disabled State Mismatch -->
               <div v-if="instanceSyncStatus.disabledMismatch?.length > 0" class="sync-section sync-section-disabled">
                 <div class="sync-section-title">
-                  <ToggleLeft class="w-3.5 h-3.5" />
+                  <Icon name="ToggleLeft" class="w-3.5 h-3.5" />
                   {{ instanceSyncStatus.disabledMismatch.length }} enable/disable states to fix
                 </div>
                 <div class="sync-section-items">
@@ -4380,7 +4332,7 @@ watch(
 
         <!-- First Launch Notice (above main bar) -->
         <div v-if="instance && !instance.lastPlayed && !isGameRunning && !isLaunching" class="floating-notice">
-          <Info class="w-3.5 h-3.5 text-primary" />
+          <Icon name="Info" class="w-3.5 h-3.5 text-primary" />
           <span>{{ modpack?.loader }} will be installed on first launch</span>
         </div>
 
@@ -4401,8 +4353,8 @@ watch(
           <!-- Minimize/Expand Toggle -->
           <button class="floating-bar-minimize-btn" @click="isFloatingBarMinimized = !isFloatingBarMinimized"
             :title="isFloatingBarMinimized ? 'Expand Bar' : 'Minimize Bar'">
-            <ChevronDown v-if="!isFloatingBarMinimized" class="w-4 h-4" />
-            <ChevronUp v-else class="w-4 h-4" />
+            <Icon v-if="!isFloatingBarMinimized" name="ChevronDown" class="w-4 h-4" />
+            <Icon v-else name="ChevronUp" class="w-4 h-4" />
           </button>
 
           <!-- Main Content (hidden when minimized) -->
@@ -4413,8 +4365,8 @@ watch(
             <template v-if="!instance">
               <button class="floating-bar-play floating-bar-create-instance" @click="handleCreateInstance()"
                 title="Create Instance" :disabled="isCreatingInstance">
-                <Loader2 v-if="isCreatingInstance" class="w-5 h-5 animate-spin" />
-                <Plus v-else class="w-5 h-5" />
+                <Icon v-if="isCreatingInstance" name="Loader2" class="w-5 h-5 animate-spin" />
+                <Icon v-else name="Plus" class="w-5 h-5" />
               </button>
               <span class="floating-bar-status-text text-amber-400">{{ isCreatingInstance ? 'Creating...'
                 : 'No instance' }}</span>
@@ -4422,14 +4374,14 @@ watch(
 
             <template v-else-if="instance.state === 'installing'">
               <button class="floating-bar-play floating-bar-syncing" disabled title="Syncing...">
-                <Loader2 class="w-5 h-5 animate-spin" />
+                <Icon name="Loader2" class="w-5 h-5 animate-spin" />
               </button>
               <span class="floating-bar-status-text text-blue-400">Syncing...</span>
             </template>
 
             <template v-else-if="isLaunching">
               <button class="floating-bar-play floating-bar-launching" disabled title="Launching...">
-                <Loader2 class="w-5 h-5 animate-spin" />
+                <Icon name="Loader2" class="w-5 h-5 animate-spin" />
               </button>
               <span class="floating-bar-status-text text-primary">Launching...</span>
             </template>
@@ -4438,8 +4390,8 @@ watch(
               <button class="floating-bar-play"
                 :class="runningGame?.status === 'running' ? 'floating-bar-play-game' : 'floating-bar-play-launcher'"
                 @click="handleKillGame()" :title="runningGame?.status === 'running' ? 'Stop Game' : 'Stop Launcher'">
-                <Square v-if="runningGame?.status !== 'running'" class="w-4 h-4 fill-current" />
-                <X v-else class="w-5 h-5" />
+                <Icon v-if="runningGame?.status !== 'running'" name="Square" class="w-4 h-4 fill-current" />
+                <Icon v-else name="X" class="w-5 h-5" />
               </button>
               <span class="floating-bar-status-text"
                 :class="runningGame?.status === 'running' ? 'text-green-400' : 'text-amber-400'">
@@ -4450,7 +4402,7 @@ watch(
             <template v-else>
               <button class="floating-bar-play" :class="{ 'floating-bar-play-ready': instance.state === 'ready' }"
                 :disabled="instance.state !== 'ready'" @click="handleLaunch()" title="Play">
-                <Play class="w-5 h-5 fill-current" />
+                <Icon name="Play" class="w-5 h-5 fill-current" />
               </button>
               <span v-if="instance.state === 'ready'" class="floating-bar-status-text text-green-400">Ready</span>
               <span v-else class="floating-bar-status-text text-muted-foreground">{{ instance.state }}</span>
@@ -4462,13 +4414,13 @@ watch(
               <button class="floating-bar-btn floating-bar-btn-sync"
                 :class="{ 'floating-bar-btn-active': showSyncDetails }" @click="showSyncDetails = !showSyncDetails"
                 :title="`${instanceSyncStatus.totalDifferences} changes pending`">
-                <AlertTriangle class="w-4 h-4" />
+                <Icon name="AlertTriangle" class="w-4 h-4" />
                 <span class="floating-bar-sync-count">{{ instanceSyncStatus.totalDifferences }}</span>
               </button>
               <button class="floating-bar-btn floating-bar-btn-sync-action" @click="handleSyncInstance"
                 :disabled="isSyncingInstance" title="Sync Now">
-                <Loader2 v-if="isSyncingInstance" class="w-4 h-4 animate-spin" />
-                <RefreshCw v-else class="w-4 h-4" />
+                <Icon v-if="isSyncingInstance" name="Loader2" class="w-4 h-4 animate-spin" />
+                <Icon v-else name="RefreshCw" class="w-4 h-4" />
               </button>
             </template>
 
@@ -4476,7 +4428,7 @@ watch(
             <template v-else-if="instance && instanceSyncStatus && !instanceSyncStatus.needsSync">
               <div class="floating-bar-divider" />
               <span class="floating-bar-sync-ok">
-                <Check class="w-3.5 h-3.5" />
+                <Icon name="Check" class="w-3.5 h-3.5" />
                 In Sync
               </span>
             </template>
@@ -4487,19 +4439,19 @@ watch(
             <!-- Instance Actions (when instance exists) -->
             <template v-if="instance">
               <button class="floating-bar-btn" @click="openInstanceSettings()" title="Instance Settings">
-                <Sliders class="w-4 h-4" />
+                <Icon name="Sliders" class="w-4 h-4" />
               </button>
               <button class="floating-bar-btn" @click="handleOpenInstanceFolder()" title="Open Folder">
-                <FolderOpen class="w-4 h-4" />
+                <Icon name="FolderOpen" class="w-4 h-4" />
               </button>
               <button class="floating-bar-btn" @click="showLogConsole = !showLogConsole"
                 :class="{ 'floating-bar-btn-active': showLogConsole }"
                 :title="showLogConsole ? 'Hide Console' : 'Show Console'">
-                <Terminal class="w-4 h-4" />
+                <Icon name="Terminal" class="w-4 h-4" />
               </button>
               <button class="floating-bar-btn floating-bar-btn-delete-instance" @click="showDeleteInstanceDialog = true"
                 title="Delete Instance">
-                <FolderX class="w-4 h-4" />
+                <Icon name="FolderX" class="w-4 h-4" />
               </button>
             </template>
 
@@ -4511,28 +4463,28 @@ watch(
 
               <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-enable" @click="bulkEnableSelected"
                 title="Enable">
-                <ToggleRight class="w-4 h-4" />
+                <Icon name="ToggleRight" class="w-4 h-4" />
               </button>
               <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-disable" @click="bulkDisableSelected"
                 title="Disable">
-                <ToggleLeft class="w-4 h-4" />
+                <Icon name="ToggleLeft" class="w-4 h-4" />
               </button>
               <button v-if="!isLinked" class="floating-bar-btn" @click="bulkLockSelected" title="Lock">
-                <Lock class="w-4 h-4" />
+                <Icon name="Lock" class="w-4 h-4" />
               </button>
               <button v-if="!isLinked" class="floating-bar-btn" @click="bulkUnlockSelected" title="Unlock">
-                <LockOpen class="w-4 h-4" />
+                <Icon name="LockOpen" class="w-4 h-4" />
               </button>
 
               <div v-if="!isLinked" class="floating-bar-divider" />
 
               <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-danger" @click="removeSelectedMods"
                 title="Remove">
-                <Trash2 class="w-4 h-4" />
+                <Icon name="Trash2" class="w-4 h-4" />
               </button>
 
               <button class="floating-bar-btn floating-bar-btn-clear" @click="clearSelection" title="Clear selection">
-                <X class="w-4 h-4" />
+                <Icon name="X" class="w-4 h-4" />
               </button>
             </template>
           </template>
@@ -4551,7 +4503,7 @@ watch(
         <!-- Memory Settings -->
         <div class="space-y-4">
           <h4 class="text-sm font-semibold flex items-center gap-2">
-            <Sliders class="w-4 h-4 text-primary" />
+            <Icon name="Sliders" class="w-4 h-4 text-primary" />
             Memory Allocation
           </h4>
           <div class="space-y-3">
@@ -4581,7 +4533,7 @@ watch(
         <!-- Java Arguments -->
         <div class="space-y-2">
           <h4 class="text-sm font-semibold flex items-center gap-2">
-            <Terminal class="w-4 h-4 text-primary" />
+            <Icon name="Terminal" class="w-4 h-4 text-primary" />
             Custom Java Arguments
           </h4>
           <textarea v-model="customJavaArgs" rows="2" placeholder="-XX:+UseG1GC -XX:MaxGCPauseMillis=50"
@@ -4594,7 +4546,7 @@ watch(
         <!-- Sync Settings -->
         <div class="space-y-3">
           <h4 class="text-sm font-semibold flex items-center gap-2">
-            <RefreshCw class="w-4 h-4 text-primary" />
+            <Icon name="RefreshCw" class="w-4 h-4 text-primary" />
             Sync Preferences
           </h4>
           <div class="space-y-2">
@@ -4638,7 +4590,7 @@ watch(
         <div class="flex items-center justify-between w-full gap-3">
           <Button variant="destructive" size="sm"
             @click="showInstanceSettings = false; showDeleteInstanceDialog = true">
-            <Trash2 class="w-4 h-4 mr-2" />
+            <Icon name="Trash2" class="w-4 h-4 mr-2" />
             Delete Instance
           </Button>
           <div class="flex gap-3">
@@ -4666,7 +4618,7 @@ watch(
         </div>
         <div class="log-console-header">
           <div class="flex items-center gap-2">
-            <Terminal class="w-4 h-4 text-primary" />
+            <Icon name="Terminal" class="w-4 h-4 text-primary" />
             <span class="font-medium text-sm">Game Console</span>
             <span v-if="isGameRunning" class="log-console-live-badge">
               <span class="log-console-live-dot"></span>
@@ -4700,16 +4652,16 @@ watch(
 
           <div class="flex items-center gap-1">
             <button @click="clearLogs" class="log-console-btn" title="Clear">
-              <Trash2 class="w-3.5 h-3.5" />
+              <Icon name="Trash2" class="w-3.5 h-3.5" />
             </button>
             <button @click="showLogConsole = false" class="log-console-btn" title="Close">
-              <X class="w-4 h-4" />
+              <Icon name="X" class="w-4 h-4" />
             </button>
           </div>
         </div>
         <div ref="logScrollRef" class="log-console-content">
           <div v-if="filteredGameLogs.length === 0" class="log-console-empty">
-            <Terminal class="w-8 h-8 text-muted-foreground/20" />
+            <Icon name="Terminal" class="w-8 h-8 text-muted-foreground/20" />
             <p v-if="gameLogs.length === 0">No logs yet. Start the game to see output.</p>
             <p v-else>No logs match the current filter.</p>
           </div>
@@ -4753,7 +4705,7 @@ watch(
         <div v-if="dependencyImpact?.dependentMods.filter(d => d.willBreak).length"
           class="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
           <div class="flex items-center gap-2 text-destructive font-medium mb-2">
-            <AlertTriangle class="w-4 h-4" />
+            <Icon name="AlertTriangle" class="w-4 h-4" />
             <span>These mods depend on it and may not work:</span>
           </div>
           <ul class="text-sm space-y-1.5 ml-6">
@@ -4777,7 +4729,7 @@ watch(
           v-if="dependencyImpact?.action === 'remove' && dependencyImpact?.orphanedDependencies.filter(d => !d.usedByOthers).length"
           class="bg-warning/10 border border-warning/30 rounded-lg p-3">
           <div class="flex items-center gap-2 text-warning font-medium mb-2">
-            <Info class="w-4 h-4" />
+            <Icon name="Info" class="w-4 h-4" />
             <span>These dependencies may no longer be needed:</span>
           </div>
           <ul class="text-sm space-y-1 ml-6">
@@ -4826,7 +4778,7 @@ watch(
         <div v-if="bulkDependencyImpact?.allDependentMods.length"
           class="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
           <div class="flex items-center gap-2 text-destructive font-medium mb-2">
-            <AlertTriangle class="w-4 h-4" />
+            <Icon name="AlertTriangle" class="w-4 h-4" />
             <span>These mods depend on the selected mods and may not work:</span>
           </div>
           <ul class="text-sm space-y-1.5 ml-6 list-disc">
@@ -4843,7 +4795,7 @@ watch(
         <div v-if="bulkDependencyImpact?.action === 'remove' && bulkDependencyImpact?.allOrphanedDependencies.length"
           class="bg-warning/10 border border-warning/30 rounded-lg p-3">
           <div class="flex items-center gap-2 text-warning font-medium mb-2">
-            <Info class="w-4 h-4" />
+            <Icon name="Info" class="w-4 h-4" />
             <span>These dependencies may no longer be needed:</span>
           </div>
           <ul class="text-sm space-y-1 ml-6 list-disc">
@@ -4928,15 +4880,15 @@ watch(
           <Button v-if="noteDialogMod && getModNote(noteDialogMod.id)" variant="ghost"
             class="text-destructive hover:text-destructive hover:bg-destructive/10"
             @click="noteDialogText = ''; saveModNote()" :disabled="isSavingNote">
-            <Trash2 class="w-4 h-4 mr-2" />
+            <Icon name="Trash2" class="w-4 h-4 mr-2" />
             Remove Note
           </Button>
           <div v-else></div>
           <div class="flex items-center gap-2">
             <Button variant="secondary" @click="closeModNoteDialog" :disabled="isSavingNote">Cancel</Button>
             <Button @click="saveModNote" :disabled="isSavingNote">
-              <Loader2 v-if="isSavingNote" class="w-4 h-4 mr-2 animate-spin" />
-              <Save v-else class="w-4 h-4 mr-2" />
+              <Icon v-if="isSavingNote" name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
+              <Icon v-else name="Save" class="w-4 h-4 mr-2" />
               Save Note
             </Button>
           </div>
@@ -4948,7 +4900,7 @@ watch(
     <Dialog :open="showCFChangelog" @close="showCFChangelog = false" title="Modpack Changelog" size="lg">
       <div class="max-h-[60vh] overflow-auto">
         <div v-if="isLoadingChangelog" class="flex items-center justify-center py-8">
-          <RefreshCw class="w-6 h-6 animate-spin text-primary" />
+          <Icon name="RefreshCw" class="w-6 h-6 animate-spin text-primary" />
         </div>
         <div v-else-if="cfChangelog" class="prose prose-invert prose-sm max-w-none" v-html="cfChangelog"></div>
         <div v-else class="text-center py-8 text-muted-foreground">
@@ -4965,7 +4917,7 @@ watch(
       <div class="space-y-4">
         <div class="p-4 bg-primary/10 rounded-lg border border-primary/20">
           <div class="flex items-center gap-3">
-            <ArrowUpCircle class="w-8 h-8 text-primary shrink-0" />
+            <Icon name="ArrowUpCircle" class="w-8 h-8 text-primary shrink-0" />
             <div>
               <div class="font-medium">Update Available</div>
               <div class="text-sm text-muted-foreground mt-1">
@@ -4998,7 +4950,7 @@ watch(
               class="p-4 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-primary/5 text-left transition-colors"
               @click="applyCFUpdate(false)">
               <div class="font-medium flex items-center gap-2">
-                <RefreshCw class="w-4 h-4 text-primary" />
+                <Icon name="RefreshCw" class="w-4 h-4 text-primary" />
                 Replace Current Modpack
               </div>
               <div class="text-xs text-muted-foreground mt-1">
@@ -5010,7 +4962,7 @@ watch(
               class="p-4 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-primary/5 text-left transition-colors"
               @click="applyCFUpdate(true)">
               <div class="font-medium flex items-center gap-2">
-                <Plus class="w-4 h-4 text-primary" />
+                <Icon name="Plus" class="w-4 h-4 text-primary" />
                 Create New Modpack
               </div>
               <div class="text-xs text-muted-foreground mt-1">
@@ -5041,7 +4993,7 @@ watch(
         <div class="px-5 py-4 border-b border-border/50 bg-gradient-to-r from-amber-500/10 to-transparent">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <AlertCircle class="w-5 h-5 text-amber-400" />
+              <Icon name="AlertCircle" class="w-5 h-5 text-amber-400" />
             </div>
             <div>
               <h3 class="font-semibold text-foreground">Sync before playing?</h3>
@@ -5058,20 +5010,20 @@ watch(
           </p>
 
           <div v-if="pendingLaunchData?.lastSynced" class="text-xs text-muted-foreground flex items-center gap-1.5">
-            <Clock class="w-3.5 h-3.5" />
+            <Icon name="Clock" class="w-3.5 h-3.5" />
             Last sync: {{ formatPlayDate(pendingLaunchData.lastSynced) }}
           </div>
 
           <div class="bg-muted/30 rounded-lg p-3 space-y-2">
             <div class="flex items-start gap-2">
-              <Download class="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <Icon name="Download" class="w-4 h-4 text-primary mt-0.5 shrink-0" />
               <div class="text-sm">
                 <span class="text-foreground font-medium">Sync & Play</span>
                 <span class="text-muted-foreground"> — Update mods first</span>
               </div>
             </div>
             <div class="flex items-start gap-2">
-              <Play class="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+              <Icon name="Play" class="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
               <div class="text-sm">
                 <span class="text-foreground font-medium">Play now</span>
                 <span class="text-muted-foreground"> — Use current mods</span>
@@ -5087,12 +5039,12 @@ watch(
           </button>
           <button @click="handleSyncConfirmation('skip')"
             class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors duration-150 flex items-center justify-center gap-2">
-            <Play class="w-4 h-4" />
+            <Icon name="Play" class="w-4 h-4" />
             Play now
           </button>
           <button @click="handleSyncConfirmation('sync')"
             class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-primary/20 hover:bg-primary/30 text-primary transition-colors duration-150 flex items-center justify-center gap-2">
-            <Download class="w-4 h-4" />
+            <Icon name="Download" class="w-4 h-4" />
             Sync & Play
           </button>
         </div>
@@ -5109,11 +5061,11 @@ watch(
             <div class="flex items-center gap-4">
               <button @click="handleCloseStructuredEditor"
                 class="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft class="w-5 h-5" />
+                <Icon name="ArrowLeft" class="w-5 h-5" />
               </button>
               <div
                 class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-1 ring-primary/20">
-                <Settings class="w-5 h-5 text-primary" />
+                <Icon name="Settings" class="w-5 h-5 text-primary" />
               </div>
               <div>
                 <h3 class="font-semibold text-lg text-foreground">{{ structuredEditorFile?.name }}</h3>

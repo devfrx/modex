@@ -18,43 +18,13 @@ import LibraryEmptyState from "@/components/library/LibraryEmptyState.vue";
 import LibraryPaginationControls from "@/components/library/LibraryPaginationControls.vue";
 import LibraryResultsInfo from "@/components/library/LibraryResultsInfo.vue";
 import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
-import { useFolderTree } from "@/composables/useFolderTree";
 import { useToast } from "@/composables/useToast";
 import { useLibraryFavorites } from "@/composables/useLibraryFavorites";
 import { useLibrarySettings } from "@/composables/useLibrarySettings";
 import { useLibrarySelection } from "@/composables/useLibrarySelection";
 import { useLibraryFiltering, type ModGroup } from "@/composables/useLibraryFiltering";
 import { useLibraryPagination } from "@/composables/useLibraryPagination";
-import {
-  Search,
-  FolderPlus,
-  FilePlus,
-  Trash2,
-  PackagePlus,
-  PlusCircle,
-  LayoutGrid,
-  List,
-  LayoutList,
-  Info,
-  X,
-  Heart,
-  AlertTriangle,
-  HardDrive,
-  Folder,
-  FolderInput,
-  ArrowUpCircle,
-  Globe,
-  Layers,
-  ChevronDown,
-  ChevronRight,
-  Image,
-  Sparkles,
-  Filter,
-  Settings2,
-  Columns,
-  GalleryVertical,
-  Package,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { Mod, Modpack } from "@/types/electron";
@@ -63,10 +33,6 @@ import ModsIcon from "@/assets/modex_mods_icon.png";
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
-
-// Folder tree integration
-const { folders, moveModsToFolder, getModFolder, createFolder } =
-  useFolderTree();
 
 // ============================================================================
 // COMPOSABLES INTEGRATION
@@ -112,7 +78,6 @@ const {
   searchQuery,
   searchQueryDebounced,
   quickFilter,
-  selectedFolderId,
   expandedGroups,
   loaderStats,
   loaders,
@@ -130,7 +95,6 @@ const {
   mods,
   modUsageMap,
   favoriteMods,
-  getModFolder,
   sortBy,
   sortDir,
   enableGrouping,
@@ -162,7 +126,6 @@ const {
     selectedContentType,
     modpackFilter,
     quickFilter,
-    selectedFolderId,
   ],
 });
 
@@ -230,7 +193,6 @@ const showDeleteDialog = ref(false);
 const showBulkDeleteDialog = ref(false);
 const showCreateModpackDialog = ref(false);
 const showAddToModpackDialog = ref(false);
-const showMoveToFolderDialog = ref(false);
 const showUpdatesDialog = ref(false);
 const showSingleModUpdateDialog = ref(false);
 const selectedUpdateMod = ref<any>(null);
@@ -254,14 +216,6 @@ const progressMessage = ref("");
 
 // Check if running in Electron
 const isElectron = () => window.api !== undefined;
-
-// Move mods to folder
-function moveSelectedToFolder(folderId: string | null) {
-  const ids = Array.from(selectedModIds.value);
-  moveModsToFolder(ids, folderId);
-  showMoveToFolderDialog.value = false;
-  clearSelection();
-}
 
 // Duplicate detection
 function detectDuplicates() {
@@ -847,7 +801,7 @@ onMounted(() => {
             <button class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all"
               :class="quickFilter === 'favorites' ? 'bg-rose-500/15 text-rose-400' : 'text-muted-foreground hover:text-foreground'"
               @click="quickFilter = 'favorites'; router.push('/library?filter=favorites');">
-              <Heart class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
+              <Icon name="Heart" class="w-3 h-3" :class="quickFilter === 'favorites' ? 'fill-rose-400' : ''" />
             </button>
             <button class="px-2.5 py-1.5 text-xs rounded-md transition-all"
               :class="quickFilter === 'recent' ? 'bg-blue-500/15 text-blue-400' : 'text-muted-foreground hover:text-foreground'"
@@ -859,7 +813,7 @@ onMounted(() => {
           <!-- Center: Search & Controls -->
           <div class="hidden md:flex items-center gap-2 flex-1 justify-center max-w-xl">
             <div class="relative flex-1 max-w-xs">
-              <Search
+              <Icon name="Search"
                 class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <input v-model="searchQuery" :placeholder="searchField === 'all' ? 'Search...' : `By ${searchField}...`"
                 class="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-muted/40 border border-border/50 focus:border-primary/50 focus:ring-0 outline-none transition-colors" />
@@ -867,7 +821,7 @@ onMounted(() => {
 
             <button @click="showFilters = !showFilters" class="relative p-2 rounded-lg transition-colors"
               :class="showFilters || activeFilterCount > 0 ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'">
-              <Filter class="w-4 h-4" />
+              <Icon name="Filter" class="w-4 h-4" />
               <span v-if="activeFilterCount > 0"
                 class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
                 {{ activeFilterCount }}
@@ -877,26 +831,26 @@ onMounted(() => {
             <div class="flex items-center p-0.5 bg-muted/40 rounded-lg">
               <button @click="viewMode = 'grid'" class="p-1.5 rounded-md transition-colors"
                 :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
-                <LayoutGrid class="w-3.5 h-3.5" />
+                <Icon name="LayoutGrid" class="w-3.5 h-3.5" />
               </button>
               <button @click="viewMode = 'gallery'" class="p-1.5 rounded-md transition-colors"
                 :class="viewMode === 'gallery' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
-                <GalleryVertical class="w-3.5 h-3.5" />
+                <Icon name="GalleryVertical" class="w-3.5 h-3.5" />
               </button>
               <button @click="viewMode = 'list'" class="p-1.5 rounded-md transition-colors"
                 :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
-                <List class="w-3.5 h-3.5" />
+                <Icon name="List" class="w-3.5 h-3.5" />
               </button>
               <button @click="viewMode = 'compact'" class="p-1.5 rounded-md transition-colors"
                 :class="viewMode === 'compact' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'">
-                <LayoutList class="w-3.5 h-3.5" />
+                <Icon name="LayoutList" class="w-3.5 h-3.5" />
               </button>
             </div>
 
             <div class="relative" v-if="viewMode === 'list'">
               <button @click="showColumnSelector = !showColumnSelector" class="p-1.5 rounded-lg transition-colors"
                 :class="showColumnSelector ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'">
-                <Columns class="w-3.5 h-3.5" />
+                <Icon name="Columns" class="w-3.5 h-3.5" />
               </button>
               <div v-if="showColumnSelector"
                 class="absolute top-full right-0 mt-2 w-48 bg-popover border border-border rounded-lg shadow-lg z-[100] p-2 space-y-1">
@@ -914,19 +868,19 @@ onMounted(() => {
 
             <button @click="enableGrouping = !enableGrouping" class="p-1.5 rounded-lg transition-colors"
               :class="enableGrouping ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'">
-              <Layers class="w-3.5 h-3.5" />
+              <Icon name="Layers" class="w-3.5 h-3.5" />
             </button>
           </div>
 
           <!-- Actions -->
           <div class="flex items-center gap-2 ml-auto shrink-0">
             <Button @click="router.push('/library/search')" size="sm" class="gap-1.5 h-8 px-3 text-xs">
-              <Globe class="w-4 h-4" />
+              <Icon name="Globe" class="w-4 h-4" />
               <span class="hidden sm:inline">Add Mods</span>
             </Button>
             <Button @click="showUpdatesDialog = true" :disabled="!isElectron()" variant="outline" size="sm"
               class="gap-1.5 h-8 px-2.5">
-              <ArrowUpCircle class="w-4 h-4 text-green-500" />
+              <Icon name="ArrowUpCircle" class="w-4 h-4 text-green-500" />
               <span class="hidden lg:inline text-xs">Updates</span>
             </Button>
           </div>
@@ -935,22 +889,22 @@ onMounted(() => {
         <!-- Mobile Search Row -->
         <div class="md:hidden flex items-center gap-2 mt-3">
           <div class="relative flex-1">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Icon name="Search" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <input v-model="searchQuery" placeholder="Search..."
               class="w-full pl-8 pr-3 py-2 text-sm rounded-lg bg-muted/40 border border-border/50 focus:border-primary/50 outline-none" />
           </div>
           <button @click="showFilters = !showFilters" class="p-2 rounded-lg transition-colors"
             :class="showFilters || activeFilterCount > 0 ? 'bg-primary/15 text-primary' : 'bg-muted/40 text-muted-foreground'">
-            <Filter class="w-4 h-4" />
+            <Icon name="Filter" class="w-4 h-4" />
           </button>
           <div class="flex items-center p-0.5 bg-muted/40 rounded-lg">
             <button @click="viewMode = 'grid'" class="p-1.5 rounded-md transition-colors"
               :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-              <LayoutGrid class="w-3.5 h-3.5" />
+              <Icon name="LayoutGrid" class="w-3.5 h-3.5" />
             </button>
             <button @click="viewMode = 'list'" class="p-1.5 rounded-md transition-colors"
               :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
-              <List class="w-3.5 h-3.5" />
+              <Icon name="List" class="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -985,11 +939,11 @@ onMounted(() => {
             class="absolute md:relative right-0 top-0 bottom-0 w-72 md:w-full h-full border-l md:border-l-0 md:border-r border-border bg-card p-4 overflow-y-auto flex flex-col">
             <div class="flex items-center justify-between mb-4">
               <h3 class="font-semibold text-sm flex items-center gap-2">
-                <Filter class="w-4 h-4" />
+                <Icon name="Filter" class="w-4 h-4" />
                 Filters
               </h3>
               <button @click="showFilters = false" class="p-1 rounded-md hover:bg-muted text-muted-foreground">
-                <X class="w-4 h-4" />
+                <Icon name="X" class="w-4 h-4" />
               </button>
             </div>
 
@@ -1072,7 +1026,7 @@ onMounted(() => {
               <button v-if="activeFilterCount > 0"
                 class="w-full px-3 py-2 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all flex items-center justify-center gap-2"
                 @click="clearAllFilters">
-                <X class="w-3.5 h-3.5" />
+                <Icon name="X" class="w-3.5 h-3.5" />
                 Clear All Filters
               </button>
               <p v-else class="text-xs text-muted-foreground text-center">
@@ -1208,7 +1162,7 @@ onMounted(() => {
                         " :src="group.primary.logo_url ||
                           group.primary.thumbnail_url
                           " class="w-full h-full object-cover" @error="handleImageError" />
-                        <Package v-else class="w-4 h-4 m-auto text-muted-foreground/40" />
+                        <Icon v-else name="Package" class="w-4 h-4 m-auto text-muted-foreground/40" />
                       </div>
                     </td>
                     <td v-if="visibleColumns.has('name')" class="p-2 sm:p-3 font-medium text-xs sm:text-sm">
@@ -1216,7 +1170,7 @@ onMounted(() => {
                         <!-- Group expand button (always visible in name column for accessibility) -->
                         <button v-if="group.variants.length > 0" @click.stop="toggleGroup(group.groupKey)"
                           class="p-0.5 rounded hover:bg-muted transition-colors shrink-0">
-                          <ChevronRight class="w-3.5 h-3.5 transition-transform text-muted-foreground"
+                          <Icon name="ChevronRight" class="w-3.5 h-3.5 transition-transform text-muted-foreground"
                             :class="{ 'rotate-90': group.isExpanded }" />
                         </button>
                         <span class="truncate">{{ group.primary.name }}</span>
@@ -1271,12 +1225,12 @@ onMounted(() => {
                         <Button variant="ghost" size="icon"
                           class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-foreground"
                           @click="showModDetails(group.primary)">
-                          <Info class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <Icon name="Info" class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         </Button>
                         <Button variant="ghost" size="icon"
                           class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-destructive"
                           @click="confirmDelete(group.primary.id)">
-                          <Trash2 class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <Icon name="Trash2" class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         </Button>
                       </div>
                     </td>
@@ -1294,14 +1248,14 @@ onMounted(() => {
                             <img v-if="variant.thumbnail_url || variant.logo_url"
                               :src="variant.logo_url || variant.thumbnail_url" class="w-full h-full object-cover"
                               @error="handleImageError" />
-                            <Package v-else class="w-3 h-3 m-auto text-muted-foreground/40" />
+                            <Icon v-else name="Package" class="w-3 h-3 m-auto text-muted-foreground/40" />
                           </div>
                         </div>
                       </td>
                       <td v-if="visibleColumns.has('name')"
                         class="p-2 sm:p-3 font-medium text-xs sm:text-sm text-muted-foreground">
                         <div class="flex items-center gap-2">
-                          <ChevronRight class="w-3 h-3" />
+                          <Icon name="ChevronRight" class="w-3 h-3" />
                           {{ variant.name }}
                         </div>
                       </td>
@@ -1348,12 +1302,12 @@ onMounted(() => {
                           <Button variant="ghost" size="icon"
                             class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-foreground"
                             @click="showModDetails(variant)">
-                            <Info class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            <Icon name="Info" class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon"
                             class="h-6 w-6 sm:h-7 sm:w-7 text-muted-foreground hover:text-destructive"
                             @click="confirmDelete(variant.id)">
-                            <Trash2 class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            <Icon name="Trash2" class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                           </Button>
                         </div>
                       </td>
@@ -1404,7 +1358,7 @@ onMounted(() => {
                   }" @click="toggleSelection(variant.id)">
                   <div class="font-medium text-xs truncate text-muted-foreground hover:text-primary transition-colors"
                     @click.stop="showModDetails(variant)" title="Click to view details">
-                    <ChevronRight class="w-2.5 h-2.5 inline -ml-0.5" />
+                    <Icon name="ChevronRight" class="w-2.5 h-2.5 inline -ml-0.5" />
                     {{ variant.game_version }}
                   </div>
                   <div class="text-caption text-muted-foreground truncate">
@@ -1426,22 +1380,18 @@ onMounted(() => {
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModIds.size > 0" :count="selectedModIds.size" label="mods" @clear="clearSelection">
       <Button variant="destructive" size="sm" class="gap-2" @click="confirmBulkDelete">
-        <Trash2 class="w-4 h-4" />
+        <Icon name="Trash2" class="w-4 h-4" />
         Delete
-      </Button>
-      <Button variant="secondary" size="sm" class="gap-2" @click="showMoveToFolderDialog = true">
-        <FolderInput class="w-4 h-4" />
-        Move to Folder
       </Button>
       <Button variant="secondary" size="sm" class="gap-2" :disabled="!selectedModsCompatibility.compatible" :title="selectedModsCompatibility.compatible
         ? 'Create modpack from selected mods'
         : 'Selected mods have different game versions or loaders'
         " @click="showCreateModpackDialog = true">
-        <PackagePlus class="w-4 h-4" />
+        <Icon name="PackagePlus" class="w-4 h-4" />
         Create Pack
       </Button>
       <Button variant="secondary" size="sm" class="gap-2" @click="showAddToModpackDialog = true">
-        <PlusCircle class="w-4 h-4" />
+        <Icon name="PlusCircle" class="w-4 h-4" />
         Add to Pack
       </Button>
     </BulkActionBar>
@@ -1466,39 +1416,6 @@ onMounted(() => {
 
     <AddToModpackDialog :open="showAddToModpackDialog" :mods="mods.filter((m) => selectedModIds.has(m.id))"
       @close="showAddToModpackDialog = false" @select="addSelectionToModpack" />
-
-    <!-- Move to Folder Dialog -->
-    <Dialog :open="showMoveToFolderDialog" title="Move to Folder"
-      :description="`Move ${selectedModIds.size} mod(s) to a folder`">
-      <div class="space-y-2 max-h-64 overflow-auto">
-        <!-- Root option (no folder) -->
-        <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
-          @click="moveSelectedToFolder(null)">
-          <Folder class="w-4 h-4 text-muted-foreground" />
-          <span class="text-sm">No folder (root)</span>
-        </button>
-
-        <!-- Folders list -->
-        <button v-for="folder in folders" :key="folder.id"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
-          @click="moveSelectedToFolder(folder.id)">
-          <Folder class="w-4 h-4" :style="{ color: folder.color }" />
-          <span class="text-sm">{{ folder.name }}</span>
-        </button>
-
-        <p v-if="folders.length === 0" class="text-sm text-muted-foreground text-center py-4">
-          No folders yet. Create one in the Organize view.
-        </p>
-      </div>
-
-      <template #footer>
-        <Button variant="outline" @click="showMoveToFolderDialog = false">Cancel</Button>
-        <Button variant="outline" @click="router.push('/organize')">
-          <FolderPlus class="w-4 h-4 mr-2" />
-          New Folder
-        </Button>
-      </template>
-    </Dialog>
 
     <ProgressDialog :open="showProgress" :title="progressTitle" :message="progressMessage" />
 
@@ -1534,7 +1451,7 @@ onMounted(() => {
       <template #footer>
         <Button variant="outline" @click="cancelUsageWarning"> Cancel </Button>
         <Button variant="destructive" @click="deleteModsWithCleanup(true)">
-          <Trash2 class="w-4 h-4 mr-2" />
+          <Icon name="Trash2" class="w-4 h-4 mr-2" />
           Delete & Remove
         </Button>
       </template>

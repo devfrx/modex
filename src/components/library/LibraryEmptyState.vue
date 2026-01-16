@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Package, Globe } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import { useRouter } from "vue-router";
 
@@ -14,7 +14,7 @@ function browseMods() {
   <div class="flex items-center justify-center flex-1 bg-background">
     <div class="text-center max-w-sm flex flex-col items-center">
       <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-6">
-        <Package class="w-8 h-8 text-muted-foreground" />
+        <Icon name="Package" class="w-8 h-8 text-muted-foreground" />
       </div>
 
       <h3 class="text-xl font-bold mb-2">Your library is empty</h3>
@@ -22,12 +22,9 @@ function browseMods() {
         Browse CurseForge to discover and add mods.
       </p>
 
-      <Button
-        @click="browseMods"
-        size="lg"
-        class="gap-2.5 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
-      >
-        <Globe class="w-5 h-5" />
+      <Button @click="browseMods" size="lg"
+        class="gap-2.5 h-11 px-6 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
+        <Icon name="Globe" class="w-5 h-5" />
         <span class="font-semibold">Browse Mods</span>
       </Button>
     </div>

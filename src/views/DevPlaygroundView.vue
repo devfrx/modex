@@ -9,11 +9,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import BulkActionBar from '@/components/ui/BulkActionBar.vue'
 import { useToast } from '@/composables/useToast'
-import {
-    Play, Settings, Download, Trash2, Plus, Search, Check, X, AlertCircle,
-    ArrowUpCircle, Layers, Sparkles, RefreshCw, Eye, Edit, Copy, ExternalLink,
-    Folder, FileCode, Globe, GitBranch, Users, Clock, Heart, Star, Zap
-} from 'lucide-vue-next'
+import Icon from '@/components/ui/Icon.vue'
 
 // State for testing components
 const activeSection = ref<string>('buttons')
@@ -45,14 +41,14 @@ const toggleLoading = () => {
 }
 
 const sections = [
-    { id: 'buttons', label: 'Buttons', icon: Play },
-    { id: 'inputs', label: 'Inputs', icon: Edit },
-    { id: 'dialogs', label: 'Dialogs', icon: Layers },
-    { id: 'toasts', label: 'Toasts', icon: AlertCircle },
-    { id: 'states', label: 'States', icon: Zap },
-    { id: 'badges', label: 'Badges', icon: Star },
-    { id: 'cards', label: 'Cards', icon: Folder },
-    { id: 'colors', label: 'Colors', icon: Sparkles },
+    { id: 'buttons', label: 'Buttons', icon: 'Play' },
+    { id: 'inputs', label: 'Inputs', icon: 'Edit' },
+    { id: 'dialogs', label: 'Dialogs', icon: 'Layers' },
+    { id: 'toasts', label: 'Toasts', icon: 'AlertCircle' },
+    { id: 'states', label: 'States', icon: 'Zap' },
+    { id: 'badges', label: 'Badges', icon: 'Star' },
+    { id: 'cards', label: 'Cards', icon: 'Folder' },
+    { id: 'colors', label: 'Colors', icon: 'Sparkles' },
 ]
 </script>
 
@@ -63,7 +59,7 @@ const sections = [
             <div class="px-6 py-4 flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center">
-                        <Zap class="w-5 h-5 text-primary" />
+                        <Icon name="Zap" class="w-5 h-5 text-primary" />
                     </div>
                     <div>
                         <h1 class="text-lg font-semibold">Dev Playground</h1>
@@ -82,7 +78,7 @@ const sections = [
                     :class="activeSection === section.id
                         ? 'bg-primary text-primary-foreground'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'">
-                    <component :is="section.icon" class="w-3.5 h-3.5" />
+                    <Icon :name="section.icon" class="w-3.5 h-3.5" />
                     {{ section.label }}
                 </button>
             </div>
@@ -104,7 +100,7 @@ const sections = [
                         <Button variant="default" size="lg">Large</Button>
                         <Button variant="default" disabled>Disabled</Button>
                         <Button variant="default">
-                            <Play class="w-4 h-4 mr-2" />
+                            <Icon name="Play" class="w-4 h-4 mr-2" />
                             With Icon
                         </Button>
                     </div>
@@ -127,7 +123,7 @@ const sections = [
                     <div class="flex flex-wrap items-center gap-3">
                         <Button variant="destructive">Destructive</Button>
                         <Button variant="destructive">
-                            <Trash2 class="w-4 h-4 mr-2" />
+                            <Icon name="Trash2" class="w-4 h-4 mr-2" />
                             Delete
                         </Button>
                     </div>
@@ -138,19 +134,19 @@ const sections = [
                     <h3 class="text-sm font-medium text-muted-foreground">Icon Only</h3>
                     <div class="flex flex-wrap items-center gap-3">
                         <Button variant="ghost" size="icon">
-                            <Settings class="w-4 h-4" />
+                            <Icon name="Settings" class="w-4 h-4" />
                         </Button>
                         <Button variant="ghost" size="icon">
-                            <Search class="w-4 h-4" />
+                            <Icon name="Search" class="w-4 h-4" />
                         </Button>
                         <Button variant="ghost" size="icon">
-                            <Plus class="w-4 h-4" />
+                            <Icon name="Plus" class="w-4 h-4" />
                         </Button>
                         <Button variant="outline" size="icon">
-                            <RefreshCw class="w-4 h-4" />
+                            <Icon name="RefreshCw" class="w-4 h-4" />
                         </Button>
                         <Button variant="default" size="icon">
-                            <Download class="w-4 h-4" />
+                            <Icon name="Download" class="w-4 h-4" />
                         </Button>
                     </div>
                 </div>
@@ -169,7 +165,8 @@ const sections = [
                     <div class="space-y-2">
                         <label class="text-sm font-medium">With Icon (Search)</label>
                         <div class="relative">
-                            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Icon name="Search"
+                                class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input v-model="inputValue" placeholder="Search..." class="pl-10" />
                         </div>
                     </div>
@@ -231,19 +228,19 @@ const sections = [
 
                 <div class="flex flex-wrap gap-3">
                     <Button @click="toast.success('Success!', 'Operation completed successfully')">
-                        <Check class="w-4 h-4 mr-2" />
+                        <Icon name="Check" class="w-4 h-4 mr-2" />
                         Success Toast
                     </Button>
                     <Button variant="destructive" @click="toast.error('Error!', 'Something went wrong')">
-                        <X class="w-4 h-4 mr-2" />
+                        <Icon name="X" class="w-4 h-4 mr-2" />
                         Error Toast
                     </Button>
                     <Button variant="secondary" @click="toast.warning('Warning!', 'Please check your input')">
-                        <AlertCircle class="w-4 h-4 mr-2" />
+                        <Icon name="AlertCircle" class="w-4 h-4 mr-2" />
                         Warning Toast
                     </Button>
                     <Button variant="outline" @click="toast.info('Info', 'Here is some information')">
-                        <AlertCircle class="w-4 h-4 mr-2" />
+                        <Icon name="AlertCircle" class="w-4 h-4 mr-2" />
                         Info Toast
                     </Button>
                 </div>
@@ -258,7 +255,7 @@ const sections = [
                         <EmptyState title="No mods found" description="Start by adding some mods to your modpack."
                             icon="package">
                             <Button>
-                                <Plus class="w-4 h-4 mr-2" />
+                                <Icon name="Plus" class="w-4 h-4 mr-2" />
                                 Add Mods
                             </Button>
                         </EmptyState>
@@ -282,15 +279,15 @@ const sections = [
                     <BulkActionBar v-if="showBulkBar" :count="selectedCount" label="items selected"
                         @clear="showBulkBar = false">
                         <Button variant="ghost" size="sm">
-                            <Check class="w-4 h-4 mr-2" />
+                            <Icon name="Check" class="w-4 h-4 mr-2" />
                             Enable
                         </Button>
                         <Button variant="ghost" size="sm">
-                            <X class="w-4 h-4 mr-2" />
+                            <Icon name="X" class="w-4 h-4 mr-2" />
                             Disable
                         </Button>
                         <Button variant="destructive" size="sm">
-                            <Trash2 class="w-4 h-4 mr-2" />
+                            <Icon name="Trash2" class="w-4 h-4 mr-2" />
                             Remove
                         </Button>
                     </BulkActionBar>
@@ -325,17 +322,17 @@ const sections = [
                     <div class="flex flex-wrap gap-2">
                         <span
                             class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/15 text-primary text-xs font-medium">
-                            <Check class="w-3 h-3" />
+                            <Icon name="Check" class="w-3 h-3" />
                             Compatible
                         </span>
                         <span
                             class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/15 text-red-500 text-xs font-medium">
-                            <X class="w-3 h-3" />
+                            <Icon name="X" class="w-3 h-3" />
                             Incompatible
                         </span>
                         <span
                             class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 text-amber-500 text-xs font-medium animate-pulse">
-                            <RefreshCw class="w-3 h-3" />
+                            <Icon name="RefreshCw" class="w-3 h-3" />
                             Updating
                         </span>
                     </div>
@@ -352,7 +349,7 @@ const sections = [
                         class="p-4 rounded-lg border border-border/50 bg-card hover:border-primary/30 transition-all duration-150">
                         <div class="flex items-center gap-3 mb-3">
                             <div class="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center">
-                                <Layers class="w-5 h-5 text-primary" />
+                                <Icon name="Layers" class="w-5 h-5 text-primary" />
                             </div>
                             <div>
                                 <h4 class="font-medium">Card Title</h4>
@@ -367,7 +364,7 @@ const sections = [
                         class="p-4 rounded-lg border border-border/50 bg-card hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-150 cursor-pointer">
                         <div class="flex items-center gap-3 mb-3">
                             <div class="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                                <Star class="w-5 h-5 text-amber-500" />
+                                <Icon name="Star" class="w-5 h-5 text-amber-500" />
                             </div>
                             <div>
                                 <h4 class="font-medium">Interactive</h4>
@@ -381,11 +378,11 @@ const sections = [
                     <div class="p-4 rounded-lg border border-border/50 bg-card">
                         <div class="flex items-center justify-between mb-3">
                             <span class="text-sm text-muted-foreground">Total Mods</span>
-                            <Layers class="w-4 h-4 text-muted-foreground" />
+                            <Icon name="Layers" class="w-4 h-4 text-muted-foreground" />
                         </div>
                         <div class="text-3xl font-bold">1,234</div>
                         <p class="text-xs text-primary mt-1 flex items-center gap-1">
-                            <ArrowUpCircle class="w-3 h-3" />
+                            <Icon name="ArrowUpCircle" class="w-3 h-3" />
                             +12% from last week
                         </p>
                     </div>

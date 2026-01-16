@@ -3,7 +3,7 @@ import { ref, computed, watch } from "vue";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import { RefreshCw, Loader2, CheckCircle2, XCircle, AlertTriangle } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { Modpack } from "@/types/electron";
 
 const props = defineProps<{
@@ -337,7 +337,7 @@ function handleClose() {
         <template #header>
             <div v-if="conversionResult" class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <CheckCircle2 class="w-5 h-5 text-green-500" />
+                    <Icon name="CheckCircle2" class="w-5 h-5 text-green-500" />
                 </div>
                 <div>
                     <h2 class="text-lg font-semibold text-green-500">Conversion Complete!</h2>
@@ -345,7 +345,7 @@ function handleClose() {
                 </div>
             </div>
             <div v-else class="flex items-center gap-2">
-                <RefreshCw class="w-5 h-5" />
+                <Icon name="RefreshCw" class="w-5 h-5" />
                 Convert Modpack
             </div>
         </template>
@@ -393,7 +393,7 @@ function handleClose() {
 
                 <div v-if="!hasChanges && canConvert"
                     class="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-600 text-sm">
-                    <AlertTriangle class="w-4 h-4 inline mr-1.5" />
+                    <Icon name="AlertTriangle" class="w-4 h-4 inline mr-1.5" />
                     No changes detected. Please select a different version or loader.
                 </div>
 
@@ -410,7 +410,7 @@ function handleClose() {
                     <div class="flex items-center justify-between text-sm">
                         <span class="text-muted-foreground">Converting mods...</span>
                         <span class="font-medium">{{ conversionProgress.current }} / {{ conversionProgress.total
-                            }}</span>
+                        }}</span>
                     </div>
                     <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
                         <div class="bg-primary h-full transition-all duration-300"
@@ -493,11 +493,11 @@ function handleClose() {
                             'bg-red-500/10': detail.status === 'failed',
                             'bg-yellow-500/10': detail.status === 'skipped',
                         }">
-                        <CheckCircle2 v-if="detail.status === 'success'"
+                        <Icon v-if="detail.status === 'success'" name="CheckCircle2"
                             class="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                        <XCircle v-else-if="detail.status === 'failed'"
+                        <Icon v-else-if="detail.status === 'failed'" name="XCircle"
                             class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                        <AlertTriangle v-else class="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                        <Icon v-else name="AlertTriangle" class="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
 
                         <div class="flex-1 min-w-0">
                             <div class="font-medium truncate">{{ detail.modName }}</div>
@@ -514,7 +514,7 @@ function handleClose() {
                     Close
                 </Button>
                 <Button v-if="conversionResult" @click="() => { emit('success'); emit('close'); }">
-                    <CheckCircle2 class="w-4 h-4 mr-2" />
+                    <Icon name="CheckCircle2" class="w-4 h-4 mr-2" />
                     Done
                 </Button>
                 <Button v-if="!conversionResult" variant="outline" @click="handleClose" :disabled="isConverting">
@@ -522,8 +522,8 @@ function handleClose() {
                 </Button>
                 <Button v-if="!conversionResult" @click="convertModpack"
                     :disabled="!canConvert || !hasChanges || isConverting">
-                    <Loader2 v-if="isConverting" class="w-4 h-4 mr-2 animate-spin" />
-                    <RefreshCw v-else class="w-4 h-4 mr-2" />
+                    <Icon v-if="isConverting" name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
+                    <Icon v-else name="RefreshCw" class="w-4 h-4 mr-2" />
                     {{ isConverting ? "Converting..." : "Convert Modpack" }}
                 </Button>
             </div>

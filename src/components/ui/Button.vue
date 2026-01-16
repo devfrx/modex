@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cn } from "@/lib/utils";
 import { type ButtonHTMLAttributes } from "vue";
-import { Loader2 } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 interface Props extends /* @vue-ignore */ ButtonHTMLAttributes {
   variant?:
@@ -46,7 +46,7 @@ const props = withDefaults(defineProps<Props>(), {
     props.class
   )
     " :disabled="loading || !!$attrs.disabled" v-bind="$attrs">
-    <Loader2 v-if="loading" class="w-4 h-4 mr-2 animate-spin" />
+    <Icon v-if="loading" name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
     <slot />
   </button>
 </template>

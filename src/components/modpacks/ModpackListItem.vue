@@ -1,19 +1,5 @@
 <script setup lang="ts">
-import {
-    Package,
-    Trash2,
-    Edit,
-    Check,
-    Copy,
-    FolderOpen,
-    Heart,
-    Share2,
-    RefreshCw,
-    Calendar,
-    Flame,
-    Globe,
-    MoreHorizontal,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import { ref } from "vue";
 
 interface ModpackWithCount {
@@ -86,7 +72,7 @@ function getLoaderColor(loader?: string) {
         <div class="flex-shrink-0">
             <div class="w-5 h-5 rounded border flex items-center justify-center transition-colors cursor-pointer"
                 :class="selected ? 'bg-primary border-primary' : 'border-border hover:border-primary'">
-                <Check v-if="selected" class="w-3 h-3 text-primary-foreground" />
+                <Icon v-if="selected" name="Check" class="w-3 h-3 text-primary-foreground" />
             </div>
         </div>
 
@@ -97,7 +83,7 @@ function getLoaderColor(loader?: string) {
                 : 'atom:///' + modpack.image_url.replace(/\\/g, '/')" class="w-full h-full object-cover" alt=""
                 @error="handleImageError" />
             <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground">
-                <Package class="w-5 h-5" />
+                <Icon name="Package" class="w-5 h-5" />
             </div>
         </div>
 
@@ -106,10 +92,10 @@ function getLoaderColor(loader?: string) {
             <div class="flex items-center gap-2">
                 <span class="font-medium text-sm truncate">{{ modpack.name }}</span>
                 <button v-if="favorite" class="flex-shrink-0" @click.stop="$emit('toggle-favorite', modpack.id)">
-                    <Heart class="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
+                    <Icon name="Heart" class="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
                 </button>
                 <span v-if="modpack.cf_project_id" class="flex-shrink-0">
-                    <Flame class="w-3.5 h-3.5 text-orange-500" />
+                    <Icon name="Flame" class="w-3.5 h-3.5 text-orange-500" />
                 </span>
             </div>
             <p class="text-xs text-muted-foreground truncate mt-0.5">
@@ -144,7 +130,7 @@ function getLoaderColor(loader?: string) {
         <!-- Favorite Button (hidden, shows on hover) -->
         <button class="flex-shrink-0 p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100 hover:bg-muted"
             :class="{ 'opacity-100': favorite }" @click.stop="$emit('toggle-favorite', modpack.id)">
-            <Heart class="w-4 h-4"
+            <Icon name="Heart" class="w-4 h-4"
                 :class="favorite ? 'fill-rose-500 text-rose-500' : 'text-muted-foreground hover:text-rose-500'" />
         </button>
 
@@ -152,7 +138,7 @@ function getLoaderColor(loader?: string) {
         <div class="flex-shrink-0 relative">
             <button class="p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100 hover:bg-muted"
                 @click.stop="showActions = !showActions">
-                <MoreHorizontal class="w-4 h-4 text-muted-foreground" />
+                <Icon name="MoreHorizontal" class="w-4 h-4 text-muted-foreground" />
             </button>
 
             <!-- Dropdown -->
@@ -162,29 +148,29 @@ function getLoaderColor(loader?: string) {
                     @mouseleave="showActions = false">
                     <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
                         @click.stop="$emit('edit', modpack.id); showActions = false">
-                        <Edit class="w-4 h-4" /> Edit
+                        <Icon name="Edit" class="w-4 h-4" /> Edit
                     </button>
                     <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
                         @click.stop="$emit('clone', modpack.id); showActions = false">
-                        <Copy class="w-4 h-4" /> Duplicate
+                        <Icon name="Copy" class="w-4 h-4" /> Duplicate
                     </button>
                     <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
                         @click.stop="$emit('open-folder', modpack.id); showActions = false">
-                        <FolderOpen class="w-4 h-4" /> Open Folder
+                        <Icon name="FolderOpen" class="w-4 h-4" /> Open Folder
                     </button>
                     <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
                         @click.stop="$emit('share', modpack.id, modpack.name); showActions = false">
-                        <Share2 class="w-4 h-4" /> Share
+                        <Icon name="Share2" class="w-4 h-4" /> Share
                     </button>
                     <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
                         @click.stop="$emit('convert', modpack.id); showActions = false">
-                        <RefreshCw class="w-4 h-4" /> Convert
+                        <Icon name="RefreshCw" class="w-4 h-4" /> Convert
                     </button>
                     <hr class="my-1 border-border" />
                     <button
                         class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-destructive/10 text-destructive"
                         @click.stop="$emit('delete', modpack.id); showActions = false">
-                        <Trash2 class="w-4 h-4" /> Delete
+                        <Icon name="Trash2" class="w-4 h-4" /> Delete
                     </button>
                 </div>
             </Transition>

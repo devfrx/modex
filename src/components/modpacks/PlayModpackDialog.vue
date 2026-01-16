@@ -11,43 +11,7 @@
  */
 
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import {
-    Play,
-    Loader2,
-    CheckCircle,
-    XCircle,
-    Package,
-    FolderOpen,
-    Download,
-    RefreshCw,
-    Settings,
-    AlertCircle,
-    Clock,
-    HardDrive,
-    FileCode,
-    Box,
-    Gamepad2,
-    Palette,
-    Sun,
-    Save,
-    Image,
-    Sparkles,
-    Layers,
-    Rocket,
-    ChevronRight,
-    Shield,
-    Check,
-    Terminal,
-    ChevronDown,
-    ChevronUp,
-    Square,
-    Maximize2,
-    Minimize2,
-    Cpu,
-    MemoryStick,
-    Sliders,
-    Trash2,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import { useInstances } from "@/composables/useInstances";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
@@ -517,20 +481,20 @@ const progressPercent = computed(() => {
 
 // Tabs configuration
 const tabs = [
-    { id: "play", label: "Play", icon: Play },
-    { id: "sync", label: "Update", icon: RefreshCw },
-    { id: "configs", label: "Configs", icon: Settings },
-    { id: "folders", label: "Folders", icon: FolderOpen },
+    { id: "play", label: "Play", icon: "Play" },
+    { id: "sync", label: "Update", icon: "RefreshCw" },
+    { id: "configs", label: "Configs", icon: "Settings" },
+    { id: "folders", label: "Folders", icon: "FolderOpen" },
 ] as const;
 
 // Folder items
 const folderItems = computed(() => [
-    { id: "mods", label: "Mods", icon: Package, colorClass: "folder-orange", desc: stats.value ? `${stats.value.modCount} files` : "Mod files" },
-    { id: "config", label: "Config", icon: Settings, colorClass: "folder-blue", desc: stats.value ? `${stats.value.configCount} files` : "Settings" },
-    { id: "saves", label: "Saves", icon: Save, colorClass: "folder-green", desc: "Worlds" },
-    { id: "resourcepacks", label: "Resources", icon: Palette, colorClass: "folder-purple", desc: "Textures" },
-    { id: "shaderpacks", label: "Shaders", icon: Sun, colorClass: "folder-yellow", desc: "Shaders" },
-    { id: "screenshots", label: "Screenshots", icon: Image, colorClass: "folder-pink", desc: "Captures" },
+    { id: "mods", label: "Mods", icon: "Package", colorClass: "folder-orange", desc: stats.value ? `${stats.value.modCount} files` : "Mod files" },
+    { id: "config", label: "Config", icon: "Settings", colorClass: "folder-blue", desc: stats.value ? `${stats.value.configCount} files` : "Settings" },
+    { id: "saves", label: "Saves", icon: "Save", colorClass: "folder-green", desc: "Worlds" },
+    { id: "resourcepacks", label: "Resources", icon: "Palette", colorClass: "folder-purple", desc: "Textures" },
+    { id: "shaderpacks", label: "Shaders", icon: "Sun", colorClass: "folder-yellow", desc: "Shaders" },
+    { id: "screenshots", label: "Screenshots", icon: "Image", colorClass: "folder-pink", desc: "Captures" },
 ]);
 
 // Watch dialog open state
@@ -616,7 +580,7 @@ function handleConfigReverted(event: Event) {
                     <div class="header-modpack-icon">
                         <img v-if="props.modpackIcon" :src="props.modpackIcon" alt=""
                             class="w-full h-full object-cover rounded-lg" />
-                        <Gamepad2 v-else class="w-6 h-6 text-primary" />
+                        <Icon v-else name="Gamepad2" class="w-6 h-6 text-primary" />
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
@@ -627,13 +591,13 @@ function handleConfigReverted(event: Event) {
                             </div>
                             <div v-else-if="instance?.state === 'installing'"
                                 class="header-status-badge header-status-installing">
-                                <Loader2 class="w-3 h-3 animate-spin" />
+                                <Icon name="Loader2" class="w-3 h-3 animate-spin" />
                                 Installing
                             </div>
                         </div>
                         <div class="flex items-center gap-3 mt-1">
                             <span class="header-tag">
-                                <Box class="w-3 h-3" />
+                                <Icon name="Box" class="w-3 h-3" />
                                 {{ props.minecraftVersion || "Auto" }}
                             </span>
                             <span
@@ -641,19 +605,19 @@ function handleConfigReverted(event: Event) {
                                 {{ props.loader || "Forge" }}
                             </span>
                             <span v-if="stats" class="header-tag">
-                                <Package class="w-3 h-3" />
+                                <Icon name="Package" class="w-3 h-3" />
                                 {{ stats.modCount }} mods
                             </span>
                             <!-- Sync Status Indicator -->
                             <span v-if="syncStatus?.needsSync"
                                 class="header-tag border-amber-500/30 text-amber-400 bg-amber-500/10"
                                 :title="`${syncStatus.totalDifferences} difference(s) with modpack`">
-                                <RefreshCw class="w-3 h-3" />
+                                <Icon name="RefreshCw" class="w-3 h-3" />
                                 Needs Sync
                             </span>
                             <span v-else-if="instance && syncStatus && !syncStatus.needsSync"
                                 class="header-tag border-green-500/30 text-green-400 bg-green-500/10">
-                                <Check class="w-3 h-3" />
+                                <Icon name="Check" class="w-3 h-3" />
                                 In Sync
                             </span>
                         </div>
@@ -676,7 +640,7 @@ function handleConfigReverted(event: Event) {
                 <div v-if="isLoading" class="loading-container">
                     <div class="text-center space-y-4">
                         <div class="loading-icon">
-                            <Loader2 class="w-8 h-8 text-primary animate-spin" />
+                            <Icon name="Loader2" class="w-8 h-8 text-primary animate-spin" />
                         </div>
                         <p class="text-sm text-muted-foreground">Loading instance...</p>
                     </div>
@@ -689,9 +653,9 @@ function handleConfigReverted(event: Event) {
                         <div class="text-center space-y-4">
                             <div class="hero-icon-wrapper">
                                 <div class="hero-icon">
-                                    <Rocket class="w-12 h-12 text-primary" />
+                                    <Icon name="Rocket" class="w-12 h-12 text-primary" />
                                 </div>
-                                <Sparkles class="sparkle-icon" />
+                                <Icon name="Sparkles" class="sparkle-icon" />
                             </div>
                             <div>
                                 <h3 class="text-xl font-bold text-foreground">Create Game Instance</h3>
@@ -704,18 +668,18 @@ function handleConfigReverted(event: Event) {
                         <!-- Info Cards -->
                         <div class="grid grid-cols-3 gap-3">
                             <div class="info-card">
-                                <Package class="w-6 h-6 text-orange-400 mx-auto mb-2" />
+                                <Icon name="Package" class="w-6 h-6 text-orange-400 mx-auto mb-2" />
                                 <div class="text-lg font-bold text-foreground">{{ props.modCount || "?" }}</div>
                                 <div class="text-xs text-muted-foreground">Mods</div>
                             </div>
                             <div class="info-card">
-                                <Box class="w-6 h-6 text-blue-400 mx-auto mb-2" />
+                                <Icon name="Box" class="w-6 h-6 text-blue-400 mx-auto mb-2" />
                                 <div class="text-lg font-bold text-foreground">{{ props.minecraftVersion || "Auto" }}
                                 </div>
                                 <div class="text-xs text-muted-foreground">Version</div>
                             </div>
                             <div class="info-card">
-                                <Shield class="w-6 h-6 text-green-400 mx-auto mb-2" />
+                                <Icon name="Shield" class="w-6 h-6 text-green-400 mx-auto mb-2" />
                                 <div class="text-lg font-bold text-foreground">Isolated</div>
                                 <div class="text-xs text-muted-foreground">Safe</div>
                             </div>
@@ -724,13 +688,13 @@ function handleConfigReverted(event: Event) {
                         <!-- Features List -->
                         <div class="features-card">
                             <h4 class="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-                                <Layers class="w-4 h-4 text-primary" />
+                                <Icon name="Layers" class="w-4 h-4 text-primary" />
                                 What's included
                             </h4>
                             <div class="space-y-2">
                                 <div class="feature-item">
                                     <div class="feature-check">
-                                        <CheckCircle class="w-3.5 h-3.5 text-green-400" />
+                                        <Icon name="CheckCircle" class="w-3.5 h-3.5 text-green-400" />
                                     </div>
                                     <span class="text-muted-foreground">Complete <span
                                             class="text-foreground font-medium">mods/</span> folder with all modpack
@@ -738,14 +702,14 @@ function handleConfigReverted(event: Event) {
                                 </div>
                                 <div class="feature-item">
                                     <div class="feature-check">
-                                        <CheckCircle class="w-3.5 h-3.5 text-green-400" />
+                                        <Icon name="CheckCircle" class="w-3.5 h-3.5 text-green-400" />
                                     </div>
                                     <span class="text-muted-foreground">Pre-configured <span
                                             class="text-foreground font-medium">config/</span> folder</span>
                                 </div>
                                 <div class="feature-item">
                                     <div class="feature-check">
-                                        <CheckCircle class="w-3.5 h-3.5 text-green-400" />
+                                        <Icon name="CheckCircle" class="w-3.5 h-3.5 text-green-400" />
                                     </div>
                                     <span class="text-muted-foreground">Separate saves, resourcepacks &
                                         screenshots</span>
@@ -757,7 +721,7 @@ function handleConfigReverted(event: Event) {
                         <div v-if="syncProgress && isCreating" class="progress-card">
                             <div class="flex items-center gap-4 mb-3">
                                 <div class="progress-icon">
-                                    <Loader2 class="w-6 h-6 text-primary animate-spin" />
+                                    <Icon name="Loader2" class="w-6 h-6 text-primary animate-spin" />
                                 </div>
                                 <div class="flex-1">
                                     <div class="flex items-center justify-between mb-1">
@@ -779,8 +743,8 @@ function handleConfigReverted(event: Event) {
 
                         <!-- Create Button -->
                         <Button @click="handleCreateInstance" :disabled="isCreating" size="lg" class="w-full gap-3">
-                            <Loader2 v-if="isCreating" class="w-5 h-5 animate-spin" />
-                            <Rocket v-else class="w-5 h-5" />
+                            <Icon v-if="isCreating" name="Loader2" class="w-5 h-5 animate-spin" />
+                            <Icon v-else name="Rocket" class="w-5 h-5" />
                             {{ isCreating ? "Creating Instance..." : "Create & Download" }}
                         </Button>
                     </div>
@@ -792,17 +756,17 @@ function handleConfigReverted(event: Event) {
                         <!-- Quick Stats Bar -->
                         <div class="quick-stats-bar">
                             <div class="quick-stat">
-                                <HardDrive class="w-4 h-4 text-muted-foreground" />
+                                <Icon name="HardDrive" class="w-4 h-4 text-muted-foreground" />
                                 <span v-if="stats">{{ stats.totalSize }}</span>
                                 <span v-else>—</span>
                             </div>
                             <div class="quick-stat">
-                                <Clock class="w-4 h-4 text-muted-foreground" />
+                                <Icon name="Clock" class="w-4 h-4 text-muted-foreground" />
                                 <span v-if="instance.lastPlayed">{{ formatDate(instance.lastPlayed) }}</span>
                                 <span v-else>Never played</span>
                             </div>
                             <div class="quick-stat">
-                                <Settings class="w-4 h-4 text-muted-foreground" />
+                                <Icon name="Settings" class="w-4 h-4 text-muted-foreground" />
                                 <span v-if="stats">{{ stats.configCount || 0 }} configs</span>
                                 <span v-else>—</span>
                             </div>
@@ -812,7 +776,7 @@ function handleConfigReverted(event: Event) {
                         <div class="tab-nav">
                             <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
                                 :class="['tab-btn', activeTab === tab.id && 'tab-active']">
-                                <component :is="tab.icon" class="w-4 h-4" />
+                                <Icon :name="tab.icon" class="w-4 h-4" />
                                 <span class="hidden sm:inline">{{ tab.label }}</span>
                             </button>
                         </div>
@@ -832,13 +796,13 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex items-center gap-3">
                                             <!-- Status Icon -->
                                             <div class="status-icon-container">
-                                                <Rocket v-if="runningGame?.status === 'launching'"
+                                                <Icon v-if="runningGame?.status === 'launching'" name="Rocket"
                                                     class="w-5 h-5 animate-bounce" />
-                                                <Loader2 v-else-if="runningGame?.status === 'loading_mods'"
+                                                <Icon v-else-if="runningGame?.status === 'loading_mods'" name="Loader2"
                                                     class="w-5 h-5 animate-spin" />
-                                                <Gamepad2 v-else-if="runningGame?.status === 'running'"
+                                                <Icon v-else-if="runningGame?.status === 'running'" name="Gamepad2"
                                                     class="w-5 h-5" />
-                                                <Loader2 v-else class="w-5 h-5 animate-spin" />
+                                                <Icon v-else name="Loader2" class="w-5 h-5 animate-spin" />
                                             </div>
 
                                             <!-- Status Text -->
@@ -885,12 +849,12 @@ function handleConfigReverted(event: Event) {
                                                 <button @click="showLogConsole = !showLogConsole"
                                                     class="p-1.5 rounded-md hover:bg-black/20 transition-colors"
                                                     :title="showLogConsole ? 'Hide Logs' : 'Show Logs'">
-                                                    <Terminal class="w-4 h-4" />
+                                                    <Icon name="Terminal" class="w-4 h-4" />
                                                 </button>
                                                 <button v-if="runningGame?.gamePid" @click="handleKillGame"
                                                     class="p-1.5 rounded-md hover:bg-red-500/30 text-red-300 transition-colors"
                                                     title="Stop Game">
-                                                    <Square class="w-4 h-4" />
+                                                    <Icon name="Square" class="w-4 h-4" />
                                                 </button>
                                             </div>
                                         </div>
@@ -901,7 +865,7 @@ function handleConfigReverted(event: Event) {
                                         <div class="log-console-header">
                                             <div class="flex items-center gap-3">
                                                 <div class="flex items-center gap-2">
-                                                    <Terminal class="w-4 h-4 text-muted-foreground" />
+                                                    <Icon name="Terminal" class="w-4 h-4 text-muted-foreground" />
                                                     <span class="text-sm font-medium">Game Logs</span>
                                                 </div>
                                                 <!-- Log Level Filters -->
@@ -966,13 +930,13 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex items-center justify-between">
                                             <div class="flex items-center gap-4">
                                                 <div v-if="runningGame?.status === 'loading_mods'" class="info-stat">
-                                                    <Package class="w-4 h-4 text-amber-400" />
+                                                    <Icon name="Package" class="w-4 h-4 text-amber-400" />
                                                     <span>{{ runningGame?.loadedMods || 0 }}/{{ runningGame?.totalMods
                                                         || '?' }} mods</span>
                                                 </div>
                                                 <div v-else-if="runningGame?.status === 'running'"
                                                     class="info-stat text-green-400">
-                                                    <CheckCircle class="w-4 h-4" />
+                                                    <Icon name="CheckCircle" class="w-4 h-4" />
                                                     <span>Ready to play</span>
                                                 </div>
                                                 <div class="info-stat text-muted-foreground">
@@ -997,8 +961,9 @@ function handleConfigReverted(event: Event) {
                                                 :disabled="instance.state !== 'ready' || isLaunching"
                                                 class="play-button-new">
                                                 <div class="play-button-inner">
-                                                    <Loader2 v-if="isLaunching" class="w-10 h-10 animate-spin" />
-                                                    <Play v-else class="w-10 h-10" />
+                                                    <Icon v-if="isLaunching" name="Loader2"
+                                                        class="w-10 h-10 animate-spin" />
+                                                    <Icon v-else name="Play" class="w-10 h-10" />
                                                 </div>
                                             </button>
 
@@ -1017,9 +982,9 @@ function handleConfigReverted(event: Event) {
                                         <!-- Settings Toggle -->
                                         <button @click="showSettings = !showSettings" class="settings-toggle"
                                             :class="{ 'settings-toggle-active': showSettings }">
-                                            <Sliders class="w-4 h-4" />
+                                            <Icon name="Sliders" class="w-4 h-4" />
                                             <span>Settings</span>
-                                            <ChevronDown class="w-4 h-4 transition-transform"
+                                            <Icon name="ChevronDown" class="w-4 h-4 transition-transform"
                                                 :class="{ 'rotate-180': showSettings }" />
                                         </button>
 
@@ -1028,7 +993,7 @@ function handleConfigReverted(event: Event) {
                                             <!-- Memory Settings -->
                                             <div class="settings-group">
                                                 <div class="settings-group-header">
-                                                    <MemoryStick class="w-4 h-4 text-primary" />
+                                                    <Icon name="MemoryStick" class="w-4 h-4 text-primary" />
                                                     <span>Memory (RAM)</span>
                                                 </div>
                                                 <div class="memory-sliders">
@@ -1052,7 +1017,7 @@ function handleConfigReverted(event: Event) {
                                             <!-- JVM Arguments -->
                                             <div class="settings-group">
                                                 <div class="settings-group-header">
-                                                    <Cpu class="w-4 h-4 text-primary" />
+                                                    <Icon name="Cpu" class="w-4 h-4 text-primary" />
                                                     <span>JVM Arguments</span>
                                                 </div>
                                                 <textarea v-model="customJavaArgs"
@@ -1065,7 +1030,7 @@ function handleConfigReverted(event: Event) {
 
                                             <!-- Save Button -->
                                             <button @click="saveInstanceSettings" class="settings-save-btn">
-                                                <Save class="w-4 h-4" />
+                                                <Icon name="Save" class="w-4 h-4" />
                                                 Save Settings
                                             </button>
                                         </div>
@@ -1073,7 +1038,7 @@ function handleConfigReverted(event: Event) {
                                         <!-- Loader Installation Progress -->
                                         <div v-if="loaderProgress" class="loader-progress-card">
                                             <div class="flex items-center gap-3 mb-2">
-                                                <Download class="w-5 h-5 text-blue-400 animate-pulse" />
+                                                <Icon name="Download" class="w-5 h-5 text-blue-400 animate-pulse" />
                                                 <span class="font-medium text-blue-300">Installing Mod Loader</span>
                                             </div>
                                             <div class="progress-bar-container">
@@ -1089,18 +1054,18 @@ function handleConfigReverted(event: Event) {
                                         <div class="play-footer">
                                             <div class="flex items-center gap-4 text-xs text-muted-foreground">
                                                 <span class="flex items-center gap-1">
-                                                    <Shield class="w-3 h-3" />
+                                                    <Icon name="Shield" class="w-3 h-3" />
                                                     Isolated instance
                                                 </span>
                                                 <span class="flex items-center gap-1">
-                                                    <HardDrive class="w-3 h-3" />
+                                                    <Icon name="HardDrive" class="w-3 h-3" />
                                                     {{ stats?.totalSize || 'N/A' }}
                                                 </span>
                                             </div>
                                         </div>
 
                                         <div v-if="instance.state !== 'ready'" class="warning-card">
-                                            <AlertCircle class="w-5 h-5 text-yellow-400" />
+                                            <Icon name="AlertCircle" class="w-5 h-5 text-yellow-400" />
                                             <p class="text-sm text-yellow-300">
                                                 Instance is currently {{ instance.state }}. Please wait...
                                             </p>
@@ -1115,7 +1080,7 @@ function handleConfigReverted(event: Event) {
                                 <div v-if="syncStatus?.needsSync"
                                     class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
                                     <div class="flex items-center gap-3 mb-3">
-                                        <AlertCircle class="w-5 h-5 text-amber-400" />
+                                        <Icon name="AlertCircle" class="w-5 h-5 text-amber-400" />
                                         <span class="font-medium text-amber-300">Instance is out of sync</span>
                                         <span class="ml-auto text-sm text-amber-400/80">
                                             {{ syncStatus.totalDifferences }} difference(s)
@@ -1127,7 +1092,7 @@ function handleConfigReverted(event: Event) {
                                         <!-- Missing in Instance -->
                                         <div v-if="syncStatus.missingInInstance.length" class="space-y-1">
                                             <div class="flex items-center gap-2 text-amber-400">
-                                                <Download class="w-4 h-4" />
+                                                <Icon name="Download" class="w-4 h-4" />
                                                 <span class="font-medium">Missing in instance ({{
                                                     syncStatus.missingInInstance.length }})</span>
                                             </div>
@@ -1135,9 +1100,11 @@ function handleConfigReverted(event: Event) {
                                                 <div v-for="item in syncStatus.missingInInstance.slice(0, 5)"
                                                     :key="item.filename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
-                                                    <Package v-if="item.type === 'mod'" class="w-3 h-3" />
-                                                    <Palette v-else-if="item.type === 'resourcepack'" class="w-3 h-3" />
-                                                    <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
+                                                    <Icon v-if="item.type === 'mod'" name="Package" class="w-3 h-3" />
+                                                    <Icon v-else-if="item.type === 'resourcepack'" name="Palette"
+                                                        class="w-3 h-3" />
+                                                    <Icon v-else-if="item.type === 'shader'" name="Sun"
+                                                        class="w-3 h-3" />
                                                     <span class="truncate">{{ item.filename }}</span>
                                                 </div>
                                                 <div v-if="syncStatus.missingInInstance.length > 5"
@@ -1150,7 +1117,7 @@ function handleConfigReverted(event: Event) {
                                         <!-- Updates to Apply -->
                                         <div v-if="syncStatus.updatesToApply?.length" class="space-y-1">
                                             <div class="flex items-center gap-2 text-orange-400">
-                                                <RefreshCw class="w-4 h-4" />
+                                                <Icon name="RefreshCw" class="w-4 h-4" />
                                                 <span class="font-medium">Updates available ({{
                                                     syncStatus.updatesToApply.length }})</span>
                                             </div>
@@ -1158,11 +1125,13 @@ function handleConfigReverted(event: Event) {
                                                 <div v-for="item in syncStatus.updatesToApply.slice(0, 5)"
                                                     :key="item.newFilename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
-                                                    <Palette v-if="item.type === 'resourcepack'" class="w-3 h-3" />
-                                                    <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
-                                                    <Package v-else class="w-3 h-3" />
+                                                    <Icon v-if="item.type === 'resourcepack'" name="Palette"
+                                                        class="w-3 h-3" />
+                                                    <Icon v-else-if="item.type === 'shader'" name="Sun"
+                                                        class="w-3 h-3" />
+                                                    <Icon v-else name="Package" class="w-3 h-3" />
                                                     <span class="truncate line-through opacity-60">{{ item.oldFilename
-                                                    }}</span>
+                                                        }}</span>
                                                     <span class="text-orange-400">→</span>
                                                     <span class="truncate text-orange-400">{{ item.newFilename }}</span>
                                                     <span v-if="item.willBeDisabled"
@@ -1179,10 +1148,10 @@ function handleConfigReverted(event: Event) {
                                         <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length"
                                             class="space-y-1">
                                             <div class="flex items-center gap-2 text-red-400">
-                                                <Trash2 class="w-4 h-4" />
+                                                <Icon name="Trash2" class="w-4 h-4" />
                                                 <span class="font-medium">Mods to remove ({{
                                                     syncStatus.extraInInstance.filter(i => i.type === 'mod').length
-                                                    }})</span>
+                                                }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These mods are not in the modpack and will be removed during sync.
@@ -1191,7 +1160,7 @@ function handleConfigReverted(event: Event) {
                                                 <div v-for="item in syncStatus.extraInInstance.filter(i => i.type === 'mod').slice(0, 5)"
                                                     :key="item.filename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
-                                                    <Package class="w-3 h-3" />
+                                                    <Icon name="Package" class="w-3 h-3" />
                                                     <span class="truncate">{{ item.filename }}</span>
                                                 </div>
                                                 <div v-if="syncStatus.extraInInstance.filter(i => i.type === 'mod').length > 5"
@@ -1206,10 +1175,10 @@ function handleConfigReverted(event: Event) {
                                         <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length"
                                             class="space-y-1">
                                             <div class="flex items-center gap-2 text-blue-400">
-                                                <Package class="w-4 h-4" />
+                                                <Icon name="Package" class="w-4 h-4" />
                                                 <span class="font-medium">Extra files ({{
                                                     syncStatus.extraInInstance.filter(i => i.type !== 'mod').length
-                                                    }})</span>
+                                                }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These files will be preserved.
@@ -1218,9 +1187,11 @@ function handleConfigReverted(event: Event) {
                                                 <div v-for="item in syncStatus.extraInInstance.filter(i => i.type !== 'mod').slice(0, 5)"
                                                     :key="item.filename"
                                                     class="flex items-center gap-2 text-muted-foreground text-xs">
-                                                    <Palette v-if="item.type === 'resourcepack'" class="w-3 h-3" />
-                                                    <Sun v-else-if="item.type === 'shader'" class="w-3 h-3" />
-                                                    <Package v-else class="w-3 h-3" />
+                                                    <Icon v-if="item.type === 'resourcepack'" name="Palette"
+                                                        class="w-3 h-3" />
+                                                    <Icon v-else-if="item.type === 'shader'" name="Sun"
+                                                        class="w-3 h-3" />
+                                                    <Icon v-else name="Package" class="w-3 h-3" />
                                                     <span class="truncate">{{ item.filename }}</span>
                                                 </div>
                                                 <div v-if="syncStatus.extraInInstance.filter(i => i.type !== 'mod').length > 5"
@@ -1234,7 +1205,7 @@ function handleConfigReverted(event: Event) {
                                         <!-- Disabled State Mismatch -->
                                         <div v-if="syncStatus.disabledMismatch.length" class="space-y-1">
                                             <div class="flex items-center gap-2 text-orange-400">
-                                                <Settings class="w-4 h-4" />
+                                                <Icon name="Settings" class="w-4 h-4" />
                                                 <span class="font-medium">Wrong enabled/disabled state ({{
                                                     syncStatus.disabledMismatch.length }})</span>
                                             </div>
@@ -1257,7 +1228,8 @@ function handleConfigReverted(event: Event) {
                                     <div class="mt-4 pt-3 border-t border-amber-500/20">
                                         <Button @click="handleSyncInstance" :disabled="isSyncing" variant="outline"
                                             class="w-full border-amber-500/50 text-amber-400 hover:bg-amber-500/20">
-                                            <RefreshCw :class="['w-4 h-4 mr-2', isSyncing && 'animate-spin']" />
+                                            <Icon name="RefreshCw"
+                                                :class="['w-4 h-4 mr-2', isSyncing && 'animate-spin']" />
                                             Sync Now to Resolve Differences
                                         </Button>
                                     </div>
@@ -1265,7 +1237,7 @@ function handleConfigReverted(event: Event) {
                                 <div v-else-if="syncStatus && !syncStatus.needsSync"
                                     class="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
                                     <div class="flex items-center gap-3">
-                                        <Check class="w-5 h-5 text-green-400" />
+                                        <Icon name="Check" class="w-5 h-5 text-green-400" />
                                         <span class="font-medium text-green-300">Instance is in sync with modpack</span>
                                     </div>
                                     <p class="text-xs text-muted-foreground mt-2 ml-8">
@@ -1276,7 +1248,7 @@ function handleConfigReverted(event: Event) {
                                 <!-- Options -->
                                 <div class="options-card">
                                     <h4 class="text-sm font-medium text-foreground flex items-center gap-2 mb-4">
-                                        <Settings class="w-4 h-4 text-muted-foreground" />
+                                        <Icon name="Settings" class="w-4 h-4 text-muted-foreground" />
                                         Sync Options
                                     </h4>
 
@@ -1294,7 +1266,7 @@ function handleConfigReverted(event: Event) {
                                 <!-- Config Sync Mode -->
                                 <div class="options-card">
                                     <h4 class="text-sm font-medium text-foreground flex items-center gap-2 mb-3">
-                                        <FileCode class="w-4 h-4 text-muted-foreground" />
+                                        <Icon name="FileCode" class="w-4 h-4 text-muted-foreground" />
                                         Config Handling
                                     </h4>
                                     <p class="text-xs text-muted-foreground mb-3">
@@ -1313,7 +1285,7 @@ function handleConfigReverted(event: Event) {
                                                 <p class="text-xs text-muted-foreground">Add configs for new mods, keep
                                                     existing</p>
                                             </div>
-                                            <CheckCircle v-if="configSyncMode === 'new_only'"
+                                            <Icon v-if="configSyncMode === 'new_only'" name="CheckCircle"
                                                 class="w-4 h-4 text-primary" />
                                         </label>
 
@@ -1327,7 +1299,7 @@ function handleConfigReverted(event: Event) {
                                                 <p class="text-xs text-muted-foreground">Reset all configs to modpack
                                                     defaults</p>
                                             </div>
-                                            <AlertCircle v-if="configSyncMode === 'overwrite'"
+                                            <Icon v-if="configSyncMode === 'overwrite'" name="AlertCircle"
                                                 class="w-4 h-4 text-orange-400" />
                                         </label>
 
@@ -1348,14 +1320,14 @@ function handleConfigReverted(event: Event) {
                                 <div v-if="syncProgress && isSyncing" class="progress-card">
                                     <div class="flex items-center gap-4 mb-3">
                                         <div class="progress-icon">
-                                            <Loader2 class="w-6 h-6 text-primary animate-spin" />
+                                            <Icon name="Loader2" class="w-6 h-6 text-primary animate-spin" />
                                         </div>
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                }}</span>
+                                                    }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                }}%</span>
+                                                    }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1376,8 +1348,9 @@ function handleConfigReverted(event: Event) {
                                     <div class="flex items-center gap-3 mb-4">
                                         <div
                                             :class="['result-icon', syncResult.success ? 'result-icon-success' : 'result-icon-error']">
-                                            <CheckCircle v-if="syncResult.success" class="w-5 h-5 text-green-400" />
-                                            <XCircle v-else class="w-5 h-5 text-red-400" />
+                                            <Icon v-if="syncResult.success" name="CheckCircle"
+                                                class="w-5 h-5 text-green-400" />
+                                            <Icon v-else name="XCircle" class="w-5 h-5 text-red-400" />
                                         </div>
                                         <span
                                             :class="['font-medium', syncResult.success ? 'text-green-400' : 'text-red-400']">
@@ -1388,7 +1361,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1398,7 +1371,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -1409,7 +1382,7 @@ function handleConfigReverted(event: Event) {
                                     </div>
 
                                     <div v-if="syncResult.errors.length > 0" class="error-notice">
-                                        <AlertCircle class="w-3 h-3 inline mr-1" />
+                                        <Icon name="AlertCircle" class="w-3 h-3 inline mr-1" />
                                         {{ syncResult.errors.length }} errors occurred
                                     </div>
 
@@ -1417,7 +1390,7 @@ function handleConfigReverted(event: Event) {
                                     <div v-if="syncResult.warnings && syncResult.warnings.length > 0"
                                         class="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                                         <div class="flex items-start gap-2">
-                                            <AlertCircle class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                            <Icon name="AlertCircle" class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                                             <div class="space-y-1 text-sm">
                                                 <div v-for="(warning, idx) in syncResult.warnings" :key="idx"
                                                     class="text-amber-400">
@@ -1430,8 +1403,8 @@ function handleConfigReverted(event: Event) {
 
                                 <!-- Sync Button -->
                                 <Button @click="handleSyncInstance" :disabled="isSyncing" class="w-full gap-2">
-                                    <Loader2 v-if="isSyncing" class="w-4 h-4 animate-spin" />
-                                    <RefreshCw v-else class="w-4 h-4" />
+                                    <Icon v-if="isSyncing" name="Loader2" class="w-4 h-4 animate-spin" />
+                                    <Icon v-else name="RefreshCw" class="w-4 h-4" />
                                     {{ isSyncing ? "Syncing..." : "Sync Now" }}
                                 </Button>
                             </div>
@@ -1446,7 +1419,7 @@ function handleConfigReverted(event: Event) {
                             <!-- Folders Tab -->
                             <div v-if="activeTab === 'folders'" class="space-y-4">
                                 <p class="text-sm text-muted-foreground flex items-center gap-2">
-                                    <FolderOpen class="w-4 h-4" />
+                                    <Icon name="FolderOpen" class="w-4 h-4" />
                                     Quick access to instance folders
                                 </p>
 
@@ -1454,13 +1427,13 @@ function handleConfigReverted(event: Event) {
                                     <!-- Root Folder -->
                                     <button @click="handleOpenFolder()" class="folder-button-main group">
                                         <div class="folder-icon-main">
-                                            <FolderOpen class="w-6 h-6" />
+                                            <Icon name="FolderOpen" class="w-6 h-6" />
                                         </div>
                                         <div class="text-left flex-1">
                                             <div class="font-medium text-foreground">Instance Root</div>
                                             <div class="text-xs text-muted-foreground">Open main folder</div>
                                         </div>
-                                        <ChevronRight
+                                        <Icon name="ChevronRight"
                                             class="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                                     </button>
 
@@ -1469,7 +1442,7 @@ function handleConfigReverted(event: Event) {
                                         @click="handleOpenFolder(folder.id)"
                                         :class="['folder-button group', folder.colorClass]">
                                         <div class="folder-icon">
-                                            <component :is="folder.icon" class="w-5 h-5" />
+                                            <Icon :name="folder.icon" class="w-5 h-5" />
                                         </div>
                                         <div class="text-left flex-1 min-w-0">
                                             <div class="font-medium text-foreground text-sm">{{ folder.label }}</div>
@@ -1494,7 +1467,7 @@ function handleConfigReverted(event: Event) {
             <div class="shrink-0 border-b border-border/50 bg-card/50 px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                        <Settings class="w-4 h-4 text-purple-400" />
+                        <Icon name="Settings" class="w-4 h-4 text-purple-400" />
                     </div>
                     <div>
                         <h3 class="font-semibold text-foreground">Editor Configurazione</h3>
@@ -1528,7 +1501,7 @@ function handleConfigReverted(event: Event) {
             <div class="px-5 py-4 border-b border-border/50 bg-gradient-to-r from-amber-500/10 to-transparent">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                        <AlertCircle class="w-5 h-5 text-amber-400" />
+                        <Icon name="AlertCircle" class="w-5 h-5 text-amber-400" />
                     </div>
                     <div>
                         <h3 class="font-semibold text-foreground">Sync prima di Avviare?</h3>
@@ -1548,20 +1521,20 @@ function handleConfigReverted(event: Event) {
 
                 <div v-if="pendingLaunchData?.lastSynced"
                     class="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <Clock class="w-3.5 h-3.5" />
+                    <Icon name="Clock" class="w-3.5 h-3.5" />
                     Ultimo sync: {{ formatDate(pendingLaunchData.lastSynced) }}
                 </div>
 
                 <div class="bg-muted/30 rounded-lg p-3 space-y-2">
                     <div class="flex items-start gap-2">
-                        <Download class="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+                        <Icon name="Download" class="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
                         <div class="text-sm">
                             <span class="text-foreground font-medium">Sincronizza</span>
                             <span class="text-muted-foreground"> - Aggiorna le mod prima di avviare il gioco</span>
                         </div>
                     </div>
                     <div class="flex items-start gap-2">
-                        <Play class="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+                        <Icon name="Play" class="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
                         <div class="text-sm">
                             <span class="text-foreground font-medium">Avvia Comunque</span>
                             <span class="text-muted-foreground"> - Gioca con le mod attuali</span>
@@ -1578,12 +1551,12 @@ function handleConfigReverted(event: Event) {
                 </button>
                 <button @click="handleSyncConfirmation('skip')"
                     class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors flex items-center justify-center gap-2">
-                    <Play class="w-4 h-4" />
+                    <Icon name="Play" class="w-4 h-4" />
                     Avvia
                 </button>
                 <button @click="handleSyncConfirmation('sync')"
                     class="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors flex items-center justify-center gap-2">
-                    <Download class="w-4 h-4" />
+                    <Icon name="Download" class="w-4 h-4" />
                     Sync & Avvia
                 </button>
             </div>

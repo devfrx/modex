@@ -2,7 +2,7 @@
 import { ref, computed, watch } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import { AlertTriangle, Check, X, Lock } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { Modpack, Mod } from "@/types/electron";
 
 const props = defineProps<{
@@ -23,16 +23,16 @@ const isLoading = ref(false);
 function isVersionCompatible(mod: Mod, packVersion: string): boolean {
   const modContentType = mod.content_type || "mod";
   const modVersion = mod.game_version;
-  
+
   // For shaders/resourcepacks with game_versions array, check if packVersion is in the list
   if (modContentType !== "mod" && mod.game_versions && mod.game_versions.length > 0) {
-    return mod.game_versions.some(gv => 
+    return mod.game_versions.some(gv =>
       gv === packVersion ||
       gv.startsWith(packVersion) ||
       packVersion.startsWith(gv)
     );
   }
-  
+
   // Standard single version check
   return modVersion === packVersion ||
     modVersion?.startsWith(packVersion) ||
@@ -49,9 +49,9 @@ const modpacksWithCompatibility = computed(() => {
     for (const mod of props.mods) {
       const modContentType = mod.content_type || "mod";
       const versionMatch = isVersionCompatible(mod, pack.minecraft_version || '');
-      
+
       // Only check loader for mods (shaders/resourcepacks don't have loaders)
-      const loaderMatch = modContentType !== "mod" || 
+      const loaderMatch = modContentType !== "mod" ||
         (mod.loader || '').toLowerCase() === (pack.loader || '').toLowerCase();
 
       if (versionMatch && loaderMatch) {
@@ -134,7 +134,7 @@ function add() {
           <div class="flex-1">
             <div class="font-medium flex items-center gap-2">
               {{ pack.name }}
-              <Lock v-if="pack.isLinked" class="w-3 h-3 text-muted-foreground" />
+              <Icon v-if="pack.isLinked" name="Lock" class="w-3 h-3 text-muted-foreground" />
             </div>
             <div class="text-xs text-muted-foreground flex items-center gap-2">
               <span>{{ pack.minecraft_version }}</span>
@@ -147,16 +147,16 @@ function add() {
           <!-- Compatibility indicator -->
           <div class="flex items-center gap-2 text-xs">
             <span v-if="pack.allCompatible" class="flex items-center gap-1 text-green-500">
-              <Check class="w-3 h-3" />
+              <Icon name="Check" class="w-3 h-3" />
               {{ pack.compatible.length }}
             </span>
             <template v-else>
               <span class="flex items-center gap-1 text-green-500">
-                <Check class="w-3 h-3" />
+                <Icon name="Check" class="w-3 h-3" />
                 {{ pack.compatible.length }}
               </span>
               <span class="flex items-center gap-1 text-amber-500">
-                <X class="w-3 h-3" />
+                <Icon name="X" class="w-3 h-3" />
                 {{ pack.incompatible.length }}
               </span>
             </template>
@@ -170,7 +170,7 @@ function add() {
       <div v-if="selectedPack && selectedPack.incompatible.length > 0"
         class="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
         <div class="flex items-center gap-2 text-amber-500 text-sm font-medium">
-          <AlertTriangle class="w-4 h-4" />
+          <Icon name="AlertTriangle" class="w-4 h-4" />
           {{ selectedPack.incompatible.length }} mod(s) will be skipped
         </div>
         <p class="text-xs text-muted-foreground">
@@ -191,7 +191,7 @@ function add() {
       <div v-else-if="selectedPack && selectedPack.allCompatible"
         class="rounded-md border border-green-500/30 bg-green-500/10 p-3">
         <div class="flex items-center gap-2 text-green-500 text-sm">
-          <Check class="w-4 h-4" />
+          <Icon name="Check" class="w-4 h-4" />
           All {{ selectedPack.compatible.length }} mods are compatible
         </div>
       </div>
@@ -201,7 +201,7 @@ function add() {
       <Button variant="outline" @click="$emit('close')">Cancel</Button>
       <Button @click="add" :disabled="!selectedModpackId || (selectedPack?.noneCompatible) || (selectedPack?.isLinked)">
         <template v-if="selectedPack?.isLinked">
-          <Lock class="w-4 h-4 mr-2" />
+          <Icon name="Lock" class="w-4 h-4 mr-2" />
           Read-Only Modpack
         </template>
         <template v-else-if="selectedPack">

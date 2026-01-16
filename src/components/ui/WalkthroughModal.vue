@@ -1,25 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import {
-    X,
-    ChevronLeft,
-    ChevronRight,
-    Key,
-    Users,
-    Upload,
-    Download,
-    Globe,
-    Github,
-    Settings,
-    Link,
-    Play,
-    CheckCircle2,
-    ExternalLink,
-    Sparkles,
-    BookOpen,
-    Rocket,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 
@@ -44,42 +26,42 @@ const steps = [
     {
         id: "welcome",
         title: "Benvenuto in ModEx!",
-        icon: Sparkles,
+        icon: "Sparkles",
         color: "text-primary",
         bgColor: "bg-primary/10",
     },
     {
         id: "api-key",
         title: "1. API Key CurseForge",
-        icon: Key,
+        icon: "Key",
         color: "text-amber-500",
         bgColor: "bg-amber-500/10",
     },
     {
         id: "github-token",
         title: "2. Token GitHub (opzionale)",
-        icon: Github,
+        icon: "Github",
         color: "text-purple-500",
         bgColor: "bg-purple-500/10",
     },
     {
         id: "host-flow",
         title: "3a. Sei un Host?",
-        icon: Upload,
+        icon: "Upload",
         color: "text-green-500",
         bgColor: "bg-green-500/10",
     },
     {
         id: "client-flow",
         title: "3b. Sei un Client?",
-        icon: Download,
+        icon: "Download",
         color: "text-blue-500",
         bgColor: "bg-blue-500/10",
     },
     {
         id: "done",
         title: "Tutto pronto!",
-        icon: Rocket,
+        icon: "Rocket",
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
     },
@@ -159,7 +141,7 @@ onMounted(() => {
                             <!-- Step indicator -->
                             <div class="flex items-center gap-2">
                                 <div :class="[currentStepData.bgColor, 'p-2 rounded-lg']">
-                                    <component :is="currentStepData.icon" :class="['w-5 h-5', currentStepData.color]" />
+                                    <Icon :name="currentStepData.icon" :class="['w-5 h-5', currentStepData.color]" />
                                 </div>
                                 <div>
                                     <h2 class="text-lg font-bold">{{ currentStepData.title }}</h2>
@@ -171,7 +153,7 @@ onMounted(() => {
                             <!-- Close button -->
                             <button @click="handleClose"
                                 class="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-                                <X class="w-5 h-5" />
+                                <Icon name="X" class="w-5 h-5" />
                             </button>
                         </div>
 
@@ -202,7 +184,7 @@ onMounted(() => {
                             <div class="grid gap-4">
                                 <div class="p-4 rounded-xl bg-muted/30 border border-border/50">
                                     <h3 class="font-semibold flex items-center gap-2 mb-2">
-                                        <Key class="w-4 h-4 text-amber-500" />
+                                        <Icon name="Key" class="w-4 h-4 text-amber-500" />
                                         API Key CurseForge
                                     </h3>
                                     <p class="text-sm text-muted-foreground">
@@ -213,7 +195,7 @@ onMounted(() => {
 
                                 <div class="p-4 rounded-xl bg-muted/30 border border-border/50">
                                     <h3 class="font-semibold flex items-center gap-2 mb-2">
-                                        <Github class="w-4 h-4 text-purple-500" />
+                                        <Icon name="Github" class="w-4 h-4 text-purple-500" />
                                         Token GitHub
                                     </h3>
                                     <p class="text-sm text-muted-foreground">
@@ -224,7 +206,7 @@ onMounted(() => {
 
                                 <div class="p-4 rounded-xl bg-muted/30 border border-border/50">
                                     <h3 class="font-semibold flex items-center gap-2 mb-2">
-                                        <Users class="w-4 h-4 text-blue-500" />
+                                        <Icon name="Users" class="w-4 h-4 text-blue-500" />
                                         Host o Client?
                                     </h3>
                                     <p class="text-sm text-muted-foreground">
@@ -255,7 +237,7 @@ onMounted(() => {
                                             <button @click="openCurseForgeConsole"
                                                 class="text-sm text-primary hover:underline flex items-center gap-1 mt-1">
                                                 console.curseforge.com
-                                                <ExternalLink class="w-3 h-3" />
+                                                <Icon name="ExternalLink" class="w-3 h-3" />
                                             </button>
                                         </div>
                                     </li>
@@ -304,7 +286,7 @@ onMounted(() => {
                             </div>
 
                             <Button variant="outline" class="w-full gap-2" @click="goToSettings">
-                                <Settings class="w-4 h-4" />
+                                <Icon name="Settings" class="w-4 h-4" />
                                 Apri Impostazioni
                             </Button>
                         </div>
@@ -331,7 +313,7 @@ onMounted(() => {
                                             <button @click="openGitHubTokens"
                                                 class="text-sm text-purple-400 hover:underline flex items-center gap-1 mt-1">
                                                 github.com/settings/tokens
-                                                <ExternalLink class="w-3 h-3" />
+                                                <Icon name="ExternalLink" class="w-3 h-3" />
                                             </button>
                                         </div>
                                     </li>
@@ -532,7 +514,7 @@ onMounted(() => {
                         <div v-else-if="currentStepData.id === 'done'" class="space-y-6 text-center">
                             <div
                                 class="w-20 h-20 mx-auto rounded-full bg-emerald-500/20 flex items-center justify-center">
-                                <CheckCircle2 class="w-10 h-10 text-emerald-500" />
+                                <Icon name="CheckCircle2" class="w-10 h-10 text-emerald-500" />
                             </div>
 
                             <div>
@@ -544,12 +526,12 @@ onMounted(() => {
 
                             <div class="grid gap-3">
                                 <Button variant="default" class="w-full gap-2" @click="handleClose">
-                                    <Play class="w-4 h-4" />
+                                    <Icon name="Play" class="w-4 h-4" />
                                     Inizia a usare ModEx
                                 </Button>
 
                                 <Button variant="outline" class="w-full gap-2" @click="goToGuide">
-                                    <BookOpen class="w-4 h-4" />
+                                    <Icon name="BookOpen" class="w-4 h-4" />
                                     Leggi la Guida completa
                                 </Button>
                             </div>
@@ -571,13 +553,13 @@ onMounted(() => {
                             <!-- Navigation buttons -->
                             <div class="flex items-center gap-2">
                                 <Button v-if="!isFirstStep" variant="ghost" size="sm" @click="prevStep" class="gap-1">
-                                    <ChevronLeft class="w-4 h-4" />
+                                    <Icon name="ChevronLeft" class="w-4 h-4" />
                                     Indietro
                                 </Button>
 
                                 <Button v-if="!isLastStep" variant="default" size="sm" @click="nextStep" class="gap-1">
                                     Avanti
-                                    <ChevronRight class="w-4 h-4" />
+                                    <Icon name="ChevronRight" class="w-4 h-4" />
                                 </Button>
                             </div>
                         </div>

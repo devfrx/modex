@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { CheckCircle2, XCircle, AlertCircle, Info, X } from 'lucide-vue-next';
+import Icon from '@/components/ui/Icon.vue';
 import type { ToastMessage } from '@/composables/useToast';
 
 const props = defineProps<{
@@ -11,11 +11,11 @@ const emit = defineEmits<{
     (e: 'remove', id: number): void;
 }>();
 
-const icons = {
-    success: CheckCircle2,
-    error: XCircle,
-    warning: AlertCircle,
-    info: Info,
+const icons: Record<string, string> = {
+    success: 'CheckCircle2',
+    error: 'XCircle',
+    warning: 'AlertCircle',
+    info: 'Info',
 };
 
 const colors = {
@@ -44,7 +44,7 @@ watch(() => props.messages, (newMessages) => {
                 'flex items-start gap-3 p-3 rounded-lg border backdrop-blur-xl shadow-xl shadow-black/20',
                 colors[msg.type]
             ]">
-                <component :is="icons[msg.type]" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <Icon :name="icons[msg.type]" class="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div class="flex-1 min-w-0">
                     <p class="font-medium text-sm text-foreground">{{ msg.title }}</p>
                     <p v-if="msg.message" class="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">
@@ -53,7 +53,7 @@ watch(() => props.messages, (newMessages) => {
                 </div>
                 <button @click="emit('remove', msg.id)"
                     class="p-1 hover:bg-muted rounded transition-colors flex-shrink-0 text-muted-foreground hover:text-foreground">
-                    <X class="w-3.5 h-3.5" />
+                    <Icon name="X" class="w-3.5 h-3.5" />
                 </button>
             </div>
         </TransitionGroup>

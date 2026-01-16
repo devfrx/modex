@@ -528,13 +528,16 @@ export interface ModpackVersion {
   loader_version?: string;
   /** Parent version ID (for branching support in the future) */
   parent_id?: string;
-  /** Snapshots of CF mods for rollback restoration */
+  /** Snapshots of mods for rollback restoration (supports CurseForge and Modrinth) */
   mod_snapshots?: Array<{
     id: string;
     name: string;
     version?: string;
-    cf_project_id: number;
-    cf_file_id: number;
+    source: "curseforge" | "modrinth";
+    cf_project_id?: number;
+    cf_file_id?: number;
+    mr_project_id?: string;
+    mr_version_id?: string;
   }>;
   /** ID of the config snapshot for this version */
   config_snapshot_id?: string;

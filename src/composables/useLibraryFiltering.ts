@@ -13,7 +13,6 @@ export interface UseLibraryFilteringOptions {
   mods: Ref<Mod[]>;
   modUsageMap: Ref<Map<string, Set<string>>>;
   favoriteMods: Ref<Set<string>>;
-  getModFolder: (modId: string) => string | null;
   // These are passed in from settings composable
   sortBy: Ref<"name" | "loader" | "created_at" | "version">;
   sortDir: Ref<"asc" | "desc">;
@@ -34,7 +33,6 @@ export function useLibraryFiltering(options: UseLibraryFilteringOptions) {
     mods,
     modUsageMap,
     favoriteMods,
-    getModFolder,
     sortBy,
     sortDir,
     enableGrouping,
@@ -51,9 +49,6 @@ export function useLibraryFiltering(options: UseLibraryFilteringOptions) {
 
   // Quick filter state
   const quickFilter = ref<"all" | "favorites" | "recent">("all");
-
-  // Folder filter
-  const selectedFolderId = ref<string | null>(null);
 
   // Group expansion state
   const expandedGroups = ref<Set<string>>(new Set());
@@ -192,12 +187,6 @@ export function useLibraryFiltering(options: UseLibraryFilteringOptions) {
         matchesQuickFilter = new Date(mod.created_at).getTime() > weekAgo;
       }
 
-      // Folder filter
-      let matchesFolder = true;
-      if (selectedFolderId.value !== null) {
-        matchesFolder = getModFolder(mod.id) === selectedFolderId.value;
-      }
-
       // Modpack filter
       let matchesModpack = true;
       if (modpackFilter.value !== "all") {
@@ -218,7 +207,6 @@ export function useLibraryFiltering(options: UseLibraryFilteringOptions) {
         matchesVersion &&
         matchesContentType &&
         matchesQuickFilter &&
-        matchesFolder &&
         matchesModpack
       );
     });
@@ -370,7 +358,6 @@ export function useLibraryFiltering(options: UseLibraryFilteringOptions) {
     searchQuery,
     searchQueryDebounced,
     quickFilter,
-    selectedFolderId,
     expandedGroups,
 
     // Computed stats

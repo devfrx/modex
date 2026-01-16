@@ -3,15 +3,7 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
-import {
-    RefreshCw,
-    Download,
-    RotateCcw,
-    CheckCircle,
-    AlertCircle,
-    ExternalLink,
-    Sparkles,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const toast = useToast();
 
@@ -220,7 +212,7 @@ defineExpose({
         <div class="flex gap-2">
             <template v-if="updateDownloaded">
                 <Button variant="default" @click="installUpdate" class="gap-2">
-                    <RotateCcw class="w-4 h-4" />
+                    <Icon name="RotateCcw" class="w-4 h-4" />
                     Restart & Install
                 </Button>
             </template>
@@ -235,14 +227,14 @@ defineExpose({
             </template>
             <template v-else-if="updateAvailable">
                 <Button variant="default" @click="showUpdateDialog = true" class="gap-2">
-                    <Download class="w-4 h-4" />
+                    <Icon name="Download" class="w-4 h-4" />
                     View Update
                 </Button>
             </template>
             <template v-else>
                 <Button variant="outline" @click="checkForUpdates" :disabled="isCheckingUpdate"
                     class="gap-2 w-full sm:w-auto">
-                    <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isCheckingUpdate }" />
+                    <Icon name="RefreshCw" class="w-4 h-4" :class="{ 'animate-spin': isCheckingUpdate }" />
                     {{ isCheckingUpdate ? "Checking..." : "Check Now" }}
                 </Button>
             </template>
@@ -253,7 +245,7 @@ defineExpose({
     <Dialog :open="showUpdateDialog" @close="closeDialog" title="Update Available">
         <template #icon>
             <div class="p-3 rounded-xl bg-primary/10">
-                <Sparkles class="w-6 h-6 text-primary" />
+                <Icon name="Sparkles" class="w-6 h-6 text-primary" />
             </div>
         </template>
 
@@ -279,7 +271,7 @@ defineExpose({
             <!-- Auto-update notice -->
             <div v-if="!updateInfo?.canAutoUpdate"
                 class="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                <AlertCircle class="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                <Icon name="AlertCircle" class="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                 <div class="text-sm text-muted-foreground">
                     Auto-update is not available in development mode. Click the button below to download the update
                     manually.
@@ -302,7 +294,7 @@ defineExpose({
             <!-- Error -->
             <div v-if="updateError"
                 class="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                <AlertCircle class="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                <Icon name="AlertCircle" class="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
                 <div class="text-sm text-destructive">{{ updateError }}</div>
             </div>
         </div>
@@ -313,18 +305,18 @@ defineExpose({
                     Later
                 </Button>
                 <Button variant="ghost" @click="openReleasePage" class="gap-2">
-                    <ExternalLink class="w-4 h-4" />
+                    <Icon name="ExternalLink" class="w-4 h-4" />
                     View Release
                 </Button>
                 <template v-if="updateDownloaded">
                     <Button variant="default" @click="installUpdate" class="gap-2">
-                        <RotateCcw class="w-4 h-4" />
+                        <Icon name="RotateCcw" class="w-4 h-4" />
                         Restart & Install
                     </Button>
                 </template>
                 <template v-else-if="!isDownloading">
                     <Button variant="default" @click="downloadUpdate" class="gap-2">
-                        <Download class="w-4 h-4" />
+                        <Icon name="Download" class="w-4 h-4" />
                         {{ updateInfo?.canAutoUpdate ? 'Download Update' : 'Download Manually' }}
                     </Button>
                 </template>

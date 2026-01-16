@@ -9,42 +9,7 @@ import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import MinecraftInstallations from "@/components/ui/MinecraftInstallations.vue";
 import UpdateManager from "@/components/ui/UpdateManager.vue";
-import {
-  Settings as SettingsIcon,
-  Database,
-  Palette,
-  Info,
-  Trash2,
-  RefreshCw,
-  AlertTriangle,
-  Sun,
-  Moon,
-  Monitor,
-  Keyboard,
-  Heart,
-  Globe,
-  Key,
-  Check,
-  Sliders,
-  RotateCcw,
-  Square,
-  Circle,
-  Sparkles,
-  PanelLeft,
-  PanelRight,
-  Eye,
-  EyeOff,
-  GripVertical,
-  Home,
-  Library,
-  Package,
-  FolderTree,
-  BarChart3,
-  LayoutGrid,
-  BookOpen,
-  Github,
-  ExternalLink,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 // Sidebar settings
 const {
@@ -60,14 +25,14 @@ const {
 } = useSidebar();
 
 // Icon mapping for sidebar items
-const sidebarIconMap: Record<string, any> = {
-  Home,
-  Library,
-  Package,
-  FolderTree,
-  BarChart3,
-  LayoutGrid,
-  BookOpen,
+const sidebarIconMap: Record<string, string> = {
+  Home: "Home",
+  Library: "Library",
+  Package: "Package",
+  FolderTree: "FolderTree",
+  BarChart3: "BarChart3",
+  LayoutGrid: "LayoutGrid",
+  BookOpen: "BookOpen",
 };
 
 // App version from package.json
@@ -110,13 +75,13 @@ const gistSettings = ref({
 
 // Tabs Configuration
 const tabs = [
-  { id: "general", name: "General", icon: SettingsIcon },
-  { id: "appearance", name: "Look & Feel", icon: Palette },
-  { id: "sidebar", name: "Navigation", icon: Sliders },
-  { id: "minecraft", name: "Launchers", icon: Globe },
-  { id: "library", name: "Storage", icon: Database },
-  { id: "shortcuts", name: "Keyboard", icon: Keyboard },
-  { id: "about", name: "About", icon: Info },
+  { id: "general", name: "General", icon: "Settings" },
+  { id: "appearance", name: "Look & Feel", icon: "Palette" },
+  { id: "sidebar", name: "Navigation", icon: "Sliders" },
+  { id: "minecraft", name: "Launchers", icon: "Globe" },
+  { id: "library", name: "Storage", icon: "Database" },
+  { id: "shortcuts", name: "Keyboard", icon: "Keyboard" },
+  { id: "about", name: "About", icon: "Info" },
 ];
 
 const currentTabName = computed(() => {
@@ -377,7 +342,7 @@ onMounted(() => {
     <!-- Mobile Header -->
     <div class="md:hidden fixed top-0 left-0 right-0 z-20 bg-card/95 backdrop-blur-sm border-b border-border">
       <div class="flex items-center gap-3 p-3">
-        <SettingsIcon class="w-5 h-5 text-primary" />
+        <Icon name="Settings" class="w-5 h-5 text-primary" />
         <h1 class="text-lg font-bold">Settings</h1>
       </div>
       <!-- Mobile Tab Navigation -->
@@ -388,7 +353,7 @@ onMounted(() => {
             ? 'bg-primary/10 text-primary'
             : 'text-muted-foreground hover:bg-muted/50'
             ">
-          <component :is="tab.icon" class="w-4 h-4" />
+          <Icon :name="tab.icon" class="w-4 h-4" />
           <span class="hidden xs:inline">{{ tab.name }}</span>
         </button>
       </div>
@@ -398,7 +363,7 @@ onMounted(() => {
     <div class="hidden md:flex w-64 flex-shrink-0 border-r border-border bg-card/30 flex-col">
       <div class="p-6 pb-4">
         <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <SettingsIcon class="w-6 h-6 text-primary" />
+          <Icon name="Settings" class="w-6 h-6 text-primary" />
           Settings
         </h1>
         <p class="text-xs text-muted-foreground mt-1">
@@ -413,7 +378,7 @@ onMounted(() => {
             ? 'bg-primary/10 text-primary'
             : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
             ">
-          <component :is="tab.icon" class="w-4 h-4" />
+          <Icon :name="tab.icon" class="w-4 h-4" />
           {{ tab.name }}
         </button>
       </nav>
@@ -444,7 +409,7 @@ onMounted(() => {
         <!-- API Warning Banner -->
         <div v-if="!apiAvailable"
           class="mb-6 bg-destructive/10 border border-destructive text-destructive rounded-lg p-4 flex items-center gap-3">
-          <AlertTriangle class="w-5 h-5 flex-shrink-0" />
+          <Icon name="AlertTriangle" class="w-5 h-5 flex-shrink-0" />
           <div>
             <p class="font-medium">Backend API not available</p>
             <p class="text-sm opacity-80">Please restart the application.</p>
@@ -456,7 +421,7 @@ onMounted(() => {
           <!-- API Keys -->
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <Key class="w-4 h-4 text-primary" />
+              <Icon name="Key" class="w-4 h-4 text-primary" />
               CurseForge API
             </h3>
             <div class="p-5 rounded-lg border border-border/50 bg-card/50">
@@ -480,7 +445,7 @@ onMounted(() => {
           <!-- GitHub Gist API -->
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <Github class="w-4 h-4 text-primary" />
+              <Icon name="Github" class="w-4 h-4 text-primary" />
               GitHub Gist
             </h3>
             <div class="p-5 rounded-lg border border-border/50 bg-card/50">
@@ -492,7 +457,7 @@ onMounted(() => {
                     <img :src="githubUser.avatarUrl" alt="GitHub Avatar" class="w-8 h-8 rounded-full" />
                     <div>
                       <div class="font-medium text-green-500 flex items-center gap-2">
-                        <Check class="w-4 h-4" />
+                        <Icon name="Check" class="w-4 h-4" />
                         Connected as @{{ githubUser.login }}
                       </div>
                       <p class="text-xs text-muted-foreground">
@@ -523,7 +488,7 @@ onMounted(() => {
                     <a href="https://github.com/settings/tokens/new?scopes=gist&description=ModEx%20Gist%20Access"
                       target="_blank" class="text-primary hover:underline inline-flex items-center gap-1">
                       Create token
-                      <ExternalLink class="w-3 h-3" />
+                      <Icon name="ExternalLink" class="w-3 h-3" />
                     </a>
                   </p>
                 </div>
@@ -562,7 +527,7 @@ onMounted(() => {
           <!-- Updates -->
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <RefreshCw class="w-4 h-4 text-primary" />
+              <Icon name="RefreshCw" class="w-4 h-4 text-primary" />
               Updates
             </h3>
             <div class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50">
@@ -573,7 +538,7 @@ onMounted(() => {
           <!-- Instance Sync Settings -->
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <RefreshCw class="w-4 h-4 text-primary" />
+              <Icon name="RefreshCw" class="w-4 h-4 text-primary" />
               Sync Settings
             </h3>
             <div class="p-4 sm:p-5 rounded-lg border border-border/50 bg-card/50 space-y-5">
@@ -675,7 +640,7 @@ onMounted(() => {
         <div v-if="currentTab === 'appearance'" class="space-y-8">
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <Sun class="w-4 h-4 text-primary" />
+              <Icon name="Sun" class="w-4 h-4 text-primary" />
               Theme
             </h3>
             <div class="p-5 rounded-lg border border-border/50 bg-card/50">
@@ -689,7 +654,7 @@ onMounted(() => {
                   <div
                     class="w-12 h-12 rounded-full shadow-sm mb-1 relative flex items-center justify-center border border-border/20"
                     :class="t.color">
-                    <Check v-if="currentTheme === t.id" class="w-6 h-6 text-white drop-shadow-md" />
+                    <Icon v-if="currentTheme === t.id" name="Check" class="w-6 h-6 text-white drop-shadow-md" />
                   </div>
                   <span class="text-sm font-medium">{{ t.name }}</span>
                 </button>
@@ -701,11 +666,11 @@ onMounted(() => {
           <section class="space-y-4">
             <div class="flex items-center justify-between">
               <h3 class="text-lg font-medium flex items-center gap-2">
-                <Sparkles class="w-4 h-4 text-primary" />
+                <Icon name="Sparkles" class="w-4 h-4 text-primary" />
                 Style Presets
               </h3>
               <Button variant="ghost" size="sm" @click="resetCustomization" class="gap-2">
-                <RotateCcw class="w-4 h-4" />
+                <Icon name="RotateCcw" class="w-4 h-4" />
                 Reset
               </Button>
             </div>
@@ -728,7 +693,7 @@ onMounted(() => {
                     <span class="text-sm font-medium flex-1">{{
                       preset.name
                     }}</span>
-                    <Check v-if="customization.stylePreset === preset.id" class="w-4 h-4 text-primary" />
+                    <Icon v-if="customization.stylePreset === preset.id" name="Check" class="w-4 h-4 text-primary" />
                   </div>
                   <span class="text-xs text-muted-foreground">{{
                     preset.description
@@ -741,7 +706,7 @@ onMounted(() => {
           <!-- Custom Controls -->
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <Sliders class="w-4 h-4 text-primary" />
+              <Icon name="Sliders" class="w-4 h-4 text-primary" />
               Custom Adjustments
             </h3>
             <div class="p-5 rounded-lg border border-border/50 bg-card/50 space-y-6">
@@ -814,11 +779,11 @@ onMounted(() => {
                   <span class="text-sm text-muted-foreground">{{ customization.borderRadius }}px</span>
                 </div>
                 <div class="flex items-center gap-4">
-                  <Square class="w-4 h-4 text-muted-foreground" />
+                  <Icon name="Square" class="w-4 h-4 text-muted-foreground" />
                   <input type="range" min="0" max="24" :value="customization.borderRadius"
                     @input="handleSliderInput($event, 'borderRadius')"
                     class="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary" />
-                  <Circle class="w-4 h-4 text-muted-foreground" />
+                  <Icon name="Circle" class="w-4 h-4 text-muted-foreground" />
                 </div>
                 <!-- Preview boxes -->
                 <div class="flex gap-3 justify-center pt-2">
@@ -889,11 +854,11 @@ onMounted(() => {
           <section class="space-y-4">
             <div class="flex items-center justify-between">
               <h3 class="text-lg font-medium flex items-center gap-2">
-                <Database class="w-4 h-4 text-primary" />
+                <Icon name="Database" class="w-4 h-4 text-primary" />
                 Statistics
               </h3>
               <Button variant="ghost" size="sm" @click="refreshLibrary" class="gap-2">
-                <RefreshCw class="w-4 h-4" />
+                <Icon name="RefreshCw" class="w-4 h-4" />
                 Refresh
               </Button>
             </div>
@@ -918,13 +883,13 @@ onMounted(() => {
 
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <Database class="w-4 h-4 text-primary" />
+              <Icon name="Database" class="w-4 h-4 text-primary" />
               Storage Information
             </h3>
             <div class="p-5 rounded-lg border border-border/50 bg-card/50">
               <div class="flex items-start gap-3">
                 <div class="p-2 rounded-lg bg-primary/10">
-                  <Info class="w-5 h-5 text-primary" />
+                  <Icon name="Info" class="w-5 h-5 text-primary" />
                 </div>
                 <div class="flex-1">
                   <div class="font-medium">Metadata-Only Storage</div>
@@ -941,7 +906,7 @@ onMounted(() => {
 
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2 text-destructive">
-              <AlertTriangle class="w-4 h-4" />
+              <Icon name="AlertTriangle" class="w-4 h-4" />
               Danger Zone
             </h3>
             <div class="p-4 sm:p-5 rounded-xl border border-destructive/30 bg-destructive/5">
@@ -953,7 +918,7 @@ onMounted(() => {
                   </div>
                 </div>
                 <Button variant="destructive" @click="clearAllData" :disabled="isClearingData" class="w-full sm:w-auto">
-                  <Trash2 class="w-4 h-4 mr-2" />
+                  <Icon name="Trash2" class="w-4 h-4 mr-2" />
                   {{ isClearingData ? "Clearing..." : "Reset Everything" }}
                 </Button>
               </div>
@@ -965,7 +930,7 @@ onMounted(() => {
         <div v-if="currentTab === 'sidebar'" class="space-y-8">
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <PanelLeft class="w-4 h-4 text-primary" />
+              <Icon name="PanelLeft" class="w-4 h-4 text-primary" />
               Sidebar Layout
             </h3>
             <p class="text-sm text-muted-foreground">
@@ -982,7 +947,7 @@ onMounted(() => {
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border hover:border-primary/50'
                       ">
-                    <PanelLeft class="w-5 h-5" />
+                    <Icon name="PanelLeft" class="w-5 h-5" />
                     <span class="font-medium">Left</span>
                   </button>
                   <button @click="setPosition('right')"
@@ -990,7 +955,7 @@ onMounted(() => {
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border hover:border-primary/50'
                       ">
-                    <PanelRight class="w-5 h-5" />
+                    <Icon name="PanelRight" class="w-5 h-5" />
                     <span class="font-medium">Right</span>
                   </button>
                 </div>
@@ -1020,7 +985,7 @@ onMounted(() => {
 
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <Eye class="w-4 h-4 text-primary" />
+              <Icon name="Eye" class="w-4 h-4 text-primary" />
               Navigation Items
             </h3>
             <p class="text-sm text-muted-foreground">
@@ -1048,14 +1013,14 @@ onMounted(() => {
               <div v-for="item in allItemsForGame" :key="item.id"
                 class="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
                 <div class="flex items-center gap-3">
-                  <component :is="sidebarIconMap[item.icon] || Package" class="w-5 h-5 text-muted-foreground" />
+                  <Icon :name="sidebarIconMap[item.icon] || 'Package'" class="w-5 h-5 text-muted-foreground" />
                   <span class="font-medium">{{ item.name }}</span>
                 </div>
                 <button @click="toggleItemEnabled(item.id)" class="p-1.5 rounded-md transition-colors" :class="item.enabled
                   ? 'text-primary bg-primary/10 hover:bg-primary/20'
                   : 'text-muted-foreground hover:bg-muted'
                   ">
-                  <component :is="item.enabled ? Eye : EyeOff" class="w-4 h-4" />
+                  <Icon :name="item.enabled ? 'Eye' : 'EyeOff'" class="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -1070,7 +1035,7 @@ onMounted(() => {
                 </p>
               </div>
               <Button variant="outline" @click="resetSidebarSettings" class="w-full sm:w-auto">
-                <RotateCcw class="w-4 h-4 mr-2" />
+                <Icon name="RotateCcw" class="w-4 h-4 mr-2" />
                 Reset to Default
               </Button>
             </div>
@@ -1081,7 +1046,7 @@ onMounted(() => {
         <div v-if="currentTab === 'shortcuts'" class="space-y-8">
           <section class="space-y-4">
             <h3 class="text-lg font-medium flex items-center gap-2">
-              <Keyboard class="w-4 h-4 text-primary" />
+              <Icon name="Keyboard" class="w-4 h-4 text-primary" />
               Keyboard Shortcuts
             </h3>
             <div class="rounded-lg border border-border/50 bg-card/50 overflow-hidden">
@@ -1125,7 +1090,7 @@ onMounted(() => {
             <div class="pt-6 sm:pt-8 text-sm text-muted-foreground">
               <p class="flex items-center justify-center gap-1">
                 Made with
-                <Heart class="w-4 h-4 text-red-500 fill-red-500" /> for the
+                <Icon name="Heart" class="w-4 h-4 text-red-500 fill-red-500" /> for the
                 community
               </p>
               <p class="mt-2">© {{ new Date().getFullYear() }} ModEx Team</p>

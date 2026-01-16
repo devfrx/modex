@@ -577,6 +577,9 @@ export interface ElectronAPI {
         disabledMods: string[];
         lockedMods: string[];
         unlockedMods: string[];
+        notesAdded: Array<{ modName: string; note: string }>;
+        notesRemoved: Array<{ modName: string; note: string }>;
+        notesChanged: Array<{ modName: string; oldNote: string; newNote: string }>;
         hasVersionHistoryChanges?: boolean;
         // Metadata changes
         loaderChanged?: { from?: string; to?: string };
@@ -1199,6 +1202,23 @@ export interface ElectronAPI {
     applyWorldModConfig: (worldId: string) => Promise<HytaleSyncResult>;
     /** Download a mod file for Hytale installation */
     downloadModFile: (downloadUrl: string, fileName: string) => Promise<string>;
+    /** Delete a mod (alias for removeMod) */
+    deleteMod: (modId: string) => Promise<boolean>;
+    /** Check for updates on all CurseForge mods */
+    checkForUpdates: () => Promise<Array<{
+      modId: string;
+      hytaleModId?: string;
+      projectId: number | null;
+      projectName: string;
+      currentVersion: string;
+      currentFileId: number | null;
+      latestVersion: string | null;
+      latestFileId: number | null;
+      hasUpdate: boolean;
+      updateUrl: string | null;
+    }>>;
+    /** Apply an update (download new version, delete old, install new) */
+    applyUpdate: (modId: string, newFileId: number) => Promise<{ success: boolean; error?: string; newModId?: string }>;
   };
 
   // ========== EVENTS ==========

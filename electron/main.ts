@@ -1278,7 +1278,7 @@ async function initializeBackend() {
       }
 
       // Build a map of snapshots by mod ID for quick lookup
-      const snapshotMap = new Map<string, { id: string; name: string; cf_project_id: number; cf_file_id: number; version?: string }>();
+      const snapshotMap = new Map<string, { id: string; name: string; source: "curseforge" | "modrinth"; cf_project_id?: number; cf_file_id?: number; mr_project_id?: string; mr_version_id?: string; version?: string }>();
       for (const snapshot of version.mod_snapshots || []) {
         snapshotMap.set(snapshot.id, snapshot);
       }
@@ -1300,17 +1300,25 @@ async function initializeBackend() {
 
         if (mod) {
           // Mod exists in library with exact ID - check if version matches
-          if (snapshot && mod.cf_file_id !== snapshot.cf_file_id) {
+          if (snapshot && snapshot.cf_file_id && mod.cf_file_id !== snapshot.cf_file_id) {
             // Same ID but file_id changed - this shouldn't happen with current ID scheme
             // but handle it anyway - we need to download the correct version
             console.log(`[Rollback] Mod ${modId} exists but file_id differs: lib=${mod.cf_file_id} vs snapshot=${snapshot.cf_file_id}`);
-            modsToDownload.push({
-              targetModId: modId,
-              modName: snapshot.name || mod.name,
-              cfProjectId: snapshot.cf_project_id,
-              cfFileId: snapshot.cf_file_id,
-              reason: "version_mismatch"
-            });
+            if (snapshot.cf_project_id) {
+              modsToDownload.push({
+                targetModId: modId,
+                modName: snapshot.name || mod.name,
+                cfProjectId: snapshot.cf_project_id,
+                cfFileId: snapshot.cf_file_id,
+                reason: "version_mismatch"
+              });
+            } else {
+              unrestorableMods.push({
+                modId,
+                modName: snapshot.name || modId,
+                reason: "No CurseForge info available"
+              });
+            }
           } else {
             existingModIds.push(modId);
           }
@@ -5075,6 +5083,157 @@ async function initializeBackend() {
     } catch (error: any) {
       console.error("[Hytale] Error downloading mod file:", error);
       throw error;
+    }
+  });
+
+  // Check for Hytale mod updates
+  ipcMain.handle("hytale:checkForUpdates", async (event) => {
+    const mods = hytaleService.getInstalledMods();
+    const cfMods = mods.filter(m => m.cfProjectId && m.cfFileId);
+    
+    const results: Array<{
+      modId: string;
+      hytaleModId?: string;
+      projectId: number | null;
+      projectName: string;
+      currentVersion: string;
+      currentFileId: number | null;
+      latestVersion: string | null;
+      latestFileId: number | null;
+      hasUpdate: boolean;
+      updateUrl: string | null;
+    }> = [];
+    
+    // Process in parallel batches
+    const BATCH_SIZE = 5;
+    let completed = 0;
+    
+    for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
+      const batch = cfMods.slice(i, i + BATCH_SIZE);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (mod) => {
+          try {
+            // For Hytale, we get the latest files without version/loader filtering
+            // since Hytale doesn't have those constraints like Minecraft
+            const files = await curseforgeService.getModFiles(mod.cfProjectId!, {
+              gameId: 70216, // Hytale
+            });
+            
+            // Find the latest release file
+            const latestFile = files?.length > 0 
+              ? files.sort((a: any, b: any) => new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime())[0]
+              : null;
+            
+            const hasUpdate = latestFile 
+              ? latestFile.id !== mod.cfFileId 
+              : false;
+            
+            return {
+              modId: mod.id,
+              hytaleModId: mod.hytaleModId,
+              projectId: mod.cfProjectId || null,
+              projectName: mod.name,
+              currentVersion: mod.version,
+              currentFileId: mod.cfFileId || null,
+              latestVersion: latestFile?.displayName || null,
+              latestFileId: hasUpdate && latestFile ? latestFile.id : null,
+              hasUpdate,
+              updateUrl: mod.cfProjectId 
+                ? `https://www.curseforge.com/hytale/mods/${mod.cfProjectId}`
+                : null,
+            };
+          } catch (error) {
+            console.error(`[Hytale] Error checking update for ${mod.name}:`, error);
+            return {
+              modId: mod.id,
+              hytaleModId: mod.hytaleModId,
+              projectId: mod.cfProjectId || null,
+              projectName: mod.name,
+              currentVersion: mod.version,
+              currentFileId: mod.cfFileId || null,
+              latestVersion: null,
+              latestFileId: null,
+              hasUpdate: false,
+              updateUrl: null,
+            };
+          }
+        })
+      );
+      
+      results.push(...batchResults);
+      completed += batch.length;
+      
+      // Send progress update
+      event.sender.send("hytale:updates:progress", {
+        current: completed,
+        total: cfMods.length,
+        modName: batch[batch.length - 1]?.name || "",
+      });
+    }
+    
+    return results;
+  });
+
+  // Apply Hytale mod update
+  ipcMain.handle("hytale:applyUpdate", async (_, modId: string, newFileId: number) => {
+    try {
+      const mods = hytaleService.getInstalledMods();
+      const mod = mods.find(m => m.id === modId);
+      
+      if (!mod || !mod.cfProjectId) {
+        return { success: false, error: "Mod not found or not from CurseForge" };
+      }
+      
+      // Get the file info
+      const file = await curseforgeService.getModFile(mod.cfProjectId, newFileId);
+      if (!file) {
+        return { success: false, error: "Could not get file info from CurseForge" };
+      }
+      
+      // Download the new file
+      const downloadUrl = file.downloadUrl;
+      if (!downloadUrl) {
+        return { success: false, error: "Download URL not available" };
+      }
+      
+      const tempDir = path.join(app.getPath("temp"), "modex-hytale-downloads");
+      await fs.ensureDir(tempDir);
+      const destPath = path.join(tempDir, file.fileName);
+      
+      const downloadService = getDownloadService();
+      const downloadResult = await downloadService.downloadFile(downloadUrl, destPath, {
+        timeout: 120000,
+      });
+      
+      if (!downloadResult.success) {
+        return { success: false, error: downloadResult.error || "Download failed" };
+      }
+      
+      // Remove the old mod
+      await hytaleService.removeMod(modId);
+      
+      // Install the new mod with proper metadata
+      const installResult = await hytaleService.installMod(destPath, {
+        id: `cf-file-${newFileId}`,
+        name: mod.name,
+        version: file.displayName || file.fileName,
+        cfProjectId: mod.cfProjectId,
+        cfFileId: newFileId,
+        logoUrl: mod.logoUrl,
+      });
+      
+      // Clean up temp file
+      await fs.remove(destPath).catch(() => {});
+      
+      if (installResult.success) {
+        return { success: true, newModId: installResult.mod?.id };
+      } else {
+        return { success: false, error: installResult.error };
+      }
+    } catch (error: any) {
+      console.error("[Hytale] Error applying update:", error);
+      return { success: false, error: error.message };
     }
   });
 

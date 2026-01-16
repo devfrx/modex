@@ -2,15 +2,7 @@
 import { ref, computed, watch } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import {
-    Loader2,
-    Download,
-    Calendar,
-    FileText,
-    ChevronDown,
-    ExternalLink,
-    Check,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const props = defineProps<{
     open: boolean;
@@ -201,7 +193,7 @@ watch(
                 <img v-if="mod?.logo?.thumbnailUrl" :src="mod.logo.thumbnailUrl"
                     class="w-10 h-10 rounded-lg object-cover" />
                 <div v-else class="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                    <FileText class="w-5 h-5 text-muted-foreground" />
+                    <Icon name="FileText" class="w-5 h-5 text-muted-foreground" />
                 </div>
                 <div class="min-w-0 flex-1">
                     <h2 class="text-lg font-bold truncate">{{ mod?.name }}</h2>
@@ -210,7 +202,7 @@ watch(
                     </p>
                 </div>
                 <Button variant="ghost" size="icon" class="h-8 w-8" @click="openCurseForge" title="View on CurseForge">
-                    <ExternalLink class="w-4 h-4" />
+                    <Icon name="ExternalLink" class="w-4 h-4" />
                 </Button>
             </div>
         </template>
@@ -248,13 +240,13 @@ watch(
 
             <!-- Loading -->
             <div v-if="isLoading" class="flex items-center justify-center py-12">
-                <Loader2 class="w-6 h-6 animate-spin text-primary mr-2" />
+                <Icon name="Loader2" class="w-6 h-6 animate-spin text-primary mr-2" />
                 <span class="text-muted-foreground">Loading files...</span>
             </div>
 
             <!-- No files -->
             <div v-else-if="filteredFiles.length === 0" class="text-center py-12 text-muted-foreground">
-                <FileText class="w-10 h-10 mx-auto mb-3 opacity-50" />
+                <Icon name="FileText" class="w-10 h-10 mx-auto mb-3 opacity-50" />
                 <p>No compatible files found</p>
                 <p class="text-xs mt-1">Try enabling Beta or Alpha channels</p>
             </div>
@@ -278,7 +270,8 @@ watch(
                                     ? 'bg-primary border-primary'
                                     : 'border-muted-foreground/30'
                                 ">
-                            <Check v-if="isFileInstalled(file.id) || selectedFileId === file.id" class="w-3 h-3"
+                            <Icon v-if="isFileInstalled(file.id) || selectedFileId === file.id" name="Check"
+                                class="w-3 h-3"
                                 :class="isFileInstalled(file.id) ? 'text-muted-foreground' : 'text-primary-foreground'" />
                         </div>
 
@@ -291,13 +284,13 @@ watch(
                                 </span>
                                 <span v-if="isFileInstalled(file.id)"
                                     class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-primary/10 text-primary border border-primary/20 flex items-center gap-0.5">
-                                    <Check class="w-3 h-3" /> INSTALLED
+                                    <Icon name="Check" class="w-3 h-3" /> INSTALLED
                                 </span>
                             </div>
 
                             <div class="flex items-center gap-3 text-xs text-muted-foreground">
                                 <span class="flex items-center gap-1">
-                                    <Calendar class="w-3 h-3" />
+                                    <Icon name="Calendar" class="w-3 h-3" />
                                     {{ formatDate(file.fileDate) }}
                                 </span>
                                 <span>{{ formatSize(file.fileLength) }}</span>
@@ -315,7 +308,7 @@ watch(
             <div class="flex justify-end gap-3">
                 <Button variant="outline" @click="emit('close')">Cancel</Button>
                 <Button :disabled="!selectedFileId" @click="handleSelect">
-                    <Download class="w-4 h-4 mr-2" />
+                    <Icon name="Download" class="w-4 h-4 mr-2" />
                     Add Selected File
                 </Button>
             </div>

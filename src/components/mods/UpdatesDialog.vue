@@ -4,18 +4,7 @@ import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
-import {
-  RefreshCw,
-  Download,
-  Check,
-  X,
-  ExternalLink,
-  AlertCircle,
-  Key,
-  Settings,
-  ArrowUpCircle,
-  FileText,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import type { ModUpdateInfo } from "@/types/electron";
 
@@ -260,25 +249,25 @@ function getSourceLabel(source: string) {
       <div class="flex items-center justify-between mb-4 pb-4 border-b border-border">
         <div class="flex items-center gap-2">
           <Button @click="checkForUpdates" :disabled="isLoading" class="gap-2">
-            <RefreshCw :class="['w-4 h-4', isLoading && 'animate-spin']" />
+            <Icon name="RefreshCw" :class="['w-4 h-4', isLoading && 'animate-spin']" />
             {{ isLoading ? "Controllo..." : "Controlla Aggiornamenti" }}
           </Button>
 
           <Button v-if="updateCount > 0" @click="applyAllUpdates" variant="secondary" class="gap-2">
-            <Download class="w-4 h-4" />
+            <Icon name="Download" class="w-4 h-4" />
             Aggiorna Tutti ({{ updateCount }})
           </Button>
         </div>
 
         <Button variant="ghost" size="icon" @click="showSettings = !showSettings" title="Impostazioni API">
-          <Settings class="w-4 h-4" />
+          <Icon name="Settings" class="w-4 h-4" />
         </Button>
       </div>
 
       <!-- Settings Panel -->
       <div v-if="showSettings" class="mb-4 p-4 rounded-lg bg-muted/50 border border-border space-y-3">
         <div class="text-sm font-medium flex items-center gap-2">
-          <Key class="w-4 h-4" />
+          <Icon name="Key" class="w-4 h-4" />
           API Keys
         </div>
 
@@ -324,7 +313,7 @@ function getSourceLabel(source: string) {
       <!-- No API Key Warning -->
       <div v-if="!curseforgeApiKey && !showSettings"
         class="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-sm flex items-start gap-2">
-        <AlertCircle class="w-4 h-4 mt-0.5 flex-shrink-0" />
+        <Icon name="AlertCircle" class="w-4 h-4 mt-0.5 flex-shrink-0" />
         <div>
           <div class="font-medium">API Key CurseForge mancante</div>
           <div class="text-xs opacity-80">
@@ -360,13 +349,13 @@ function getSourceLabel(source: string) {
       <div class="flex-1 overflow-auto space-y-2">
         <!-- Empty State -->
         <div v-if="!isLoading && updates.length === 0" class="text-center py-8 text-muted-foreground">
-          <ArrowUpCircle class="w-12 h-12 mx-auto mb-3 opacity-50" />
+          <Icon name="ArrowUpCircle" class="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p>Clicca "Controlla Aggiornamenti" per cercare nuove versioni</p>
         </div>
 
         <!-- No Updates -->
         <div v-else-if="!isLoading && updateCount === 0 && updates.length > 0" class="text-center py-8">
-          <Check class="w-12 h-12 mx-auto mb-3 text-green-500" />
+          <Icon name="Check" class="w-12 h-12 mx-auto mb-3 text-green-500" />
           <p class="text-green-600 dark:text-green-400 font-medium">
             Tutte le mod sono aggiornate!
           </p>
@@ -405,25 +394,25 @@ function getSourceLabel(source: string) {
             <div class="flex items-center gap-1">
               <Button v-if="update.updateUrl" variant="ghost" size="icon" class="h-8 w-8"
                 @click="openUrl(update.updateUrl)" title="Apri pagina mod">
-                <ExternalLink class="w-4 h-4" />
+                <Icon name="ExternalLink" class="w-4 h-4" />
               </Button>
 
               <Button v-if="update.projectId && update.newFileId" variant="ghost" size="icon"
                 class="h-8 w-8 text-muted-foreground" @click="viewChangelog(update)" title="Vedi Changelog">
-                <FileText class="w-4 h-4" />
+                <Icon name="FileText" class="w-4 h-4" />
               </Button>
 
               <Button v-if="update.newFileId" size="sm" class="gap-1" :disabled="updatingMods.has(update.modId)"
                 @click="applyUpdate(update)">
-                <RefreshCw v-if="updatingMods.has(update.modId)" class="w-3 h-3 animate-spin" />
-                <Download v-else class="w-3 h-3" />
+                <Icon v-if="updatingMods.has(update.modId)" name="RefreshCw" class="w-3 h-3 animate-spin" />
+                <Icon v-else name="Download" class="w-3 h-3" />
                 {{
                   updatingMods.has(update.modId) ? "Aggiorno..." : "Aggiorna"
                 }}
               </Button>
 
               <Button v-else variant="outline" size="sm" @click="openUrl(update.updateUrl)">
-                <ExternalLink class="w-3 h-3 mr-1" />
+                <Icon name="ExternalLink" class="w-3 h-3 mr-1" />
                 Manuale
               </Button>
             </div>

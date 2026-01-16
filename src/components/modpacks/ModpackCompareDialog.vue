@@ -1,19 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import {
-  ArrowLeftRight,
-  ArrowRight,
-  ChevronDown,
-  AlertTriangle,
-  Check,
-  Lock,
-  Package,
-  Copy,
-  Merge,
-  FileDown,
-  RefreshCw,
-  ArrowUpDown,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import { useToast } from "@/composables/useToast";
@@ -452,7 +439,7 @@ const packBName = computed(
     <!-- Header -->
     <div class="px-5 py-4 border-b border-border/50 flex items-center gap-3 shrink-0">
       <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-        <ArrowLeftRight class="w-5 h-5 text-primary" />
+        <Icon name="ArrowLeftRight" class="w-5 h-5 text-primary" />
       </div>
       <div class="flex-1 min-w-0">
         <h2 class="text-base font-semibold">Compare Modpacks</h2>
@@ -464,7 +451,7 @@ const packBName = computed(
       <div class="flex items-center gap-2">
         <Button v-if="packAId && packBId" variant="outline" size="sm" class="h-8 text-xs gap-1.5"
           @click="exportDiffReport">
-          <FileDown class="w-3.5 h-3.5" />
+          <Icon name="FileDown" class="w-3.5 h-3.5" />
           Export Report
         </Button>
       </div>
@@ -487,7 +474,8 @@ const packBName = computed(
               {{ pack.name }}
             </option>
           </select>
-          <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
+          <Icon name="ChevronDown"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
         </div>
         <div v-if="packA" class="flex items-center gap-2">
           <span class="text-xs bg-secondary px-1.5 py-0.5 rounded font-medium">{{ packA.minecraft_version }}</span>
@@ -501,7 +489,7 @@ const packBName = computed(
         <button @click="swapPacks" :disabled="!packAId || !packBId"
           class="w-10 h-10 rounded-full bg-muted/50 hover:bg-muted flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title="Swap packs">
-          <ArrowUpDown class="w-5 h-5 text-muted-foreground" />
+          <Icon name="ArrowUpDown" class="w-5 h-5 text-muted-foreground" />
         </button>
       </div>
 
@@ -519,7 +507,8 @@ const packBName = computed(
               {{ pack.name }}
             </option>
           </select>
-          <ChevronDown class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
+          <Icon name="ChevronDown"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none" />
         </div>
         <div v-if="packB" class="flex items-center gap-2 justify-end">
           <span class="text-xs text-muted-foreground">{{ packBMods.length }} mods</span>
@@ -556,27 +545,27 @@ const packBName = computed(
         <Button variant="outline" size="sm" class="h-7 text-xs gap-1.5"
           :disabled="isSyncing || (onlyInA.length === 0 && onlyInB.length === 0) || !!packA?.remote_source?.url || !!packB?.remote_source?.url"
           @click="syncBothWays" title="Add unique mods from each pack to the other">
-          <Merge class="w-3.5 h-3.5" />
+          <Icon name="Merge" class="w-3.5 h-3.5" />
           Sync Both Ways
         </Button>
         <div class="relative group">
           <Button variant="outline" size="sm" class="h-7 text-xs gap-1.5"
             :disabled="isSyncing || (onlyInA.length === 0 && onlyInB.length === 0)">
-            <Copy class="w-3.5 h-3.5" />
+            <Icon name="Copy" class="w-3.5 h-3.5" />
             Make Identical
-            <ChevronDown class="w-3 h-3" />
+            <Icon name="ChevronDown" class="w-3 h-3" />
           </Button>
           <!-- Dropdown -->
           <div
             class="absolute top-full right-0 mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
             <button @click="makeIdentical('AtoB')" :disabled="!!packB?.remote_source?.url || isSyncing"
               class="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-t-lg">
-              <ArrowRight class="w-4 h-4" />
+              <Icon name="ArrowRight" class="w-4 h-4" />
               <span>Make <strong class="text-primary">{{ packBName }}</strong> identical to A</span>
             </button>
             <button @click="makeIdentical('BtoA')" :disabled="!!packA?.remote_source?.url || isSyncing"
               class="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-b-lg">
-              <ArrowRight class="w-4 h-4 rotate-180" />
+              <Icon name="ArrowRight" class="w-4 h-4 rotate-180" />
               <span>Make <strong class="text-primary">{{ packAName }}</strong> identical to B</span>
             </button>
           </div>
@@ -589,7 +578,7 @@ const packBName = computed(
       class="px-5 py-3 border-b border-amber-500/30 bg-amber-500/10 shrink-0">
       <div class="flex items-center gap-3 text-sm text-amber-600 dark:text-amber-400">
         <div class="p-1.5 rounded-lg bg-amber-500/20">
-          <AlertTriangle class="w-4 h-4" />
+          <Icon name="AlertTriangle" class="w-4 h-4" />
         </div>
         <div class="flex-1">
           <span class="font-medium">Incompatible modpacks.</span>
@@ -619,25 +608,25 @@ const packBName = computed(
           <Button v-if="onlyInA.length > 0" variant="outline" size="sm"
             class="h-7 text-xs gap-1.5 hover:bg-amber-500/10 hover:text-amber-600 hover:border-amber-500/50"
             :disabled="!areCompatible || !!packB?.remote_source?.url || isCopying" @click="copyAllToB">
-            <Lock v-if="packB?.remote_source?.url" class="w-3 h-3" />
+            <Icon v-if="packB?.remote_source?.url" name="Lock" class="w-3 h-3" />
             <template v-else>
-              <Copy class="w-3 h-3" />
+              <Icon name="Copy" class="w-3 h-3" />
               Copy All
-              <ArrowRight class="w-3 h-3" />
+              <Icon name="ArrowRight" class="w-3 h-3" />
             </template>
           </Button>
         </div>
         <div class="flex-1 overflow-y-auto p-2 space-y-1">
           <div v-if="onlyInA.length === 0"
             class="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
-            <Check class="w-8 h-8 mb-2 text-green-500/50" />
+            <Icon name="Check" class="w-8 h-8 mb-2 text-green-500/50" />
             <p>No unique mods</p>
             <p class="text-xs opacity-70">All mods are shared</p>
           </div>
           <div v-for="mod in onlyInA" :key="mod.id"
             class="group flex items-center justify-between p-2.5 rounded-lg border border-transparent hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-sm">
             <div class="min-w-0 pr-3 flex items-center gap-2">
-              <Package class="w-4 h-4 text-muted-foreground shrink-0" />
+              <Icon name="Package" class="w-4 h-4 text-muted-foreground shrink-0" />
               <div class="min-w-0">
                 <div class="font-medium truncate">{{ mod.name }}</div>
                 <div v-if="mod.version" class="text-xs text-muted-foreground truncate opacity-70">{{ mod.version }}
@@ -649,8 +638,8 @@ const packBName = computed(
               :disabled="!areCompatible || !!packB?.remote_source?.url || isCopying"
               :title="packB?.remote_source?.url ? 'Target pack is read-only' : areCompatible ? 'Copy to Pack B' : 'Incompatible'"
               @click="copyToB(mod.id)">
-              <Lock v-if="packB?.remote_source?.url" class="w-3.5 h-3.5 text-muted-foreground" />
-              <ArrowRight v-else class="w-3.5 h-3.5" />
+              <Icon v-if="packB?.remote_source?.url" name="Lock" class="w-3.5 h-3.5 text-muted-foreground" />
+              <Icon v-else name="ArrowRight" class="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
@@ -667,7 +656,7 @@ const packBName = computed(
         <div class="flex-1 overflow-y-auto p-2 space-y-1">
           <div v-if="common.length === 0"
             class="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
-            <Package class="w-8 h-8 mb-2 opacity-30" />
+            <Icon name="Package" class="w-8 h-8 mb-2 opacity-30" />
             <p>No common mods</p>
           </div>
           <div v-for="mod in common" :key="mod.id"
@@ -683,11 +672,11 @@ const packBName = computed(
           <Button v-if="onlyInB.length > 0" variant="outline" size="sm"
             class="h-7 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary hover:border-primary/50"
             :disabled="!areCompatible || !!packA?.remote_source?.url || isCopying" @click="copyAllToA">
-            <Lock v-if="packA?.remote_source?.url" class="w-3 h-3" />
+            <Icon v-if="packA?.remote_source?.url" name="Lock" class="w-3 h-3" />
             <template v-else>
-              <ArrowRight class="w-3 h-3 rotate-180" />
+              <Icon name="ArrowRight" class="w-3 h-3 rotate-180" />
               Copy All
-              <Copy class="w-3 h-3" />
+              <Icon name="Copy" class="w-3 h-3" />
             </template>
           </Button>
           <span v-else></span>
@@ -699,7 +688,7 @@ const packBName = computed(
         <div class="flex-1 overflow-y-auto p-2 space-y-1">
           <div v-if="onlyInB.length === 0"
             class="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
-            <Check class="w-8 h-8 mb-2 text-green-500/50" />
+            <Icon name="Check" class="w-8 h-8 mb-2 text-green-500/50" />
             <p>No unique mods</p>
             <p class="text-xs opacity-70">All mods are shared</p>
           </div>
@@ -710,8 +699,8 @@ const packBName = computed(
               :disabled="!areCompatible || !!packA?.remote_source?.url || isCopying"
               :title="packA?.remote_source?.url ? 'Target pack is read-only' : areCompatible ? 'Copy to Pack A' : 'Incompatible'"
               @click="copyToA(mod.id)">
-              <Lock v-if="packA?.remote_source?.url" class="w-3.5 h-3.5 text-muted-foreground" />
-              <ArrowRight v-else class="w-3.5 h-3.5 rotate-180" />
+              <Icon v-if="packA?.remote_source?.url" name="Lock" class="w-3.5 h-3.5 text-muted-foreground" />
+              <Icon v-else name="ArrowRight" class="w-3.5 h-3.5 rotate-180" />
             </Button>
             <div class="min-w-0 pl-3 text-right flex items-center gap-2 justify-end">
               <div class="min-w-0">
@@ -719,7 +708,7 @@ const packBName = computed(
                 <div v-if="mod.version" class="text-xs text-muted-foreground truncate opacity-70">{{ mod.version }}
                 </div>
               </div>
-              <Package class="w-4 h-4 text-muted-foreground shrink-0" />
+              <Icon name="Package" class="w-4 h-4 text-muted-foreground shrink-0" />
             </div>
           </div>
         </div>
@@ -732,7 +721,7 @@ const packBName = computed(
       <!-- Header -->
       <div class="p-3 border-b border-border/30 bg-amber-500/5 flex items-center justify-between shrink-0">
         <span class="text-sm font-medium flex items-center gap-2">
-          <RefreshCw class="w-4 h-4 text-amber-500" />
+          <Icon name="RefreshCw" class="w-4 h-4 text-amber-500" />
           Mods with Different Versions ({{ versionDiffs.length }})
         </span>
       </div>
@@ -740,7 +729,7 @@ const packBName = computed(
       <div class="flex-1 overflow-y-auto">
         <div v-if="versionDiffs.length === 0"
           class="flex flex-col items-center justify-center h-full text-muted-foreground py-16">
-          <Check class="w-12 h-12 mb-3 text-green-500/50" />
+          <Icon name="Check" class="w-12 h-12 mb-3 text-green-500/50" />
           <p class="font-medium">All versions match!</p>
           <p class="text-sm opacity-70 mt-1">Common mods have the same version in both packs</p>
         </div>
@@ -750,7 +739,7 @@ const packBName = computed(
             <div class="flex items-center gap-4">
               <!-- Mod Info -->
               <div class="flex items-center gap-3 min-w-0 flex-1">
-                <Package class="w-5 h-5 text-muted-foreground shrink-0" />
+                <Icon name="Package" class="w-5 h-5 text-muted-foreground shrink-0" />
                 <div class="min-w-0">
                   <div class="font-medium truncate">{{ diff.name }}</div>
                 </div>
@@ -771,13 +760,13 @@ const packBName = computed(
                   :disabled="!!packB?.remote_source?.url || isCopying"
                   :title="`Use ${packAName}'s version in ${packBName}`"
                   @click="updateVersion(diff.projectId, diff.modA.id!, 'AtoB')">
-                  <ArrowRight class="w-3.5 h-3.5" />
+                  <Icon name="ArrowRight" class="w-3.5 h-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" class="h-7 w-7 hover:bg-primary/20 hover:text-primary"
                   :disabled="!!packA?.remote_source?.url || isCopying"
                   :title="`Use ${packBName}'s version in ${packAName}`"
                   @click="updateVersion(diff.projectId, diff.modB.id!, 'BtoA')">
-                  <ArrowRight class="w-3.5 h-3.5 rotate-180" />
+                  <Icon name="ArrowRight" class="w-3.5 h-3.5 rotate-180" />
                 </Button>
               </div>
 
@@ -798,7 +787,7 @@ const packBName = computed(
     <!-- Empty State -->
     <div v-else class="flex-1 flex flex-col items-center justify-center text-muted-foreground py-16 min-h-[300px]">
       <div class="w-16 h-16 rounded-xl bg-muted/30 flex items-center justify-center mb-4">
-        <ArrowLeftRight class="w-8 h-8 text-muted-foreground/40" />
+        <Icon name="ArrowLeftRight" class="w-8 h-8 text-muted-foreground/40" />
       </div>
       <p class="font-medium">Select modpacks to compare</p>
       <p class="text-sm opacity-70 mt-1">Choose a source and target pack above</p>

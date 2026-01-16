@@ -12,21 +12,16 @@
     "docs:build": "cd docs && npm ci && npm run docs:build"
   },
   "dependencies": {
-    "@types/d3": "^7.4.3",
+    "@iconify/vue": "^5.0.0",
     "@vueuse/core": "^14.1.0",
-    "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "d3": "^7.9.0",
     "electron-updater": "^6.7.3",
     "fs-extra": "^11.3.2",
     "lowdb": "^7.0.1",
-    "lucide-vue-next": "^0.555.0",
-    "pixi.js": "^8.14.3",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.4.0",
     "vue": "^3.4.21",
-    "vue-chartjs": "^5.3.3",
     "vue-router": "^4.6.3"
   },
   "devDependencies": {

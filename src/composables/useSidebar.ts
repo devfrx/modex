@@ -29,17 +29,18 @@ const defaultMinecraftItems: SidebarNavItem[] = [
   { id: "home", name: "Home", route: "/home", icon: "Home", enabled: true, order: 0, games: ["minecraft"] },
   { id: "library", name: "My Mods", route: "/library", icon: "Library", enabled: true, order: 1, games: ["minecraft"] },
   { id: "modpacks", name: "My Packs", route: "/modpacks", icon: "Package", enabled: true, order: 2, games: ["minecraft"] },
-  { id: "organize", name: "Folders", route: "/organize", icon: "FolderTree", enabled: true, order: 3, games: ["minecraft"] },
-  { id: "stats", name: "Insights", route: "/stats", icon: "BarChart3", enabled: true, order: 4, games: ["minecraft"] },
-  { id: "sandbox", name: "Visualize", route: "/sandbox", icon: "LayoutGrid", enabled: true, order: 5, games: ["minecraft"] },
-  { id: "guide", name: "Guide", route: "/guide", icon: "BookOpen", enabled: true, order: 6, games: ["minecraft"] },
+  { id: "browse-mods", name: "Browse Mods", route: "/library/search", icon: "Globe", enabled: true, order: 3, games: ["minecraft"] },
+  { id: "browse-modpacks", name: "Browse Packs", route: "/modpacks/browse", icon: "Compass", enabled: true, order: 4, games: ["minecraft"] },
+  { id: "guide", name: "Guide", route: "/guide", icon: "BookOpen", enabled: true, order: 5, games: ["minecraft"] },
 ];
 
 // Hytale sidebar items
 const defaultHytaleItems: SidebarNavItem[] = [
-  { id: "hytale-home", name: "Hytale", route: "/hytale", icon: "Home", enabled: true, order: 0, games: ["hytale"] },
-  { id: "hytale-mods", name: "Browse Mods", route: "/hytale/browse", icon: "Library", enabled: true, order: 1, games: ["hytale"] },
-  { id: "hytale-worlds", name: "Worlds", route: "/hytale/worlds", icon: "FolderTree", enabled: true, order: 2, games: ["hytale"] },
+  { id: "hytale-home", name: "Home", route: "/hytale", icon: "Home", enabled: true, order: 0, games: ["hytale"] },
+  { id: "hytale-mods", name: "My Mods", route: "/hytale/mods", icon: "Library", enabled: true, order: 1, games: ["hytale"] },
+  { id: "hytale-modpacks", name: "My Packs", route: "/hytale/modpacks", icon: "Package", enabled: true, order: 2, games: ["hytale"] },
+  { id: "hytale-browse", name: "Browse Mods", route: "/hytale/browse", icon: "LayoutGrid", enabled: true, order: 3, games: ["hytale"] },
+  { id: "hytale-worlds", name: "Worlds", route: "/hytale/worlds", icon: "FolderTree", enabled: true, order: 4, games: ["hytale"] },
 ];
 
 // Legacy items for backwards compatibility
@@ -60,17 +61,41 @@ const settings = ref<SidebarSettings>(loadSettings());
 // Track active game for filtering items
 const activeGame = ref<GameType>("minecraft");
 
+function mergeItems(savedItems: SidebarNavItem[] | undefined, defaultItems: SidebarNavItem[]): SidebarNavItem[] {
+  if (!savedItems) return [...defaultItems];
+  
+  // Create a set of valid item IDs from defaults
+  const validIds = new Set(defaultItems.map(item => item.id));
+  
+  // Filter saved items to only include valid IDs (remove deprecated items)
+  const filteredSaved = savedItems.filter(item => validIds.has(item.id));
+  
+  // Create a map of filtered saved items by id
+  const savedMap = new Map(filteredSaved.map(item => [item.id, item]));
+  
+  // Start with filtered saved items, then add any missing defaults
+  const result = [...filteredSaved];
+  for (const defaultItem of defaultItems) {
+    if (!savedMap.has(defaultItem.id)) {
+      result.push(defaultItem);
+    }
+  }
+  
+  // Sort by order
+  return result.sort((a, b) => a.order - b.order);
+}
+
 function loadSettings(): SidebarSettings {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Merge with defaults to ensure all fields exist
+      // Merge with defaults to ensure all fields exist AND add new items
       return {
         ...defaultSettings,
         ...parsed,
-        items: parsed.items || defaultMinecraftItems,
-        hytaleItems: parsed.hytaleItems || defaultHytaleItems,
+        items: mergeItems(parsed.items, defaultMinecraftItems),
+        hytaleItems: mergeItems(parsed.hytaleItems, defaultHytaleItems),
       };
     }
   } catch (e) {

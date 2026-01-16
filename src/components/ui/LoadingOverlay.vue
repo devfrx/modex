@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Loader2 } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 defineProps<{
   open: boolean;
@@ -22,7 +22,7 @@ defineProps<{
           <!-- Spinner -->
           <div class="relative">
             <div class="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
-            <Loader2 class="w-12 h-12 text-primary animate-spin relative z-10" />
+            <Icon name="Loader2" class="w-12 h-12 text-primary animate-spin relative z-10" />
           </div>
 
           <!-- Title -->

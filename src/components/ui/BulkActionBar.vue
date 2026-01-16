@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from "@/components/ui/Button.vue";
-import { X, CheckSquare } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 defineProps<{
   count: number;
@@ -20,7 +20,7 @@ defineEmits<{
       <!-- Selection count badge -->
       <div class="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-4 border-r border-border flex-shrink-0">
         <div class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/20">
-          <CheckSquare class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+          <Icon name="CheckSquare" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
         </div>
         <div>
           <div class="text-base sm:text-lg font-bold text-foreground leading-tight">{{ count }}</div>
@@ -39,7 +39,7 @@ defineEmits<{
         <button
           class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
           @click="$emit('clear')" title="Clear selection">
-          <X class="w-4 h-4" />
+          <Icon name="X" class="w-4 h-4" />
         </button>
       </div>
     </div>

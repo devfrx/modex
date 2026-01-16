@@ -669,6 +669,9 @@ contextBridge.exposeInMainWorld("api", {
         disabledMods: string[];
         lockedMods: string[];
         unlockedMods: string[];
+        notesAdded: Array<{ modName: string; note: string }>;
+        notesRemoved: Array<{ modName: string; note: string }>;
+        notesChanged: Array<{ modName: string; oldNote: string; newNote: string }>;
         hasVersionHistoryChanges?: boolean;
         // Metadata changes
         loaderChanged?: { from?: string; to?: string };
@@ -1849,6 +1852,23 @@ contextBridge.exposeInMainWorld("api", {
     // Download mod file (actually downloads the file for Hytale installation)
     downloadModFile: (downloadUrl: string, fileName: string): Promise<string> =>
       ipcRenderer.invoke("hytale:downloadModFile", downloadUrl, fileName),
+    // Delete a mod
+    deleteMod: (modId: string) => ipcRenderer.invoke("hytale:removeMod", modId),
+    // Update checking
+    checkForUpdates: (): Promise<Array<{
+      modId: string;
+      hytaleModId?: string;
+      projectId: number | null;
+      projectName: string;
+      currentVersion: string;
+      currentFileId: number | null;
+      latestVersion: string | null;
+      latestFileId: number | null;
+      hasUpdate: boolean;
+      updateUrl: string | null;
+    }>> => ipcRenderer.invoke("hytale:checkForUpdates"),
+    applyUpdate: (modId: string, newFileId: number): Promise<{ success: boolean; error?: string; newModId?: string }> =>
+      ipcRenderer.invoke("hytale:applyUpdate", modId, newFileId),
   },
 
   // ========== EVENTS ==========

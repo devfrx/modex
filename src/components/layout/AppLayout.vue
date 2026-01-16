@@ -5,7 +5,7 @@ import Toast from "@/components/ui/Toast.vue";
 import ApiKeyBanner from "@/components/ui/ApiKeyBanner.vue";
 import { useToast } from "@/composables/useToast";
 import { useSidebar } from "@/composables/useSidebar";
-import { Menu } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const { messages, remove } = useToast();
 const { settings: sidebarSettings } = useSidebar();
@@ -23,7 +23,7 @@ function closeSidebar() {
     <button @click="sidebarOpen = true"
       class="fixed top-2 z-40 sm:hidden p-2 rounded-lg bg-card border border-border shadow-lg"
       :class="sidebarSettings.position === 'right' ? 'right-2' : 'left-2'" aria-label="Open menu">
-      <Menu class="w-5 h-5" />
+      <Icon name="Menu" class="w-5 h-5" />
     </button>
 
     <!-- Mobile overlay -->
@@ -45,7 +45,7 @@ function closeSidebar() {
     <main class="flex-1 overflow-auto sm:ml-0 flex flex-col">
       <!-- Global API Key Warning Banner -->
       <ApiKeyBanner />
-      
+
       <!-- Main content -->
       <div class="flex-1 overflow-auto">
         <slot />

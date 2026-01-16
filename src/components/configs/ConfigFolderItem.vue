@@ -3,18 +3,7 @@
  * ConfigFolderItem - Recursive tree item for config browser
  */
 import { computed } from "vue";
-import {
-    ChevronRight,
-    ChevronDown,
-    Folder,
-    FolderOpen,
-    FileJson,
-    FileCode,
-    FileText,
-    ExternalLink,
-    Trash2,
-    Settings2,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { ConfigFolder, ConfigFile } from "@/types";
 
 const props = defineProps<{
@@ -36,17 +25,17 @@ const emit = defineEmits<{
 const depth = computed(() => props.depth ?? 0);
 const isExpanded = computed(() => props.expandedFolders.has(props.folder.path));
 
-function getFileIcon(type: string) {
+function getFileIcon(type: string): string {
     switch (type) {
         case "json":
         case "json5":
-            return FileJson;
+            return "FileJson";
         case "toml":
         case "cfg":
         case "yaml":
-            return FileCode;
+            return "FileCode";
         default:
-            return FileText;
+            return "FileText";
     }
 }
 
@@ -77,13 +66,13 @@ function formatSize(bytes: number): string {
     <div class="folder-item-wrapper">
         <!-- Folder Row -->
         <div class="folder-row" :style="{ paddingLeft: depth * 16 + 8 + 'px' }" @click="emit('toggle', folder.path)">
-            <component :is="isExpanded ? ChevronDown : ChevronRight"
+            <Icon :name="isExpanded ? 'ChevronDown' : 'ChevronRight'"
                 class="w-4 h-4 text-muted-foreground transition-transform" />
-            <component :is="isExpanded ? FolderOpen : Folder" class="w-4 h-4 text-amber-400" />
+            <Icon :name="isExpanded ? 'FolderOpen' : 'Folder'" class="w-4 h-4 text-amber-400" />
             <span class="folder-name">{{ folder.name }}</span>
             <span class="folder-count">{{ folder.fileCount }}</span>
             <button class="folder-action" @click.stop="emit('openFolder', folder.path)" title="Open in Explorer">
-                <ExternalLink class="w-3.5 h-3.5" />
+                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
             </button>
         </div>
 
@@ -100,19 +89,19 @@ function formatSize(bytes: number): string {
             <div v-for="file in folder.files" :key="file.path"
                 :class="['file-row', selectedFile?.path === file.path && 'file-row-active']"
                 :style="{ paddingLeft: (depth + 1) * 16 + 8 + 'px' }" @click="emit('select', file)">
-                <component :is="getFileIcon(file.type)" :class="['w-4 h-4', getFileTypeClass(file.type)]" />
+                <Icon :name="getFileIcon(file.type)" :class="['w-4 h-4', getFileTypeClass(file.type)]" />
                 <span class="file-name">{{ file.name }}</span>
                 <span class="file-size">{{ formatSize(file.size) }}</span>
                 <div class="file-actions">
                     <button class="file-action file-action-structured" @click.stop="emit('openStructured', file)"
                         title="Edit as Key-Value">
-                        <Settings2 class="w-3.5 h-3.5" />
+                        <Icon name="Settings2" class="w-3.5 h-3.5" />
                     </button>
                     <button class="file-action" @click.stop="emit('openExternal', file)" title="Open External">
-                        <ExternalLink class="w-3.5 h-3.5" />
+                        <Icon name="ExternalLink" class="w-3.5 h-3.5" />
                     </button>
                     <button class="file-action file-action-delete" @click.stop="emit('delete', file)" title="Delete">
-                        <Trash2 class="w-3.5 h-3.5" />
+                        <Icon name="Trash2" class="w-3.5 h-3.5" />
                     </button>
                 </div>
             </div>

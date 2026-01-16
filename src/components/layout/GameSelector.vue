@@ -10,7 +10,7 @@
 
 import { ref, onMounted, watch, computed, onUnmounted } from "vue";
 import type { GameType, GameConfig } from "@/types";
-import { Gamepad2, Pickaxe, ChevronDown, Check } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const props = defineProps<{
     currentGame?: GameType;
@@ -85,9 +85,9 @@ async function selectGame(gameType: GameType) {
     emit("change", gameType);
 }
 
-// Get icon component based on game type
-function getGameIcon(gameType: GameType) {
-    return gameType === "minecraft" ? Pickaxe : Gamepad2;
+// Get icon name based on game type
+function getGameIcon(gameType: GameType): string {
+    return gameType === "minecraft" ? "Pickaxe" : "Sword";
 }
 
 // Get list of game types for iteration
@@ -117,12 +117,12 @@ onUnmounted(() => {
             class="flex items-center rounded-lg bg-muted/50 hover:bg-muted transition-colors disabled:opacity-50"
             :class="collapsed ? 'justify-center p-2' : 'gap-2 px-3 py-2 w-full'"
             :title="collapsed ? gameInfo[activeGame].name : undefined">
-            <component :is="getGameIcon(activeGame)" class="w-5 h-5 text-primary shrink-0" />
+            <Icon :name="getGameIcon(activeGame)" class="w-5 h-5 text-primary shrink-0" />
             <template v-if="!collapsed">
                 <span class="flex-1 text-left font-medium text-sm">
                     {{ gameInfo[activeGame].name }}
                 </span>
-                <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform"
+                <Icon name="ChevronDown" class="w-4 h-4 text-muted-foreground transition-transform"
                     :class="isOpen && 'rotate-180'" />
             </template>
         </button>
@@ -134,7 +134,7 @@ onUnmounted(() => {
                 @click="selectGame(gameType)"
                 class="flex items-center gap-3 w-full px-3 py-2 hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-muted">
-                    <component :is="getGameIcon(gameType)" class="w-4 h-4"
+                    <Icon :name="getGameIcon(gameType)" class="w-4 h-4"
                         :class="activeGame === gameType ? 'text-primary' : 'text-muted-foreground'" />
                 </div>
                 <div class="flex-1 text-left">
@@ -149,7 +149,7 @@ onUnmounted(() => {
                         {{ gameInfo[gameType].description }}
                     </p>
                 </div>
-                <Check v-if="activeGame === gameType" class="w-4 h-4 text-primary" />
+                <Icon v-if="activeGame === gameType" name="Check" class="w-4 h-4 text-primary" />
             </button>
         </div>
     </div>

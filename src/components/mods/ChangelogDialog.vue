@@ -2,7 +2,7 @@
 import { ref, watch } from "vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
-import { RefreshCw, ExternalLink, FileText } from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -69,7 +69,7 @@ watch(
     <template #header>
       <div class="flex items-center gap-3">
         <div class="p-2 rounded-lg bg-primary/10">
-          <FileText class="w-5 h-5 text-primary" />
+          <Icon name="FileText" class="w-5 h-5 text-primary" />
         </div>
         <div class="min-w-0">
           <h2 class="text-lg font-bold truncate">{{ modName }}</h2>
@@ -81,7 +81,7 @@ watch(
     <div class="min-h-[200px] max-h-[400px] overflow-y-auto">
       <!-- Loading -->
       <div v-if="isLoading" class="flex items-center justify-center py-12">
-        <RefreshCw class="w-6 h-6 animate-spin text-primary" />
+        <Icon name="RefreshCw" class="w-6 h-6 animate-spin text-primary" />
         <span class="ml-2 text-muted-foreground">Loading changelog...</span>
       </div>
 
@@ -89,7 +89,7 @@ watch(
       <div v-else-if="error" class="text-center py-12">
         <p class="text-red-500 mb-4">{{ error }}</p>
         <Button variant="outline" @click="loadChangelog">
-          <RefreshCw class="w-4 h-4 mr-2" />
+          <Icon name="RefreshCw" class="w-4 h-4 mr-2" />
           Retry
         </Button>
       </div>
@@ -103,7 +103,7 @@ watch(
     <template #footer>
       <div class="flex items-center justify-between w-full">
         <Button v-if="slug" variant="ghost" size="sm" @click="openCurseForge">
-          <ExternalLink class="w-4 h-4 mr-2" />
+          <Icon name="ExternalLink" class="w-4 h-4 mr-2" />
           View on CurseForge
         </Button>
         <div v-else></div>

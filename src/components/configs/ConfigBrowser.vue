@@ -17,31 +17,7 @@ import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfigFolderItem from "./ConfigFolderItem.vue";
-import {
-    File,
-    Search,
-    Download,
-    Upload,
-    History,
-    RefreshCw,
-    HardDrive,
-    Loader2,
-    X,
-    FileSliders,
-    Archive,
-    Folder,
-    FileJson,
-    FileCode,
-    FileText,
-    ExternalLink,
-    Trash2,
-    Settings2,
-    Filter,
-    Clock,
-    Star,
-    ChevronDown,
-    Sparkles,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import type { ConfigFolder, ConfigFile, ConfigBackup } from "@/types";
 
 const props = defineProps<{
@@ -374,17 +350,17 @@ async function deleteBackup(backup: ConfigBackup) {
 }
 
 // Get file icon based on type
-function getFileIcon(type: string) {
+function getFileIcon(type: string): string {
     switch (type) {
         case "json":
         case "json5":
-            return FileJson;
+            return "FileJson";
         case "toml":
         case "cfg":
         case "yaml":
-            return FileCode;
+            return "FileCode";
         default:
-            return FileText;
+            return "FileText";
     }
 }
 
@@ -458,7 +434,7 @@ watch(folderCategory, () => {
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <div class="header-icon">
-                        <FileSliders class="w-5 h-5 text-primary" />
+                        <Icon name="FileSliders" class="w-5 h-5 text-primary" />
                     </div>
                     <div>
                         <h3 class="font-semibold text-foreground flex items-center gap-2">
@@ -472,20 +448,20 @@ watch(folderCategory, () => {
                 </div>
                 <div class="flex items-center gap-1">
                     <button @click="loadFolders" :disabled="isLoading" class="header-btn" title="Refresh">
-                        <RefreshCw :class="['w-4 h-4', isLoading && 'animate-spin']" />
+                        <Icon name="RefreshCw" :class="['w-4 h-4', isLoading && 'animate-spin']" />
                     </button>
                     <button @click="showBackupsDialog = true; loadBackups();" class="header-btn" title="Backups">
-                        <History class="w-4 h-4" />
+                        <Icon name="History" class="w-4 h-4" />
                     </button>
                     <div class="w-px h-4 bg-border/50 mx-1"></div>
                     <Button variant="ghost" size="sm" @click="importConfigs" :disabled="isImporting"
                         class="gap-1.5 h-8">
-                        <Upload class="w-4 h-4" />
+                        <Icon name="Upload" class="w-4 h-4" />
                         <span class="hidden sm:inline">Import</span>
                     </Button>
                     <Button variant="ghost" size="sm" @click="exportConfigs" :disabled="isExporting"
                         class="gap-1.5 h-8">
-                        <Download class="w-4 h-4" />
+                        <Icon name="Download" class="w-4 h-4" />
                         <span class="hidden sm:inline">Export</span>
                     </Button>
                 </div>
@@ -493,10 +469,10 @@ watch(folderCategory, () => {
 
             <!-- Search with Enhanced Design -->
             <div class="search-container">
-                <Search class="search-icon" />
+                <Icon name="Search" class="search-icon" />
                 <input v-model="searchQuery" placeholder="Search configs by name or mod..." class="search-input" />
                 <button v-if="searchQuery" @click="searchQuery = ''" class="search-clear">
-                    <X class="w-4 h-4" />
+                    <Icon name="X" class="w-4 h-4" />
                 </button>
             </div>
 
@@ -530,22 +506,23 @@ watch(folderCategory, () => {
                     <!-- Filter Toggle -->
                     <button @click="showFilters = !showFilters"
                         :class="['filter-chip', showFilters || activeFileTypeFilter || showRecentlyModified ? 'filter-chip-active' : '']">
-                        <Filter class="w-3.5 h-3.5" />
+                        <Icon name="Filter" class="w-3.5 h-3.5" />
                         <span>Filters</span>
-                        <ChevronDown :class="['w-3 h-3 transition-transform', showFilters && 'rotate-180']" />
+                        <Icon name="ChevronDown"
+                            :class="['w-3 h-3 transition-transform', showFilters && 'rotate-180']" />
                     </button>
 
                     <!-- Quick Filters -->
                     <button @click="showRecentlyModified = !showRecentlyModified"
                         :class="['filter-chip', showRecentlyModified ? 'filter-chip-active' : '']">
-                        <Clock class="w-3.5 h-3.5" />
+                        <Icon name="Clock" class="w-3.5 h-3.5" />
                         <span>Recent</span>
                     </button>
 
                     <!-- Favorites -->
                     <button @click="toggleFavoritesFilter"
                         :class="['filter-chip', showFavoritesOnly ? 'filter-chip-active' : '']">
-                        <Star class="w-3.5 h-3.5"
+                        <Icon name="Star" class="w-3.5 h-3.5"
                             :class="favorites.size > 0 ? 'fill-yellow-400 text-yellow-400' : ''" />
                         <span>Favorites</span>
                         <span v-if="favorites.size > 0" class="text-[10px] ml-0.5">({{ favorites.size }})</span>
@@ -558,7 +535,7 @@ watch(folderCategory, () => {
                             <span :class="fileTypeOptions.find(f => f.value === activeFileTypeFilter)?.color">
                                 {{ activeFileTypeFilter.toUpperCase() }}
                             </span>
-                            <X class="w-3 h-3" />
+                            <Icon name="X" class="w-3 h-3" />
                         </button>
                     </template>
                 </div>
@@ -566,7 +543,7 @@ watch(folderCategory, () => {
                 <!-- Stats -->
                 <div class="flex items-center gap-3 text-xs text-muted-foreground shrink-0 ml-2">
                     <div class="flex items-center gap-1">
-                        <HardDrive class="w-3.5 h-3.5" />
+                        <Icon name="HardDrive" class="w-3.5 h-3.5" />
                         {{ totalStats.size }}
                     </div>
                 </div>
@@ -581,7 +558,7 @@ watch(folderCategory, () => {
                             'filter-type-btn',
                             activeFileTypeFilter === type.value ? `${type.bg} ${type.color} border-current` : ''
                         ]">
-                        <component :is="getFileIcon(type.value)" class="w-3.5 h-3.5" />
+                        <Icon :name="getFileIcon(type.value)" class="w-3.5 h-3.5" />
                         {{ type.label }}
                     </button>
                 </div>
@@ -593,7 +570,7 @@ watch(folderCategory, () => {
             <!-- Favorites Section (when favorites filter active) -->
             <div v-if="showFavoritesOnly" class="p-3">
                 <div v-if="favoriteFiles.length === 0" class="empty-state">
-                    <Star class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <Icon name="Star" class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
                     <p class="text-muted-foreground text-sm">No favorite configs yet</p>
                     <p class="text-xs text-muted-foreground/70 mt-1">Click the star icon on any config to add it to
                         favorites
@@ -603,7 +580,7 @@ watch(folderCategory, () => {
                     <div v-for="file in favoriteFiles" :key="file.path"
                         :class="['search-result', selectedFile?.path === file.path && 'search-result-active']"
                         @click="selectFile(file)">
-                        <component :is="getFileIcon(file.type)"
+                        <Icon :name="getFileIcon(file.type)"
                             :class="['w-4 h-4 shrink-0', getFileTypeClass(file.type)]" />
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-medium text-foreground truncate">{{ file.name }}</div>
@@ -612,14 +589,14 @@ watch(folderCategory, () => {
                         <div class="search-result-actions">
                             <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
                                 title="Remove from favorites">
-                                <Star class="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                                <Icon name="Star" class="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
                             </button>
                             <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
                                 title="Edit as Key-Value">
-                                <Settings2 class="w-3.5 h-3.5" />
+                                <Icon name="Settings2" class="w-3.5 h-3.5" />
                             </button>
                             <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
-                                <ExternalLink class="w-3.5 h-3.5" />
+                                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
                             </button>
                         </div>
                     </div>
@@ -630,19 +607,19 @@ watch(folderCategory, () => {
             <div v-else-if="(activeFileTypeFilter || showRecentlyModified) && !searchQuery.trim() && !showFavoritesOnly"
                 class="p-3">
                 <div v-if="filteredFiles.length === 0" class="empty-state">
-                    <Filter class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <Icon name="Filter" class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
                     <p class="text-muted-foreground text-sm">No matching configs</p>
                     <p class="text-xs text-muted-foreground/70 mt-1">Try adjusting your filters</p>
                 </div>
                 <div v-else class="space-y-1">
                     <div class="text-xs text-muted-foreground mb-2 flex items-center gap-2">
-                        <Sparkles class="w-3.5 h-3.5" />
+                        <Icon name="Sparkles" class="w-3.5 h-3.5" />
                         {{ filteredFiles.length }} config{{ filteredFiles.length !== 1 ? 's' : '' }} found
                     </div>
                     <div v-for="file in filteredFiles" :key="file.path"
                         :class="['search-result', selectedFile?.path === file.path && 'search-result-active']"
                         @click="selectFile(file)">
-                        <component :is="getFileIcon(file.type)"
+                        <Icon :name="getFileIcon(file.type)"
                             :class="['w-4 h-4 shrink-0', getFileTypeClass(file.type)]" />
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-medium text-foreground truncate">{{ file.name }}</div>
@@ -651,18 +628,18 @@ watch(folderCategory, () => {
                         <div class="search-result-actions">
                             <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
                                 :title="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'">
-                                <Star
+                                <Icon name="Star"
                                     :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
                             </button>
                             <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
                                 title="Edit as Key-Value">
-                                <Settings2 class="w-3.5 h-3.5" />
+                                <Icon name="Settings2" class="w-3.5 h-3.5" />
                             </button>
                             <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
-                                <ExternalLink class="w-3.5 h-3.5" />
+                                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
                             </button>
                             <button class="action-btn action-btn-delete" @click.stop="deleteFile(file)" title="Delete">
-                                <Trash2 class="w-3.5 h-3.5" />
+                                <Icon name="Trash2" class="w-3.5 h-3.5" />
                             </button>
                         </div>
                     </div>
@@ -672,10 +649,10 @@ watch(folderCategory, () => {
             <!-- Search Results -->
             <div v-else-if="searchQuery.trim()" class="p-3">
                 <div v-if="isSearching" class="loading-state">
-                    <Loader2 class="w-6 h-6 animate-spin text-primary" />
+                    <Icon name="Loader2" class="w-6 h-6 animate-spin text-primary" />
                 </div>
                 <div v-else-if="searchResults.length === 0" class="empty-state">
-                    <Search class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <Icon name="Search" class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
                     <p class="text-muted-foreground">
                         No configs found for "{{ searchQuery }}"
                     </p>
@@ -685,7 +662,7 @@ watch(folderCategory, () => {
                         'search-result',
                         selectedFile?.path === file.path && 'search-result-active',
                     ]" @click="selectFile(file)">
-                        <component :is="getFileIcon(file.type)"
+                        <Icon :name="getFileIcon(file.type)"
                             :class="['w-4 h-4 shrink-0', getFileTypeClass(file.type)]" />
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-medium text-foreground truncate">
@@ -698,18 +675,18 @@ watch(folderCategory, () => {
                         <div class="search-result-actions">
                             <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
                                 :title="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'">
-                                <Star
+                                <Icon name="Star"
                                     :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
                             </button>
                             <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
                                 title="Edit as Key-Value">
-                                <Settings2 class="w-3.5 h-3.5" />
+                                <Icon name="Settings2" class="w-3.5 h-3.5" />
                             </button>
                             <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
-                                <ExternalLink class="w-3.5 h-3.5" />
+                                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
                             </button>
                             <button class="action-btn action-btn-delete" @click.stop="deleteFile(file)" title="Delete">
-                                <Trash2 class="w-3.5 h-3.5" />
+                                <Icon name="Trash2" class="w-3.5 h-3.5" />
                             </button>
                         </div>
                     </div>
@@ -719,10 +696,10 @@ watch(folderCategory, () => {
             <!-- Folder Tree (default view) -->
             <div v-else class="p-3">
                 <div v-if="isLoading" class="loading-state">
-                    <Loader2 class="w-6 h-6 animate-spin text-primary" />
+                    <Icon name="Loader2" class="w-6 h-6 animate-spin text-primary" />
                 </div>
                 <div v-else-if="folders.length === 0" class="empty-state">
-                    <Folder class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <Icon name="Folder" class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
                     <p class="text-muted-foreground">No config folders found</p>
                 </div>
                 <div v-else class="folder-tree">
@@ -740,19 +717,19 @@ watch(folderCategory, () => {
                 <div class="flex items-center justify-between">
                     <p class="text-sm text-muted-foreground">Manage your config backups</p>
                     <Button size="sm" @click="createBackup" :disabled="isCreatingBackup" class="gap-1.5">
-                        <Archive :class="['w-4 h-4', isCreatingBackup && 'animate-pulse']" />
+                        <Icon name="Archive" :class="['w-4 h-4', isCreatingBackup && 'animate-pulse']" />
                         Create Backup
                     </Button>
                 </div>
 
                 <div v-if="backups.length === 0" class="empty-state py-8">
-                    <Archive class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <Icon name="Archive" class="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
                     <p class="text-muted-foreground">No backups found</p>
                 </div>
                 <div v-else class="space-y-2 max-h-64 overflow-auto custom-scrollbar">
                     <div v-for="backup in backups" :key="backup.path" class="backup-item">
                         <div class="backup-icon">
-                            <Archive class="w-5 h-5 text-primary" />
+                            <Icon name="Archive" class="w-5 h-5 text-primary" />
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-medium text-foreground">
@@ -765,10 +742,10 @@ watch(folderCategory, () => {
                         <div class="flex items-center gap-1">
                             <button @click="restoreBackup(backup)" :disabled="isRestoringBackup"
                                 class="backup-btn backup-btn-restore" title="Restore">
-                                <History class="w-4 h-4" />
+                                <Icon name="History" class="w-4 h-4" />
                             </button>
                             <button @click="deleteBackup(backup)" class="backup-btn backup-btn-delete" title="Delete">
-                                <Trash2 class="w-4 h-4" />
+                                <Icon name="Trash2" class="w-4 h-4" />
                             </button>
                         </div>
                     </div>

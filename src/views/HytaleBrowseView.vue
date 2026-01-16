@@ -13,17 +13,7 @@
 
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
-import {
-    Search,
-    Loader2,
-    Download,
-    ArrowLeft,
-    RefreshCw,
-    AlertCircle,
-    ChevronDown,
-    Package,
-    Info,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import HytaleCFModDetailsModal from "@/components/hytale/HytaleCFModDetailsModal.vue";
@@ -32,7 +22,15 @@ import { useToast } from "@/composables/useToast";
 
 const router = useRouter();
 const toast = useToast();
-const { isInstalled, installFromCurseForge } = useHytale();
+const {
+    isInstalled,
+    installFromCurseForge,
+    isModInstalledByCfId,
+    getInstalledModByCfId,
+    getInstalledFileIdByCfId,
+    refreshMods,
+    initialize,
+} = useHytale();
 
 interface CFMod {
     id: number;
@@ -59,6 +57,27 @@ const searchQuery = ref("");
 const isSearching = ref(false);
 const searchResults = ref<CFMod[]>([]);
 const pagination = ref({ index: 0, pageSize: 20, totalCount: 0 });
+
+// Pagination computed
+const currentPage = computed(() => Math.floor(pagination.value.index / pagination.value.pageSize) + 1);
+const totalPages = computed(() => Math.ceil(pagination.value.totalCount / pagination.value.pageSize));
+const canGoPrev = computed(() => currentPage.value > 1);
+const canGoNext = computed(() => currentPage.value < totalPages.value);
+
+// Pagination navigation
+function goToPage(page: number) {
+    if (page < 1 || page > totalPages.value) return;
+    pagination.value.index = (page - 1) * pagination.value.pageSize;
+    search(false);
+}
+
+function prevPage() {
+    if (canGoPrev.value) goToPage(currentPage.value - 1);
+}
+
+function nextPage() {
+    if (canGoNext.value) goToPage(currentPage.value + 1);
+}
 
 // Mod details modal
 const showModDetailsModal = ref(false);
@@ -117,7 +136,16 @@ async function loadCategories() {
     }
 }
 
-async function handleInstall(mod: CFMod) {
+async function handleInstall(mod: CFMod, fileId?: number) {
+    const existingMod = getInstalledModByCfId(mod.id);
+    const existingFileId = getInstalledFileIdByCfId(mod.id);
+
+    // Check if same version is already installed (unless changing version)
+    if (existingMod && existingFileId === fileId) {
+        toast.info("Already Installed", `${mod.name} is already in your mods folder`);
+        return;
+    }
+
     installingMods.value.add(mod.id);
 
     // Close modal if open (when installing from modal)
@@ -127,18 +155,30 @@ async function handleInstall(mod: CFMod) {
     }
 
     try {
-        // Get the latest file for this mod
-        const files = await window.api.curseforge.getModFiles(mod.id);
-        if (!files || files.length === 0) {
-            throw new Error("No files available for this mod");
+        let targetFileId = fileId;
+
+        // If no specific file ID, get the latest file
+        if (!targetFileId) {
+            const files = await window.api.curseforge.getModFiles(mod.id);
+            if (!files || files.length === 0) {
+                throw new Error("No files available for this mod");
+            }
+            targetFileId = files[0].id;
         }
 
-        // Get the most recent file
-        const latestFile = files[0];
+        // If changing version, delete the old one first
+        if (existingMod) {
+            await window.api.hytale.removeMod(existingMod.id);
+        }
 
-        const result = await installFromCurseForge(mod.id, latestFile.id);
+        const result = await installFromCurseForge(mod.id, targetFileId);
         if (result.success) {
-            toast.success(`Installed ${mod.name}`, "Mod added to your Hytale mods folder");
+            const message = existingMod
+                ? "Mod version updated successfully"
+                : "Mod added to your Hytale mods folder";
+            toast.success(`${existingMod ? 'Updated' : 'Installed'} ${mod.name}`, message);
+            // Refresh mods list to update installed state
+            await refreshMods();
         } else {
             throw new Error(result.error || "Failed to install mod");
         }
@@ -166,29 +206,20 @@ function formatDate(dateStr: string): string {
 }
 
 // Load on mount
-onMounted(() => {
+onMounted(async () => {
+    await initialize(); // Load installed mods for tracking
     loadCategories();
     search();
 });
-
-// Load more functionality
-const hasMore = computed(() => {
-    return pagination.value.index + pagination.value.pageSize < pagination.value.totalCount;
-});
-
-function loadMore() {
-    pagination.value.index += pagination.value.pageSize;
-    search(false);
-}
 </script>
 
 <template>
-    <div class="h-full flex flex-col">
+    <div class="h-full flex flex-col relative">
         <!-- Header -->
         <div class="border-b border-border/50 bg-card/50 backdrop-blur-sm px-6 py-4">
             <div class="flex items-center gap-4">
                 <button @click="router.push('/hytale')" class="p-2 hover:bg-muted rounded-lg transition-colors">
-                    <ArrowLeft class="w-5 h-5" />
+                    <Icon name="ArrowLeft" class="w-5 h-5" />
                 </button>
                 <div>
                     <h1 class="text-xl font-semibold">Browse Hytale Mods</h1>
@@ -205,8 +236,8 @@ function loadMore() {
                 <Input v-model="searchQuery" placeholder="Search for Hytale mods..." class="flex-1"
                     @keyup.enter="search()" />
                 <Button @click="search()" :disabled="isSearching">
-                    <Search v-if="!isSearching" class="w-4 h-4 mr-2" />
-                    <Loader2 v-else class="w-4 h-4 mr-2 animate-spin" />
+                    <Icon v-if="!isSearching" name="Search" class="w-4 h-4 mr-2" />
+                    <Icon v-else name="Loader2" class="w-4 h-4 mr-2 animate-spin" />
                     Search
                 </Button>
             </div>
@@ -220,7 +251,7 @@ function loadMore() {
                         {{ cat.name }}
                     </option>
                 </select>
-                <ChevronDown
+                <Icon name="ChevronDown"
                     class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             </div>
         </div>
@@ -229,10 +260,10 @@ function loadMore() {
         <div class="flex-1 overflow-y-auto p-6">
             <!-- Error State -->
             <div v-if="error" class="flex flex-col items-center justify-center py-12 gap-4">
-                <AlertCircle class="w-12 h-12 text-destructive" />
+                <Icon name="AlertCircle" class="w-12 h-12 text-destructive" />
                 <p class="text-muted-foreground">{{ error }}</p>
                 <Button variant="outline" @click="search()">
-                    <RefreshCw class="w-4 h-4 mr-2" />
+                    <Icon name="RefreshCw" class="w-4 h-4 mr-2" />
                     Try Again
                 </Button>
             </div>
@@ -240,14 +271,14 @@ function loadMore() {
             <!-- Loading State -->
             <div v-else-if="isSearching && searchResults.length === 0"
                 class="flex flex-col items-center justify-center py-12 gap-4">
-                <Loader2 class="w-12 h-12 text-primary animate-spin" />
+                <Icon name="Loader2" class="w-12 h-12 text-primary animate-spin" />
                 <p class="text-muted-foreground">Searching...</p>
             </div>
 
             <!-- Empty State -->
             <div v-else-if="!isSearching && searchResults.length === 0"
                 class="flex flex-col items-center justify-center py-12 gap-4">
-                <Package class="w-12 h-12 text-muted-foreground" />
+                <Icon name="Package" class="w-12 h-12 text-muted-foreground" />
                 <p class="text-muted-foreground">No mods found</p>
             </div>
 
@@ -262,7 +293,7 @@ function loadMore() {
                             <img v-if="mod.logo?.thumbnailUrl" :src="mod.logo.thumbnailUrl" :alt="mod.name"
                                 class="w-12 h-12 rounded-lg object-cover bg-muted group-hover:scale-105 transition-transform" />
                             <div v-else class="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                                <Package class="w-6 h-6 text-muted-foreground" />
+                                <Icon name="Package" class="w-6 h-6 text-muted-foreground" />
                             </div>
                             <div class="flex-1 min-w-0">
                                 <h3 class="font-medium text-sm truncate group-hover:text-primary transition-colors">{{
@@ -279,49 +310,110 @@ function loadMore() {
 
                         <div class="flex items-center justify-between text-xs text-muted-foreground">
                             <span class="flex items-center gap-1">
-                                <Download class="w-3 h-3" />
+                                <Icon name="Download" class="w-3 h-3" />
                                 {{ formatDownloads(mod.downloadCount) }}
                             </span>
                             <span>Updated {{ formatDate(mod.dateModified) }}</span>
                         </div>
 
                         <div class="flex gap-2">
-                            <Button size="sm" class="flex-1" :disabled="installingMods.has(mod.id)"
+                            <Button v-if="isModInstalledByCfId(mod.id)" size="sm" variant="outline" class="flex-1"
+                                disabled>
+                                <Icon name="Check" class="w-4 h-4 mr-2 text-emerald-500" />
+                                Installed
+                            </Button>
+                            <Button v-else size="sm" class="flex-1" :disabled="installingMods.has(mod.id)"
                                 @click.stop="handleInstall(mod)">
-                                <Loader2 v-if="installingMods.has(mod.id)" class="w-4 h-4 mr-2 animate-spin" />
-                                <Download v-else class="w-4 h-4 mr-2" />
+                                <Icon v-if="installingMods.has(mod.id)" name="Loader2"
+                                    class="w-4 h-4 mr-2 animate-spin" />
+                                <Icon v-else name="Download" class="w-4 h-4 mr-2" />
                                 {{ installingMods.has(mod.id) ? 'Installing...' : 'Install' }}
                             </Button>
                             <Button size="sm" variant="outline" @click.stop="handleShowDetails(mod)"
                                 title="View details">
-                                <Info class="w-4 h-4" />
+                                <Icon name="Info" class="w-4 h-4" />
                             </Button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Load More -->
-            <div v-if="hasMore && !isSearching" class="flex justify-center mt-6">
-                <Button variant="outline" @click="loadMore">
-                    Load More
+            <!-- Pagination Controls -->
+            <div v-if="totalPages > 1 && !isSearching" class="browse-pagination">
+                <Button variant="outline" size="sm" :disabled="!canGoPrev" @click="goToPage(1)">
+                    <Icon name="ChevronsLeft" class="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" :disabled="!canGoPrev" @click="prevPage">
+                    <Icon name="ChevronLeft" class="w-4 h-4" />
+                </Button>
+
+                <div class="pagination-pages">
+                    <template v-for="page in totalPages" :key="page">
+                        <Button
+                            v-if="page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)"
+                            :variant="page === currentPage ? 'default' : 'outline'" size="sm"
+                            class="pagination-page-btn" @click="goToPage(page)">
+                            {{ page }}
+                        </Button>
+                        <span v-else-if="page === currentPage - 2 || page === currentPage + 2" class="pagination-dots">
+                            ...
+                        </span>
+                    </template>
+                </div>
+
+                <Button variant="outline" size="sm" :disabled="!canGoNext" @click="nextPage">
+                    <Icon name="ChevronRight" class="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" :disabled="!canGoNext" @click="goToPage(totalPages)">
+                    <Icon name="ChevronsRight" class="w-4 h-4" />
                 </Button>
             </div>
 
-            <!-- Loading More Indicator -->
+            <!-- Loading Indicator -->
             <div v-if="isSearching && searchResults.length > 0" class="flex justify-center mt-6">
-                <Loader2 class="w-6 h-6 text-primary animate-spin" />
+                <Icon name="Loader2" class="w-6 h-6 text-primary animate-spin" />
             </div>
 
             <!-- Results Count -->
             <div v-if="pagination.totalCount > 0" class="text-center mt-4 text-sm text-muted-foreground">
-                Showing {{ Math.min(pagination.index + pagination.pageSize, pagination.totalCount) }} of {{
+                Showing {{ (currentPage - 1) * pagination.pageSize + 1 }} - {{ Math.min(currentPage *
+                    pagination.pageSize,
+                    pagination.totalCount) }} of {{
                     pagination.totalCount }} results
             </div>
         </div>
 
         <!-- CF Mod Details Modal -->
-        <HytaleCFModDetailsModal :mod="selectedMod" :open="showModDetailsModal" @close="showModDetailsModal = false"
-            @install="handleInstall" />
+        <HytaleCFModDetailsModal :mod="selectedMod" :open="showModDetailsModal"
+            :installed-mod="selectedMod ? getInstalledModByCfId(selectedMod.id) : null"
+            :installed-file-id="selectedMod ? getInstalledFileIdByCfId(selectedMod.id) : null"
+            @close="showModDetailsModal = false" @install="handleInstall" />
     </div>
 </template>
+
+<style scoped>
+.browse-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    padding: 1rem 0;
+}
+
+.pagination-pages {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.pagination-page-btn {
+    min-width: 2rem;
+}
+
+.pagination-dots {
+    padding: 0 0.5rem;
+    color: var(--muted-foreground);
+    user-select: none;
+}
+</style>

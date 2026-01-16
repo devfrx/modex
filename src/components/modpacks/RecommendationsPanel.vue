@@ -1,16 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
-import {
-  Sparkles,
-  RefreshCw,
-  Plus,
-  Loader2,
-  Tag,
-  ExternalLink,
-  Package,
-  Layers,
-  Palette,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import FilePickerDialog from "@/components/mods/FilePickerDialog.vue";
 import { useToast } from "@/composables/useToast";
@@ -38,9 +28,9 @@ const selectedMod = ref<any>(null);
 const modpackInfo = ref<{ version?: string; loader?: string }>({});
 
 const tabs = [
-  { id: "mod", label: "Mods", icon: Package },
-  { id: "resourcepack", label: "Resource Packs", icon: Layers },
-  { id: "shader", label: "Shaders", icon: Palette },
+  { id: "mod", label: "Mods", icon: "Package" },
+  { id: "resourcepack", label: "Resource Packs", icon: "Layers" },
+  { id: "shader", label: "Shaders", icon: "Palette" },
 ] as const;
 
 async function loadRecommendations(randomize = false) {
@@ -125,7 +115,7 @@ onMounted(() => {
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20">
-            <Sparkles class="w-5 h-5 text-primary" />
+            <Icon name="Sparkles" class="w-5 h-5 text-primary" />
           </div>
           <div>
             <h3 class="text-lg font-semibold tracking-tight">
@@ -138,7 +128,7 @@ onMounted(() => {
         </div>
 
         <Button variant="secondary" size="sm" class="gap-1.5" :disabled="isLoading" @click="loadRecommendations(true)">
-          <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': isLoading }" />
+          <Icon name="RefreshCw" class="w-3.5 h-3.5" :class="{ 'animate-spin': isLoading }" />
           Shuffle
         </Button>
       </div>
@@ -164,14 +154,14 @@ onMounted(() => {
     <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar p-6">
       <div v-if="isLoading && recommendations.length === 0" class="h-full flex items-center justify-center">
         <div class="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 class="w-8 h-8 animate-spin text-primary" />
+          <Icon name="Loader2" class="w-8 h-8 animate-spin text-primary" />
           <p>Finding the best {{ activeTab }}s for you...</p>
         </div>
       </div>
 
       <div v-else-if="recommendations.length === 0" class="h-full flex items-center justify-center text-center p-8">
         <div class="max-w-md">
-          <Sparkles class="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+          <Icon name="Sparkles" class="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
           <h4 class="text-lg font-medium mb-2">No recommendations found</h4>
           <p class="text-muted-foreground">
             Try changing your filters or refreshing to see new suggestions.
@@ -198,7 +188,7 @@ onMounted(() => {
               <Button size="icon" variant="secondary"
                 class="h-7 w-7 rounded-md bg-background/60 backdrop-blur-md border border-border/30 hover:bg-background"
                 @click.stop="openCurseForge(mod.links?.websiteUrl)" title="View on CurseForge">
-                <ExternalLink class="w-3.5 h-3.5" />
+                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>
@@ -220,7 +210,7 @@ onMounted(() => {
               <!-- Reason Badge -->
               <div
                 class="flex items-center gap-1.5 text-[10px] text-primary font-medium bg-primary/10 px-2 py-1 rounded w-fit border border-primary/20">
-                <Sparkles class="w-3 h-3" />
+                <Icon name="Sparkles" class="w-3 h-3" />
                 {{ reason }}
               </div>
 
@@ -228,7 +218,7 @@ onMounted(() => {
               <div class="flex items-center justify-between text-xs text-muted-foreground font-medium">
                 <span
                   class="flex items-center gap-1.5 bg-muted/30 px-2 py-0.5 rounded text-[10px] border border-border/30">
-                  <Tag class="w-3 h-3" />
+                  <Icon name="Tag" class="w-3 h-3" />
                   {{ mod.categories?.[0]?.name || "Content" }}
                 </span>
                 <span>
@@ -238,7 +228,7 @@ onMounted(() => {
 
               <Button class="w-full gap-1.5 h-8 text-xs" :variant="isLinked ? 'ghost' : 'default'" :disabled="isLinked"
                 @click="handleAdd(mod)">
-                <Plus class="w-3.5 h-3.5" />
+                <Icon name="Plus" class="w-3.5 h-3.5" />
                 {{ isLinked ? "Managed by Remote" : "Add to Pack" }}
               </Button>
             </div>

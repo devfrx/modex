@@ -7,11 +7,8 @@ import ModpackEditorView from "@/views/ModpackEditorView.vue";
 import CurseForgeSearchView from "@/views/CurseForgeSearchView.vue";
 import CurseForgeModpackSearchView from "@/views/CurseForgeModpackSearchView.vue";
 import ModDetailsView from "@/views/ModDetailsView.vue";
-import OrganizeView from "@/views/OrganizeView.vue";
 import SettingsView from "@/views/SettingsView.vue";
-import SandboxView from "@/views/SandboxView.vue";
 import GuideView from "@/views/GuideView.vue";
-import StatsView from "@/views/StatsView.vue";
 import HytaleView from "@/views/HytaleView.vue";
 
 const routes: RouteRecordRaw[] = [
@@ -23,13 +20,12 @@ const routes: RouteRecordRaw[] = [
   { path: "/modpacks", component: ModpackView },
   { path: "/modpacks/:id", component: ModpackEditorView },
   { path: "/modpacks/browse", component: CurseForgeModpackSearchView },
-  { path: "/organize", component: OrganizeView },
-  { path: "/stats", component: StatsView },
-  { path: "/sandbox", component: SandboxView },
   { path: "/settings", component: SettingsView },
   { path: "/guide", component: GuideView },
   // Hytale routes
   { path: "/hytale", component: HytaleView },
+  { path: "/hytale/mods", component: defineAsyncComponent(() => import("@/views/HytaleModsView.vue")) },
+  { path: "/hytale/modpacks", component: defineAsyncComponent(() => import("@/views/HytaleModpacksView.vue")) },
   { path: "/hytale/browse", component: defineAsyncComponent(() => import("@/views/HytaleBrowseView.vue")) },
   { path: "/hytale/worlds", component: defineAsyncComponent(() => import("@/views/HytaleWorldsView.vue")) },
   { path: "/hytale/modpack/:id", component: defineAsyncComponent(() => import("@/views/HytaleModpackEditorView.vue")) },

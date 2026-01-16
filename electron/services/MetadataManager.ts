@@ -173,13 +173,16 @@ export interface ModpackVersion {
   /** Loader version at this version */
   loader_version?: string;
   parent_id?: string;
-  /** Snapshots of CF mods for rollback restoration */
+  /** Snapshots of mods for rollback restoration (supports CurseForge and Modrinth) */
   mod_snapshots?: Array<{
     id: string;
     name: string;
     version?: string;
-    cf_project_id: number;
-    cf_file_id: number;
+    source: "curseforge" | "modrinth";
+    cf_project_id?: number;
+    cf_file_id?: number;
+    mr_project_id?: string;
+    mr_version_id?: string;
   }>;
   /** ID of the config snapshot for this version (stored in overrides/{modpackId}/snapshots/{versionId}/) */
   config_snapshot_id?: string;
@@ -243,6 +246,10 @@ export interface ModexManifestMod {
   content_type?: "mod" | "resourcepack" | "shader";
   cf_project_id?: number;
   cf_file_id?: number;
+  /** Alias for cf_project_id (backwards compatibility with external formats) */
+  project_id?: number;
+  /** Alias for cf_file_id (backwards compatibility with external formats) */
+  file_id?: number;
   mr_project_id?: string;
   mr_version_id?: string;
   description?: string;
@@ -262,7 +269,12 @@ export interface ModexManifest {
     version: string;
     minecraft_version?: string;
     loader?: string;
+    loader_version?: string;
     description?: string;
+    /** CurseForge project ID (if imported from CF) */
+    cf_project_id?: number;
+    /** CurseForge file ID (specific version imported) */
+    cf_file_id?: number;
   };
   mods: ModexManifestMod[];
   disabled_mods?: string[];
@@ -271,9 +283,25 @@ export interface ModexManifest {
     mr_project_id?: string;
     name: string;
   }>;
+  /** Internal mod IDs of locked mods (for backwards compatibility) */
+  locked_mods?: string[];
+  /** Locked mods by project ID (stable cross-import identifiers) */
+  locked_mods_by_project?: Array<{
+    cf_project_id?: number;
+    mr_project_id?: string;
+    name: string;
+  }>;
+  /** Mods that failed to import due to incompatibility */
+  incompatible_mods?: Array<{
+    cf_project_id: number;
+    name: string;
+    reason: string;
+  }>;
   stats: {
     mod_count: number;
     disabled_count?: number;
+    locked_count?: number;
+    notes_count?: number;
   };
   mod_notes?: Record<string, string>;
   mod_notes_by_project?: Array<{
@@ -1162,7 +1190,7 @@ export class MetadataManager {
   async saveOverridesFromZip(
     zipPath: string,
     modpackId: string,
-    manifest?: CFManifest
+    manifest?: CFManifest | { overrides: string }
   ): Promise<{ path: string | null; fileCount: number }> {
     const AdmZip = (await import("adm-zip")).default;
     const zip = new AdmZip(zipPath);
@@ -1406,41 +1434,66 @@ export class MetadataManager {
     const currentDisabledIds = new Set(modpack.disabled_mod_ids || []);
     const savedSnapshots = currentVersion.mod_snapshots || [];
     const snapshotMap = new Map(savedSnapshots.map(s => [s.id, s]));
-    // Map by cf_project_id to detect updates (same project, different file)
-    const snapshotByProjectId = new Map(savedSnapshots.filter(s => s.cf_project_id).map(s => [s.cf_project_id, s]));
+    // Map by project IDs to detect updates (same project, different file)
+    const snapshotByCfProjectId = new Map(savedSnapshots.filter(s => s.cf_project_id).map(s => [s.cf_project_id!, s]));
+    const snapshotByMrProjectId = new Map(savedSnapshots.filter(s => s.mr_project_id).map(s => [s.mr_project_id!, s]));
 
     const library = await this.loadLibrary();
 
     // Build maps of current mods by project ID
-    const currentModsByProjectId = new Map<number, typeof library.mods[0]>();
+    const currentModsByCfProjectId = new Map<number, typeof library.mods[0]>();
+    const currentModsByMrProjectId = new Map<string, typeof library.mods[0]>();
     for (const modId of currentModIds) {
       const mod = library.mods.find(m => m.id === modId);
       if (mod?.cf_project_id) {
-        currentModsByProjectId.set(mod.cf_project_id, mod);
+        currentModsByCfProjectId.set(mod.cf_project_id, mod);
+      }
+      if (mod?.mr_project_id) {
+        currentModsByMrProjectId.set(mod.mr_project_id, mod);
       }
     }
 
     // Track which mods are updates (to exclude from add/remove)
-    const updatedProjectIds = new Set<number>();
+    const updatedCfProjectIds = new Set<number>();
+    const updatedMrProjectIds = new Set<string>();
 
-    // First pass: detect updates (same cf_project_id, different file)
+    // First pass: detect updates (same project_id, different file)
     for (const modId of currentModIds) {
       const mod = library.mods.find(m => m.id === modId);
-      if (!mod?.cf_project_id) continue;
+      if (!mod) continue;
 
-      // Check if same project existed in saved version with different file
-      const savedSnapshot = snapshotByProjectId.get(mod.cf_project_id);
-      if (savedSnapshot && savedSnapshot.id !== modId) {
-        // Same project, different ID = update
-        updatedProjectIds.add(mod.cf_project_id);
-        const oldVersion = savedSnapshot.version || `file:${savedSnapshot.cf_file_id}`;
-        const newVersion = mod.version || `file:${mod.cf_file_id}`;
-        result.changes.modsUpdated.push({
-          id: modId,
-          name: mod.name || modId,
-          oldVersion,
-          newVersion
-        });
+      // CurseForge update detection
+      if (mod.cf_project_id) {
+        const savedSnapshot = snapshotByCfProjectId.get(mod.cf_project_id);
+        if (savedSnapshot && savedSnapshot.id !== modId) {
+          // Same project, different ID = update
+          updatedCfProjectIds.add(mod.cf_project_id);
+          const oldVersion = savedSnapshot.version || `file:${savedSnapshot.cf_file_id}`;
+          const newVersion = mod.version || `file:${mod.cf_file_id}`;
+          result.changes.modsUpdated.push({
+            id: modId,
+            name: mod.name || modId,
+            oldVersion,
+            newVersion
+          });
+        }
+      }
+      
+      // Modrinth update detection
+      if (mod.mr_project_id) {
+        const savedSnapshot = snapshotByMrProjectId.get(mod.mr_project_id);
+        if (savedSnapshot && savedSnapshot.id !== modId) {
+          // Same project, different ID = update
+          updatedMrProjectIds.add(mod.mr_project_id);
+          const oldVersion = savedSnapshot.version || `version:${savedSnapshot.mr_version_id}`;
+          const newVersion = mod.version || `version:${mod.mr_version_id}`;
+          result.changes.modsUpdated.push({
+            id: modId,
+            name: mod.name || modId,
+            oldVersion,
+            newVersion
+          });
+        }
       }
     }
 
@@ -1448,8 +1501,10 @@ export class MetadataManager {
     for (const modId of currentModIds) {
       if (!savedModIds.has(modId)) {
         const mod = library.mods.find(m => m.id === modId);
-        // Skip if this is an update
-        if (mod?.cf_project_id && updatedProjectIds.has(mod.cf_project_id)) continue;
+        // Skip if this is a CurseForge update
+        if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) continue;
+        // Skip if this is a Modrinth update
+        if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) continue;
         result.changes.modsAdded.push({ id: modId, name: mod?.name || modId });
       }
     }
@@ -1457,9 +1512,11 @@ export class MetadataManager {
     // Find removed mods (excluding updates)
     for (const modId of savedModIds) {
       if (!currentModIds.has(modId)) {
-        // Check if this was replaced by an update
+        // Check if this was replaced by an update (CurseForge)
         const savedSnapshot = snapshotMap.get(modId);
-        if (savedSnapshot?.cf_project_id && updatedProjectIds.has(savedSnapshot.cf_project_id)) continue;
+        if (savedSnapshot?.cf_project_id && updatedCfProjectIds.has(savedSnapshot.cf_project_id)) continue;
+        // Check if this was replaced by an update (Modrinth)
+        if (savedSnapshot?.mr_project_id && updatedMrProjectIds.has(savedSnapshot.mr_project_id)) continue;
 
         // First try to find in library
         let modName = library.mods.find(m => m.id === modId)?.name;
@@ -1472,46 +1529,120 @@ export class MetadataManager {
       }
     }
 
-    // Find updated mods with same ID but different cf_file_id (edge case: in-place update)
+    // Find updated mods with same ID but different file_id (edge case: in-place update)
     for (const modId of currentModIds) {
       if (!savedModIds.has(modId)) continue;
 
       const mod = library.mods.find(m => m.id === modId);
-      if (!mod || !mod.cf_file_id) continue;
+      if (!mod) continue;
 
       const savedSnapshot = snapshotMap.get(modId);
       if (!savedSnapshot) continue;
 
-      // Compare file IDs - if different, the mod has been updated
-      if (mod.cf_file_id !== savedSnapshot.cf_file_id) {
-        // Use real versions if available, fall back to file IDs
-        const oldVersion = savedSnapshot.version || `file:${savedSnapshot.cf_file_id}`;
-        const newVersion = mod.version || `file:${mod.cf_file_id}`;
-        // Avoid duplicates
-        if (!result.changes.modsUpdated.find(u => u.id === modId)) {
-          result.changes.modsUpdated.push({
-            id: modId,
-            name: mod.name || modId,
-            oldVersion,
-            newVersion
-          });
+      // CurseForge in-place update
+      if (mod.cf_file_id && savedSnapshot.cf_file_id) {
+        if (mod.cf_file_id !== savedSnapshot.cf_file_id) {
+          // Avoid duplicates
+          if (!result.changes.modsUpdated.find(u => u.id === modId)) {
+            const oldVersion = savedSnapshot.version || `file:${savedSnapshot.cf_file_id}`;
+            const newVersion = mod.version || `file:${mod.cf_file_id}`;
+            result.changes.modsUpdated.push({
+              id: modId,
+              name: mod.name || modId,
+              oldVersion,
+              newVersion
+            });
+          }
+        }
+      }
+      
+      // Modrinth in-place update
+      if (mod.mr_version_id && savedSnapshot.mr_version_id) {
+        if (mod.mr_version_id !== savedSnapshot.mr_version_id) {
+          // Avoid duplicates
+          if (!result.changes.modsUpdated.find(u => u.id === modId)) {
+            const oldVersion = savedSnapshot.version || `version:${savedSnapshot.mr_version_id}`;
+            const newVersion = mod.version || `version:${mod.mr_version_id}`;
+            result.changes.modsUpdated.push({
+              id: modId,
+              name: mod.name || modId,
+              oldVersion,
+              newVersion
+            });
+          }
         }
       }
     }
 
     // Find enabled mods (were disabled, now enabled)
-    for (const modId of savedDisabledIds) {
-      if (currentModIds.has(modId) && !currentDisabledIds.has(modId)) {
-        const mod = library.mods.find(m => m.id === modId);
+    // This also handles mods that were updated AND then enabled
+    for (const modId of currentModIds) {
+      // Skip if mod is currently disabled
+      if (currentDisabledIds.has(modId)) continue;
+      
+      const mod = library.mods.find(m => m.id === modId);
+      
+      // Case 1: Mod existed in saved version with same ID and was disabled
+      if (savedDisabledIds.has(modId)) {
         result.changes.modsEnabled.push({ id: modId, name: mod?.name || modId });
+        continue;
+      }
+      
+      // Case 2: Mod was updated (different ID but same project) and original was disabled
+      if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) {
+        const originalSnapshot = snapshotByCfProjectId.get(mod.cf_project_id);
+        if (originalSnapshot && savedDisabledIds.has(originalSnapshot.id)) {
+          result.changes.modsEnabled.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
+      }
+      if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) {
+        const originalSnapshot = snapshotByMrProjectId.get(mod.mr_project_id);
+        if (originalSnapshot && savedDisabledIds.has(originalSnapshot.id)) {
+          result.changes.modsEnabled.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
       }
     }
 
     // Find disabled mods (were enabled, now disabled)
+    // This also handles mods that were updated AND then disabled
     for (const modId of currentDisabledIds) {
+      const mod = library.mods.find(m => m.id === modId);
+      
+      // Case 1: Mod existed in saved version with same ID and was not disabled
       if (savedModIds.has(modId) && !savedDisabledIds.has(modId)) {
-        const mod = library.mods.find(m => m.id === modId);
         result.changes.modsDisabled.push({ id: modId, name: mod?.name || modId });
+        continue;
+      }
+      
+      // Case 2: Mod was updated (different ID but same project) and then disabled
+      // Check if this mod's project was in saved version but with different ID
+      if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) {
+        // This mod was updated, check if the original was enabled (not in savedDisabledIds)
+        const originalSnapshot = snapshotByCfProjectId.get(mod.cf_project_id);
+        if (originalSnapshot && !savedDisabledIds.has(originalSnapshot.id)) {
+          result.changes.modsDisabled.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
+      }
+      if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) {
+        const originalSnapshot = snapshotByMrProjectId.get(mod.mr_project_id);
+        if (originalSnapshot && !savedDisabledIds.has(originalSnapshot.id)) {
+          result.changes.modsDisabled.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
+      }
+      
+      // Case 3: Mod is newly added AND disabled (not in saved version at all)
+      // This catches mods added from library/CurseForge that are immediately disabled
+      if (!savedModIds.has(modId)) {
+        // Check it's not an update by project ID
+        const isUpdate = (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) ||
+                        (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id));
+        if (!isUpdate) {
+          result.changes.modsDisabled.push({ id: modId, name: mod?.name || modId });
+        }
       }
     }
 
@@ -1519,19 +1650,71 @@ export class MetadataManager {
     const savedLockedIds = new Set(currentVersion.locked_mod_ids || []);
     const currentLockedIds = new Set(modpack.locked_mod_ids || []);
 
-    // Find newly locked mods
+    // Find newly locked mods (including updated mods that were then locked)
     for (const modId of currentLockedIds) {
-      if (!savedLockedIds.has(modId)) {
-        const mod = library.mods.find(m => m.id === modId);
+      const mod = library.mods.find(m => m.id === modId);
+      
+      // Case 1: Mod existed in saved version with same ID and was not locked
+      if (savedModIds.has(modId) && !savedLockedIds.has(modId)) {
         result.changes.modsLocked.push({ id: modId, name: mod?.name || modId });
+        continue;
+      }
+      
+      // Case 2: Mod was updated and then locked
+      if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) {
+        const originalSnapshot = snapshotByCfProjectId.get(mod.cf_project_id);
+        if (originalSnapshot && !savedLockedIds.has(originalSnapshot.id)) {
+          result.changes.modsLocked.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
+      }
+      if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) {
+        const originalSnapshot = snapshotByMrProjectId.get(mod.mr_project_id);
+        if (originalSnapshot && !savedLockedIds.has(originalSnapshot.id)) {
+          result.changes.modsLocked.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
+      }
+      
+      // Case 3: Mod is newly added AND locked (not in saved version at all)
+      // This catches mods added from library/CurseForge that are immediately locked
+      if (!savedModIds.has(modId)) {
+        // Check it's not an update by project ID
+        const isUpdate = (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) ||
+                        (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id));
+        if (!isUpdate) {
+          result.changes.modsLocked.push({ id: modId, name: mod?.name || modId });
+        }
       }
     }
 
-    // Find newly unlocked mods
-    for (const modId of savedLockedIds) {
-      if (!currentLockedIds.has(modId) && currentModIds.has(modId)) {
-        const mod = library.mods.find(m => m.id === modId);
+    // Find newly unlocked mods (including updated mods that were then unlocked)
+    for (const modId of currentModIds) {
+      // Skip if mod is currently locked
+      if (currentLockedIds.has(modId)) continue;
+      
+      const mod = library.mods.find(m => m.id === modId);
+      
+      // Case 1: Mod existed in saved version with same ID and was locked
+      if (savedLockedIds.has(modId)) {
         result.changes.modsUnlocked.push({ id: modId, name: mod?.name || modId });
+        continue;
+      }
+      
+      // Case 2: Mod was updated and original was locked
+      if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) {
+        const originalSnapshot = snapshotByCfProjectId.get(mod.cf_project_id);
+        if (originalSnapshot && savedLockedIds.has(originalSnapshot.id)) {
+          result.changes.modsUnlocked.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
+      }
+      if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) {
+        const originalSnapshot = snapshotByMrProjectId.get(mod.mr_project_id);
+        if (originalSnapshot && savedLockedIds.has(originalSnapshot.id)) {
+          result.changes.modsUnlocked.push({ id: modId, name: mod?.name || modId });
+          continue;
+        }
       }
     }
 
@@ -2933,18 +3116,25 @@ export class MetadataManager {
     const modSnapshots = modpack.mod_ids
       .map((modId) => {
         const mod = library.mods.find((m) => m.id === modId);
-        if (
-          mod &&
-          mod.source === "curseforge" &&
-          mod.cf_project_id &&
-          mod.cf_file_id
-        ) {
+        if (mod && mod.cf_project_id && mod.cf_file_id) {
           return {
             id: mod.id,
             name: mod.name,
             version: mod.version,
+            source: mod.source as "curseforge" | "modrinth",
             cf_project_id: mod.cf_project_id,
             cf_file_id: mod.cf_file_id,
+            mr_project_id: mod.mr_project_id,
+            mr_version_id: mod.mr_version_id,
+          };
+        } else if (mod && mod.mr_project_id && mod.mr_version_id) {
+          return {
+            id: mod.id,
+            name: mod.name,
+            version: mod.version,
+            source: mod.source as "curseforge" | "modrinth",
+            mr_project_id: mod.mr_project_id,
+            mr_version_id: mod.mr_version_id,
           };
         }
         return null;
@@ -3092,24 +3282,36 @@ export class MetadataManager {
     // Generate tag if not provided
     const versionTag = tag || this.generateNextTag(currentVersion.tag);
 
-    // Create snapshots of CF mods for potential rollback restoration
+    // Create snapshots of mods for potential rollback restoration (supports CurseForge and Modrinth)
     const modSnapshots = modpack.mod_ids
       .map((modId) => {
         const mod = library.mods.find((m) => m.id === modId);
-        if (
-          mod &&
-          mod.source === "curseforge" &&
-          mod.cf_project_id &&
-          mod.cf_file_id
-        ) {
+        if (!mod) return null;
+        
+        // CurseForge mods
+        if (mod.source === "curseforge" && mod.cf_project_id && mod.cf_file_id) {
           return {
             id: mod.id,
             name: mod.name,
             version: mod.version,
+            source: "curseforge" as const,
             cf_project_id: mod.cf_project_id,
             cf_file_id: mod.cf_file_id,
           };
         }
+        
+        // Modrinth mods
+        if (mod.source === "modrinth" && mod.mr_project_id && mod.mr_version_id) {
+          return {
+            id: mod.id,
+            name: mod.name,
+            version: mod.version,
+            source: "modrinth" as const,
+            mr_project_id: mod.mr_project_id,
+            mr_version_id: mod.mr_version_id,
+          };
+        }
+        
         return null;
       })
       .filter((s): s is NonNullable<typeof s> => s !== null);
@@ -3250,13 +3452,22 @@ export class MetadataManager {
 
   /**
    * Calculate changes between two mod_ids arrays
-   * Also detects mod version updates by comparing cf_file_id from snapshots
+   * Also detects mod version updates by comparing file IDs from snapshots (supports CurseForge and Modrinth)
    */
   private calculateChanges(
     oldModIds: string[],
     newModIds: string[],
     library: LibraryData,
-    oldSnapshots?: Array<{ id: string; name: string; version?: string; cf_project_id: number; cf_file_id: number }>
+    oldSnapshots?: Array<{ 
+      id: string; 
+      name: string; 
+      version?: string; 
+      source?: "curseforge" | "modrinth";
+      cf_project_id?: number; 
+      cf_file_id?: number;
+      mr_project_id?: string;
+      mr_version_id?: string;
+    }>
   ): ModpackChange[] {
     const changes: ModpackChange[] = [];
     const oldSet = new Set(oldModIds);
@@ -3264,41 +3475,73 @@ export class MetadataManager {
     const modMap = new Map(library.mods.map((m) => [m.id, m]));
     const snapshotMap = new Map(oldSnapshots?.map(s => [s.id, s]) || []);
 
-    // Build maps by cf_project_id for detecting updates (same project, different file)
-    const snapshotByProjectId = new Map(
-      oldSnapshots?.filter(s => s.cf_project_id).map(s => [s.cf_project_id, s]) || []
+    // Build maps by project ID for detecting updates (same project, different file)
+    // CurseForge: by cf_project_id
+    const snapshotByCfProjectId = new Map(
+      oldSnapshots?.filter(s => s.cf_project_id).map(s => [s.cf_project_id!, s]) || []
     );
-    const currentModsByProjectId = new Map<number, typeof library.mods[0]>();
+    // Modrinth: by mr_project_id
+    const snapshotByMrProjectId = new Map(
+      oldSnapshots?.filter(s => s.mr_project_id).map(s => [s.mr_project_id!, s]) || []
+    );
+    
+    const currentModsByCfProjectId = new Map<number, typeof library.mods[0]>();
+    const currentModsByMrProjectId = new Map<string, typeof library.mods[0]>();
     for (const modId of newModIds) {
       const mod = modMap.get(modId);
       if (mod?.cf_project_id) {
-        currentModsByProjectId.set(mod.cf_project_id, mod);
+        currentModsByCfProjectId.set(mod.cf_project_id, mod);
+      }
+      if (mod?.mr_project_id) {
+        currentModsByMrProjectId.set(mod.mr_project_id, mod);
       }
     }
 
     // Track which project IDs are updates (to exclude from add/remove)
-    const updatedProjectIds = new Set<number>();
+    const updatedCfProjectIds = new Set<number>();
+    const updatedMrProjectIds = new Set<string>();
 
-    // First pass: detect updates (same cf_project_id, different ID/file)
+    // First pass: detect updates (same project_id, different ID/file)
     for (const modId of newModIds) {
       const mod = modMap.get(modId);
-      if (!mod?.cf_project_id) continue;
+      if (!mod) continue;
 
-      const oldSnapshot = snapshotByProjectId.get(mod.cf_project_id);
-      if (oldSnapshot && oldSnapshot.id !== modId) {
-        // Same project, different ID = update
-        updatedProjectIds.add(mod.cf_project_id);
-        const prevVersion = oldSnapshot.version || `file:${oldSnapshot.cf_file_id}`;
-        const newVersion = mod.version || `file:${mod.cf_file_id}`;
-        changes.push({
-          type: "update",
-          modId,
-          modName: mod.name || modId,
-          previousVersion: prevVersion,
-          newVersion: newVersion,
-          previousFileId: oldSnapshot.cf_file_id,
-          newFileId: mod.cf_file_id,
-        });
+      // CurseForge update detection
+      if (mod.cf_project_id) {
+        const oldSnapshot = snapshotByCfProjectId.get(mod.cf_project_id);
+        if (oldSnapshot && oldSnapshot.id !== modId) {
+          // Same project, different ID = update
+          updatedCfProjectIds.add(mod.cf_project_id);
+          const prevVersion = oldSnapshot.version || `file:${oldSnapshot.cf_file_id}`;
+          const newVersion = mod.version || `file:${mod.cf_file_id}`;
+          changes.push({
+            type: "update",
+            modId,
+            modName: mod.name || modId,
+            previousVersion: prevVersion,
+            newVersion: newVersion,
+            previousFileId: oldSnapshot.cf_file_id,
+            newFileId: mod.cf_file_id,
+          });
+        }
+      }
+      
+      // Modrinth update detection
+      if (mod.mr_project_id) {
+        const oldSnapshot = snapshotByMrProjectId.get(mod.mr_project_id);
+        if (oldSnapshot && oldSnapshot.id !== modId) {
+          // Same project, different ID = update
+          updatedMrProjectIds.add(mod.mr_project_id);
+          const prevVersion = oldSnapshot.version || `version:${oldSnapshot.mr_version_id}`;
+          const newVersion = mod.version || `version:${mod.mr_version_id}`;
+          changes.push({
+            type: "update",
+            modId,
+            modName: mod.name || modId,
+            previousVersion: prevVersion,
+            newVersion: newVersion,
+          });
+        }
       }
     }
 
@@ -3306,8 +3549,10 @@ export class MetadataManager {
     for (const modId of oldModIds) {
       if (!newSet.has(modId)) {
         const snapshot = snapshotMap.get(modId);
-        // Skip if this was replaced by an update
-        if (snapshot?.cf_project_id && updatedProjectIds.has(snapshot.cf_project_id)) continue;
+        // Skip if this was replaced by an update (CurseForge)
+        if (snapshot?.cf_project_id && updatedCfProjectIds.has(snapshot.cf_project_id)) continue;
+        // Skip if this was replaced by an update (Modrinth)
+        if (snapshot?.mr_project_id && updatedMrProjectIds.has(snapshot.mr_project_id)) continue;
 
         const mod = modMap.get(modId);
         changes.push({
@@ -3323,8 +3568,10 @@ export class MetadataManager {
     for (const modId of newModIds) {
       if (!oldSet.has(modId)) {
         const mod = modMap.get(modId);
-        // Skip if this is an update
-        if (mod?.cf_project_id && updatedProjectIds.has(mod.cf_project_id)) continue;
+        // Skip if this is a CurseForge update
+        if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) continue;
+        // Skip if this is a Modrinth update
+        if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) continue;
 
         changes.push({
           type: "add",
@@ -3335,13 +3582,15 @@ export class MetadataManager {
       }
     }
 
-    // Find updated mods with same ID but different cf_file_id (edge case: in-place update)
+    // Find updated mods with same ID but different file_id (edge case: in-place update)
     for (const modId of newModIds) {
       if (oldSet.has(modId)) {
         const mod = modMap.get(modId);
         const snapshot = snapshotMap.get(modId);
+        if (!mod || !snapshot) continue;
 
-        if (mod && snapshot && mod.cf_file_id && snapshot.cf_file_id) {
+        // CurseForge in-place update
+        if (mod.cf_file_id && snapshot.cf_file_id) {
           if (mod.cf_file_id !== snapshot.cf_file_id) {
             // Check if already tracked
             if (!changes.find(c => c.modId === modId && c.type === "update")) {
@@ -3355,6 +3604,24 @@ export class MetadataManager {
                 newVersion: newVersion,
                 previousFileId: snapshot.cf_file_id,
                 newFileId: mod.cf_file_id,
+              });
+            }
+          }
+        }
+        
+        // Modrinth in-place update
+        if (mod.mr_version_id && snapshot.mr_version_id) {
+          if (mod.mr_version_id !== snapshot.mr_version_id) {
+            // Check if already tracked
+            if (!changes.find(c => c.modId === modId && c.type === "update")) {
+              const prevVersion = snapshot.version || `version:${snapshot.mr_version_id}`;
+              const newVersion = mod.version || `version:${mod.mr_version_id}`;
+              changes.push({
+                type: "update",
+                modId,
+                modName: mod.name || modId,
+                previousVersion: prevVersion,
+                newVersion: newVersion,
               });
             }
           }
@@ -4409,6 +4676,9 @@ ${modLinks}
       disabledMods: string[];
       lockedMods: string[];
       unlockedMods: string[];
+      notesAdded: Array<{ modName: string; note: string }>;
+      notesRemoved: Array<{ modName: string; note: string }>;
+      notesChanged: Array<{ modName: string; oldNote: string; newNote: string }>;
       hasVersionHistoryChanges?: boolean;
       loaderChanged?: { from?: string; to?: string };
       loaderVersionChanged?: { from?: string; to?: string };
@@ -6218,12 +6488,12 @@ ${modLinks}
         // Try to find existing mod in library using correct method
         let existingMod: Mod | undefined;
 
-        if (modEntry.source === "curseforge" || modEntry.cf_project_id) {
-          existingMod = await this.findModByCFIds(
-            modEntry.project_id || modEntry.cf_project_id,
-            modEntry.file_id || modEntry.cf_file_id
-          );
-        } else if ((modEntry.source === "modrinth" || modEntry.mr_project_id) && modEntry.mr_project_id) {
+        const cfProjectId = modEntry.project_id || modEntry.cf_project_id;
+        const cfFileId = modEntry.file_id || modEntry.cf_file_id;
+        
+        if ((modEntry.source === "curseforge" || modEntry.cf_project_id) && cfProjectId && cfFileId) {
+          existingMod = await this.findModByCFIds(cfProjectId, cfFileId);
+        } else if ((modEntry.source === "modrinth" || modEntry.mr_project_id) && modEntry.mr_project_id && modEntry.mr_version_id) {
           existingMod = await this.findModByMRIds(
             modEntry.mr_project_id,
             modEntry.mr_version_id
@@ -6236,14 +6506,12 @@ ${modLinks}
         if (!existingMod) {
           console.log(`[ImportFromUrl] Mod not in library, fetching from API...`);
           // Add mod to library using CurseForge API
-          if (modEntry.source === "curseforge" && (modEntry.cf_project_id || modEntry.project_id)) {
+          if (modEntry.source === "curseforge" && cfProjectId && cfFileId) {
             try {
-              const projectId = modEntry.cf_project_id || modEntry.project_id;
-              const fileId = modEntry.cf_file_id || modEntry.file_id;
-              console.log(`[ImportFromUrl] Fetching CF mod: projectId=${projectId}, fileId=${fileId}`);
+              console.log(`[ImportFromUrl] Fetching CF mod: projectId=${cfProjectId}, fileId=${cfFileId}`);
 
-              const cfMod = await cfService.getMod(projectId);
-              const cfFile = await cfService.getFile(projectId, fileId);
+              const cfMod = await cfService.getMod(cfProjectId);
+              const cfFile = await cfService.getFile(cfProjectId, cfFileId);
 
               if (cfMod && cfFile) {
                 // Convert to library format with content_type from manifest

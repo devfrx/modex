@@ -1,31 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import {
-    BookOpen,
-    Library,
-    Package,
-    FolderTree,
-    LayoutGrid,
-    Settings,
-    Search,
-    Download,
-    Plus,
-    Trash2,
-    Star,
-    RefreshCw,
-    Upload,
-    Filter,
-    ChevronRight,
-    Keyboard,
-    HelpCircle,
-    Zap,
-    CheckCircle2,
-    ArrowRight,
-    MousePointer,
-    Globe,
-    ArrowLeftRight,
-    Rocket,
-} from "lucide-vue-next";
+import Icon from "@/components/ui/Icon.vue";
 import WalkthroughModal from "@/components/ui/WalkthroughModal.vue";
 import Button from "@/components/ui/Button.vue";
 
@@ -33,15 +8,13 @@ const activeSection = ref("getting-started");
 const showWalkthrough = ref(false);
 
 const sections = [
-    { id: "getting-started", name: "Getting Started", icon: Zap },
-    { id: "library", name: "Library", icon: Library },
-    { id: "modpacks", name: "Modpacks", icon: Package },
-    { id: "organize", name: "Organize", icon: FolderTree },
-    { id: "sandbox", name: "Sandbox", icon: LayoutGrid },
-    { id: "curseforge", name: "CurseForge Browse", icon: Globe },
-    { id: "settings", name: "Settings", icon: Settings },
-    { id: "shortcuts", name: "Keyboard Shortcuts", icon: Keyboard },
-    { id: "faq", name: "FAQ", icon: HelpCircle },
+    { id: "getting-started", name: "Getting Started", icon: "Zap" },
+    { id: "library", name: "Library", icon: "Library" },
+    { id: "modpacks", name: "Modpacks", icon: "Package" },
+    { id: "curseforge", name: "CurseForge Browse", icon: "Globe" },
+    { id: "settings", name: "Settings", icon: "Settings" },
+    { id: "shortcuts", name: "Keyboard Shortcuts", icon: "Keyboard" },
+    { id: "faq", name: "FAQ", icon: "HelpCircle" },
 ];
 
 const shortcuts = [
@@ -88,7 +61,7 @@ const faqs = [
         <!-- Mobile Header -->
         <div class="md:hidden fixed top-0 left-0 right-0 z-20 bg-card/95 backdrop-blur-sm border-b border-border">
             <div class="flex items-center gap-3 p-3">
-                <BookOpen class="w-5 h-5 text-primary" />
+                <Icon name="BookOpen" class="w-5 h-5 text-primary" />
                 <h1 class="text-lg font-bold">User Guide</h1>
             </div>
             <!-- Mobile Tab Navigation -->
@@ -99,7 +72,7 @@ const faqs = [
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-muted/50'
                         ">
-                    <component :is="section.icon" class="w-4 h-4" />
+                    <Icon :name="section.icon" class="w-4 h-4" />
                     <span class="hidden xs:inline">{{ section.name }}</span>
                 </button>
             </div>
@@ -109,7 +82,7 @@ const faqs = [
         <div class="hidden md:flex w-64 flex-shrink-0 border-r border-border bg-card/30 flex-col">
             <div class="p-6 pb-4">
                 <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-                    <BookOpen class="w-6 h-6 text-primary" />
+                    <Icon name="BookOpen" class="w-6 h-6 text-primary" />
                     User Guide
                 </h1>
                 <p class="text-xs text-muted-foreground mt-1">Learn how to use ModEx</p>
@@ -122,7 +95,7 @@ const faqs = [
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         ">
-                    <component :is="section.icon" class="w-4 h-4" />
+                    <Icon :name="section.icon" class="w-4 h-4" />
                     {{ section.name }}
                 </button>
             </nav>
@@ -136,7 +109,7 @@ const faqs = [
                 <div v-if="activeSection === 'getting-started'" class="space-y-6 sm:space-y-8">
                     <div>
                         <h2 class="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2 sm:gap-3">
-                            <Zap class="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
+                            <Icon name="Zap" class="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
                             Getting Started with ModEx
                         </h2>
                         <p class="text-muted-foreground mt-2 text-base sm:text-lg">
@@ -151,7 +124,7 @@ const faqs = [
                             <div class="flex items-center gap-3 flex-1">
                                 <div
                                     class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
-                                    <Rocket class="w-5 h-5 sm:w-6 sm:h-6 text-amber-500" />
+                                    <Icon name="Rocket" class="w-5 h-5 sm:w-6 sm:h-6 text-amber-500" />
                                 </div>
                                 <div>
                                     <h3 class="font-semibold text-amber-400">Walkthrough Guidato</h3>
@@ -163,7 +136,7 @@ const faqs = [
                             </div>
                             <Button variant="default" class="gap-2 shrink-0 w-full sm:w-auto"
                                 @click="showWalkthrough = true">
-                                <Rocket class="w-4 h-4" />
+                                <Icon name="Rocket" class="w-4 h-4" />
                                 Apri Walkthrough
                             </Button>
                         </div>
@@ -222,13 +195,13 @@ const faqs = [
 
                     <div class="p-6 rounded-xl border border-primary/30 bg-primary/5">
                         <div class="flex items-start gap-3">
-                            <CheckCircle2 class="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
+                            <Icon name="CheckCircle2" class="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
                             <div>
                                 <h3 class="font-semibold text-primary">Pro Tip</h3>
                                 <p class="text-sm text-muted-foreground mt-1">
-                                    Use the <strong>Organize</strong> view to create folders and categorize your mods
-                                    (e.g., "Performance", "World Gen", "Magic"). This makes it easier to build themed
-                                    modpacks later!
+                                    Create multiple modpacks for different playstyles (e.g., "Performance Pack",
+                                    "Magic Mods 1.20.1", "Tech Overhaul"). This makes it easy to switch between
+                                    different mod configurations!
                                 </p>
                             </div>
                         </div>
@@ -239,7 +212,7 @@ const faqs = [
                 <div v-if="activeSection === 'library'" class="space-y-8">
                     <div>
                         <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <Library class="w-8 h-8 text-primary" />
+                            <Icon name="Library" class="w-8 h-8 text-primary" />
                             Library
                         </h2>
                         <p class="text-muted-foreground mt-2">
@@ -251,20 +224,20 @@ const faqs = [
                     <div class="space-y-6">
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <Plus class="w-4 h-4 text-primary" />
+                                <Icon name="Plus" class="w-4 h-4 text-primary" />
                                 Adding Mods
                             </h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Click <strong>"+ Add from CurseForge"</strong> to open the browse dialog
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Set your preferred <strong>Game Version</strong> and <strong>Loader</strong> filters
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Search or browse popular mods, then click <strong>Download</strong> or expand to
                                     select a specific version
                                 </li>
@@ -273,20 +246,20 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <Filter class="w-4 h-4 text-primary" />
+                                <Icon name="Filter" class="w-4 h-4 text-primary" />
                                 Filtering & Searching
                             </h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Use the <strong>search bar</strong> to find mods by name
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Filter by <strong>Loader</strong> (Forge, Fabric, etc.) using the dropdown
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Toggle <strong>Favorites Only</strong> to show starred mods
                                 </li>
                             </ul>
@@ -294,7 +267,7 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <RefreshCw class="w-4 h-4 text-primary" />
+                                <Icon name="RefreshCw" class="w-4 h-4 text-primary" />
                                 Checking for Updates
                             </h3>
                             <p class="text-sm text-muted-foreground">
@@ -308,7 +281,7 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <MousePointer class="w-4 h-4 text-primary" />
+                                <Icon name="MousePointer" class="w-4 h-4 text-primary" />
                                 Bulk Actions
                             </h3>
                             <p class="text-sm text-muted-foreground">
@@ -324,7 +297,7 @@ const faqs = [
                 <div v-if="activeSection === 'modpacks'" class="space-y-8">
                     <div>
                         <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <Package class="w-8 h-8 text-primary" />
+                            <Icon name="Package" class="w-8 h-8 text-primary" />
                             Modpacks
                         </h2>
                         <p class="text-muted-foreground mt-2">
@@ -335,7 +308,7 @@ const faqs = [
                     <div class="space-y-6">
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <Plus class="w-4 h-4 text-primary" />
+                                <Icon name="Plus" class="w-4 h-4 text-primary" />
                                 Creating a Modpack
                             </h3>
                             <ol class="space-y-2 text-sm text-muted-foreground ml-6 list-decimal list-inside">
@@ -349,7 +322,7 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <Zap class="w-4 h-4 text-primary" />
+                                <Icon name="Zap" class="w-4 h-4 text-primary" />
                                 Modpack Analysis
                             </h3>
                             <p class="text-sm text-muted-foreground">
@@ -358,17 +331,17 @@ const faqs = [
                             </p>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>RAM Usage Estimation:</strong> Predicted memory requirements based on mod
                                     count and types.
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Performance Impact:</strong> Identification of heavy mods and potential
                                     bottlenecks.
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Conflict Detection:</strong> Warnings about known incompatible mod
                                     combinations.
                                 </li>
@@ -377,20 +350,20 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <Download class="w-4 h-4 text-primary" />
+                                <Icon name="Download" class="w-4 h-4 text-primary" />
                                 Adding Mods to a Modpack
                             </h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Open the modpack by clicking on it
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Click <strong>"+ Add Mods"</strong> to select from your library
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Or click <strong>"+ Browse CurseForge"</strong> to add new mods directly
                                 </li>
                             </ul>
@@ -398,7 +371,7 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <Upload class="w-4 h-4 text-primary" />
+                                <Icon name="Upload" class="w-4 h-4 text-primary" />
                                 Exporting a Modpack
                             </h3>
                             <p class="text-sm text-muted-foreground">
@@ -414,7 +387,7 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <RefreshCw class="w-4 h-4 text-primary" />
+                                <Icon name="RefreshCw" class="w-4 h-4 text-primary" />
                                 Dependency Analysis
                             </h3>
                             <p class="text-sm text-muted-foreground">
@@ -430,7 +403,7 @@ const faqs = [
 
                         <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
                             <h3 class="font-semibold flex items-center gap-2">
-                                <ArrowLeftRight class="w-4 h-4 text-primary" />
+                                <Icon name="ArrowLeftRight" class="w-4 h-4 text-primary" />
                                 Comparing Modpacks
                             </h3>
                             <p class="text-sm text-muted-foreground">
@@ -438,142 +411,16 @@ const faqs = [
                             </p>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6 mt-2">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Click the <strong>Compare</strong> button in the Modpacks toolbar
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     Select the <strong>Source</strong> and <strong>Target</strong> modpacks
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     View a detailed diff of added, removed, and version-changed mods
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Organize Section -->
-                <div v-if="activeSection === 'organize'" class="space-y-8">
-                    <div>
-                        <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <FolderTree class="w-8 h-8 text-primary" />
-                            Organize
-                        </h2>
-                        <p class="text-muted-foreground mt-2">
-                            Create a folder hierarchy to categorize your mods for easy navigation.
-                        </p>
-                    </div>
-
-                    <div class="space-y-6">
-                        <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
-                            <h3 class="font-semibold">How Folders Work</h3>
-                            <p class="text-sm text-muted-foreground">
-                                Folders are a visual organization tool. A mod can be in <strong>one folder</strong> but
-                                still
-                                appear in <strong>multiple modpacks</strong>. Think of folders as categories, not
-                                containers.
-                            </p>
-                        </div>
-
-                        <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
-                            <h3 class="font-semibold">Creating Folders</h3>
-                            <ul class="space-y-2 text-sm text-muted-foreground ml-6">
-                                <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                                    Click <strong>"+ New Folder"</strong> in the Organize view
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                                    Drag and drop folders to create nested hierarchies
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                                    Right-click a folder to rename or delete it
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
-                            <h3 class="font-semibold">Moving Mods</h3>
-                            <p class="text-sm text-muted-foreground">
-                                Drag mods from the list on the right into folders on the left.
-                                You can also select multiple mods and move them at once.
-                            </p>
-                        </div>
-
-                        <div class="p-5 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
-                            <h3 class="font-semibold text-primary">Suggested Folder Structure</h3>
-                            <ul class="space-y-1 text-sm text-muted-foreground ml-4">
-                                <li>📁 <strong>Performance</strong> - Sodium, Lithium, FerriteCore</li>
-                                <li>📁 <strong>World Generation</strong> - Terralith, Biomes O' Plenty</li>
-                                <li>📁 <strong>Technology</strong> - Create, Mekanism, Applied Energistics</li>
-                                <li>📁 <strong>Magic</strong> - Botania, Ars Nouveau, Thaumcraft</li>
-                                <li>📁 <strong>Quality of Life</strong> - JEI, WAILA, Inventory Tweaks</li>
-                                <li>📁 <strong>Libraries</strong> - Architectury, Cloth Config, GeckoLib</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sandbox Section -->
-                <div v-if="activeSection === 'sandbox'" class="space-y-8">
-                    <div>
-                        <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <LayoutGrid class="w-8 h-8 text-primary" />
-                            Sandbox
-                        </h2>
-                        <p class="text-muted-foreground mt-2">
-                            A visual graph view of your entire mod ecosystem.
-                        </p>
-                    </div>
-
-                    <div class="space-y-6">
-                        <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
-                            <h3 class="font-semibold">What is Sandbox?</h3>
-                            <p class="text-sm text-muted-foreground">
-                                Sandbox displays your mods, modpacks, and folders as interconnected nodes in a graph.
-                                This helps you visualize relationships and dependencies at a glance.
-                            </p>
-                        </div>
-
-                        <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
-                            <h3 class="font-semibold">Navigation</h3>
-                            <ul class="space-y-2 text-sm text-muted-foreground ml-6">
-                                <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                                    <strong>Pan</strong>: Click and drag on empty space
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                                    <strong>Zoom</strong>: Scroll wheel or use the +/- buttons
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                                    <strong>Focus</strong>: Click a node to center on it
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                                    <strong>Filter</strong>: Use the top bar to show/hide Folders, Mods, or Modpacks
-                                </li>
-                            </ul>
-                        </div>
-
-                        <div class="p-5 rounded-xl border border-border bg-card/50 space-y-3">
-                            <h3 class="font-semibold">Node Colors</h3>
-                            <ul class="space-y-2 text-sm text-muted-foreground">
-                                <li class="flex items-center gap-2">
-                                    <span class="w-3 h-3 rounded-full bg-amber-500"></span>
-                                    <strong>Amber</strong> - Folders
-                                </li>
-                                <li class="flex items-center gap-2">
-                                    <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
-                                    <strong>Green</strong> - Mods
-                                </li>
-                                <li class="flex items-center gap-2">
-                                    <span class="w-3 h-3 rounded-full bg-violet-500"></span>
-                                    <strong>Purple</strong> - Modpacks
                                 </li>
                             </ul>
                         </div>
@@ -584,7 +431,7 @@ const faqs = [
                 <div v-if="activeSection === 'curseforge'" class="space-y-8">
                     <div>
                         <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <Globe class="w-8 h-8 text-primary" />
+                            <Icon name="Globe" class="w-8 h-8 text-primary" />
                             CurseForge Browse
                         </h2>
                         <p class="text-muted-foreground mt-2">
@@ -597,20 +444,20 @@ const faqs = [
                             <h3 class="font-semibold">Using Filters</h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Game Version</strong>: Filter mods compatible with a specific Minecraft
                                     version
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Loader</strong>: Show only mods for Forge, Fabric, Quilt, or NeoForge
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Category</strong>: Browse by category (World Gen, Technology, etc.)
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Release Type</strong>: Toggle Release, Beta, Alpha visibility
                                 </li>
                             </ul>
@@ -620,17 +467,17 @@ const faqs = [
                             <h3 class="font-semibold">Downloading Mods</h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Quick Download</strong>: Click the download icon to add the latest release
                                     file matching your filters
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Select Specific File</strong>: Click the mod card to expand and see all
                                     available versions
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Bulk Selection</strong>: Enable selection mode to download multiple mods at
                                     once
                                 </li>
@@ -654,7 +501,7 @@ const faqs = [
                 <div v-if="activeSection === 'settings'" class="space-y-8">
                     <div>
                         <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <Settings class="w-8 h-8 text-primary" />
+                            <Icon name="Settings" class="w-8 h-8 text-primary" />
                             Settings
                         </h2>
                         <p class="text-muted-foreground mt-2">
@@ -667,12 +514,12 @@ const faqs = [
                             <h3 class="font-semibold">General</h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>CurseForge API Key</strong>: Add your own key for faster performance
                                     (optional)
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Check for Updates</strong>: Manually check if a new version of ModEx is
                                     available
                                 </li>
@@ -683,12 +530,12 @@ const faqs = [
                             <h3 class="font-semibold">Appearance</h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Theme</strong>: Choose between Light, Dark, or System (follows OS
                                     preference)
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Accent Color</strong>: Pick your preferred highlight color
                                 </li>
                             </ul>
@@ -698,11 +545,11 @@ const faqs = [
                             <h3 class="font-semibold">Library</h3>
                             <ul class="space-y-2 text-sm text-muted-foreground ml-6">
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     View statistics: total mods, modpacks, and storage size
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <Icon name="ArrowRight" class="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                     <strong>Danger Zone</strong>: Clear all data to start fresh
                                 </li>
                             </ul>
@@ -714,7 +561,7 @@ const faqs = [
                 <div v-if="activeSection === 'shortcuts'" class="space-y-8">
                     <div>
                         <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <Keyboard class="w-8 h-8 text-primary" />
+                            <Icon name="Keyboard" class="w-8 h-8 text-primary" />
                             Keyboard Shortcuts
                         </h2>
                         <p class="text-muted-foreground mt-2">
@@ -740,7 +587,7 @@ const faqs = [
                 <div v-if="activeSection === 'faq'" class="space-y-8">
                     <div>
                         <h2 class="text-3xl font-bold tracking-tight flex items-center gap-3">
-                            <HelpCircle class="w-8 h-8 text-primary" />
+                            <Icon name="HelpCircle" class="w-8 h-8 text-primary" />
                             Frequently Asked Questions
                         </h2>
                         <p class="text-muted-foreground mt-2">

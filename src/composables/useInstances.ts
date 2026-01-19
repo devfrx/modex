@@ -345,11 +345,28 @@ export function useInstances() {
   });
 
   onUnmounted(() => {
-    unsubscribeSyncProgress?.();
-    unsubscribeGameStatus?.();
-    unsubscribeGameLogLine?.();
-    syncProgress.value = null;
-    logLineCallbacks.clear();
+    // Safely cleanup all listeners - continue even if one fails
+    const cleanupFns = [
+      () => unsubscribeSyncProgress?.(),
+      () => unsubscribeGameStatus?.(),
+      () => unsubscribeGameLogLine?.(),
+      () => { syncProgress.value = null; },
+      () => logLineCallbacks.clear(),
+    ];
+    
+    const errors: Error[] = [];
+    for (const fn of cleanupFns) {
+      try {
+        fn();
+      } catch (err) {
+        errors.push(err as Error);
+        console.warn("[useInstances] Cleanup error:", err);
+      }
+    }
+    
+    if (errors.length > 0) {
+      console.error(`[useInstances] ${errors.length} cleanup error(s) occurred`);
+    }
   });
   
   /**

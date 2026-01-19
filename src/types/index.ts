@@ -5,6 +5,45 @@
  * This enables lightweight storage and native export to modpack formats.
  */
 
+// ==================== CONTENT TYPE ====================
+
+/**
+ * Internal content type for library storage (singular form)
+ * Used throughout the application for mod data stored in the library
+ */
+export type ModContentType = "mod" | "resourcepack" | "shader";
+
+/**
+ * CurseForge API content type (plural form)
+ * Used when communicating with CurseForge API
+ */
+export type CurseForgeContentType = "mods" | "resourcepacks" | "shaders" | "modpacks";
+
+/**
+ * Convert CurseForge content type to internal content type
+ */
+export function cfContentTypeToInternal(cfType: CurseForgeContentType): ModContentType {
+  const map: Record<CurseForgeContentType, ModContentType> = {
+    mods: "mod",
+    resourcepacks: "resourcepack",
+    shaders: "shader",
+    modpacks: "mod" // modpacks default to mods
+  };
+  return map[cfType];
+}
+
+/**
+ * Convert internal content type to CurseForge content type
+ */
+export function internalToCfContentType(internalType: ModContentType): CurseForgeContentType {
+  const map: Record<ModContentType, CurseForgeContentType> = {
+    mod: "mods",
+    resourcepack: "resourcepacks",
+    shader: "shaders"
+  };
+  return map[internalType];
+}
+
 // ==================== GAME TYPES ====================
 
 /** Supported game types */
@@ -103,8 +142,8 @@ export interface Mod {
   /** Which game this mod is for */
   gameType?: GameType;
 
-  /** Content type: mod, resourcepack, or shader */
-  content_type?: "mod" | "resourcepack" | "shader";
+  /** Content type: mod, resourcepack, or shader (internal singular form) */
+  content_type?: ModContentType;
 
   /** Short description */
   description?: string;
@@ -403,7 +442,7 @@ export interface ModexManifestMod {
   version: string;
   filename: string;
   source: "curseforge" | "modrinth";
-  content_type?: "mod" | "resourcepack" | "shader";
+  content_type?: ModContentType;
   cf_project_id?: number;
   cf_file_id?: number;
   /** Alias for cf_project_id (backwards compatibility with external formats) */
@@ -415,6 +454,26 @@ export interface ModexManifestMod {
   description?: string;
   author?: string;
   thumbnail_url?: string;
+}
+
+/**
+ * Union type for all supported manifest formats
+ * Used when importing modpacks from various sources
+ */
+export type ImportManifest = CurseForgeManifest | ModexManifest;
+
+/**
+ * Type guard to check if manifest is a CurseForge manifest
+ */
+export function isCurseForgeManifest(manifest: ImportManifest): manifest is CurseForgeManifest {
+  return 'manifestType' in manifest && manifest.manifestType === 'minecraftModpack';
+}
+
+/**
+ * Type guard to check if manifest is a Modex manifest
+ */
+export function isModexManifest(manifest: ImportManifest): manifest is ModexManifest {
+  return 'modex_version' in manifest;
 }
 
 // ==================== UPDATE INFO ====================

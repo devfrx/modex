@@ -628,7 +628,13 @@ export class ConfigService {
   ): Promise<{ imported: number; skipped: number; errors: string[] }> {
     const result = { imported: 0, skipped: 0, errors: [] as string[] };
     
-    const zip = new AdmZip(zipPath);
+    let zip;
+    try {
+      zip = new AdmZip(zipPath);
+    } catch (zipError) {
+      result.errors.push(`Invalid zip file: ${zipError instanceof Error ? zipError.message : 'Unknown error'}`);
+      return result;
+    }
     const entries = zip.getEntries();
 
     // Check for manifest
@@ -848,7 +854,12 @@ export class ConfigService {
     }
     
     // Extract backup
-    const zip = new AdmZip(backupPath);
+    let zip;
+    try {
+      zip = new AdmZip(backupPath);
+    } catch (zipError) {
+      throw new Error(`Invalid backup file: ${zipError instanceof Error ? zipError.message : 'Unknown error'}`);
+    }
     zip.extractAllTo(instancePath, true);
     
     return { restored: zip.getEntries().filter(e => !e.isDirectory).length };

@@ -339,10 +339,13 @@ export class MetadataManager {
     new Map();
 
   // File locks to prevent race conditions on concurrent writes
-  private fileLocks: Map<string, Promise<void>> = new Map();
+  // Using a queue-based approach to ensure atomic lock acquisition
+  private fileLockQueues: Map<string, Array<() => void>> = new Map();
+  private fileLockActive: Set<string> = new Set();
 
   // Modpack-level locks for atomic read-modify-write operations
-  private modpackLocks: Map<string, Promise<void>> = new Map();
+  private modpackLockQueues: Map<string, Array<() => void>> = new Map();
+  private modpackLockActive: Set<string> = new Set();
 
   constructor() {
     this.baseDir = path.join(app.getPath("userData"), "modex");
@@ -364,50 +367,76 @@ export class MetadataManager {
 
   /**
    * Acquire a lock for a file to prevent concurrent writes
+   * Uses queue-based approach to ensure atomic lock acquisition (no race window)
    * Returns a release function that must be called when done
    */
   private async acquireFileLock(filePath: string): Promise<() => void> {
-    // Wait for any existing lock on this file
-    while (this.fileLocks.has(filePath)) {
-      await this.fileLocks.get(filePath);
-    }
-
-    // Create a new lock
-    let releaseLock: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
-      releaseLock = resolve;
+    return new Promise((resolve) => {
+      const tryAcquire = () => {
+        if (!this.fileLockActive.has(filePath)) {
+          // Lock is free, acquire it atomically
+          this.fileLockActive.add(filePath);
+          resolve(() => {
+            this.fileLockActive.delete(filePath);
+            // Process next waiter in queue
+            const queue = this.fileLockQueues.get(filePath);
+            if (queue && queue.length > 0) {
+              const next = queue.shift()!;
+              if (queue.length === 0) {
+                this.fileLockQueues.delete(filePath);
+              }
+              next();
+            }
+          });
+        } else {
+          // Lock is held, add to queue
+          let queue = this.fileLockQueues.get(filePath);
+          if (!queue) {
+            queue = [];
+            this.fileLockQueues.set(filePath, queue);
+          }
+          queue.push(tryAcquire);
+        }
+      };
+      tryAcquire();
     });
-
-    this.fileLocks.set(filePath, lockPromise);
-
-    return () => {
-      this.fileLocks.delete(filePath);
-      releaseLock!();
-    };
   }
 
   /**
    * Acquire a modpack-level lock for atomic read-modify-write operations
+   * Uses queue-based approach to ensure atomic lock acquisition (no race window)
    * This prevents race conditions when multiple operations modify the same modpack
    */
   private async acquireModpackLock(modpackId: string): Promise<() => void> {
-    // Wait for any existing lock on this modpack
-    while (this.modpackLocks.has(modpackId)) {
-      await this.modpackLocks.get(modpackId);
-    }
-
-    // Create a new lock
-    let releaseLock: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
-      releaseLock = resolve;
+    return new Promise((resolve) => {
+      const tryAcquire = () => {
+        if (!this.modpackLockActive.has(modpackId)) {
+          // Lock is free, acquire it atomically
+          this.modpackLockActive.add(modpackId);
+          resolve(() => {
+            this.modpackLockActive.delete(modpackId);
+            // Process next waiter in queue
+            const queue = this.modpackLockQueues.get(modpackId);
+            if (queue && queue.length > 0) {
+              const next = queue.shift()!;
+              if (queue.length === 0) {
+                this.modpackLockQueues.delete(modpackId);
+              }
+              next();
+            }
+          });
+        } else {
+          // Lock is held, add to queue
+          let queue = this.modpackLockQueues.get(modpackId);
+          if (!queue) {
+            queue = [];
+            this.modpackLockQueues.set(modpackId, queue);
+          }
+          queue.push(tryAcquire);
+        }
+      };
+      tryAcquire();
     });
-
-    this.modpackLocks.set(modpackId, lockPromise);
-
-    return () => {
-      this.modpackLocks.delete(modpackId);
-      releaseLock!();
-    };
   }
 
   /**
@@ -907,8 +936,12 @@ export class MetadataManager {
       }
     }
 
-    // Execute all modpack updates in parallel
-    await Promise.all(modpackUpdates);
+    // Execute all modpack updates in parallel, but don't fail if some fail
+    const results = await Promise.allSettled(modpackUpdates);
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failures.length > 0) {
+      console.warn(`[DeleteMods] ${failures.length} modpack update(s) failed:`, failures.map(f => f.reason));
+    }
 
     return deletedCount;
   }
@@ -1204,7 +1237,13 @@ export class MetadataManager {
     manifest?: CFManifest | { overrides: string }
   ): Promise<{ path: string | null; fileCount: number }> {
     const AdmZip = (await import("adm-zip")).default;
-    const zip = new AdmZip(zipPath);
+    let zip;
+    try {
+      zip = new AdmZip(zipPath);
+    } catch (zipError: any) {
+      console.error(`[MetadataManager] Failed to open ZIP file: ${zipPath}`, zipError);
+      throw new Error(`Corrupted or invalid ZIP file: ${zipError.message || "Unable to read archive"}`);
+    }
     const entries = zip.getEntries();
 
     // Get overrides folder name from manifest (defaults to "overrides")
@@ -2378,81 +2417,166 @@ export class MetadataManager {
     return result;
   }
 
-  async addModToModpack(modpackId: string, modId: string, disabled: boolean = false): Promise<boolean> {
-    return this.withModpackLock(modpackId, async () => {
-      const modpack = await this.getModpackById(modpackId);
-      if (!modpack) return false;
+  /**
+   * Internal unlocked version of addModToModpack - MUST be called within withModpackLock
+   * Used by transaction wrappers to batch multiple operations atomically
+   */
+  async addModToModpackUnlocked(modpackId: string, modId: string, disabled: boolean = false): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return false;
 
-      // Check mod exists
-      const modToAdd = await this.getModById(modId);
-      if (!modToAdd) return false;
+    // Check mod exists
+    const modToAdd = await this.getModById(modId);
+    if (!modToAdd) return false;
 
-      // Already in modpack?
-      if (modpack.mod_ids.includes(modId)) return true;
+    // Already in modpack?
+    if (modpack.mod_ids.includes(modId)) return true;
 
-      // Check for conflicts (same project, different version)
-      const currentMods = await this.getModsInModpack(modpackId);
-      const modsToRemove: string[] = [];
+    // Check for conflicts (same project, different version)
+    const currentMods = await this.getModsInModpack(modpackId);
+    const modsToRemove: string[] = [];
 
-      for (const existingMod of currentMods) {
-        // Check CurseForge conflict
-        if (
-          modToAdd.source === "curseforge" &&
-          existingMod.source === "curseforge" &&
-          modToAdd.cf_project_id &&
-          existingMod.cf_project_id === modToAdd.cf_project_id
-        ) {
-          console.log(
-            `[MetadataManager] Replacing existing version of ${existingMod.name} (ID: ${existingMod.id}) with new version (ID: ${modId})`
-          );
-          modsToRemove.push(existingMod.id);
-        }
-        // Check Modrinth conflict
-        else if (
-          modToAdd.source === "modrinth" &&
-          existingMod.source === "modrinth" &&
-          modToAdd.mr_project_id &&
-          existingMod.mr_project_id === modToAdd.mr_project_id
-        ) {
-          console.log(
-            `[MetadataManager] Replacing existing version of ${existingMod.name} (ID: ${existingMod.id}) with new version (ID: ${modId})`
-          );
-          modsToRemove.push(existingMod.id);
-        }
+    for (const existingMod of currentMods) {
+      // Check CurseForge conflict
+      if (
+        modToAdd.source === "curseforge" &&
+        existingMod.source === "curseforge" &&
+        modToAdd.cf_project_id &&
+        existingMod.cf_project_id === modToAdd.cf_project_id
+      ) {
+        console.log(
+          `[MetadataManager] Replacing existing version of ${existingMod.name} (ID: ${existingMod.id}) with new version (ID: ${modId})`
+        );
+        modsToRemove.push(existingMod.id);
       }
+      // Check Modrinth conflict
+      else if (
+        modToAdd.source === "modrinth" &&
+        existingMod.source === "modrinth" &&
+        modToAdd.mr_project_id &&
+        existingMod.mr_project_id === modToAdd.mr_project_id
+      ) {
+        console.log(
+          `[MetadataManager] Replacing existing version of ${existingMod.name} (ID: ${existingMod.id}) with new version (ID: ${modId})`
+        );
+        modsToRemove.push(existingMod.id);
+      }
+    }
 
-      // Remove conflicting mods
-      if (modsToRemove.length > 0) {
-        modpack.mod_ids = modpack.mod_ids.filter(
+    // Remove conflicting mods
+    if (modsToRemove.length > 0) {
+      modpack.mod_ids = modpack.mod_ids.filter(
+        (id) => !modsToRemove.includes(id)
+      );
+      // Also clean up disabled list
+      if (modpack.disabled_mod_ids) {
+        modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
           (id) => !modsToRemove.includes(id)
         );
-        // Also clean up disabled list
-        if (modpack.disabled_mod_ids) {
-          modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
-            (id) => !modsToRemove.includes(id)
-          );
-        }
       }
+    }
 
-      modpack.mod_ids.push(modId);
-      console.log(`[addModToModpack] Added ${modId} to modpack ${modpackId}, now has ${modpack.mod_ids.length} mods`);
+    modpack.mod_ids.push(modId);
+    console.log(`[addModToModpack] Added ${modId} to modpack ${modpackId}, now has ${modpack.mod_ids.length} mods`);
 
-      // Handle disabled state
-      if (disabled) {
-        if (!modpack.disabled_mod_ids) {
-          modpack.disabled_mod_ids = [];
-        }
-        if (!modpack.disabled_mod_ids.includes(modId)) {
-          modpack.disabled_mod_ids.push(modId);
-          console.log(`[addModToModpack] Marked ${modId} as disabled`);
-        }
+    // Handle disabled state
+    if (disabled) {
+      if (!modpack.disabled_mod_ids) {
+        modpack.disabled_mod_ids = [];
       }
+      if (!modpack.disabled_mod_ids.includes(modId)) {
+        modpack.disabled_mod_ids.push(modId);
+        console.log(`[addModToModpack] Marked ${modId} as disabled`);
+      }
+    }
 
-      modpack.updated_at = new Date().toISOString();
+    modpack.updated_at = new Date().toISOString();
 
-      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-      return true;
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return true;
+  }
+
+  async addModToModpack(modpackId: string, modId: string, disabled: boolean = false): Promise<boolean> {
+    return this.withModpackLock(modpackId, async () => {
+      return this.addModToModpackUnlocked(modpackId, modId, disabled);
     });
+  }
+
+  /**
+   * Internal unlocked version of addModsToModpackBatch - MUST be called within withModpackLock
+   * Used by transaction wrappers to batch multiple operations atomically
+   */
+  async addModsToModpackBatchUnlocked(modpackId: string, modIds: string[]): Promise<number> {
+    if (modIds.length === 0) return 0;
+
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return 0;
+
+    // Pre-fetch all mods at once
+    const library = await this.loadLibrary();
+    const modsMap = new Map(library.mods.map(m => [m.id, m]));
+
+    // Track existing mods in modpack by project ID for conflict detection
+    const existingByProjectId = new Map<number | string, string>();
+    for (const existingModId of modpack.mod_ids) {
+      const existingMod = modsMap.get(existingModId);
+      if (existingMod) {
+        if (existingMod.source === "curseforge" && existingMod.cf_project_id) {
+          existingByProjectId.set(existingMod.cf_project_id, existingModId);
+        } else if (existingMod.source === "modrinth" && existingMod.mr_project_id) {
+          existingByProjectId.set(existingMod.mr_project_id, existingModId);
+        }
+      }
+    }
+
+    const modsToRemove = new Set<string>();
+    const modsToAdd: string[] = [];
+    const existingModIds = new Set(modpack.mod_ids);
+
+    for (const modId of modIds) {
+      // Check mod exists
+      const modToAdd = modsMap.get(modId);
+      if (!modToAdd) continue;
+
+      // Already in modpack?
+      if (existingModIds.has(modId)) continue;
+
+      // Check for conflicts (same project, different version)
+      let conflictId: string | undefined;
+      if (modToAdd.source === "curseforge" && modToAdd.cf_project_id) {
+        conflictId = existingByProjectId.get(modToAdd.cf_project_id);
+      } else if (modToAdd.source === "modrinth" && modToAdd.mr_project_id) {
+        conflictId = existingByProjectId.get(modToAdd.mr_project_id);
+      }
+
+      if (conflictId && conflictId !== modId) {
+        modsToRemove.add(conflictId);
+        // Update the index for subsequent conflicts
+        if (modToAdd.source === "curseforge" && modToAdd.cf_project_id) {
+          existingByProjectId.set(modToAdd.cf_project_id, modId);
+        } else if (modToAdd.source === "modrinth" && modToAdd.mr_project_id) {
+          existingByProjectId.set(modToAdd.mr_project_id, modId);
+        }
+      }
+
+      modsToAdd.push(modId);
+      existingModIds.add(modId);
+    }
+
+    // Remove conflicting mods
+    if (modsToRemove.size > 0) {
+      modpack.mod_ids = modpack.mod_ids.filter(id => !modsToRemove.has(id));
+      if (modpack.disabled_mod_ids) {
+        modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(id => !modsToRemove.has(id));
+      }
+    }
+
+    // Add new mods
+    modpack.mod_ids.push(...modsToAdd);
+    modpack.updated_at = new Date().toISOString();
+
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return modsToAdd.length;
   }
 
   /**
@@ -2463,74 +2587,7 @@ export class MetadataManager {
     if (modIds.length === 0) return 0;
 
     return this.withModpackLock(modpackId, async () => {
-      const modpack = await this.getModpackById(modpackId);
-      if (!modpack) return 0;
-
-      // Pre-fetch all mods at once
-      const library = await this.loadLibrary();
-      const modsMap = new Map(library.mods.map(m => [m.id, m]));
-
-      // Track existing mods in modpack by project ID for conflict detection
-      const existingByProjectId = new Map<number | string, string>();
-      for (const existingModId of modpack.mod_ids) {
-        const existingMod = modsMap.get(existingModId);
-        if (existingMod) {
-          if (existingMod.source === "curseforge" && existingMod.cf_project_id) {
-            existingByProjectId.set(existingMod.cf_project_id, existingModId);
-          } else if (existingMod.source === "modrinth" && existingMod.mr_project_id) {
-            existingByProjectId.set(existingMod.mr_project_id, existingModId);
-          }
-        }
-      }
-
-      const modsToRemove = new Set<string>();
-      const modsToAdd: string[] = [];
-      const existingModIds = new Set(modpack.mod_ids);
-
-      for (const modId of modIds) {
-        // Check mod exists
-        const modToAdd = modsMap.get(modId);
-        if (!modToAdd) continue;
-
-        // Already in modpack?
-        if (existingModIds.has(modId)) continue;
-
-        // Check for conflicts (same project, different version)
-        let conflictId: string | undefined;
-        if (modToAdd.source === "curseforge" && modToAdd.cf_project_id) {
-          conflictId = existingByProjectId.get(modToAdd.cf_project_id);
-        } else if (modToAdd.source === "modrinth" && modToAdd.mr_project_id) {
-          conflictId = existingByProjectId.get(modToAdd.mr_project_id);
-        }
-
-        if (conflictId && conflictId !== modId) {
-          modsToRemove.add(conflictId);
-          // Update the index for subsequent conflicts
-          if (modToAdd.source === "curseforge" && modToAdd.cf_project_id) {
-            existingByProjectId.set(modToAdd.cf_project_id, modId);
-          } else if (modToAdd.source === "modrinth" && modToAdd.mr_project_id) {
-            existingByProjectId.set(modToAdd.mr_project_id, modId);
-          }
-        }
-
-        modsToAdd.push(modId);
-        existingModIds.add(modId);
-      }
-
-      // Remove conflicting mods
-      if (modsToRemove.size > 0) {
-        modpack.mod_ids = modpack.mod_ids.filter(id => !modsToRemove.has(id));
-        if (modpack.disabled_mod_ids) {
-          modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(id => !modsToRemove.has(id));
-        }
-      }
-
-      // Add new mods
-      modpack.mod_ids.push(...modsToAdd);
-      modpack.updated_at = new Date().toISOString();
-
-      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-      return modsToAdd.length;
+      return this.addModsToModpackBatchUnlocked(modpackId, modIds);
     });
   }
 
@@ -2834,29 +2891,40 @@ export class MetadataManager {
     };
   }
 
+  /**
+   * Internal unlocked version of removeModFromModpack - MUST be called within withModpackLock
+   * Used by transaction wrappers to batch multiple operations atomically
+   */
+  async removeModFromModpackUnlocked(
+    modpackId: string,
+    modId: string
+  ): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return false;
+
+    const initialLength = modpack.mod_ids.length;
+    modpack.mod_ids = modpack.mod_ids.filter((id) => id !== modId);
+
+    // Also remove from disabled list if present
+    if (modpack.disabled_mod_ids) {
+      modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
+        (id) => id !== modId
+      );
+    }
+
+    if (modpack.mod_ids.length === initialLength) return false;
+
+    modpack.updated_at = new Date().toISOString();
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return true;
+  }
+
   async removeModFromModpack(
     modpackId: string,
     modId: string
   ): Promise<boolean> {
     return this.withModpackLock(modpackId, async () => {
-      const modpack = await this.getModpackById(modpackId);
-      if (!modpack) return false;
-
-      const initialLength = modpack.mod_ids.length;
-      modpack.mod_ids = modpack.mod_ids.filter((id) => id !== modId);
-
-      // Also remove from disabled list if present
-      if (modpack.disabled_mod_ids) {
-        modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
-          (id) => id !== modId
-        );
-      }
-
-      if (modpack.mod_ids.length === initialLength) return false;
-
-      modpack.updated_at = new Date().toISOString();
-      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-      return true;
+      return this.removeModFromModpackUnlocked(modpackId, modId);
     });
   }
 
@@ -2904,40 +2972,91 @@ export class MetadataManager {
    * Toggle a mod's enabled/disabled state in a modpack
    * Disabled mods remain in the pack but won't be included in exports
    */
+  /**
+   * Internal unlocked version of toggleModInModpack - MUST be called within withModpackLock
+   * Used by transaction wrappers to batch multiple operations atomically
+   */
+  async toggleModInModpackUnlocked(
+    modpackId: string,
+    modId: string
+  ): Promise<{ enabled: boolean } | null> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return null;
+
+    // Check if mod is in the pack
+    if (!modpack.mod_ids.includes(modId)) return null;
+
+    // Initialize disabled_mod_ids if not present
+    if (!modpack.disabled_mod_ids) {
+      modpack.disabled_mod_ids = [];
+    }
+
+    let enabled: boolean;
+    if (modpack.disabled_mod_ids.includes(modId)) {
+      // Currently disabled, enable it
+      modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
+        (id) => id !== modId
+      );
+      enabled = true;
+    } else {
+      // Currently enabled, disable it
+      modpack.disabled_mod_ids.push(modId);
+      enabled = false;
+    }
+
+    modpack.updated_at = new Date().toISOString();
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+
+    return { enabled };
+  }
+
   async toggleModInModpack(
     modpackId: string,
     modId: string
   ): Promise<{ enabled: boolean } | null> {
     return this.withModpackLock(modpackId, async () => {
-      const modpack = await this.getModpackById(modpackId);
-      if (!modpack) return null;
-
-      // Check if mod is in the pack
-      if (!modpack.mod_ids.includes(modId)) return null;
-
-      // Initialize disabled_mod_ids if not present
-      if (!modpack.disabled_mod_ids) {
-        modpack.disabled_mod_ids = [];
-      }
-
-      let enabled: boolean;
-      if (modpack.disabled_mod_ids.includes(modId)) {
-        // Currently disabled, enable it
-        modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
-          (id) => id !== modId
-        );
-        enabled = true;
-      } else {
-        // Currently enabled, disable it
-        modpack.disabled_mod_ids.push(modId);
-        enabled = false;
-      }
-
-      modpack.updated_at = new Date().toISOString();
-      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-
-      return { enabled };
+      return this.toggleModInModpackUnlocked(modpackId, modId);
     });
+  }
+
+  /**
+   * Internal unlocked version of setModEnabledInModpack - MUST be called within withModpackLock
+   * Used by transaction wrappers to batch multiple operations atomically
+   */
+  async setModEnabledInModpackUnlocked(
+    modpackId: string,
+    modId: string,
+    enabled: boolean
+  ): Promise<boolean> {
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return false;
+
+    // Check if mod is in the pack
+    if (!modpack.mod_ids.includes(modId)) return false;
+
+    // Initialize disabled_mod_ids if not present
+    if (!modpack.disabled_mod_ids) {
+      modpack.disabled_mod_ids = [];
+    }
+
+    const isCurrentlyDisabled = modpack.disabled_mod_ids.includes(modId);
+
+    if (enabled && isCurrentlyDisabled) {
+      // Enable the mod
+      modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
+        (id) => id !== modId
+      );
+    } else if (!enabled && !isCurrentlyDisabled) {
+      // Disable the mod
+      modpack.disabled_mod_ids.push(modId);
+    } else {
+      // No change needed
+      return true;
+    }
+
+    modpack.updated_at = new Date().toISOString();
+    await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
+    return true;
   }
 
   /**
@@ -2949,35 +3068,7 @@ export class MetadataManager {
     enabled: boolean
   ): Promise<boolean> {
     return this.withModpackLock(modpackId, async () => {
-      const modpack = await this.getModpackById(modpackId);
-      if (!modpack) return false;
-
-      // Check if mod is in the pack
-      if (!modpack.mod_ids.includes(modId)) return false;
-
-      // Initialize disabled_mod_ids if not present
-      if (!modpack.disabled_mod_ids) {
-        modpack.disabled_mod_ids = [];
-      }
-
-      const isCurrentlyDisabled = modpack.disabled_mod_ids.includes(modId);
-
-      if (enabled && isCurrentlyDisabled) {
-        // Enable the mod
-        modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(
-          (id) => id !== modId
-        );
-      } else if (!enabled && !isCurrentlyDisabled) {
-        // Disable the mod
-        modpack.disabled_mod_ids.push(modId);
-      } else {
-        // No change needed
-        return true;
-      }
-
-      modpack.updated_at = new Date().toISOString();
-      await this.safeWriteJson(this.getModpackPath(modpackId), modpack);
-      return true;
+      return this.setModEnabledInModpackUnlocked(modpackId, modId, enabled);
     });
   }
 
@@ -6726,7 +6817,7 @@ ${modLinks}
   async resolveImportConflicts(
     modpackId: string,
     conflicts: Array<{
-      modEntry: any;
+      modEntry: ModexManifestMod;
       existingMod: Mod;
       resolution: "use_existing" | "use_new";
     }>,

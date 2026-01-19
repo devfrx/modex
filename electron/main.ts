@@ -18,7 +18,7 @@ import { autoUpdater } from "electron-updater";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "fs-extra";
-import MetadataManager, { Mod, Modpack } from "./services/MetadataManager.js";
+import MetadataManager, { Mod, Modpack, ModexManifest, ModexManifestMod } from "./services/MetadataManager.js";
 import { CurseForgeService, getContentTypeFromClassId } from "./services/CurseForgeService.js";
 import {
   ModAnalyzerService,
@@ -573,14 +573,20 @@ async function initializeBackend() {
       // Check if instant sync is enabled
       const syncSettings = await metadataManager.getInstanceSyncSettings();
       
-      // Add to database
-      const result = await metadataManager.addModToModpack(modpackId, modId);
-      
       if (syncSettings.instantSync) {
-        // Get mod details and sync to instance
-        const mod = await metadataManager.getModById(modId);
-        if (mod) {
+        // Use atomic transaction: wrap both database and filesystem operations in single lock
+        return metadataManager.withModpackLock(modpackId, async () => {
+          // Get mod details first (before any mutations)
+          const mod = await metadataManager.getModById(modId);
+          if (!mod) {
+            throw new Error(`Mod ${modId} not found in library`);
+          }
+          
+          // Add to database (unlocked version since we already hold the lock)
+          const result = await metadataManager.addModToModpackUnlocked(modpackId, modId);
+          
           try {
+            // Sync to filesystem
             await syncModToInstance(modpackId, {
               id: mod.id,
               name: mod.name,
@@ -590,19 +596,22 @@ async function initializeBackend() {
               content_type: mod.content_type
             });
           } catch (syncError) {
-            // Rollback database change on sync failure
+            // Rollback database change on sync failure (still within the same lock)
             console.error(`[InstantSync] Failed to sync mod ${modId}, rolling back:`, syncError);
             try {
-              await metadataManager.removeModFromModpack(modpackId, modId);
+              await metadataManager.removeModFromModpackUnlocked(modpackId, modId);
             } catch (rollbackError) {
               console.error(`[InstantSync] Rollback also failed:`, rollbackError);
             }
             throw new Error(`Failed to sync mod to instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
           }
-        }
+          
+          return result;
+        });
       }
       
-      return result;
+      // No instant sync - just add to database (uses internal lock)
+      return metadataManager.addModToModpack(modpackId, modId);
     }
   );
 
@@ -620,42 +629,49 @@ async function initializeBackend() {
       // Check if instant sync is enabled
       const syncSettings = await metadataManager.getInstanceSyncSettings();
       
-      // Add to database
-      const result = await metadataManager.addModsToModpackBatch(modpackId, modIds);
-      
       if (syncSettings.instantSync) {
-        // Sync all mods to instance
-        const mods = await Promise.all(modIds.map(id => metadataManager.getModById(id)));
-        const validMods = mods.filter((m): m is NonNullable<typeof m> => m != null);
-        const syncedModIds: string[] = [];
-        
-        try {
-          for (const mod of validMods) {
-            await syncModToInstance(modpackId, {
-              id: mod.id,
-              name: mod.name,
-              filename: mod.filename,
-              cf_project_id: mod.cf_project_id,
-              cf_file_id: mod.cf_file_id,
-              content_type: mod.content_type
-            });
-            syncedModIds.push(mod.id);
-          }
-        } catch (syncError) {
-          // Rollback: remove all synced mods from database
-          console.error(`[InstantSync] Failed to sync batch, rolling back ${syncedModIds.length} mods:`, syncError);
+        // Use atomic transaction: wrap both database and filesystem operations in single lock
+        return metadataManager.withModpackLock(modpackId, async () => {
+          // Pre-fetch all mods at once (before any mutations)
+          const mods = await Promise.all(modIds.map(id => metadataManager.getModById(id)));
+          const validMods = mods.filter((m): m is NonNullable<typeof m> => m != null);
+          
+          // Add to database (unlocked version since we already hold the lock)
+          const result = await metadataManager.addModsToModpackBatchUnlocked(modpackId, modIds);
+          
+          const syncedModIds: string[] = [];
           try {
-            for (const modId of syncedModIds) {
-              await metadataManager.removeModFromModpack(modpackId, modId);
+            // Sync all mods to filesystem
+            for (const mod of validMods) {
+              await syncModToInstance(modpackId, {
+                id: mod.id,
+                name: mod.name,
+                filename: mod.filename,
+                cf_project_id: mod.cf_project_id,
+                cf_file_id: mod.cf_file_id,
+                content_type: mod.content_type
+              });
+              syncedModIds.push(mod.id);
             }
-          } catch (rollbackError) {
-            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+          } catch (syncError) {
+            // Rollback: remove all successfully synced mods from database (still within lock)
+            console.error(`[InstantSync] Failed to sync batch, rolling back ${syncedModIds.length} mods:`, syncError);
+            try {
+              for (const modId of syncedModIds) {
+                await metadataManager.removeModFromModpackUnlocked(modpackId, modId);
+              }
+            } catch (rollbackError) {
+              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+            }
+            throw new Error(`Failed to sync mods to instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
           }
-          throw new Error(`Failed to sync mods to instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
-        }
+          
+          return result;
+        });
       }
       
-      return result;
+      // No instant sync - just add to database (uses internal lock)
+      return metadataManager.addModsToModpackBatch(modpackId, modIds);
     }
   );
 
@@ -711,35 +727,45 @@ async function initializeBackend() {
       }
       await guardLinkedModpack(modpackId, "remove mod");
       
-      // Get mod details before removing (for instant sync and potential rollback)
-      const mod = await metadataManager.getModById(modId);
-      
       // Check if instant sync is enabled
       const syncSettings = await metadataManager.getInstanceSyncSettings();
       
-      // Remove from database
-      const result = await metadataManager.removeModFromModpack(modpackId, modId);
-      
-      if (syncSettings.instantSync && mod) {
-        try {
-          // Remove from instance immediately
-          await removeModFromInstance(modpackId, {
-            filename: mod.filename,
-            content_type: mod.content_type
-          });
-        } catch (syncError) {
-          // Rollback database change on sync failure
-          console.error(`[InstantSync] Failed to remove mod ${modId} from instance, rolling back:`, syncError);
-          try {
-            await metadataManager.addModToModpack(modpackId, modId);
-          } catch (rollbackError) {
-            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+      if (syncSettings.instantSync) {
+        // Use atomic transaction: wrap both database and filesystem operations in single lock
+        return metadataManager.withModpackLock(modpackId, async () => {
+          // Get mod details first (before any mutations)
+          const mod = await metadataManager.getModById(modId);
+          if (!mod) {
+            // Mod not found, still try to remove from modpack (cleanup case)
+            return metadataManager.removeModFromModpackUnlocked(modpackId, modId);
           }
-          throw new Error(`Failed to remove mod from instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
-        }
+          
+          // Remove from database (unlocked version since we already hold the lock)
+          const result = await metadataManager.removeModFromModpackUnlocked(modpackId, modId);
+          
+          try {
+            // Remove from filesystem
+            await removeModFromInstance(modpackId, {
+              filename: mod.filename,
+              content_type: mod.content_type
+            });
+          } catch (syncError) {
+            // Rollback database change on sync failure (still within the same lock)
+            console.error(`[InstantSync] Failed to remove mod ${modId} from instance, rolling back:`, syncError);
+            try {
+              await metadataManager.addModToModpackUnlocked(modpackId, modId);
+            } catch (rollbackError) {
+              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+            }
+            throw new Error(`Failed to remove mod from instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+          }
+          
+          return result;
+        });
       }
       
-      return result;
+      // No instant sync - just remove from database (uses internal lock)
+      return metadataManager.removeModFromModpack(modpackId, modId);
     }
   );
 
@@ -754,36 +780,48 @@ async function initializeBackend() {
       }
       await guardLinkedModpack(modpackId, "toggle mod");
       
-      // Get mod details for instant sync
-      const mod = await metadataManager.getModById(modId);
-      
       // Check if instant sync is enabled
       const syncSettings = await metadataManager.getInstanceSyncSettings();
       
-      // Toggle in database
-      const result = await metadataManager.toggleModInModpack(modpackId, modId);
-      
-      if (syncSettings.instantSync && mod && result) {
-        try {
-          // Toggle in instance immediately
-          await toggleModInInstance(modpackId, {
-            filename: mod.filename,
-            content_type: mod.content_type
-          }, result.enabled);
-        } catch (syncError) {
-          // Rollback database change on sync failure
-          console.error(`[InstantSync] Failed to toggle mod ${modId} in instance, rolling back:`, syncError);
-          try {
-            // Toggle back to previous state
-            await metadataManager.toggleModInModpack(modpackId, modId);
-          } catch (rollbackError) {
-            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+      if (syncSettings.instantSync) {
+        // Use atomic transaction: wrap both database and filesystem operations in single lock
+        return metadataManager.withModpackLock(modpackId, async () => {
+          // Get mod details first
+          const mod = await metadataManager.getModById(modId);
+          if (!mod) {
+            throw new Error(`Mod ${modId} not found in library`);
           }
-          throw new Error(`Failed to toggle mod in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
-        }
+          
+          // Toggle in database (unlocked version since we already hold the lock)
+          const result = await metadataManager.toggleModInModpackUnlocked(modpackId, modId);
+          if (!result) {
+            return null;
+          }
+          
+          try {
+            // Toggle in filesystem
+            await toggleModInInstance(modpackId, {
+              filename: mod.filename,
+              content_type: mod.content_type
+            }, result.enabled);
+          } catch (syncError) {
+            // Rollback database change on sync failure (still within the same lock)
+            console.error(`[InstantSync] Failed to toggle mod ${modId} in instance, rolling back:`, syncError);
+            try {
+              // Toggle back to previous state
+              await metadataManager.toggleModInModpackUnlocked(modpackId, modId);
+            } catch (rollbackError) {
+              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+            }
+            throw new Error(`Failed to toggle mod in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+          }
+          
+          return result;
+        });
       }
       
-      return result;
+      // No instant sync - just toggle in database (uses internal lock)
+      return metadataManager.toggleModInModpack(modpackId, modId);
     }
   );
 
@@ -801,36 +839,45 @@ async function initializeBackend() {
       }
       await guardLinkedModpack(modpackId, "change mod state");
       
-      // Get mod details for instant sync
-      const mod = await metadataManager.getModById(modId);
-      
       // Check if instant sync is enabled
       const syncSettings = await metadataManager.getInstanceSyncSettings();
       
-      // Update in database
-      const result = await metadataManager.setModEnabledInModpack(modpackId, modId, enabled);
-      
-      if (syncSettings.instantSync && mod) {
-        try {
-          // Toggle in instance immediately
-          await toggleModInInstance(modpackId, {
-            filename: mod.filename,
-            content_type: mod.content_type
-          }, enabled);
-        } catch (syncError) {
-          // Rollback database change on sync failure
-          console.error(`[InstantSync] Failed to set mod ${modId} enabled=${enabled} in instance, rolling back:`, syncError);
-          try {
-            // Revert to opposite state
-            await metadataManager.setModEnabledInModpack(modpackId, modId, !enabled);
-          } catch (rollbackError) {
-            console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+      if (syncSettings.instantSync) {
+        // Use atomic transaction: wrap both database and filesystem operations in single lock
+        return metadataManager.withModpackLock(modpackId, async () => {
+          // Get mod details first
+          const mod = await metadataManager.getModById(modId);
+          if (!mod) {
+            throw new Error(`Mod ${modId} not found in library`);
           }
-          throw new Error(`Failed to update mod state in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
-        }
+          
+          // Update in database (unlocked version since we already hold the lock)
+          const result = await metadataManager.setModEnabledInModpackUnlocked(modpackId, modId, enabled);
+          
+          try {
+            // Update in filesystem
+            await toggleModInInstance(modpackId, {
+              filename: mod.filename,
+              content_type: mod.content_type
+            }, enabled);
+          } catch (syncError) {
+            // Rollback database change on sync failure (still within the same lock)
+            console.error(`[InstantSync] Failed to set mod ${modId} enabled=${enabled} in instance, rolling back:`, syncError);
+            try {
+              // Revert to opposite state
+              await metadataManager.setModEnabledInModpackUnlocked(modpackId, modId, !enabled);
+            } catch (rollbackError) {
+              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+            }
+            throw new Error(`Failed to update mod state in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
+          }
+          
+          return result;
+        });
       }
       
-      return result;
+      // No instant sync - just update database (uses internal lock)
+      return metadataManager.setModEnabledInModpack(modpackId, modId, enabled);
     }
   );
 
@@ -1097,21 +1144,39 @@ async function initializeBackend() {
 
       if (enabled) {
         // Enable: rename .disabled to normal
-        if (await fs.pathExists(disabledPath)) {
+        // Use atomic rename + catch ENOENT to avoid TOCTOU race condition
+        try {
           await fs.rename(disabledPath, enabledPath);
           console.log(`[DirectSync] Enabled ${mod.filename}`);
-        } else if (!await fs.pathExists(enabledPath)) {
-          // File doesn't exist at all - can't toggle
-          return { success: true, skipped: true, reason: "file_not_found" };
+        } catch (err: any) {
+          if (err.code === 'ENOENT') {
+            // .disabled file doesn't exist, check if already enabled
+            if (await fs.pathExists(enabledPath)) {
+              // Already enabled, nothing to do
+              return { success: true };
+            }
+            // File doesn't exist at all - can't toggle
+            return { success: true, skipped: true, reason: "file_not_found" };
+          }
+          throw err;
         }
       } else {
         // Disable: rename to .disabled
-        if (await fs.pathExists(enabledPath)) {
+        // Use atomic rename + catch ENOENT to avoid TOCTOU race condition
+        try {
           await fs.rename(enabledPath, disabledPath);
           console.log(`[DirectSync] Disabled ${mod.filename}`);
-        } else if (!await fs.pathExists(disabledPath)) {
-          // File doesn't exist at all - can't toggle
-          return { success: true, skipped: true, reason: "file_not_found" };
+        } catch (err: any) {
+          if (err.code === 'ENOENT') {
+            // Enabled file doesn't exist, check if already disabled
+            if (await fs.pathExists(disabledPath)) {
+              // Already disabled, nothing to do
+              return { success: true };
+            }
+            // File doesn't exist at all - can't toggle
+            return { success: true, skipped: true, reason: "file_not_found" };
+          }
+          throw err;
         }
       }
 
@@ -1652,7 +1717,18 @@ async function initializeBackend() {
 
         // Extract manifest
         const AdmZip = (await import("adm-zip")).default;
-        const zip = new AdmZip(tempFile);
+        let zip;
+        try {
+          zip = new AdmZip(tempFile);
+        } catch (zipError: any) {
+          await fs.remove(tempFile);
+          return {
+            success: false,
+            modsImported: 0,
+            modsSkipped: 0,
+            errors: [`Corrupted or invalid modpack file: ${zipError.message || "Unable to read ZIP archive"}`],
+          };
+        }
         const manifestEntry = zip.getEntry("manifest.json");
 
         if (!manifestEntry) {
@@ -1665,7 +1741,18 @@ async function initializeBackend() {
           };
         }
 
-        const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+        let manifest;
+        try {
+          manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+        } catch (parseError) {
+          await fs.remove(tempFile);
+          return {
+            success: false,
+            modsImported: 0,
+            modsSkipped: 0,
+            errors: ["Invalid CurseForge modpack: manifest.json is not valid JSON"],
+          };
+        }
 
         // Progress callback
         const onProgress = (current: number, total: number, modName: string) => {
@@ -2276,7 +2363,11 @@ async function initializeBackend() {
         if (!file) {
           throw new Error(`File "${filename}" not found in gist`);
         }
-        manifest = JSON.parse(file.content);
+        try {
+          manifest = JSON.parse(file.content);
+        } catch (parseError) {
+          throw new Error(`Invalid MODEX manifest: File "${filename}" is not valid JSON`);
+        }
       } else {
         // Regular URL fetch
         const response = await fetch(urlToFetch, {
@@ -2587,7 +2678,17 @@ async function initializeBackend() {
         };
       }
 
-      const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+      let manifest;
+      try {
+        manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+      } catch (parseError) {
+        return {
+          success: false,
+          modsImported: 0,
+          modsSkipped: 0,
+          errors: ["Invalid CurseForge modpack: manifest.json is not valid JSON"],
+        };
+      }
 
       // Progress callback that sends events to renderer
       const onProgress = (current: number, total: number, modName: string) => {
@@ -2931,7 +3032,18 @@ async function initializeBackend() {
 
         // Extract and import
         const AdmZip = (await import("adm-zip")).default;
-        const zip = new AdmZip(tempFile);
+        let zip;
+        try {
+          zip = new AdmZip(tempFile);
+        } catch (zipError: any) {
+          await fs.remove(tempFile);
+          return {
+            success: false,
+            modsImported: 0,
+            modsSkipped: 0,
+            errors: [`Corrupted or invalid modpack file: ${zipError.message || "Unable to read ZIP archive"}`],
+          };
+        }
         const manifestEntry = zip.getEntry("manifest.json");
 
         if (!manifestEntry) {
@@ -2944,7 +3056,18 @@ async function initializeBackend() {
           };
         }
 
-        const manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+        let manifest;
+        try {
+          manifest = JSON.parse(manifestEntry.getData().toString("utf8"));
+        } catch (parseError) {
+          await fs.remove(tempFile);
+          return {
+            success: false,
+            modsImported: 0,
+            modsSkipped: 0,
+            errors: ["Invalid CurseForge modpack: manifest.json is not valid JSON"],
+          };
+        }
 
         // Progress callback
         const onProgress = (current: number, total: number, modName: string) => {
@@ -3339,7 +3462,7 @@ async function initializeBackend() {
 
   ipcMain.handle(
     "import:modex:manifest",
-    async (_, manifest: any, modpackId?: string) => {
+    async (_, manifest: ModexManifest, modpackId?: string) => {
       if (!win) return null;
 
       // Check for API key (required for fetching mod metadata)
@@ -3430,12 +3553,16 @@ async function initializeBackend() {
       data: {
         modpackId: string;
         conflicts: Array<{
-          modEntry: any;
-          existingMod: any;
+          modEntry: ModexManifestMod;
+          existingMod: Mod;
           resolution: "use_existing" | "use_new";
         }>;
-        partialData: any;
-        manifest: any;
+        partialData: {
+          newModIds: string[];
+          addedModNames: string[];
+          oldModIds?: string[];
+        };
+        manifest: ModexManifest;
       }
     ) => {
       try {
@@ -3446,8 +3573,9 @@ async function initializeBackend() {
           data.manifest,
           curseforgeService
         );
-      } catch (error: any) {
-        throw new Error(error.message);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(message);
       }
     }
   );

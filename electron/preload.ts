@@ -355,7 +355,7 @@ contextBridge.exposeInMainWorld("api", {
       // Set up progress listener if callback provided
       if (onProgress) {
         const progressHandler = (
-          _event: any,
+          _event: Electron.IpcRendererEvent,
           data: { current: number; total: number; modName: string }
         ) => {
           onProgress(data.current, data.total, data.modName);
@@ -440,7 +440,7 @@ contextBridge.exposeInMainWorld("api", {
     }> => {
       if (onProgress) {
         const progressHandler = (
-          _event: any,
+          _event: Electron.IpcRendererEvent,
           data: { current: number; total: number; modName: string }
         ) => {
           onProgress(data.current, data.total, data.modName);
@@ -466,7 +466,7 @@ contextBridge.exposeInMainWorld("api", {
     }> => {
       if (onProgress) {
         const progressHandler = (
-          _event: any,
+          _event: Electron.IpcRendererEvent,
           data: { current: number; total: number; modName: string }
         ) => {
           onProgress(data.current, data.total, data.modName);
@@ -1008,7 +1008,18 @@ contextBridge.exposeInMainWorld("api", {
       icon?: string;
     }>> => ipcRenderer.invoke("minecraft:getInstallations"),
 
-    addCustom: (name: string, mcPath: string, modsPath?: string): Promise<any> =>
+    addCustom: (name: string, mcPath: string, modsPath?: string): Promise<{
+      id: string;
+      name: string;
+      type: string;
+      path: string;
+      modsPath: string;
+      version?: string;
+      loader?: string;
+      lastUsed?: string;
+      isDefault?: boolean;
+      icon?: string;
+    }> =>
       ipcRenderer.invoke("minecraft:addCustomInstallation", name, mcPath, modsPath),
 
     remove: (id: string): Promise<boolean> =>
@@ -1017,7 +1028,18 @@ contextBridge.exposeInMainWorld("api", {
     setDefault: (id: string): Promise<boolean> =>
       ipcRenderer.invoke("minecraft:setDefault", id),
 
-    getDefault: (): Promise<any> =>
+    getDefault: (): Promise<{
+      id: string;
+      name: string;
+      type: string;
+      path: string;
+      modsPath: string;
+      version?: string;
+      loader?: string;
+      lastUsed?: string;
+      isDefault?: boolean;
+      icon?: string;
+    } | undefined> =>
       ipcRenderer.invoke("minecraft:getDefault"),
 
     syncModpack: (
@@ -1033,7 +1055,7 @@ contextBridge.exposeInMainWorld("api", {
       syncedMods: string[];
     }> => {
       if (onProgress) {
-        const handler = (_event: any, data: { current: number; total: number; modName: string }) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: { current: number; total: number; modName: string }) => {
           onProgress(data.current, data.total, data.modName);
         };
         ipcRenderer.on("sync:progress", handler);
@@ -1611,7 +1633,36 @@ contextBridge.exposeInMainWorld("api", {
       totalSize?: number;
     } | null> => ipcRenderer.invoke("preview:fromZip", zipPath),
 
-    fromCurseForge: (modpackData: any, fileData: any): Promise<any> =>
+    fromCurseForge: (modpackData: { id: number; name: string; authors?: Array<{ name: string }>; summary?: string }, fileData: { id: number; displayName?: string; fileName?: string; gameVersions?: string[]; dependencies?: Array<{ modId: number; fileId?: number; relationType?: number }>; modules?: Array<{ type: number }>; fileLength?: number }): Promise<{
+      name: string;
+      version: string;
+      author?: string;
+      description?: string;
+      minecraftVersion: string;
+      modLoader: string;
+      modLoaderVersion?: string;
+      modCount: number;
+      mods: Array<{ projectId: number; fileId: number; name?: string; required: boolean }>;
+      resourcePackCount: number;
+      shaderCount: number;
+      analysis: {
+        estimatedRamMin: number;
+        estimatedRamRecommended: number;
+        estimatedRamMax: number;
+        performanceImpact: number;
+        loadTimeImpact: number;
+        storageImpact: number;
+        warnings: string[];
+        recommendations: string[];
+        compatibilityScore: number;
+      };
+      source: string;
+      cfProjectId?: number;
+      cfFileId?: number;
+      overridesCount: number;
+      configFilesCount: number;
+      totalSize?: number;
+    } | null> =>
       ipcRenderer.invoke("preview:fromCurseForge", modpackData, fileData),
 
     analyzeModpack: (modpackId: string): Promise<{
@@ -1630,7 +1681,34 @@ contextBridge.exposeInMainWorld("api", {
 
     selectAndPreview: (): Promise<{
       path: string;
-      preview: any;
+      preview: {
+        name: string;
+        version: string;
+        author?: string;
+        description?: string;
+        minecraftVersion: string;
+        modLoader: string;
+        modLoaderVersion?: string;
+        modCount: number;
+        mods: Array<{ projectId: number; fileId: number; name?: string; required: boolean }>;
+        resourcePackCount: number;
+        shaderCount: number;
+        analysis: {
+          estimatedRamMin: number;
+          estimatedRamRecommended: number;
+          estimatedRamMax: number;
+          performanceImpact: number;
+          loadTimeImpact: number;
+          storageImpact: number;
+          warnings: string[];
+          recommendations: string[];
+          compatibilityScore: number;
+        };
+        source: string;
+        overridesCount: number;
+        configFilesCount: number;
+        totalSize?: number;
+      } | null;
     } | null> => ipcRenderer.invoke("preview:selectZip"),
   },
 
@@ -1952,8 +2030,8 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   // ========== EVENTS ==========
-  on: (channel: string, callback: (data: any) => void) => {
-    const handler = (_event: any, data: any) => callback(data);
+  on: (channel: string, callback: (data: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on(channel, handler);
     // Return a cleanup function to properly remove the listener
     return () => {

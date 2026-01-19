@@ -129,7 +129,8 @@ async function applyUpdate(update: ModUpdateInfo) {
     // In metadata-only mode, we just update the mod reference to the new file ID
     const result = await window.api.updates.applyUpdate(
       update.modId,
-      update.newFileId!
+      update.newFileId!,
+      props.modpackId // Pass modpackId to update only in this modpack context
     );
 
     if (result.success) {
@@ -178,7 +179,8 @@ async function applyAllUpdates() {
         try {
           const result = await window.api.updates.applyUpdate(
             update.modId,
-            update.newFileId!
+            update.newFileId!,
+            props.modpackId // Pass modpackId to update only in this modpack context
           );
           if (result.success) {
             updates.value = updates.value.filter((u) => u.modId !== update.modId);

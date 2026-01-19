@@ -44,6 +44,9 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
   const updateAvailable = options.updateAvailable ?? ref<Record<string, UpdateInfo | null>>({});
   const isCheckingAllUpdates = options.isCheckingAllUpdates ?? ref(false);
 
+  // Track mods currently being updated (untouchable during update)
+  const updatingMods = ref<Set<string>>(new Set());
+
   // Single mod update dialog
   const showSingleModUpdateDialog = ref(false);
   const selectedUpdateMod = ref<Mod | null>(null);
@@ -105,6 +108,13 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
     const latest = updateAvailable.value[mod.id];
     if (!latest) return;
 
+    // Check if mod is already being updated
+    if (updatingMods.value.has(mod.id)) {
+      return;
+    }
+
+    updatingMods.value.add(mod.id);
+
     try {
       const result = await window.api.updates.applyUpdate(
         mod.id,
@@ -121,6 +131,8 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
     } catch (err) {
       console.error("Update failed:", err);
       toast.error("Couldn't update mod");
+    } finally {
+      updatingMods.value.delete(mod.id);
     }
   }
 
@@ -151,9 +163,16 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
       return;
     }
 
+    // Check if mod is already being updated
+    if (updatingMods.value.has(mod.id)) {
+      return;
+    }
+
     const latest = updateAvailable.value[mod.id];
     if (!latest) return;
 
+    // Mark mod as updating (untouchable)
+    updatingMods.value = new Set([...updatingMods.value, mod.id]);
     checkingUpdates.value[mod.id] = true;
     try {
       const result = await window.api.updates.applyUpdate(
@@ -179,13 +198,17 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
       toast.error(`Couldn't update ${mod.name}`);
     } finally {
       checkingUpdates.value[mod.id] = false;
+      // Remove from updating set
+      const newUpdating = new Set(updatingMods.value);
+      newUpdating.delete(mod.id);
+      updatingMods.value = newUpdating;
     }
   }
 
   // Update all mods with available updates (excluding locked)
   async function updateAllMods(): Promise<void> {
     const modsToUpdate = currentMods.value.filter(
-      (m) => updateAvailable.value[m.id] && !lockedModIds.value.has(m.id)
+      (m) => updateAvailable.value[m.id] && !lockedModIds.value.has(m.id) && !updatingMods.value.has(m.id)
     );
     if (modsToUpdate.length === 0) {
       toast.info("All up to date", "Your mods are on their latest versions.");
@@ -194,6 +217,13 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
 
     let successCount = 0;
     let failCount = 0;
+
+    // Mark all mods as updating
+    const updatingSet = new Set(updatingMods.value);
+    for (const mod of modsToUpdate) {
+      updatingSet.add(mod.id);
+    }
+    updatingMods.value = updatingSet;
 
     for (const mod of modsToUpdate) {
       try {
@@ -216,6 +246,11 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
         }
       } catch {
         failCount++;
+      } finally {
+        // Remove this mod from updating set
+        const newUpdating = new Set(updatingMods.value);
+        newUpdating.delete(mod.id);
+        updatingMods.value = newUpdating;
       }
     }
 
@@ -255,20 +290,30 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
   async function handleVersionSelected(fileId: number): Promise<void> {
     if (!versionPickerMod.value) return;
 
+    const modId = versionPickerMod.value.libraryModId;
+
+    // Check if mod is already being updated
+    if (updatingMods.value.has(modId)) {
+      return;
+    }
+
+    // Mark mod as updating (untouchable)
+    updatingMods.value = new Set([...updatingMods.value, modId]);
+
     try {
       const result = await window.api.updates.applyUpdate(
-        versionPickerMod.value.libraryModId,
+        modId,
         fileId,
         modpackId.value
       );
       if (result.success) {
         // Mark as recently updated using the NEW mod ID
-        const updatedModId = result.newModId || versionPickerMod.value.libraryModId;
+        const updatedModId = result.newModId || modId;
         recentlyUpdatedMods.value.add(updatedModId);
 
         // Clear any cached update status
-        if (updateAvailable.value[versionPickerMod.value.libraryModId]) {
-          delete updateAvailable.value[versionPickerMod.value.libraryModId];
+        if (updateAvailable.value[modId]) {
+          delete updateAvailable.value[modId];
         }
         await loadData();
         onUpdate();
@@ -279,6 +324,11 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
     } catch (err: unknown) {
       console.error("Version change failed:", err);
       toast.error(`Couldn't change version: ${(err as Error)?.message || "Unknown error"}`);
+    } finally {
+      // Remove from updating set
+      const newUpdating = new Set(updatingMods.value);
+      newUpdating.delete(modId);
+      updatingMods.value = newUpdating;
     }
 
     showVersionPickerDialog.value = false;
@@ -337,6 +387,7 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
     checkingUpdates,
     updateAvailable,
     isCheckingAllUpdates,
+    updatingMods,
 
     // Single mod update dialog
     showSingleModUpdateDialog,

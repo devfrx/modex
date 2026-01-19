@@ -234,6 +234,7 @@ const {
   showChangelogDialog,
   changelogMod,
   updatesAvailableCount,
+  updatingMods,
   checkModUpdate,
   updateMod,
   checkAllUpdates,
@@ -816,20 +817,31 @@ function closeModDetails() {
 async function handleModDetailsVersionChange(fileId: number) {
   if (!modDetailsTarget.value) return;
 
+  const modId = modDetailsTarget.value.id;
+
+  // Check if mod is already being updated
+  if (updatingMods.value.has(modId)) {
+    toast.error("Update in progress", "Please wait for the current update to finish.");
+    return;
+  }
+
+  // Mark as updating
+  updatingMods.value.add(modId);
+
   try {
     const result = await window.api.updates.applyUpdate(
-      modDetailsTarget.value.id,
+      modId,
       fileId,
       props.modpackId
     );
     if (result.success) {
       // Mark as recently updated using the NEW mod ID
-      const updatedModId = result.newModId || modDetailsTarget.value.id;
+      const updatedModId = result.newModId || modId;
       recentlyUpdatedMods.value.add(updatedModId);
 
       // Clear any cached update status
-      if (updateAvailable.value[modDetailsTarget.value.id]) {
-        delete updateAvailable.value[modDetailsTarget.value.id];
+      if (updateAvailable.value[modId]) {
+        delete updateAvailable.value[modId];
       }
       await loadData();
       emit("update");
@@ -841,6 +853,8 @@ async function handleModDetailsVersionChange(fileId: number) {
   } catch (err: any) {
     console.error("Version change failed:", err);
     toast.error(`Couldn't change version: ${err?.message || 'Unknown error'}`);
+  } finally {
+    updatingMods.value.delete(modId);
   }
 }
 
@@ -1158,13 +1172,13 @@ async function saveModpackInfo() {
 async function removeSelectedMods() {
   if (selectedModIds.value.size === 0) return;
 
-  // Filter out locked mods
+  // Filter out locked mods and updating mods
   const idsToRemove: string[] = Array.from(selectedModIds.value).filter(
-    id => !lockedModIds.value.has(id)
+    id => !lockedModIds.value.has(id) && !updatingMods.value.has(id)
   );
 
   if (idsToRemove.length === 0) {
-    toast.warning("Cannot Remove", "All selected mods are locked");
+    toast.warning("Cannot Remove", "All selected mods are locked or updating");
     return;
   }
 
@@ -1248,15 +1262,15 @@ async function executeBulkRemove(idsToRemove: string[]) {
 async function bulkEnableSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
-  // Filter out locked mods first
-  const unlockedMods = [...selectedModIds.value].filter(id => !lockedModIds.value.has(id));
+  // Filter out locked mods and updating mods first
+  const unlockedMods = [...selectedModIds.value].filter(id => !lockedModIds.value.has(id) && !updatingMods.value.has(id));
   const skippedLocked = selectedModIds.value.size - unlockedMods.length;
 
   // Check if all unlocked mods are already enabled
   const modsToEnable = unlockedMods.filter(id => disabledModIds.value.has(id));
   if (modsToEnable.length === 0) {
     if (skippedLocked > 0) {
-      toast.warning("Cannot Enable", `All ${skippedLocked} selected mod(s) are locked`);
+      toast.warning("Cannot Enable", `All ${skippedLocked} selected mod(s) are locked or updating`);
     } else {
       toast.info("All Already Enabled", "All selected mods are already enabled");
     }
@@ -1284,7 +1298,7 @@ async function bulkEnableSelected() {
   if (failCount === 0 && skippedLocked === 0) {
     toast.success("Mods Enabled", `Enabled ${successCount} mod(s)`);
   } else if (failCount === 0 && skippedLocked > 0) {
-    toast.success("Mods Enabled", `Enabled ${successCount} mod(s), ${skippedLocked} locked mod(s) skipped`);
+    toast.success("Mods Enabled", `Enabled ${successCount} mod(s), ${skippedLocked} locked/updating mod(s) skipped`);
   } else {
     toast.warning("Mods Enabled", `Enabled ${successCount} mod(s), ${failCount} failed`);
   }
@@ -1293,15 +1307,15 @@ async function bulkEnableSelected() {
 async function bulkDisableSelected() {
   if (selectedModIds.value.size === 0 || isLinked.value) return;
 
-  // Filter out locked mods first
-  const unlockedMods = [...selectedModIds.value].filter(id => !lockedModIds.value.has(id));
+  // Filter out locked mods and updating mods first
+  const unlockedMods = [...selectedModIds.value].filter(id => !lockedModIds.value.has(id) && !updatingMods.value.has(id));
   const skippedLocked = selectedModIds.value.size - unlockedMods.length;
 
   // Check if all unlocked mods are already disabled
   const modsToDisable = unlockedMods.filter(id => !disabledModIds.value.has(id));
   if (modsToDisable.length === 0) {
     if (skippedLocked > 0) {
-      toast.warning("Cannot Disable", `All ${skippedLocked} selected mod(s) are locked`);
+      toast.warning("Cannot Disable", `All ${skippedLocked} selected mod(s) are locked or updating`);
     } else {
       toast.info("All Already Disabled", "All selected mods are already disabled");
     }
@@ -3427,10 +3441,14 @@ watch(
                         <!-- Note Button -->
                         <button
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="getModNote(mod.id)
-                            ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-500/50'
-                            : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-blue-400 border-border/40 hover:border-blue-500/50'"
-                          :title="getModNote(mod.id) ? 'Edit note' : 'Add note'" @click.stop="openModNoteDialog(mod)">
+                          :class="updatingMods.has(mod.id)
+                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
+                            : getModNote(mod.id)
+                              ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-500/50'
+                              : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-blue-400 border-border/40 hover:border-blue-500/50'"
+                          :disabled="updatingMods.has(mod.id)"
+                          :title="updatingMods.has(mod.id) ? 'Updating...' : getModNote(mod.id) ? 'Edit note' : 'Add note'" 
+                          @click.stop="!updatingMods.has(mod.id) && openModNoteDialog(mod)">
                           <Icon v-if="getModNote(mod.id)" name="MessageSquare" class="w-3.5 h-3.5" />
                           <Icon v-else name="MessageSquarePlus" class="w-3.5 h-3.5" />
                         </button>
@@ -3438,10 +3456,14 @@ watch(
                         <!-- Lock/Unlock Button (action) -->
                         <button v-if="!isLinked"
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="lockedModIds.has(mod.id)
-                            ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 hover:border-amber-500/50'
-                            : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-amber-500 border-border/40 hover:border-amber-500/50'"
-                          :title="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" @click.stop="toggleModLocked(mod.id)">
+                          :class="updatingMods.has(mod.id)
+                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
+                            : lockedModIds.has(mod.id)
+                              ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 hover:border-amber-500/50'
+                              : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-amber-500 border-border/40 hover:border-amber-500/50'"
+                          :disabled="updatingMods.has(mod.id)"
+                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" 
+                          @click.stop="!updatingMods.has(mod.id) && toggleModLocked(mod.id)">
                           <Icon v-if="lockedModIds.has(mod.id)" name="Lock" class="w-3.5 h-3.5" />
                           <Icon v-else name="LockOpen" class="w-3.5 h-3.5" />
                         </button>
@@ -3449,24 +3471,24 @@ watch(
                         <!-- Change Version Button -->
                         <button v-if="!isLinked && mod.cf_project_id"
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="lockedModIds.has(mod.id)
+                          :class="(lockedModIds.has(mod.id) || updatingMods.has(mod.id))
                             ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
                             : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-primary border-border/40 hover:border-primary/50'"
-                          :disabled="lockedModIds.has(mod.id)"
-                          :title="lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
-                          @click.stop="!lockedModIds.has(mod.id) && openVersionPicker(mod)">
+                          :disabled="lockedModIds.has(mod.id) || updatingMods.has(mod.id)"
+                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
+                          @click.stop="!(lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && openVersionPicker(mod)">
                           <Icon name="GitBranch" class="w-3.5 h-3.5" />
                         </button>
 
                         <!-- Remove Button -->
                         <button v-if="!isLinked"
                           class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="lockedModIds.has(mod.id)
+                          :class="(lockedModIds.has(mod.id) || updatingMods.has(mod.id))
                             ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
                             : 'bg-muted/60 hover:bg-destructive/15 text-muted-foreground hover:text-destructive border-border/40 hover:border-destructive/50'"
-                          :disabled="lockedModIds.has(mod.id)"
-                          :title="lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
-                          @click.stop="!lockedModIds.has(mod.id) && removeMod(mod.id)">
+                          :disabled="lockedModIds.has(mod.id) || updatingMods.has(mod.id)"
+                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
+                          @click.stop="!(lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && removeMod(mod.id)">
                           <Icon name="Trash2" class="w-3.5 h-3.5" />
                         </button>
 
@@ -3480,23 +3502,29 @@ watch(
 
                       <!-- Lock state indicator and update/changelog (moved next to toggle) -->
                       <div class="flex items-center ml-1 gap-1">
-                        <!-- Checking Indicator (shows while checking) -->
-                        <div v-if="!isLinked && mod.cf_project_id && checkingUpdates[mod.id]"
+                        <!-- Updating Indicator (shows while updating - takes precedence) -->
+                        <div v-if="!isLinked && updatingMods.has(mod.id)"
+                          class="w-6 h-6 flex items-center justify-center rounded-md bg-primary/10" title="Updating...">
+                          <Icon name="RefreshCw" class="w-3.5 h-3.5 animate-spin text-primary" />
+                        </div>
+
+                        <!-- Checking Indicator (shows while checking, not updating) -->
+                        <div v-else-if="!isLinked && mod.cf_project_id && checkingUpdates[mod.id]"
                           class="w-6 h-6 flex items-center justify-center rounded-md bg-primary/10" title="Checking...">
                           <Icon name="RefreshCw" class="w-3.5 h-3.5 animate-spin text-primary/70" />
                         </div>
 
-                        <!-- View Changelog (always visible when update available) -->
+                        <!-- View Changelog (hidden while updating) -->
                         <button
-                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
+                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id] && !updatingMods.has(mod.id)"
                           class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/60 text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground transition-all duration-150"
                           title="View changelog" @click.stop="viewModChangelog(mod)">
                           <Icon name="FileText" class="w-3.5 h-3.5" />
                         </button>
 
-                        <!-- Update Available (always visible when update available) -->
+                        <!-- Update Available (hidden while updating) -->
                         <button
-                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id]"
+                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id] && !updatingMods.has(mod.id)"
                           class="w-7 h-7 flex items-center justify-center rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 hover:border-primary/50 transition-all duration-150"
                           :title="`Update to ${updateAvailable[mod.id]?.displayName || 'latest version'}`"
                           @click.stop="quickUpdateMod(mod)">
@@ -3523,14 +3551,16 @@ watch(
                           disabledModIds.has(mod.id)
                             ? 'bg-muted-foreground/20'
                             : 'bg-primary shadow-primary/20',
-                          (isLinked || lockedModIds.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90',
-                        ]" @click.stop="!(isLinked || lockedModIds.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
+                          (isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90',
+                        ]" @click.stop="!(isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
                           ? 'Managed by remote source'
-                          : lockedModIds.has(mod.id)
-                            ? 'Unlock mod to change state'
-                            : disabledModIds.has(mod.id)
-                              ? 'Click to enable mod'
-                              : 'Click to disable mod'" :disabled="isLinked || lockedModIds.has(mod.id)">
+                          : updatingMods.has(mod.id)
+                            ? 'Updating...'
+                            : lockedModIds.has(mod.id)
+                              ? 'Unlock mod to change state'
+                              : disabledModIds.has(mod.id)
+                                ? 'Click to enable mod'
+                                : 'Click to disable mod'" :disabled="isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)">
                         <span
                           class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200"
                           :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[14px]'" />

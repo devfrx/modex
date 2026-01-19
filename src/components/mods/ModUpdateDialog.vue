@@ -107,7 +107,8 @@ async function applyUpdate() {
   try {
     const result = await window.api.updates.applyUpdate(
       props.mod.id,
-      updateInfo.value.newFileId
+      updateInfo.value.newFileId,
+      props.modpackId // Pass modpackId to update only in this modpack context
     );
     if (result.success) {
       toast.success("Updated ✓", `${props.mod.name} is now up to date.`);

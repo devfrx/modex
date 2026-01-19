@@ -484,7 +484,43 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== VERSION CONTROL ==========
   versions: {
-    getHistory: (modpackId: string): Promise<any | null> =>
+    getHistory: (modpackId: string): Promise<{
+      modpack_id: string;
+      current_version_id: string;
+      versions: Array<{
+        id: string;
+        tag: string;
+        message: string;
+        created_at: string;
+        author?: string;
+        changes: Array<{
+          type: "added" | "removed" | "updated" | "enabled" | "disabled" | "locked" | "unlocked" | "note_added" | "note_updated" | "note_removed";
+          mod_id: string;
+          mod_name: string;
+          previous_version?: string;
+          new_version?: string;
+          note?: string;
+        }>;
+        mod_ids: string[];
+        disabled_mod_ids?: string[];
+        locked_mod_ids?: string[];
+        mod_notes?: Record<string, string>;
+        loader?: string;
+        loader_version?: string;
+        parent_id?: string;
+        mod_snapshots?: Array<{
+          id: string;
+          name: string;
+          version?: string;
+          source: "curseforge" | "modrinth";
+          cf_project_id?: number;
+          cf_file_id?: number;
+          mr_project_id?: string;
+          mr_version_id?: string;
+        }>;
+        config_snapshot_id?: string;
+      }>;
+    } | null> =>
       ipcRenderer.invoke("versions:getHistory", modpackId),
     validateRollback: (modpackId: string, versionId: string): Promise<{
       valid: boolean;
@@ -493,14 +529,28 @@ contextBridge.exposeInMainWorld("api", {
       brokenDependencies: Array<{ modId: string; modName: string; dependsOn: string }>;
     }> =>
       ipcRenderer.invoke("versions:validateRollback", modpackId, versionId),
-    initialize: (modpackId: string, message?: string): Promise<any | null> =>
+    initialize: (modpackId: string, message?: string): Promise<{
+      id: string;
+      tag: string;
+      message: string;
+      created_at: string;
+      changes: Array<any>;
+      mod_ids: string[];
+    } | null> =>
       ipcRenderer.invoke("versions:initialize", modpackId, message),
     create: (
       modpackId: string,
       message: string,
       tag?: string,
       syncFromInstanceId?: string
-    ): Promise<any | null> =>
+    ): Promise<{
+      id: string;
+      tag: string;
+      message: string;
+      created_at: string;
+      changes: Array<any>;
+      mod_ids: string[];
+    } | null> =>
       ipcRenderer.invoke("versions:create", modpackId, message, tag, syncFromInstanceId),
     rollback: (modpackId: string, versionId: string): Promise<{
       success: boolean;
@@ -516,14 +566,30 @@ contextBridge.exposeInMainWorld("api", {
       modpackId: string,
       fromVersionId: string,
       toVersionId: string
-    ): Promise<any[] | null> =>
+    ): Promise<Array<{
+      type: "added" | "removed" | "updated" | "enabled" | "disabled" | "locked" | "unlocked" | "note_added" | "note_updated" | "note_removed";
+      mod_id: string;
+      mod_name: string;
+      previous_version?: string;
+      new_version?: string;
+      note?: string;
+    }> | null> =>
       ipcRenderer.invoke(
         "versions:compare",
         modpackId,
         fromVersionId,
         toVersionId
       ),
-    get: (modpackId: string, versionId: string): Promise<any | null> =>
+    get: (modpackId: string, versionId: string): Promise<{
+      id: string;
+      tag: string;
+      message: string;
+      created_at: string;
+      changes: Array<any>;
+      mod_ids: string[];
+      disabled_mod_ids?: string[];
+      locked_mod_ids?: string[];
+    } | null> =>
       ipcRenderer.invoke("versions:get", modpackId, versionId),
   },
 
@@ -948,21 +1014,25 @@ contextBridge.exposeInMainWorld("api", {
       conflicts: Array<{
         mod1: { id: string; name: string; curseforge_id?: number };
         mod2: { id: string; name: string; curseforge_id?: number };
-        type: 'incompatible' | 'duplicate' | 'version_mismatch' | 'loader_mismatch';
+        type: 'duplicate' | 'loader_mismatch';
         severity: 'error' | 'warning' | 'info';
         description: string;
         suggestion?: string;
         reason?: string;
       }>;
-      performanceStats: {
-        totalMods: number;
-        clientOnly: number;
-        optimizationMods: number;
-        resourceHeavy: number;
-        graphicsIntensive: number;
-        worldGenMods: number;
-      };
-      recommendations: string[];
+      orphanedDependencies: Array<{
+        id: string;
+        name: string;
+        wasRequiredBy: string[];
+        confidence: 'high' | 'medium' | 'low';
+        reason: string;
+      }>;
+      dependencyChains: Array<{
+        rootMod: { id: string; name: string };
+        chain: Array<{ id: string; name: string; depth: number }>;
+      }>;
+      totalMods: number;
+      satisfiedDependencies: number;
     }> => ipcRenderer.invoke("analyzer:analyzeModpack", modpackId),
 
     checkDependencies: (
@@ -976,8 +1046,71 @@ contextBridge.exposeInMainWorld("api", {
       slug?: string;
     }>> => ipcRenderer.invoke("analyzer:checkDependencies", curseforgeId, loader, gameVersion),
 
+    /** Analyze all mods in the library for conflicts and dependencies */
+    analyzeLibrary: (): Promise<{
+      missingDependencies: Array<{
+        modId: number;
+        modName: string;
+        modSlug: string;
+        thumbnailUrl?: string;
+        relationType: 'required' | 'optional' | 'embedded' | 'tool' | 'include';
+        status: 'missing' | 'present' | 'outdated';
+        requiredBy: string[];
+        suggestedFile?: {
+          fileId: number;
+          fileName: string;
+          gameVersion: string;
+          downloadUrl: string | null;
+        };
+      }>;
+      conflicts: Array<{
+        mod1: { id: string; name: string; curseforge_id?: number };
+        mod2: { id: string; name: string; curseforge_id?: number };
+        type: 'duplicate' | 'loader_mismatch';
+        severity: 'error' | 'warning' | 'info';
+        description: string;
+        suggestion?: string;
+        reason?: string;
+      }>;
+      orphanedDependencies: Array<{
+        id: string;
+        name: string;
+        wasRequiredBy: string[];
+        confidence: 'high' | 'medium' | 'low';
+        reason: string;
+      }>;
+      dependencyChains: Array<{
+        rootMod: { id: string; name: string };
+        chain: Array<{ id: string; name: string; depth: number }>;
+      }>;
+      totalMods: number;
+      satisfiedDependencies: number;
+    }> => ipcRenderer.invoke("analyzer:analyzeLibrary"),
+
+    /** Get performance tips for a modpack */
     getPerformanceTips: (modpackId: string): Promise<string[]> =>
       ipcRenderer.invoke("analyzer:getPerformanceTips", modpackId),
+
+    /** Install a missing dependency into the library and optionally a modpack */
+    installDependency: (
+      depInfo: {
+        modId: number;
+        modName: string;
+        modSlug: string;
+        thumbnailUrl?: string;
+        relationType: 'required' | 'optional' | 'embedded' | 'tool' | 'include';
+        status: 'missing' | 'present' | 'outdated';
+        requiredBy: string[];
+        suggestedFile?: {
+          fileId: number;
+          fileName: string;
+          gameVersion: string;
+          downloadUrl: string | null;
+        };
+      },
+      modpackId?: string
+    ): Promise<{ success: boolean; mod?: any; error?: string }> =>
+      ipcRenderer.invoke("analyzer:installDependency", depInfo, modpackId),
   },
 
   // ========== MINECRAFT INSTALLATIONS ==========
@@ -1602,7 +1735,7 @@ contextBridge.exposeInMainWorld("api", {
     }> => ipcRenderer.invoke("instance:smartLaunch", instanceId, modpackId, options),
   },
 
-  // ========== MODPACK PREVIEW/ANALYSIS ==========
+  // ========== MODPACK PREVIEW ==========
   preview: {
     fromZip: (zipPath: string): Promise<{
       name: string;
@@ -1616,17 +1749,6 @@ contextBridge.exposeInMainWorld("api", {
       mods: Array<{ projectId: number; fileId: number; name?: string; required: boolean }>;
       resourcePackCount: number;
       shaderCount: number;
-      analysis: {
-        estimatedRamMin: number;
-        estimatedRamRecommended: number;
-        estimatedRamMax: number;
-        performanceImpact: number;
-        loadTimeImpact: number;
-        storageImpact: number;
-        warnings: string[];
-        recommendations: string[];
-        compatibilityScore: number;
-      };
       source: string;
       overridesCount: number;
       configFilesCount: number;
@@ -1645,17 +1767,6 @@ contextBridge.exposeInMainWorld("api", {
       mods: Array<{ projectId: number; fileId: number; name?: string; required: boolean }>;
       resourcePackCount: number;
       shaderCount: number;
-      analysis: {
-        estimatedRamMin: number;
-        estimatedRamRecommended: number;
-        estimatedRamMax: number;
-        performanceImpact: number;
-        loadTimeImpact: number;
-        storageImpact: number;
-        warnings: string[];
-        recommendations: string[];
-        compatibilityScore: number;
-      };
       source: string;
       cfProjectId?: number;
       cfFileId?: number;
@@ -1665,19 +1776,8 @@ contextBridge.exposeInMainWorld("api", {
     } | null> =>
       ipcRenderer.invoke("preview:fromCurseForge", modpackData, fileData),
 
-    analyzeModpack: (modpackId: string): Promise<{
-      estimatedRamMin: number;
-      estimatedRamRecommended: number;
-      estimatedRamMax: number;
-      performanceImpact: number;
-      loadTimeImpact: number;
-      storageImpact: number;
-      modCategories: Record<string, number>;
-      warnings: string[];
-      recommendations: string[];
-      compatibilityScore: number;
-      compatibilityNotes: string[];
-    } | null> => ipcRenderer.invoke("preview:analyzeModpack", modpackId),
+    // Deprecated - returns null (RAM analysis removed)
+    analyzeModpack: (_modpackId: string): Promise<null> => ipcRenderer.invoke("preview:analyzeModpack"),
 
     selectAndPreview: (): Promise<{
       path: string;
@@ -1693,17 +1793,6 @@ contextBridge.exposeInMainWorld("api", {
         mods: Array<{ projectId: number; fileId: number; name?: string; required: boolean }>;
         resourcePackCount: number;
         shaderCount: number;
-        analysis: {
-          estimatedRamMin: number;
-          estimatedRamRecommended: number;
-          estimatedRamMax: number;
-          performanceImpact: number;
-          loadTimeImpact: number;
-          storageImpact: number;
-          warnings: string[];
-          recommendations: string[];
-          compatibilityScore: number;
-        };
         source: string;
         overridesCount: number;
         configFilesCount: number;

@@ -10,9 +10,14 @@ export function useLibraryFavorites() {
   const favoriteMods = ref<Set<string>>(new Set());
 
   function loadFavorites(): void {
-    const stored = localStorage.getItem(FAVORITES_KEY);
-    if (stored) {
-      favoriteMods.value = new Set(JSON.parse(stored));
+    try {
+      const stored = localStorage.getItem(FAVORITES_KEY);
+      if (stored) {
+        favoriteMods.value = new Set(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error("Failed to load favorites from localStorage:", e);
+      favoriteMods.value = new Set();
     }
   }
 

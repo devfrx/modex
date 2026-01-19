@@ -109,6 +109,53 @@ const contentTypeTab = ref<"mods" | "resourcepacks" | "shaders">("mods");
 // Floating bar minimize state
 const isFloatingBarMinimized = ref(false);
 
+// Floating bar drag state
+const floatingBarPosition = ref({ x: 0, y: 0 });
+const isDraggingFloatingBar = ref(false);
+const dragOffset = ref({ x: 0, y: 0 });
+
+// Floating bar drag handlers
+function startDragFloatingBar(e: MouseEvent) {
+  if (e.target instanceof HTMLButtonElement || (e.target as HTMLElement).closest('button')) return;
+
+  isDraggingFloatingBar.value = true;
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  dragOffset.value = {
+    x: e.clientX - rect.left - rect.width / 2,
+    y: e.clientY - rect.top - rect.height / 2
+  };
+
+  document.addEventListener('mousemove', onDragFloatingBar);
+  document.addEventListener('mouseup', stopDragFloatingBar);
+  e.preventDefault();
+}
+
+function onDragFloatingBar(e: MouseEvent) {
+  if (!isDraggingFloatingBar.value) return;
+
+  const newX = e.clientX - window.innerWidth / 2 - dragOffset.value.x;
+  const newY = e.clientY - window.innerHeight + 40 - dragOffset.value.y;
+
+  // Constrain within viewport
+  const maxX = window.innerWidth / 2 - 100;
+  const maxY = window.innerHeight - 80;
+
+  floatingBarPosition.value = {
+    x: Math.max(-maxX, Math.min(maxX, newX)),
+    y: Math.max(-maxY + 40, Math.min(0, newY))
+  };
+}
+
+function stopDragFloatingBar() {
+  isDraggingFloatingBar.value = false;
+  document.removeEventListener('mousemove', onDragFloatingBar);
+  document.removeEventListener('mouseup', stopDragFloatingBar);
+}
+
+function resetFloatingBarPosition() {
+  floatingBarPosition.value = { x: 0, y: 0 };
+}
+
 // ========== DEFERRED CALLBACKS ==========
 // These will be assigned to actual functions later in the file
 // This pattern allows composables to reference functions defined after them
@@ -3447,7 +3494,7 @@ watch(
                               ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-500/50'
                               : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-blue-400 border-border/40 hover:border-blue-500/50'"
                           :disabled="updatingMods.has(mod.id)"
-                          :title="updatingMods.has(mod.id) ? 'Updating...' : getModNote(mod.id) ? 'Edit note' : 'Add note'" 
+                          :title="updatingMods.has(mod.id) ? 'Updating...' : getModNote(mod.id) ? 'Edit note' : 'Add note'"
                           @click.stop="!updatingMods.has(mod.id) && openModNoteDialog(mod)">
                           <Icon v-if="getModNote(mod.id)" name="MessageSquare" class="w-3.5 h-3.5" />
                           <Icon v-else name="MessageSquarePlus" class="w-3.5 h-3.5" />
@@ -3462,7 +3509,7 @@ watch(
                               ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 hover:border-amber-500/50'
                               : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-amber-500 border-border/40 hover:border-amber-500/50'"
                           :disabled="updatingMods.has(mod.id)"
-                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" 
+                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'"
                           @click.stop="!updatingMods.has(mod.id) && toggleModLocked(mod.id)">
                           <Icon v-if="lockedModIds.has(mod.id)" name="Lock" class="w-3.5 h-3.5" />
                           <Icon v-else name="LockOpen" class="w-3.5 h-3.5" />
@@ -3552,7 +3599,9 @@ watch(
                             ? 'bg-muted-foreground/20'
                             : 'bg-primary shadow-primary/20',
                           (isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90',
-                        ]" @click.stop="!(isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && toggleModEnabled(mod.id)" :title="isLinked
+                        ]"
+                        @click.stop="!(isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && toggleModEnabled(mod.id)"
+                        :title="isLinked
                           ? 'Managed by remote source'
                           : updatingMods.has(mod.id)
                             ? 'Updating...'
@@ -3560,7 +3609,8 @@ watch(
                               ? 'Unlock mod to change state'
                               : disabledModIds.has(mod.id)
                                 ? 'Click to enable mod'
-                                : 'Click to disable mod'" :disabled="isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)">
+                                : 'Click to disable mod'"
+                        :disabled="isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)">
                         <span
                           class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200"
                           :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[14px]'" />
@@ -4220,7 +4270,16 @@ watch(
       enter-from-class="opacity-0 translate-y-8 scale-95" enter-to-class="opacity-100 translate-y-0 scale-100"
       leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100 translate-y-0 scale-100"
       leave-to-class="opacity-0 translate-y-8 scale-95">
-      <div class="floating-bar-container">
+      <div class="floating-bar-container" :class="{ 'floating-bar-dragging': isDraggingFloatingBar }" :style="{
+        transform: `translateX(calc(-50% + ${floatingBarPosition.x}px))`,
+        bottom: `${20 - floatingBarPosition.y}px`
+      }">
+        <!-- Drag Handle / Reset Position Button -->
+        <button v-if="floatingBarPosition.x !== 0 || floatingBarPosition.y !== 0" class="floating-bar-reset-btn"
+          @click="resetFloatingBarPosition" title="Reset position">
+          <Icon name="RotateCcw" class="w-3 h-3" />
+        </button>
+
         <!-- Sync Status Panel (above main bar) -->
         <Transition enter-active-class="transition duration-200 ease-out"
           enter-from-class="opacity-0 translate-y-2 scale-95" enter-to-class="opacity-100 translate-y-0 scale-100"
@@ -4387,7 +4446,14 @@ watch(
           </div>
         </div>
 
-        <div class="floating-bar" :class="{ 'floating-bar-minimized': isFloatingBarMinimized }">
+        <div class="floating-bar"
+          :class="{ 'floating-bar-minimized': isFloatingBarMinimized, 'floating-bar-is-dragging': isDraggingFloatingBar }"
+          @mousedown="startDragFloatingBar">
+          <!-- Drag Handle Indicator -->
+          <div class="floating-bar-drag-handle" title="Drag to move">
+            <Icon name="GripVertical" class="w-3 h-3" />
+          </div>
+
           <!-- Minimize/Expand Toggle -->
           <button class="floating-bar-minimize-btn" @click="isFloatingBarMinimized = !isFloatingBarMinimized"
             :title="isFloatingBarMinimized ? 'Expand Bar' : 'Minimize Bar'">
@@ -5251,6 +5317,41 @@ watch(
   transform: translateX(-50%);
   z-index: 50;
   pointer-events: none;
+  transition: transform 0.1s ease-out, bottom 0.1s ease-out;
+}
+
+.floating-bar-container.floating-bar-dragging {
+  transition: none;
+}
+
+/* Reset position button */
+.floating-bar-reset-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  opacity: 0;
+  transition: all 0.15s ease;
+  border: 1px solid hsl(var(--border));
+  z-index: 10;
+}
+
+.floating-bar-container:hover .floating-bar-reset-btn {
+  opacity: 1;
+}
+
+.floating-bar-reset-btn:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  transform: rotate(-90deg);
 }
 
 .floating-bar {
@@ -5267,6 +5368,30 @@ watch(
     0 0 0 1px hsl(var(--border) / 0.3);
   pointer-events: auto;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: grab;
+}
+
+.floating-bar.floating-bar-is-dragging {
+  cursor: grabbing;
+  box-shadow:
+    0 30px 60px -12px hsl(var(--background) / 0.6),
+    0 0 0 2px hsl(var(--primary) / 0.3);
+}
+
+/* Drag handle */
+.floating-bar-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 24px;
+  color: hsl(var(--muted-foreground) / 0.5);
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.floating-bar:hover .floating-bar-drag-handle {
+  color: hsl(var(--muted-foreground));
 }
 
 .floating-bar-minimized {

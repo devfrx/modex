@@ -4254,6 +4254,9 @@ async function initializeBackend() {
 
       const result = await modAnalyzerService.analyzeModpack(validMods);
 
+      // Also get dependency health analysis for orphaned dependencies
+      const healthAnalysis = await metadataManager.analyzeDependencyHealth(modpackId);
+
       // Transform to frontend format
       return {
         missingDependencies: result.dependencies.missing.map((dep) => ({
@@ -4269,21 +4272,21 @@ async function initializeBackend() {
           severity: c.severity,
           description: c.description,
           suggestion: c.suggestion,
-          reason: c.description, // legacy field for backwards compatibility
+          reason: c.description,
         })),
-        performanceStats: {
-          totalMods: result.modCount,
-          clientOnly: 0,
-          optimizationMods: result.performance.filter(
-            (p) => p.type === "add_mod"
-          ).length,
-          resourceHeavy: result.performance.filter(
-            (p) => p.severity === "critical"
-          ).length,
-          graphicsIntensive: 0,
-          worldGenMods: 0,
-        },
-        recommendations: result.performance.map((p) => p.description),
+        orphanedDependencies: healthAnalysis.orphanedDependencies.map((o) => ({
+          id: o.id,
+          name: o.name,
+          wasRequiredBy: o.wasRequiredBy,
+          confidence: o.confidence,
+          reason: o.reason,
+        })),
+        dependencyChains: healthAnalysis.dependencyChains.map((chain) => ({
+          rootMod: chain.rootMod,
+          chain: chain.chain,
+        })),
+        totalMods: result.modCount,
+        satisfiedDependencies: result.dependencies.satisfied,
       };
     } catch (error: any) {
       console.error("[Main] Analyzer error:", error);
@@ -5372,23 +5375,9 @@ async function initializeBackend() {
     return modpackAnalyzerService.previewFromCurseForge(modpackData, fileData);
   });
 
-  ipcMain.handle("preview:analyzeModpack", async (_, modpackId: string) => {
-    const modpack = await metadataManager.getModpackById(modpackId);
-    if (!modpack) return null;
-
-    const mods = await metadataManager.getModsInModpack(modpackId);
-
-    return modpackAnalyzerService.analyzeExistingModpack(
-      mods.map(m => ({
-        cf_project_id: m.cf_project_id,
-        name: m.name,
-        file_size: m.file_size
-      })),
-      {
-        minecraftVersion: modpack.minecraft_version || "",
-        modLoader: modpack.loader || "forge"
-      }
-    );
+  // RAM/Performance analysis removed - was based on unreliable static data
+  ipcMain.handle("preview:analyzeModpack", async () => {
+    return null;
   });
 
   ipcMain.handle("preview:selectZip", async () => {

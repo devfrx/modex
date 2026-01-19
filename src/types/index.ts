@@ -694,21 +694,7 @@ export interface SyncResult {
   syncedMods: string[];
 }
 
-// ==================== MODPACK PREVIEW/ANALYSIS ====================
-
-export interface ModpackAnalysis {
-  estimatedRamMin: number;
-  estimatedRamRecommended: number;
-  estimatedRamMax: number;
-  performanceImpact: number;
-  loadTimeImpact: number;
-  storageImpact: number;
-  modCategories: Record<string, number>;
-  warnings: string[];
-  recommendations: string[];
-  compatibilityScore: number;
-  compatibilityNotes: string[];
-}
+// ==================== MODPACK PREVIEW ====================
 
 export interface ModpackPreview {
   name: string;
@@ -727,7 +713,6 @@ export interface ModpackPreview {
   }>;
   resourcePackCount: number;
   shaderCount: number;
-  analysis: ModpackAnalysis;
   source: "curseforge" | "modrinth" | "modex" | "zip" | "unknown";
   cfProjectId?: number;
   cfFileId?: number;

@@ -3,19 +3,7 @@
  */
 
 import { ref, reactive, computed, onMounted } from "vue";
-
-export interface MinecraftInstallation {
-  id: string;
-  name: string;
-  type: "vanilla" | "prism" | "multimc" | "curseforge" | "atlauncher" | "gdlauncher" | "modrinth" | "custom";
-  path: string;
-  modsPath: string;
-  version?: string;
-  loader?: string;
-  lastUsed?: string;
-  isDefault?: boolean;
-  icon?: string;
-}
+import type { MinecraftInstallation } from "@/types";
 
 export interface SyncProgress {
   current: number;

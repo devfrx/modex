@@ -2636,6 +2636,183 @@ export class MetadataManager {
   }
 
   /**
+   * Analyze dependency health for a modpack
+   * Finds orphaned dependencies (mods that might no longer be needed) and dependency chains
+   * 
+   * An "orphaned" dependency is a mod that:
+   * - Was likely added as a dependency for another mod
+   * - Is not currently required by any enabled mod in the pack
+   * - Has dependency metadata suggesting it's a library/API mod
+   */
+  async analyzeDependencyHealth(modpackId: string): Promise<{
+    orphanedDependencies: Array<{
+      id: string;
+      name: string;
+      wasRequiredBy: string[];  // Mod names that might have required it (now removed/disabled)
+      confidence: 'high' | 'medium' | 'low';
+      reason: string;
+    }>;
+    dependencyChains: Array<{
+      rootMod: { id: string; name: string };
+      chain: Array<{ id: string; name: string; depth: number }>;
+    }>;
+  }> {
+    const result: {
+      orphanedDependencies: Array<{
+        id: string;
+        name: string;
+        wasRequiredBy: string[];
+        confidence: 'high' | 'medium' | 'low';
+        reason: string;
+      }>;
+      dependencyChains: Array<{
+        rootMod: { id: string; name: string };
+        chain: Array<{ id: string; name: string; depth: number }>;
+      }>;
+    } = {
+      orphanedDependencies: [],
+      dependencyChains: [],
+    };
+
+    const { modMap, dependsOn, dependedBy } = await this.buildDependencyGraph(modpackId);
+
+    const modpack = await this.getModpackById(modpackId);
+    if (!modpack) return result;
+
+    const disabledModIds = new Set(modpack.disabled_mod_ids || []);
+
+    // Keywords that suggest a mod is a library/API (dependency-type mod)
+    const libraryKeywords = [
+      'lib', 'api', 'core', 'framework', 'compat', 'compatibility',
+      'connector', 'bridge', 'addon', 'extension', 'support'
+    ];
+
+    // Find orphaned dependencies
+    for (const [modId, mod] of modMap) {
+      // Skip disabled mods
+      if (disabledModIds.has(modId)) continue;
+
+      // Check if this mod is depended upon by anyone ENABLED
+      const dependents = dependedBy.get(modId);
+      let hasEnabledDependents = false;
+
+      if (dependents) {
+        for (const depId of dependents) {
+          if (!disabledModIds.has(depId)) {
+            hasEnabledDependents = true;
+            break;
+          }
+        }
+      }
+
+      // If no one depends on this mod, check if it looks like a library/API
+      if (!hasEnabledDependents) {
+        const nameLower = mod.name.toLowerCase();
+        const slugLower = (mod.slug || '').toLowerCase();
+
+        // Check if the mod name/slug suggests it's a library
+        const isLikelyLibrary = libraryKeywords.some(kw =>
+          nameLower.includes(kw) || slugLower.includes(kw)
+        );
+
+        // Check if this mod IS a dependency OF other mods (even disabled ones)
+        // This helps identify mods that were added as dependencies
+        const wasEverADependency = dependedBy.has(modId);
+
+        // Check if this mod itself has no dependencies (pure library pattern)
+        const ownDependencies = dependsOn.get(modId);
+        const hasNoDependencies = !ownDependencies || ownDependencies.size === 0;
+
+        // Determine confidence
+        let confidence: 'high' | 'medium' | 'low' = 'low';
+        let reason = '';
+
+        if (isLikelyLibrary && wasEverADependency) {
+          confidence = 'high';
+          reason = 'Library/API mod with no active dependents';
+        } else if (isLikelyLibrary) {
+          confidence = 'medium';
+          reason = 'Name suggests library/API mod';
+        } else if (wasEverADependency && hasNoDependencies) {
+          confidence = 'medium';
+          reason = 'Previously required dependency with no active dependents';
+        } else if (wasEverADependency) {
+          confidence = 'low';
+          reason = 'Was required by another mod';
+        }
+
+        // Only report if we have some confidence it's orphaned
+        if (confidence !== 'low' || wasEverADependency) {
+          // Find which mods USED to require this (including disabled)
+          const wasRequiredBy: string[] = [];
+          if (dependents) {
+            for (const depId of dependents) {
+              const depMod = modMap.get(depId);
+              if (depMod) {
+                wasRequiredBy.push(depMod.name);
+              }
+            }
+          }
+
+          result.orphanedDependencies.push({
+            id: modId,
+            name: mod.name,
+            wasRequiredBy,
+            confidence,
+            reason,
+          });
+        }
+      }
+    }
+
+    // Find dependency chains (multi-level dependencies)
+    // Only track chains with depth > 1
+    for (const [modId, deps] of dependsOn) {
+      if (disabledModIds.has(modId)) continue;
+
+      const mod = modMap.get(modId);
+      if (!mod) continue;
+
+      const chain: Array<{ id: string; name: string; depth: number }> = [];
+      const visited = new Set<string>();
+
+      // Recursive function to build chain
+      const buildChain = (depId: string, depth: number) => {
+        if (visited.has(depId) || depth > 5) return; // Prevent cycles and limit depth
+        visited.add(depId);
+
+        const depMod = modMap.get(depId);
+        if (!depMod || disabledModIds.has(depId)) return;
+
+        chain.push({ id: depId, name: depMod.name, depth });
+
+        // Follow this mod's dependencies
+        const subDeps = dependsOn.get(depId);
+        if (subDeps) {
+          for (const subDepId of subDeps) {
+            buildChain(subDepId, depth + 1);
+          }
+        }
+      };
+
+      // Build chain for each direct dependency
+      for (const depId of deps) {
+        buildChain(depId, 1);
+      }
+
+      // Only include if there are indirect dependencies (depth > 1)
+      if (chain.some(c => c.depth > 1)) {
+        result.dependencyChains.push({
+          rootMod: { id: modId, name: mod.name },
+          chain: chain.sort((a, b) => a.depth - b.depth),
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Helper: Check if a dependency matches a mod by project ID
    * Handles both number and string comparisons robustly
    */

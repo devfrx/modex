@@ -743,7 +743,9 @@ export interface ElectronAPI {
 
   // ========== ANALYZER ==========
   analyzer: {
+    /** Analyze a modpack for missing dependencies, conflicts, and orphaned mods */
     analyzeModpack: (modpackId: string) => Promise<ModpackAnalysis>;
+    /** Check dependencies for a specific CurseForge mod */
     checkDependencies: (
       curseforgeId: number,
       loader: string,
@@ -754,7 +756,15 @@ export interface ElectronAPI {
       type: "required" | "optional" | "embedded" | "incompatible";
       slug?: string;
     }>>;
+    /** Analyze all mods in the library for conflicts and dependencies */
+    analyzeLibrary: () => Promise<ModpackAnalysis>;
+    /** Get performance tips for a modpack */
     getPerformanceTips: (modpackId: string) => Promise<string[]>;
+    /** Install a missing dependency into the library and optionally a modpack */
+    installDependency: (
+      depInfo: FullDependencyInfo,
+      modpackId?: string
+    ) => Promise<{ success: boolean; mod?: Mod; error?: string }>;
   };
 
   // ========== MINECRAFT INSTALLATIONS ==========
@@ -852,19 +862,8 @@ export interface ElectronAPI {
   preview: {
     fromZip: (zipPath: string) => Promise<ModpackPreview | null>;
     fromCurseForge: (modpackData: any, fileData: any) => Promise<ModpackPreview | null>;
-    analyzeModpack: (modpackId: string) => Promise<{
-      estimatedRamMin: number;
-      estimatedRamRecommended: number;
-      estimatedRamMax: number;
-      performanceImpact: number;
-      loadTimeImpact: number;
-      storageImpact: number;
-      modCategories: Record<string, number>;
-      warnings: string[];
-      recommendations: string[];
-      compatibilityScore: number;
-      compatibilityNotes: string[];
-    } | null>;
+    /** @deprecated RAM analysis has been removed - always returns null */
+    analyzeModpack: (modpackId: string) => Promise<null>;
     selectAndPreview: () => Promise<{ path: string; preview: ModpackPreview } | null>;
   };
 
@@ -1093,43 +1092,8 @@ export interface ElectronAPI {
 
     // ========== STRUCTURED CONFIG EDITOR ==========
 
-    /** Config entry type */
-    ConfigEntry: {
-      keyPath: string;
-      key: string;
-      value: any;
-      originalValue: any;
-      type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
-      comment?: string;
-      section?: string;
-      depth: number;
-      modified: boolean;
-      line?: number;
-    };
-
-    /** Config section type */
-    ConfigSection: {
-      name: string;
-      displayName: string;
-      comment?: string;
-      entries: Array<ConfigsAPI['ConfigEntry']>;
-      subsections: Array<ConfigsAPI['ConfigSection']>;
-      expanded: boolean;
-    };
-
-    /** Parsed config type */
-    ParsedConfig: {
-      path: string;
-      type: string;
-      sections: Array<ConfigsAPI['ConfigSection']>;
-      allEntries: Array<ConfigsAPI['ConfigEntry']>;
-      errors: string[];
-      rawContent: string;
-      encoding: string;
-    };
-
     /** Parse a config file into structured key-value pairs */
-    parseStructured: (instanceId: string, configPath: string) => Promise<ConfigsAPI['ParsedConfig']>;
+    parseStructured: (instanceId: string, configPath: string) => Promise<StructuredParsedConfig>;
 
     /** Save structured config modifications with version control */
     saveStructured: (instanceId: string, configPath: string, modifications: Array<{
@@ -1403,30 +1367,55 @@ export interface CFModLoader {
   type: number;
 }
 
+// ==================== STRUCTURED CONFIG TYPES ====================
+
+/** Config entry in structured editor */
+export interface StructuredConfigEntry {
+  keyPath: string;
+  key: string;
+  value: any;
+  originalValue: any;
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+  comment?: string;
+  section?: string;
+  depth: number;
+  modified: boolean;
+  line?: number;
+}
+
+/** Config section in structured editor */
+export interface StructuredConfigSection {
+  name: string;
+  displayName: string;
+  comment?: string;
+  entries: StructuredConfigEntry[];
+  subsections: StructuredConfigSection[];
+  expanded: boolean;
+}
+
+/** Parsed config returned by structured parser */
+export interface StructuredParsedConfig {
+  path: string;
+  type: string;
+  sections: StructuredConfigSection[];
+  allEntries: StructuredConfigEntry[];
+  errors: string[];
+  rawContent: string;
+  encoding: string;
+}
+
 // ==================== ANALYZER TYPES ====================
 
 export interface ModpackAnalysis {
-  missingDependencies: DependencyInfo[];
+  missingDependencies: FullDependencyInfo[];
   conflicts: ConflictInfo[];
-  performanceStats: PerformanceStats;
-  recommendations: string[];
+  orphanedDependencies: OrphanedDependencyInfo[];
+  dependencyChains: DependencyChain[];
+  totalMods: number;
+  satisfiedDependencies: number;
 }
 
-export interface ModAnalysis {
-  dependencies: Array<{
-    modId: number;
-    name: string;
-    type: "required" | "optional" | "embedded" | "incompatible";
-    slug?: string;
-  }>;
-  conflicts: Array<{
-    modId: number;
-    name: string;
-    reason: string;
-  }>;
-  performanceImpact: "positive" | "neutral" | "negative" | "unknown";
-}
-
+/** Basic dependency info for simple dependency checks */
 export interface DependencyInfo {
   modId: number;
   modName: string;
@@ -1434,23 +1423,44 @@ export interface DependencyInfo {
   slug?: string;
 }
 
+/** Full dependency info returned by analyzer and used for installation */
+export interface FullDependencyInfo {
+  modId: number;
+  modName: string;
+  modSlug: string;
+  thumbnailUrl?: string;
+  relationType: 'required' | 'optional' | 'embedded' | 'tool' | 'include';
+  status: 'missing' | 'present' | 'outdated';
+  requiredBy: string[];
+  suggestedFile?: {
+    fileId: number;
+    fileName: string;
+    gameVersion: string;
+    downloadUrl: string | null;
+  };
+}
+
+export interface OrphanedDependencyInfo {
+  id: string;
+  name: string;
+  wasRequiredBy: string[];
+  confidence: 'high' | 'medium' | 'low';
+  reason: string;
+}
+
+export interface DependencyChain {
+  rootMod: { id: string; name: string };
+  chain: Array<{ id: string; name: string; depth: number }>;
+}
+
 export interface ConflictInfo {
   mod1: { id: string; name: string; curseforge_id?: number };
   mod2: { id: string; name: string; curseforge_id?: number };
-  type: 'incompatible' | 'duplicate' | 'version_mismatch' | 'loader_mismatch';
+  type: 'duplicate' | 'loader_mismatch';
   severity: 'error' | 'warning' | 'info';
   description: string;
   suggestion?: string;
-  reason?: string; // legacy field for backwards compatibility
-}
-
-export interface PerformanceStats {
-  totalMods: number;
-  clientOnly: number;
-  optimizationMods: number;
-  resourceHeavy: number;
-  graphicsIntensive: number;
-  worldGenMods: number;
+  reason?: string;
 }
 
 // ==================== GLOBAL WINDOW ====================

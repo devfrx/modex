@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import Icon from "@/components/ui/Icon.vue";
-import { useMinecraft, type MinecraftInstallation } from "@/composables/useMinecraft";
+import { useMinecraft } from "@/composables/useMinecraft";
+import type { MinecraftInstallation } from "@/types";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";

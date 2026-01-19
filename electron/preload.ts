@@ -1342,6 +1342,50 @@ contextBridge.exposeInMainWorld("api", {
       defaultMemory?: { min: number; max: number };
     }): Promise<void> => ipcRenderer.invoke("instance:setLauncherConfig", config),
 
+    // Mod Loader Verification & Repair
+    verifyModLoader: (loader: string, loaderVersion: string, minecraftVersion: string): Promise<{
+      isValid: boolean;
+      loader: "fabric" | "forge" | "neoforge" | "quilt" | "vanilla";
+      loaderVersion: string;
+      minecraftVersion: string;
+      versionJsonValid: boolean;
+      versionJsonPath: string;
+      totalLibraries: number;
+      validLibraries: number;
+      invalidLibraries: Array<{ name: string; path: string; exists: boolean; size?: number; sha1Valid?: boolean }>;
+      missingLibraries: Array<{ name: string; path: string; exists: boolean }>;
+      baseVersionInstalled: boolean;
+      errors: string[];
+      warnings: string[];
+      canRepair: boolean;
+    }> => ipcRenderer.invoke("instance:verifyModLoader", loader, loaderVersion, minecraftVersion),
+
+    repairModLoader: (loader: string, loaderVersion: string, minecraftVersion: string): Promise<{
+      success: boolean;
+      librariesRepaired: number;
+      librariesFailed: number;
+      errors: string[];
+      fullReinstall: boolean;
+    }> => ipcRenderer.invoke("instance:repairModLoader", loader, loaderVersion, minecraftVersion),
+
+    verifyAndRepair: (instanceId: string, autoRepair?: boolean): Promise<{
+      canLaunch: boolean;
+      repaired: boolean;
+      errors: string[];
+    }> => ipcRenderer.invoke("instance:verifyAndRepair", instanceId, autoRepair),
+
+    onRepairProgress: (callback: (data: { stage: string; current: number; total: number; detail?: string }) => void) => {
+      const handler = (_: any, data: any) => callback(data);
+      ipcRenderer.on("instance:repairProgress", handler);
+      return () => ipcRenderer.removeListener("instance:repairProgress", handler);
+    },
+
+    onVerifyProgress: (callback: (data: { stage: string; current: number; total: number; detail?: string }) => void) => {
+      const handler = (_: any, data: any) => callback(data);
+      ipcRenderer.on("instance:verifyProgress", handler);
+      return () => ipcRenderer.removeListener("instance:verifyProgress", handler);
+    },
+
     createFromModpack: (
       modpackId: string,
       options?: { overridesZipPath?: string }

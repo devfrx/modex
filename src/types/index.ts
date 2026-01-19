@@ -796,6 +796,81 @@ export interface InstanceLaunchResult {
   error?: string;
 }
 
+// ==================== MOD LOADER VERIFICATION TYPES ====================
+
+/** Result of a single library verification */
+export interface LibraryVerification {
+  name: string;
+  path: string;
+  exists: boolean;
+  size?: number;
+  sha1Valid?: boolean;
+  expectedSha1?: string;
+  actualSha1?: string;
+}
+
+/** Result of mod loader installation verification */
+export interface ModLoaderVerificationResult {
+  /** Overall verification status */
+  isValid: boolean;
+  
+  /** Type of mod loader */
+  loader: "fabric" | "forge" | "neoforge" | "quilt" | "vanilla";
+  
+  /** Loader version */
+  loaderVersion: string;
+  
+  /** Minecraft version */
+  minecraftVersion: string;
+  
+  /** Whether version JSON exists and is valid */
+  versionJsonValid: boolean;
+  
+  /** Path to version JSON */
+  versionJsonPath: string;
+  
+  /** Total libraries required */
+  totalLibraries: number;
+  
+  /** Libraries that passed verification */
+  validLibraries: number;
+  
+  /** Libraries that failed verification */
+  invalidLibraries: LibraryVerification[];
+  
+  /** Missing libraries */
+  missingLibraries: LibraryVerification[];
+  
+  /** Base Minecraft version installed */
+  baseVersionInstalled: boolean;
+  
+  /** Errors encountered during verification */
+  errors: string[];
+  
+  /** Warnings (non-critical issues) */
+  warnings: string[];
+  
+  /** Can be auto-repaired */
+  canRepair: boolean;
+}
+
+/** Result of repair operation */
+export interface ModLoaderRepairResult {
+  success: boolean;
+  librariesRepaired: number;
+  librariesFailed: number;
+  errors: string[];
+  /** Whether a full reinstall was needed */
+  fullReinstall: boolean;
+}
+
+/** Result of verification before launch */
+export interface VerifyBeforeLaunchResult {
+  canLaunch: boolean;
+  repaired: boolean;
+  errors: string[];
+}
+
 /** Instance statistics */
 export interface InstanceStats {
   modCount: number;

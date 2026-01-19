@@ -29,7 +29,14 @@ import { getDownloadService } from "./services/DownloadService.js";
 import { MinecraftService, MinecraftInstallation, SyncResult } from "./services/MinecraftService.js";
 import { ImageCacheService } from "./services/ImageCacheService.js";
 import { ModpackAnalyzerService, ModpackPreview, ModpackAnalysis } from "./services/ModpackAnalyzerService.js";
-import { InstanceService, ModexInstance, InstanceSyncResult } from "./services/InstanceService.js";
+import { 
+  InstanceService, 
+  ModexInstance, 
+  InstanceSyncResult,
+  ModLoaderVerificationResult,
+  ModLoaderRepairResult,
+  LibraryVerification
+} from "./services/InstanceService.js";
 import { ConfigService, ConfigFile, ConfigFolder, ConfigContent, ConfigExport } from "./services/ConfigService.js";
 import { GistService, GistInfo, GistOperationResult } from "./services/GistService.js";
 import { GameService, GameType, GameProfile, GameConfig } from "./services/GameService.js";
@@ -4903,6 +4910,42 @@ async function initializeBackend() {
 
   ipcMain.handle("instance:setLauncherConfig", async (_, config: any) => {
     return instanceService.setLauncherConfig(config);
+  });
+
+  // ========== MOD LOADER VERIFICATION HANDLERS ==========
+
+  ipcMain.handle("instance:verifyModLoader", async (_, loader: string, loaderVersion: string, minecraftVersion: string) => {
+    return instanceService.verifyModLoaderInstallation(loader, loaderVersion, minecraftVersion);
+  });
+
+  ipcMain.handle("instance:repairModLoader", async (_, loader: string, loaderVersion: string, minecraftVersion: string) => {
+    return instanceService.repairModLoaderInstallation(
+      loader, 
+      loaderVersion, 
+      minecraftVersion,
+      (stage, current, total, detail) => {
+        if (win) {
+          win.webContents.send("instance:repairProgress", { stage, current, total, detail });
+        }
+      }
+    );
+  });
+
+  ipcMain.handle("instance:verifyAndRepair", async (_, instanceId: string, autoRepair: boolean = true) => {
+    const instance = await instanceService.getInstance(instanceId);
+    if (!instance) {
+      return { canLaunch: false, repaired: false, errors: ["Instance not found"] };
+    }
+    
+    return instanceService.verifyBeforeLaunch(
+      instance, 
+      autoRepair,
+      (stage, current, total, detail) => {
+        if (win) {
+          win.webContents.send("instance:verifyProgress", { stage, current, total, detail });
+        }
+      }
+    );
   });
 
   ipcMain.handle("instance:createFromModpack", async (_, modpackId: string, options?: {

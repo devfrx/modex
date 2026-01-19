@@ -401,6 +401,41 @@ export function useInstances() {
     return result;
   }
 
+  /**
+   * Verify mod loader installation integrity
+   */
+  async function verifyModLoader(loader: string, loaderVersion: string, minecraftVersion: string) {
+    return window.api.instances.verifyModLoader(loader, loaderVersion, minecraftVersion);
+  }
+
+  /**
+   * Repair mod loader installation by re-downloading missing/invalid libraries
+   */
+  async function repairModLoader(loader: string, loaderVersion: string, minecraftVersion: string) {
+    return window.api.instances.repairModLoader(loader, loaderVersion, minecraftVersion);
+  }
+
+  /**
+   * Verify and optionally repair installation before launch
+   */
+  async function verifyAndRepair(instanceId: string, autoRepair: boolean = true) {
+    return window.api.instances.verifyAndRepair(instanceId, autoRepair);
+  }
+
+  /**
+   * Listen for repair progress events
+   */
+  function onRepairProgress(callback: (data: { stage: string; current: number; total: number; detail?: string }) => void) {
+    return window.api.instances.onRepairProgress(callback);
+  }
+
+  /**
+   * Listen for verification progress events
+   */
+  function onVerifyProgress(callback: (data: { stage: string; current: number; total: number; detail?: string }) => void) {
+    return window.api.instances.onVerifyProgress(callback);
+  }
+
   return {
     // State
     instances,
@@ -436,6 +471,12 @@ export function useInstances() {
     getInstanceSyncSettings,
     setInstanceSyncSettings,
     smartLaunch,
+    // Mod loader verification & repair
+    verifyModLoader,
+    repairModLoader,
+    verifyAndRepair,
+    onRepairProgress,
+    onVerifyProgress,
   };
 }
 

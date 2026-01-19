@@ -941,6 +941,44 @@ export interface ElectronAPI {
       javaPath?: string;
       defaultMemory?: { min: number; max: number };
     }) => Promise<void>;
+    
+    // Mod Loader Verification & Repair
+    /** Verify mod loader installation integrity */
+    verifyModLoader: (loader: string, loaderVersion: string, minecraftVersion: string) => Promise<{
+      isValid: boolean;
+      loader: "fabric" | "forge" | "neoforge" | "quilt" | "vanilla";
+      loaderVersion: string;
+      minecraftVersion: string;
+      versionJsonValid: boolean;
+      versionJsonPath: string;
+      totalLibraries: number;
+      validLibraries: number;
+      invalidLibraries: Array<{ name: string; path: string; exists: boolean; size?: number; sha1Valid?: boolean }>;
+      missingLibraries: Array<{ name: string; path: string; exists: boolean }>;
+      baseVersionInstalled: boolean;
+      errors: string[];
+      warnings: string[];
+      canRepair: boolean;
+    }>;
+    /** Repair mod loader installation by re-downloading missing/invalid libraries */
+    repairModLoader: (loader: string, loaderVersion: string, minecraftVersion: string) => Promise<{
+      success: boolean;
+      librariesRepaired: number;
+      librariesFailed: number;
+      errors: string[];
+      fullReinstall: boolean;
+    }>;
+    /** Verify and optionally repair installation before launch */
+    verifyAndRepair: (instanceId: string, autoRepair?: boolean) => Promise<{
+      canLaunch: boolean;
+      repaired: boolean;
+      errors: string[];
+    }>;
+    /** Listen for repair progress events */
+    onRepairProgress: (callback: (data: { stage: string; current: number; total: number; detail?: string }) => void) => () => void;
+    /** Listen for verification progress events */
+    onVerifyProgress: (callback: (data: { stage: string; current: number; total: number; detail?: string }) => void) => () => void;
+    
     createFromModpack: (
       modpackId: string,
       options?: { overridesZipPath?: string }

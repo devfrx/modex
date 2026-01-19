@@ -99,6 +99,74 @@ export interface InstanceLaunchResult {
   process?: ChildProcess;
 }
 
+// ==================== MOD LOADER VERIFICATION ====================
+
+/** Result of a single library verification */
+export interface LibraryVerification {
+  name: string;
+  path: string;
+  exists: boolean;
+  size?: number;
+  sha1Valid?: boolean;
+  expectedSha1?: string;
+  actualSha1?: string;
+}
+
+/** Result of mod loader installation verification */
+export interface ModLoaderVerificationResult {
+  /** Overall verification status */
+  isValid: boolean;
+  
+  /** Type of mod loader */
+  loader: "fabric" | "forge" | "neoforge" | "quilt" | "vanilla";
+  
+  /** Loader version */
+  loaderVersion: string;
+  
+  /** Minecraft version */
+  minecraftVersion: string;
+  
+  /** Whether version JSON exists and is valid */
+  versionJsonValid: boolean;
+  
+  /** Path to version JSON */
+  versionJsonPath: string;
+  
+  /** Total libraries required */
+  totalLibraries: number;
+  
+  /** Libraries that passed verification */
+  validLibraries: number;
+  
+  /** Libraries that failed verification */
+  invalidLibraries: LibraryVerification[];
+  
+  /** Missing libraries */
+  missingLibraries: LibraryVerification[];
+  
+  /** Base Minecraft version installed */
+  baseVersionInstalled: boolean;
+  
+  /** Errors encountered during verification */
+  errors: string[];
+  
+  /** Warnings (non-critical issues) */
+  warnings: string[];
+  
+  /** Can be auto-repaired */
+  canRepair: boolean;
+}
+
+/** Result of repair operation */
+export interface ModLoaderRepairResult {
+  success: boolean;
+  librariesRepaired: number;
+  librariesFailed: number;
+  errors: string[];
+  /** Whether a full reinstall was needed */
+  fullReinstall: boolean;
+}
+
 /** Running game info */
 export interface RunningGameInfo {
   instanceId: string;
@@ -1274,6 +1342,21 @@ export class InstanceService {
           console.warn(`[InstanceService] Failed to install mod loader: ${loaderInstalled.error}`);
           // Continue anyway - user might have installed it manually
         }
+
+        // Verify installation integrity and auto-repair if needed
+        onProgress?.("verify", 0, 100, "Verifying mod loader installation...");
+        const verifyResult = await this.verifyBeforeLaunch(instance, true, onProgress);
+        
+        if (!verifyResult.canLaunch) {
+          return {
+            success: false,
+            error: `Mod loader installation is corrupted and could not be repaired: ${verifyResult.errors.join(", ")}`
+          };
+        }
+        
+        if (verifyResult.repaired) {
+          console.log("[InstanceService] Installation was repaired before launch");
+        }
       }
 
       // Notify creating profile
@@ -1518,9 +1601,23 @@ export class InstanceService {
 
       for (const lib of libraries) {
         const libName = lib.name.split(":")[1] || lib.name;
-        onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 80), 100, `Downloading ${libName}...`);
+        onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 75), 100, `Downloading ${libName}...`);
         await this.downloadLibrary(lib, librariesDir);
         downloadedLibs++;
+      }
+
+      // Verify installation after downloading libraries
+      onProgress?.("install", 95, 100, "Verifying installation...");
+      const verification = await this.verifyModLoaderInstallation("fabric", loaderVersion, minecraftVersion);
+      
+      if (!verification.isValid && verification.canRepair) {
+        console.warn("[InstanceService] Fabric installation verification found issues, attempting repair...");
+        onProgress?.("install", 96, 100, "Repairing libraries...");
+        
+        const repairResult = await this.repairModLoaderInstallation("fabric", loaderVersion, minecraftVersion);
+        if (!repairResult.success) {
+          console.warn("[InstanceService] Fabric repair had issues:", repairResult.errors);
+        }
       }
 
       onProgress?.("install", 100, 100, `Fabric ${loaderVersion} installed!`);
@@ -1571,9 +1668,23 @@ export class InstanceService {
 
       for (const lib of libraries) {
         const libName = lib.name.split(":")[1] || lib.name;
-        onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 80), 100, `Downloading ${libName}...`);
+        onProgress?.("install", 15 + Math.floor((downloadedLibs / totalLibs) * 75), 100, `Downloading ${libName}...`);
         await this.downloadLibrary(lib, librariesDir);
         downloadedLibs++;
+      }
+
+      // Verify installation after downloading libraries
+      onProgress?.("install", 95, 100, "Verifying installation...");
+      const verification = await this.verifyModLoaderInstallation("quilt", loaderVersion, minecraftVersion);
+      
+      if (!verification.isValid && verification.canRepair) {
+        console.warn("[InstanceService] Quilt installation verification found issues, attempting repair...");
+        onProgress?.("install", 96, 100, "Repairing libraries...");
+        
+        const repairResult = await this.repairModLoaderInstallation("quilt", loaderVersion, minecraftVersion);
+        if (!repairResult.success) {
+          console.warn("[InstanceService] Quilt repair had issues:", repairResult.errors);
+        }
       }
 
       onProgress?.("install", 100, 100, `Quilt ${loaderVersion} installed!`);
@@ -1626,6 +1737,33 @@ export class InstanceService {
       onProgress?.("install", 30, 100, "Running Forge installer...");
 
       await this.runForgeInstaller(buffer, minecraftDir, minecraftVersion, loaderVersion, onProgress);
+
+      // Verify installation after installer completes
+      onProgress?.("install", 95, 100, "Verifying installation...");
+      const verification = await this.verifyModLoaderInstallation("forge", loaderVersion, minecraftVersion);
+      
+      if (!verification.isValid) {
+        console.warn("[InstanceService] Forge installation verification failed:", verification.errors);
+        
+        // Try to repair if possible
+        if (verification.canRepair && (verification.missingLibraries.length > 0 || verification.invalidLibraries.length > 0)) {
+          console.log("[InstanceService] Attempting to repair Forge installation...");
+          onProgress?.("install", 96, 100, "Repairing libraries...");
+          
+          const repairResult = await this.repairModLoaderInstallation(
+            "forge", 
+            loaderVersion, 
+            minecraftVersion,
+            onProgress
+          );
+          
+          if (!repairResult.success) {
+            console.warn("[InstanceService] Forge repair failed:", repairResult.errors);
+          } else {
+            console.log(`[InstanceService] Forge repair succeeded: ${repairResult.librariesRepaired} libraries fixed`);
+          }
+        }
+      }
 
       onProgress?.("install", 100, 100, `Forge ${loaderVersion} installed!`);
       console.log(`[InstanceService] Forge ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
@@ -1694,18 +1832,24 @@ export class InstanceService {
 
       console.log(`[InstanceService] Using Java: ${javaPath}`);
       console.log(`[InstanceService] Running Forge installer: ${installerPath}`);
+      console.log(`[InstanceService] Target .minecraft directory: ${minecraftDir}`);
 
       // Run installer in headless mode
-      // The --installClient flag tells Forge to install without GUI
+      // The --installClient flag tells Forge to install the client version (not server)
+      // The installer automatically uses the default .minecraft location
       return new Promise((resolve, reject) => {
         const proc = spawn(javaPath, [
           "-jar",
           installerPath,
-          "--installClient",
-          minecraftDir
+          "--installClient"
         ], {
           cwd: tempDir,
-          stdio: ["ignore", "pipe", "pipe"]
+          stdio: ["ignore", "pipe", "pipe"],
+          // Set APPDATA so installer finds the correct .minecraft
+          env: {
+            ...process.env,
+            APPDATA: path.dirname(minecraftDir)
+          }
         });
 
         let output = "";
@@ -1789,6 +1933,34 @@ export class InstanceService {
 
       await this.runNeoForgeInstaller(buffer, minecraftDir, loaderVersion, onProgress);
 
+      // Verify installation after installer completes
+      onProgress?.("install", 95, 100, "Verifying installation...");
+      const verification = await this.verifyModLoaderInstallation("neoforge", loaderVersion, minecraftVersion);
+      
+      if (!verification.isValid) {
+        console.warn("[InstanceService] NeoForge installation verification failed:", verification.errors);
+        
+        // Try to repair if possible
+        if (verification.canRepair && (verification.missingLibraries.length > 0 || verification.invalidLibraries.length > 0)) {
+          console.log("[InstanceService] Attempting to repair NeoForge installation...");
+          onProgress?.("install", 96, 100, "Repairing libraries...");
+          
+          const repairResult = await this.repairModLoaderInstallation(
+            "neoforge", 
+            loaderVersion, 
+            minecraftVersion,
+            onProgress
+          );
+          
+          if (!repairResult.success) {
+            console.warn("[InstanceService] NeoForge repair failed:", repairResult.errors);
+            // Still return success - the game might still work
+          } else {
+            console.log(`[InstanceService] NeoForge repair succeeded: ${repairResult.librariesRepaired} libraries fixed`);
+          }
+        }
+      }
+
       onProgress?.("install", 100, 100, `NeoForge ${loaderVersion} installed!`);
       console.log(`[InstanceService] NeoForge ${loaderVersion} installed successfully`);
       return { success: true };
@@ -1853,16 +2025,24 @@ export class InstanceService {
 
       console.log(`[InstanceService] Using Java: ${javaPath}`);
       console.log(`[InstanceService] Running NeoForge installer: ${installerPath}`);
+      console.log(`[InstanceService] Target .minecraft directory: ${minecraftDir}`);
 
       return new Promise((resolve, reject) => {
+        // NeoForge installer headless mode:
+        // --installClient installs the client version (not server)
+        // The installer automatically uses the default .minecraft location
         const proc = spawn(javaPath, [
           "-jar",
           installerPath,
-          "--installClient",
-          minecraftDir
+          "--installClient"
         ], {
           cwd: tempDir,
-          stdio: ["ignore", "pipe", "pipe"]
+          stdio: ["ignore", "pipe", "pipe"],
+          // Set APPDATA so installer finds the correct .minecraft
+          env: {
+            ...process.env,
+            APPDATA: path.dirname(minecraftDir)
+          }
         });
 
         let output = "";
@@ -1921,18 +2101,37 @@ export class InstanceService {
     lib: { name: string; url: string; sha1?: string },
     librariesDir: string
   ): Promise<void> {
-    // Parse Maven coordinates: group:artifact:version
+    // Parse Maven coordinates: group:artifact:version[:classifier]
     const parts = lib.name.split(":");
     if (parts.length < 3) return;
 
     const [group, artifact, version] = parts;
+    const classifier = parts.length > 3 ? parts[3] : null;
     const groupPath = group.replace(/\./g, "/");
-    const jarName = `${artifact}-${version}.jar`;
+    
+    // Build JAR filename
+    let jarName = `${artifact}-${version}`;
+    if (classifier) {
+      jarName += `-${classifier}`;
+    }
+    jarName += ".jar";
+    
     const libPath = path.join(librariesDir, groupPath, artifact, version, jarName);
 
-    // Check if already exists
+    // Check if already exists and is valid
     if (await fs.pathExists(libPath)) {
-      return;
+      try {
+        const stat = await fs.stat(libPath);
+        if (stat.size > 100) {
+          // File exists and is not corrupted (not empty/tiny)
+          return;
+        }
+        // File exists but is corrupted, will re-download
+        console.warn(`[InstanceService] Library ${lib.name} appears corrupted, re-downloading`);
+        await fs.remove(libPath);
+      } catch {
+        // Stat failed, try to re-download
+      }
     }
 
     // Build download URL
@@ -1947,13 +2146,29 @@ export class InstanceService {
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
+      
+      // Validate download - check it's not empty or too small
+      if (buffer.length < 100) {
+        console.warn(`[InstanceService] Downloaded library ${lib.name} is too small (${buffer.length} bytes), skipping`);
+        return;
+      }
+
+      // Verify SHA1 if provided
+      if (lib.sha1) {
+        const crypto = await import("crypto");
+        const hash = crypto.createHash("sha1").update(buffer).digest("hex");
+        if (hash !== lib.sha1) {
+          console.warn(`[InstanceService] SHA1 mismatch for ${lib.name}: expected ${lib.sha1}, got ${hash}`);
+          // Still save the file - Minecraft might be able to use it
+        }
+      }
 
       // Ensure directory exists
       await fs.ensureDir(path.dirname(libPath));
 
       // Save library
       await fs.writeFile(libPath, buffer);
-      console.log(`[InstanceService] Downloaded: ${jarName}`);
+      console.log(`[InstanceService] Downloaded: ${jarName} (${buffer.length} bytes)`);
     } catch (error) {
       console.warn(`[InstanceService] Failed to download ${lib.name}:`, error);
     }
@@ -2696,6 +2911,491 @@ export class InstanceService {
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  }
+
+  // ==================== MOD LOADER VERIFICATION ====================
+
+  /**
+   * Verify mod loader installation integrity
+   * Checks version JSON, libraries, and base Minecraft version
+   */
+  async verifyModLoaderInstallation(
+    loader: string,
+    loaderVersion: string,
+    minecraftVersion: string
+  ): Promise<ModLoaderVerificationResult> {
+    const loaderLower = loader.toLowerCase();
+    const platform = process.platform;
+    
+    // Get .minecraft directory
+    let minecraftDir: string;
+    if (platform === "win32") {
+      minecraftDir = path.join(process.env.APPDATA || "", ".minecraft");
+    } else if (platform === "darwin") {
+      minecraftDir = path.join(os.homedir(), "Library", "Application Support", "minecraft");
+    } else {
+      minecraftDir = path.join(os.homedir(), ".minecraft");
+    }
+
+    const versionsDir = path.join(minecraftDir, "versions");
+    const librariesDir = path.join(minecraftDir, "libraries");
+
+    // Build version ID based on loader type
+    let versionId: string;
+    if (loaderLower === "fabric") {
+      versionId = `fabric-loader-${loaderVersion}-${minecraftVersion}`;
+    } else if (loaderLower === "forge") {
+      versionId = `${minecraftVersion}-forge-${loaderVersion}`;
+    } else if (loaderLower === "neoforge") {
+      versionId = `neoforge-${loaderVersion}`;
+    } else if (loaderLower === "quilt") {
+      versionId = `quilt-loader-${loaderVersion}-${minecraftVersion}`;
+    } else {
+      // Vanilla
+      versionId = minecraftVersion;
+    }
+
+    const result: ModLoaderVerificationResult = {
+      isValid: true,
+      loader: loaderLower as any,
+      loaderVersion,
+      minecraftVersion,
+      versionJsonValid: false,
+      versionJsonPath: path.join(versionsDir, versionId, `${versionId}.json`),
+      totalLibraries: 0,
+      validLibraries: 0,
+      invalidLibraries: [],
+      missingLibraries: [],
+      baseVersionInstalled: false,
+      errors: [],
+      warnings: [],
+      canRepair: true
+    };
+
+    try {
+      // Check version JSON exists
+      if (!await fs.pathExists(result.versionJsonPath)) {
+        result.isValid = false;
+        result.errors.push(`Version JSON not found: ${versionId}.json`);
+        return result;
+      }
+
+      // Read and parse version JSON
+      let versionJson: any;
+      try {
+        versionJson = await fs.readJson(result.versionJsonPath);
+        result.versionJsonValid = true;
+      } catch (e: any) {
+        result.isValid = false;
+        result.errors.push(`Invalid version JSON: ${e.message}`);
+        return result;
+      }
+
+      // Check base Minecraft version (inheritsFrom)
+      const inheritsFrom = versionJson.inheritsFrom;
+      if (inheritsFrom) {
+        const baseVersionPath = path.join(versionsDir, inheritsFrom, `${inheritsFrom}.json`);
+        result.baseVersionInstalled = await fs.pathExists(baseVersionPath);
+        if (!result.baseVersionInstalled) {
+          result.isValid = false;
+          result.errors.push(`Base Minecraft version ${inheritsFrom} not installed. Please run the vanilla launcher once with this version.`);
+          result.canRepair = false; // Can't auto-repair missing base version
+        }
+      } else {
+        // No inheritance, this might be vanilla or a standalone version
+        result.baseVersionInstalled = true;
+      }
+
+      // Verify libraries
+      const libraries = versionJson.libraries || [];
+      result.totalLibraries = libraries.length;
+
+      for (const lib of libraries) {
+        const libVerification = await this.verifyLibrary(lib, librariesDir);
+        
+        if (!libVerification.exists) {
+          result.missingLibraries.push(libVerification);
+          result.isValid = false;
+        } else if (libVerification.sha1Valid === false) {
+          result.invalidLibraries.push(libVerification);
+          result.isValid = false;
+        } else {
+          result.validLibraries++;
+        }
+      }
+
+      // Additional checks for specific loaders
+      if (loaderLower === "forge" || loaderLower === "neoforge") {
+        // Check for patched client JAR
+        const clientJarPath = path.join(versionsDir, versionId, `${versionId}.jar`);
+        if (!await fs.pathExists(clientJarPath)) {
+          result.warnings.push(`Client JAR may be created at first launch: ${versionId}.jar`);
+        }
+      }
+
+      // Summary
+      if (result.missingLibraries.length > 0) {
+        result.errors.push(`${result.missingLibraries.length} libraries missing`);
+      }
+      if (result.invalidLibraries.length > 0) {
+        result.errors.push(`${result.invalidLibraries.length} libraries have invalid checksums`);
+      }
+
+    } catch (error: any) {
+      result.isValid = false;
+      result.errors.push(`Verification error: ${error.message}`);
+    }
+
+    console.log(`[InstanceService] Verification result for ${versionId}:`, {
+      isValid: result.isValid,
+      validLibraries: result.validLibraries,
+      totalLibraries: result.totalLibraries,
+      missingCount: result.missingLibraries.length,
+      invalidCount: result.invalidLibraries.length
+    });
+
+    return result;
+  }
+
+  /**
+   * Verify a single library file
+   */
+  private async verifyLibrary(
+    lib: any,
+    librariesDir: string
+  ): Promise<LibraryVerification> {
+    // Parse Maven coordinates: group:artifact:version[:classifier]
+    const name = lib.name || "";
+    const parts = name.split(":");
+    
+    if (parts.length < 3) {
+      return {
+        name,
+        path: "",
+        exists: false
+      };
+    }
+
+    const [group, artifact, version] = parts;
+    const classifier = parts.length > 3 ? parts[3] : null;
+    const groupPath = group.replace(/\./g, "/");
+    
+    // Build JAR filename
+    let jarName = `${artifact}-${version}`;
+    if (classifier) {
+      jarName += `-${classifier}`;
+    }
+    jarName += ".jar";
+    
+    const libPath = path.join(librariesDir, groupPath, artifact, version, jarName);
+    
+    const verification: LibraryVerification = {
+      name,
+      path: libPath,
+      exists: false
+    };
+
+    // Check if file exists
+    if (!await fs.pathExists(libPath)) {
+      // Try alternative paths for natives or special cases
+      const altPath = await this.findAlternativeLibraryPath(lib, librariesDir);
+      if (altPath && await fs.pathExists(altPath)) {
+        verification.path = altPath;
+        verification.exists = true;
+      }
+      return verification;
+    }
+
+    verification.exists = true;
+
+    // Get file size
+    try {
+      const stat = await fs.stat(libPath);
+      verification.size = stat.size;
+      
+      // Validate size (should not be 0 or too small)
+      if (stat.size < 100) {
+        verification.sha1Valid = false;
+        verification.actualSha1 = "file_too_small";
+        return verification;
+      }
+    } catch {
+      // Can't stat file
+    }
+
+    // Check SHA1 if provided
+    if (lib.downloads?.artifact?.sha1) {
+      verification.expectedSha1 = lib.downloads.artifact.sha1;
+      try {
+        const crypto = await import("crypto");
+        const fileBuffer = await fs.readFile(libPath);
+        const hash = crypto.createHash("sha1").update(fileBuffer).digest("hex");
+        verification.actualSha1 = hash;
+        verification.sha1Valid = hash === verification.expectedSha1;
+      } catch {
+        verification.sha1Valid = undefined; // Couldn't verify
+      }
+    }
+
+    return verification;
+  }
+
+  /**
+   * Find alternative library path (for natives, special formats)
+   */
+  private async findAlternativeLibraryPath(lib: any, librariesDir: string): Promise<string | null> {
+    // Handle libraries with explicit path in downloads
+    if (lib.downloads?.artifact?.path) {
+      const altPath = path.join(librariesDir, lib.downloads.artifact.path);
+      if (await fs.pathExists(altPath)) {
+        return altPath;
+      }
+    }
+    
+    // Handle native libraries
+    if (lib.natives) {
+      const platform = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "osx" : "linux";
+      const nativeClassifier = lib.natives[platform];
+      if (nativeClassifier && lib.downloads?.classifiers?.[nativeClassifier]) {
+        const nativePath = path.join(librariesDir, lib.downloads.classifiers[nativeClassifier].path);
+        if (await fs.pathExists(nativePath)) {
+          return nativePath;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Repair mod loader installation by re-downloading missing/invalid libraries
+   */
+  async repairModLoaderInstallation(
+    loader: string,
+    loaderVersion: string,
+    minecraftVersion: string,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<ModLoaderRepairResult> {
+    const result: ModLoaderRepairResult = {
+      success: false,
+      librariesRepaired: 0,
+      librariesFailed: 0,
+      errors: [],
+      fullReinstall: false
+    };
+
+    // First verify to find what needs repair
+    const verification = await this.verifyModLoaderInstallation(loader, loaderVersion, minecraftVersion);
+    
+    if (verification.isValid) {
+      result.success = true;
+      return result;
+    }
+
+    if (!verification.canRepair) {
+      result.errors.push("Installation cannot be auto-repaired. Please install the mod loader manually.");
+      return result;
+    }
+
+    const platform = process.platform;
+    let minecraftDir: string;
+    if (platform === "win32") {
+      minecraftDir = path.join(process.env.APPDATA || "", ".minecraft");
+    } else if (platform === "darwin") {
+      minecraftDir = path.join(os.homedir(), "Library", "Application Support", "minecraft");
+    } else {
+      minecraftDir = path.join(os.homedir(), ".minecraft");
+    }
+
+    const librariesDir = path.join(minecraftDir, "libraries");
+
+    // If version JSON is missing/invalid, do full reinstall
+    if (!verification.versionJsonValid) {
+      console.log("[InstanceService] Version JSON invalid, performing full reinstall");
+      onProgress?.("reinstall", 0, 100, "Reinstalling mod loader...");
+      result.fullReinstall = true;
+      
+      const installResult = await this.ensureModLoaderInstalled(
+        loader,
+        loaderVersion,
+        minecraftVersion,
+        onProgress
+      );
+      
+      result.success = installResult.success;
+      if (!installResult.success) {
+        result.errors.push(installResult.error || "Failed to reinstall mod loader");
+      }
+      return result;
+    }
+
+    // Repair individual libraries
+    const librariesToRepair = [...verification.missingLibraries, ...verification.invalidLibraries];
+    const total = librariesToRepair.length;
+    let current = 0;
+
+    // Read version JSON to get download URLs
+    let versionJson: any;
+    try {
+      versionJson = await fs.readJson(verification.versionJsonPath);
+    } catch (e: any) {
+      result.errors.push(`Cannot read version JSON: ${e.message}`);
+      return result;
+    }
+
+    for (const lib of librariesToRepair) {
+      current++;
+      onProgress?.("repair", current, total, `Repairing ${lib.name.split(":")[1] || lib.name}`);
+
+      // Find library info in version JSON
+      const libInfo = versionJson.libraries?.find((l: any) => l.name === lib.name);
+      if (!libInfo) {
+        result.librariesFailed++;
+        result.errors.push(`Library not found in version JSON: ${lib.name}`);
+        continue;
+      }
+
+      // Try to download the library
+      const repaired = await this.repairLibrary(libInfo, librariesDir);
+      if (repaired) {
+        result.librariesRepaired++;
+      } else {
+        result.librariesFailed++;
+        result.errors.push(`Failed to repair: ${lib.name}`);
+      }
+    }
+
+    result.success = result.librariesFailed === 0;
+    
+    console.log(`[InstanceService] Repair complete: ${result.librariesRepaired} repaired, ${result.librariesFailed} failed`);
+    
+    return result;
+  }
+
+  /**
+   * Repair a single library by downloading it
+   */
+  private async repairLibrary(lib: any, librariesDir: string): Promise<boolean> {
+    try {
+      // Get download URL from library info
+      let downloadUrl: string | null = null;
+      let destPath: string | null = null;
+
+      if (lib.downloads?.artifact) {
+        downloadUrl = lib.downloads.artifact.url;
+        destPath = path.join(librariesDir, lib.downloads.artifact.path);
+      } else if (lib.url && lib.name) {
+        // Build Maven-style URL
+        const parts = lib.name.split(":");
+        if (parts.length >= 3) {
+          const [group, artifact, version] = parts;
+          const groupPath = group.replace(/\./g, "/");
+          const jarName = `${artifact}-${version}.jar`;
+          downloadUrl = `${lib.url}${groupPath}/${artifact}/${version}/${jarName}`;
+          destPath = path.join(librariesDir, groupPath, artifact, version, jarName);
+        }
+      }
+
+      if (!downloadUrl || !destPath) {
+        console.warn(`[InstanceService] Cannot determine download URL for: ${lib.name}`);
+        return false;
+      }
+
+      console.log(`[InstanceService] Downloading library: ${lib.name} from ${downloadUrl}`);
+      
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        console.warn(`[InstanceService] Failed to download ${lib.name}: HTTP ${response.status}`);
+        return false;
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      
+      // Verify size
+      if (buffer.length < 100) {
+        console.warn(`[InstanceService] Downloaded file too small for ${lib.name}`);
+        return false;
+      }
+
+      // Verify SHA1 if available
+      if (lib.downloads?.artifact?.sha1) {
+        const crypto = await import("crypto");
+        const hash = crypto.createHash("sha1").update(buffer).digest("hex");
+        if (hash !== lib.downloads.artifact.sha1) {
+          console.warn(`[InstanceService] SHA1 mismatch for ${lib.name}: expected ${lib.downloads.artifact.sha1}, got ${hash}`);
+          return false;
+        }
+      }
+
+      // Ensure directory exists and save
+      await fs.ensureDir(path.dirname(destPath));
+      await fs.writeFile(destPath, buffer);
+      
+      console.log(`[InstanceService] Successfully repaired: ${lib.name}`);
+      return true;
+
+    } catch (error: any) {
+      console.error(`[InstanceService] Error repairing ${lib.name}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Verify and optionally repair installation before launch
+   */
+  async verifyBeforeLaunch(
+    instance: ModexInstance,
+    autoRepair: boolean = true,
+    onProgress?: (stage: string, current: number, total: number, detail?: string) => void
+  ): Promise<{ canLaunch: boolean; repaired: boolean; errors: string[] }> {
+    const result = { canLaunch: true, repaired: false, errors: [] as string[] };
+
+    if (!instance.loader || instance.loader === "vanilla" || !instance.loaderVersion) {
+      // Vanilla installation, skip verification
+      return result;
+    }
+
+    onProgress?.("verify", 0, 100, "Verifying mod loader installation...");
+
+    const verification = await this.verifyModLoaderInstallation(
+      instance.loader,
+      instance.loaderVersion,
+      instance.minecraftVersion
+    );
+
+    if (verification.isValid) {
+      onProgress?.("verify", 100, 100, "Installation verified");
+      return result;
+    }
+
+    // Installation has issues
+    result.errors = [...verification.errors];
+    
+    if (!autoRepair) {
+      result.canLaunch = false;
+      return result;
+    }
+
+    // Try to repair
+    onProgress?.("repair", 0, 100, "Repairing installation...");
+    
+    const repairResult = await this.repairModLoaderInstallation(
+      instance.loader,
+      instance.loaderVersion,
+      instance.minecraftVersion,
+      onProgress
+    );
+
+    if (repairResult.success) {
+      result.repaired = true;
+      result.errors = [];
+      onProgress?.("verify", 100, 100, "Installation repaired");
+    } else {
+      result.canLaunch = false;
+      result.errors = repairResult.errors;
+    }
+
+    return result;
   }
 
   /**

@@ -1,55 +1,61 @@
 # Game Instances
 
-ModEx can detect and sync with Minecraft installations from popular launchers.
+ModEx can create isolated game instances and launch Minecraft directly.
 
-## Supported Launchers
-
-ModEx can detect instances from:
-
-- **CurseForge App**
-- **Prism Launcher**
-- **MultiMC**
-- **Official Minecraft Launcher**
-
-## Detecting Instances
-
-1. Go to **Settings**
-2. Navigate to the **Minecraft** tab
-3. Click **Rescan** to detect installations
-4. ModEx searches common installation paths
-5. Detected instances appear in the list
-
-### Manual Addition
-
-If an instance isn't detected:
-
-1. Click **Add Instance**
-2. Browse to the instance folder
-3. Select the folder containing `mods/`
-4. Name the instance
-5. Click **Add**
-
-## Instance Information
-
-Each detected instance shows:
-
-- **Name** — Instance display name
-- **Path** — Folder location
-- **Game Version** — Minecraft version
-- **Loader** — Forge, Fabric, etc.
-- **Mod Count** — Number of mods installed
-
-## Linking Modpacks
-
-Connect a modpack to a game instance for syncing:
+## Creating an Instance
 
 1. Open a modpack in the editor
-2. Click **Link Instance**
-3. Select an instance from the list
-4. Choose sync settings:
-   - **Sync Mods** — Copy mod files
-   - **Sync Configs** — Copy configuration files
-5. Confirm the link
+2. Click **Play** in the toolbar
+3. In the Play dialog, click **Create Instance**
+4. The instance is created with the modpack's mods and configs
+
+## Instance Features
+
+Each instance provides:
+
+- **Isolated Environment** — Separate mods, configs, saves
+- **Custom RAM Settings** — Configure min and max memory
+- **JVM Arguments** — Add custom Java arguments
+- **Sync Control** — Choose when to sync mods and configs
+- **Statistics** — View mod count, config count, total size
+
+## Launching Games
+
+### From Modpack Editor
+
+1. Open a modpack
+2. Click **Play**
+3. Select or create an instance
+4. Click **Launch**
+
+### Smart Sync
+
+Before launching, ModEx checks if the instance needs syncing:
+- If mods have changed, prompts to sync
+- Configure auto-sync in Settings
+
+### Running Game Detection
+
+- ModEx shows when a game is running
+- View live game logs with filtering
+- Kill the game from within ModEx
+
+## Instance Settings
+
+### Memory Configuration
+
+Set RAM allocation:
+- **Minimum Memory** — Starting heap size (e.g., 2048 MB)
+- **Maximum Memory** — Maximum heap size (e.g., 8192 MB)
+
+### JVM Arguments
+
+Add custom arguments for Java:
+- Performance flags
+- GC tuning
+- Debug options
+
+## Sync Options
 
 ### Sync Modes
 
@@ -59,44 +65,45 @@ Connect a modpack to a game instance for syncing:
 | **New Only** | Only add new files, keep existing |
 | **Skip** | Don't sync this category |
 
-## Syncing
+### Automatic Sync
 
-After linking, sync your modpack:
+Enable in Settings > General:
+- **Instant file sync** — Sync immediately when changes occur
+- **Auto-sync before launch** — Always sync before starting game
+- **Show confirmation dialog** — Prompt before syncing
 
-1. Open the modpack
-2. Click **Sync to Instance**
-3. ModEx downloads required mods from CurseForge
-4. Files are copied to the instance folder
+## Live Logs
 
-### Before Launch Sync
+When a game is running, view logs in real-time:
 
-Enable automatic syncing in Settings:
+1. Open the Play dialog while game is running
+2. Switch to the **Logs** tab
+3. Filter by level: All, Info, Warn, Error
+4. Logs update in real-time
 
-1. Go to **Settings > General**
-2. Find **Instance Sync** section
-3. Enable **Auto-sync before launch**
-4. When you launch from ModEx, it syncs first
+## Detecting Installations
 
-## Viewing Installations
+ModEx can detect Minecraft installations from:
 
-See detected Minecraft installations:
+- **CurseForge App**
+- **Prism Launcher**
+- **MultiMC**
+- **Official Minecraft Launcher**
 
-1. Go to **Settings > Minecraft**
-2. Detected installations are listed by launcher type
-3. View paths and set default installation
+View detected installations in Settings > Launchers (Minecraft).
 
 ## Troubleshooting
 
-### Instance Not Detected
+### Game Won't Launch
 
-- Ensure the launcher has been run at least once
-- Check that instances exist in standard locations
-- Use manual addition for custom paths
+- Check Java is installed and accessible
+- Verify RAM settings don't exceed available memory
+- Check the game logs for errors
 
-### Sync Failures
+### Sync Issues
 
-- Check write permissions to the instance folder
-- Ensure the game isn't running
+- Ensure the game isn't running during sync
+- Check write permissions to instance folder
 - Verify CurseForge API key is configured
 
 ### Version Mismatch

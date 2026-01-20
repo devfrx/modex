@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useData } from 'vitepress'
+import modexLogo from './assets/modex_logo_h2_nobg.png'
 
 const { isDark } = useData()
 </script>
@@ -9,6 +10,9 @@ const { isDark } = useData()
         <!-- Hero Section -->
         <section class="hero">
             <div class="hero-content">
+                <div class="hero-logo">
+                    <img :src="modexLogo" alt="ModEx Logo" class="logo-image" />
+                </div>
                 <h1 class="hero-title">
                     <span class="gradient-text">ModEx</span>
                 </h1>
@@ -50,8 +54,8 @@ const { isDark } = useData()
                         </svg>
                     </div>
                     <h3>Mod Library</h3>
-                    <p>Centralized hub for all your mods, resource packs, and shaders. Advanced search, filters, and
-                        favorites.</p>
+                    <p>Centralized hub for mods, resource packs, and shaders. Grid, list, gallery & compact views with
+                        advanced filtering.</p>
                 </div>
 
                 <div class="feature-card">
@@ -65,8 +69,8 @@ const { isDark } = useData()
                         </svg>
                     </div>
                     <h3>Modpack Management</h3>
-                    <p>Create modpacks with version history and multiple profiles. Export to CurseForge format for any
-                        launcher.</p>
+                    <p>Create modpacks with built-in version control. Track changes, create versions, and revert when
+                        needed.</p>
                 </div>
 
                 <div class="feature-card">
@@ -78,21 +82,7 @@ const { isDark } = useData()
                         </svg>
                     </div>
                     <h3>CurseForge Integration</h3>
-                    <p>Browse and search CurseForge directly. One-click add to library with automatic update checking.
-                    </p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <path
-                                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-                        </svg>
-                    </div>
-                    <h3>Folder Organization</h3>
-                    <p>Create nested folder hierarchies with color coding. Drag-and-drop interface for intuitive
-                        organization.</p>
+                    <p>Browse and search CurseForge directly. Add mods to library or modpacks with one click.</p>
                 </div>
 
                 <div class="feature-card">
@@ -103,24 +93,36 @@ const { isDark } = useData()
                             <polygon points="10 8 16 12 10 16 10 8" />
                         </svg>
                     </div>
-                    <h3>Visual Sandbox</h3>
-                    <p>Interactive graph visualization powered by D3.js and WebGL. Explore relationships between mods
-                        and modpacks.</p>
+                    <h3>Instance & Launch</h3>
+                    <p>Create isolated game instances with custom RAM settings. Sync mods, launch games, and view live
+                        logs.</p>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2">
-                            <path d="M3 3v18h18" />
-                            <path d="M18 17V9" />
-                            <path d="M13 17V5" />
-                            <path d="M8 17v-3" />
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <path d="M12 18v-6" />
+                            <path d="M9 15l3 3 3-3" />
                         </svg>
                     </div>
-                    <h3>Statistics Dashboard</h3>
-                    <p>Beautiful charts with customizable colors. Track loader distribution, version breakdown, and
-                        more.</p>
+                    <h3>Config Management</h3>
+                    <p>Browse and edit config files with a structured editor. Backup, restore, and sync configs between
+                        instances.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                        </svg>
+                    </div>
+                    <h3>Remote Sync</h3>
+                    <p>Publish modpacks to GitHub Gist. Subscribe to remote modpacks and sync updates with conflict
+                        resolution.</p>
                 </div>
             </div>
         </section>
@@ -233,7 +235,6 @@ const { isDark } = useData()
                 <span class="tech-item">Vue 3</span>
                 <span class="tech-item">TypeScript</span>
                 <span class="tech-item">Tailwind CSS</span>
-                <span class="tech-item">D3.js</span>
             </div>
         </section>
     </div>
@@ -259,6 +260,18 @@ const { isDark } = useData()
     margin: 0 auto;
 }
 
+.hero-logo {
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: center;
+}
+
+.logo-image {
+    width: 120px;
+    height: auto;
+    filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.2));
+}
+
 .hero-title {
     font-size: clamp(3rem, 8vw, 5rem);
     font-weight: 800;
@@ -267,7 +280,7 @@ const { isDark } = useData()
 }
 
 .gradient-text {
-    background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 50%, #6366f1 100%);
+    background: linear-gradient(135deg, #ffffff 0%, #e5e5e5 50%, #ffffff 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -302,7 +315,7 @@ const { isDark } = useData()
     transform: translate(-50%, -50%);
     width: 600px;
     height: 600px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
     pointer-events: none;
 }
 
@@ -320,13 +333,13 @@ const { isDark } = useData()
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #8b5cf6, #a855f7);
-    color: white !important;
+    background: linear-gradient(135deg, #ffffff, #e5e5e5);
+    color: #0c0c0e !important;
 }
 
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.5);
+    box-shadow: 0 10px 30px -10px rgba(255, 255, 255, 0.3);
 }
 
 .btn-secondary {
@@ -336,8 +349,8 @@ const { isDark } = useData()
 }
 
 .btn-secondary:hover {
-    border-color: rgba(139, 92, 246, 0.5);
-    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 /* Section Header */
@@ -355,9 +368,9 @@ const { isDark } = useData()
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 16px;
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    color: #a855f7;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ffffff;
 }
 
 .section-header h2 {
@@ -395,9 +408,9 @@ const { isDark } = useData()
 }
 
 .feature-card:hover {
-    border-color: rgba(139, 92, 246, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
     transform: translateY(-4px);
-    box-shadow: 0 20px 40px -20px rgba(139, 92, 246, 0.2);
+    box-shadow: 0 20px 40px -20px rgba(255, 255, 255, 0.1);
 }
 
 .feature-icon {
@@ -408,9 +421,9 @@ const { isDark } = useData()
     align-items: center;
     justify-content: center;
     margin-bottom: 16px;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.1));
-    border: 1px solid rgba(139, 92, 246, 0.2);
-    color: #a855f7;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ffffff;
 }
 
 .feature-card h3 {
@@ -432,7 +445,7 @@ const { isDark } = useData()
     padding: 60px 24px;
     border-top: 1px solid var(--vp-c-divider);
     border-bottom: 1px solid var(--vp-c-divider);
-    background: linear-gradient(180deg, transparent, rgba(139, 92, 246, 0.02), transparent);
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.02), transparent);
 }
 
 .stats-grid {
@@ -459,7 +472,7 @@ const { isDark } = useData()
 .stat-number {
     font-size: 2.5rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #a855f7, #8b5cf6);
+    background: linear-gradient(135deg, #ffffff, #e5e5e5);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -511,7 +524,7 @@ const { isDark } = useData()
 }
 
 .why-item:hover {
-    border-color: rgba(139, 92, 246, 0.3);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .why-icon {
@@ -522,8 +535,8 @@ const { isDark } = useData()
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
 }
 
 .why-content strong {

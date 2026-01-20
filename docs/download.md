@@ -174,8 +174,8 @@ Confronta il risultato con il checksum pubblicato nella pagina releases.
 
 .platform-card.supported {
   opacity: 1;
-  border-color: #8b5cf6;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.05));
+  border-color: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
 }
 
 .platform-card svg {
@@ -184,7 +184,7 @@ Confronta il risultato con il checksum pubblicato nella pagina releases.
 }
 
 .platform-card.supported svg {
-  color: #8b5cf6;
+  color: #ffffff;
 }
 
 .platform-card h3 {
@@ -229,8 +229,8 @@ Confronta il risultato con il checksum pubblicato nella pagina releases.
   display: inline-flex;
   align-items: center;
   padding: 1rem 2rem;
-  background: linear-gradient(135deg, #8b5cf6, #a855f7);
-  color: white !important;
+  background: linear-gradient(135deg, #ffffff, #e5e5e5);
+  color: #0c0c0e !important;
   font-weight: 600;
   font-size: 1.1rem;
   border-radius: 10px;
@@ -240,7 +240,7 @@ Confronta il risultato con il checksum pubblicato nella pagina releases.
 
 .download-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.2);
 }
 
 .release-info {

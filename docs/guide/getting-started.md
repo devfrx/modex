@@ -72,6 +72,6 @@ ModEx requires a CurseForge API key to browse and fetch mod information.
 ## Next Steps
 
 - [Library Guide](/guide/library) — Learn about search, filters, and favorites
-- [Modpacks Guide](/guide/modpacks) — Master modpack creation and version history
-- [Organize Guide](/guide/organize) — Set up folder structures
+- [Modpacks Guide](/guide/modpacks) — Master modpack creation and version control
+- [CurseForge Integration](/guide/curseforge) — Browse and add mods
 - [Keyboard Shortcuts](/guide/shortcuts) — Speed up your workflow

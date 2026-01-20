@@ -17,7 +17,7 @@ ModEx uses a **metadata-only architecture**. Instead of downloading and storing 
 
 Your central hub for all content:
 - Mods, resource packs, and shaders in one place
-- Multiple view modes (grid, list, gallery)
+- Multiple view modes (grid, list, gallery, compact)
 - Advanced search and filtering
 - Favorites system
 - Duplicate detection
@@ -27,8 +27,8 @@ Your central hub for all content:
 ### 📦 Modpack Management
 
 Create and manage sophisticated modpacks:
-- Version history with restore capability
-- Multiple profiles per modpack
+- Version control with commit-style history
+- Create, tag, and revert versions
 - Dependency impact warnings
 - Built-in config editor
 - Export to CurseForge format
@@ -41,49 +41,40 @@ Browse CurseForge without leaving the app:
 - Search mods, packs, and shaders
 - Filter by version, loader, category
 - Update checking
-- Add mods directly to library
+- Add mods directly to library or modpacks
 
 [Learn more →](/guide/curseforge)
 
-### 🗂️ Folder Organization
+### 🎮 Instance & Launch
 
-Structure your library your way:
-- Hierarchical folder system
-- Color-coded folders
-- Drag-and-drop organization
-- Tree and grid views
-
-[Learn more →](/guide/organize)
-
-### 🎯 Visual Sandbox
-
-See your library as an interactive graph:
-- Force-directed visualization
-- SVG and WebGL rendering
-- Filter by content type
-- Search and focus navigation
-
-[Learn more →](/guide/sandbox)
-
-### 📊 Statistics Dashboard
-
-Insights about your collection:
-- Interactive charts
-- Customizable colors
-- Multiple chart types
-- Loader and version distribution
-
-[Learn more →](/guide/statistics)
-
-### 🎮 Instance Sync
-
-Connect to your game installations:
-- Auto-detect popular launchers
-- Link modpacks to instances
+Connect and play directly from ModEx:
+- Create isolated game instances
+- Custom RAM and JVM settings
 - Sync mods and configs
-- Multiple sync modes
+- Live game logs with filtering
+- Running game detection
 
 [Learn more →](/guide/instances)
+
+### ⚙️ Config Management
+
+Full config file management:
+- Browse and edit config files
+- Structured editor for JSON, TOML, YAML
+- Backup and restore functionality
+- Sync configs between modpacks and instances
+
+[Learn more →](/guide/modpacks#configuration-editor)
+
+### 🔄 Remote Sync
+
+Share modpacks via GitHub Gist:
+- Publish modpacks to Gist
+- Subscribe to remote modpacks
+- Check for and apply updates
+- Conflict resolution
+
+[Learn more →](/guide/import-export)
 
 ### 📤 Import & Export
 

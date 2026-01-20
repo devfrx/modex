@@ -102,4 +102,46 @@ You can also export individual modpacks as `.modex` files for sharing or backup.
 
 ### Configuration Backups
 
-When syncing to game instances, ModEx creates config backups in the instance's `.config-backups` folder.
+When syncing to game instances, ModEx creates config backups in the instance's config backup folder.
+
+## Remote Sync (GitHub Gist)
+
+ModEx can publish modpacks to GitHub Gist for cloud backup and sharing.
+
+### Setup
+
+1. Go to **Settings > General**
+2. Enter your **GitHub Token** (needs Gist permissions)
+3. Your GitHub avatar appears when connected
+
+### Publishing a Modpack
+
+1. Open a modpack in the editor
+2. Go to the **Remote** tab
+3. Click **Publish to Gist**
+4. The modpack is uploaded and you receive a shareable URL
+
+### Subscribing to a Remote Modpack
+
+1. Get a Gist URL from someone
+2. In Modpacks view, click **Import > From URL**
+3. Paste the URL and import
+4. The modpack shows a cloud badge indicating it's subscribed
+
+### Checking for Updates
+
+1. Open a subscribed modpack
+2. Go to the **Remote** tab
+3. Click **Check for Updates**
+4. If updates are available, review them in the Update Review dialog
+
+### Applying Updates
+
+1. Review the changes shown in the Update Review dialog
+2. Choose which changes to apply
+3. Resolve any conflicts if prompted
+4. Click **Apply** to update your local modpack
+
+### Auto-Check
+
+Enable **Auto-check remote** in the Remote tab to automatically check for updates when opening the modpack.

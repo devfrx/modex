@@ -6,14 +6,14 @@ export default defineConfig({
   
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],
-    ['meta', { name: 'theme-color', content: '#8b5cf6' }],
+    ['meta', { name: 'theme-color', content: '#ffffff' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'ModEx - Minecraft Mod Manager' }],
     ['meta', { property: 'og:description', content: 'The intelligent mod library manager for Minecraft' }],
   ],
 
   themeConfig: {
-    logo: '/logo.svg',
+    logo: '/modex_logo.png',
     
     nav: [
       { text: 'Home', link: '/' },
@@ -37,17 +37,14 @@ export default defineConfig({
           items: [
             { text: 'Library', link: '/guide/library' },
             { text: 'Modpacks', link: '/guide/modpacks' },
-            { text: 'Organize', link: '/guide/organize' },
-            { text: 'Sandbox', link: '/guide/sandbox' }
+            { text: 'CurseForge Integration', link: '/guide/curseforge' },
+            { text: 'Game Instances', link: '/guide/instances' }
           ]
         },
         {
           text: 'Advanced',
           items: [
-            { text: 'CurseForge Integration', link: '/guide/curseforge' },
-            { text: 'Game Instances', link: '/guide/instances' },
-            { text: 'Import & Export', link: '/guide/import-export' },
-            { text: 'Statistics', link: '/guide/statistics' }
+            { text: 'Import & Export', link: '/guide/import-export' }
           ]
         },
         {
@@ -65,20 +62,19 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/features/' },
             { text: 'Metadata Architecture', link: '/features/metadata' },
-            { text: 'Version Control', link: '/features/versioning' },
-            { text: 'Visual Sandbox', link: '/features/sandbox' }
+            { text: 'Version Control', link: '/features/versioning' }
           ]
         }
       ]
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/your-username/modex' }
+      { icon: 'github', link: 'https://github.com/devfrx/modex' }
     ],
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2024 ModEx'
+      copyright: 'Copyright © 2024-2026 ModEx'
     },
 
     search: {

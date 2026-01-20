@@ -10,6 +10,9 @@ import path from "path";
 import fs from "fs-extra";
 import { spawn, ChildProcess } from "child_process";
 import os from "os";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("Game");
 
 // ==================== GAME TYPES ====================
 
@@ -175,7 +178,7 @@ export class GameService {
         this.activeGameType = config.activeGameType || "minecraft";
       }
     } catch (error) {
-      console.error("[GameService] Error loading config:", error);
+      log.error("Error loading config:", error);
     }
   }
 
@@ -185,7 +188,7 @@ export class GameService {
         activeGameType: this.activeGameType,
       }, { spaces: 2 });
     } catch (error) {
-      console.error("[GameService] Error saving config:", error);
+      log.error("Error saving config:", error);
     }
   }
 
@@ -197,7 +200,7 @@ export class GameService {
         this.profiles = await fs.readJson(this.profilesPath);
       }
     } catch (error) {
-      console.error("[GameService] Error loading profiles:", error);
+      log.error("Error loading profiles:", error);
       this.profiles = [];
     }
   }
@@ -206,7 +209,7 @@ export class GameService {
     try {
       await fs.writeJson(this.profilesPath, this.profiles, { spaces: 2 });
     } catch (error) {
-      console.error("[GameService] Error saving profiles:", error);
+      log.error("Error saving profiles:", error);
     }
   }
 
@@ -239,7 +242,7 @@ export class GameService {
     this.profiles = [minecraftProfile, hytaleProfile];
     await this.saveProfiles();
     
-    console.log("[GameService] Created default profiles");
+    log.info("Created default profiles");
   }
 
   // ==================== PUBLIC API ====================
@@ -333,7 +336,7 @@ export class GameService {
     const profile = this.profiles[index];
     const sameTypeProfiles = this.getProfilesByGameType(profile.gameType);
     if (sameTypeProfiles.length <= 1) {
-      console.warn("[GameService] Cannot delete last profile for game type:", profile.gameType);
+      log.warn("Cannot delete last profile for game type:", profile.gameType);
       return false;
     }
 
@@ -422,7 +425,7 @@ export class GameService {
     }
 
     try {
-      console.log(`[GameService] Launching ${profile.gameType} from:`, launcherPath);
+      log.info(`Launching ${profile.gameType} from:`, launcherPath);
       
       // For Hytale, just launch the launcher directly - no special args needed
       const child = spawn(launcherPath, [], {
@@ -449,7 +452,7 @@ export class GameService {
 
       return { success: true };
     } catch (error: any) {
-      console.error("[GameService] Launch error:", error);
+      log.error("Launch error:", error);
       return { success: false, error: error.message };
     }
   }
@@ -486,7 +489,7 @@ export class GameService {
       await fs.ensureDir(modsPath);
       return true;
     } catch (error) {
-      console.error("[GameService] Error creating mods directory:", error);
+      log.error("Error creating mods directory:", error);
       return false;
     }
   }
@@ -505,7 +508,7 @@ export class GameService {
         f.endsWith(".hmod") // Hytale mod extension if applicable
       );
     } catch (error) {
-      console.error("[GameService] Error listing mods:", error);
+      log.error("Error listing mods:", error);
       return [];
     }
   }
@@ -520,7 +523,7 @@ export class GameService {
       shell.openPath(modsPath);
       return true;
     } catch (error) {
-      console.error("[GameService] Error opening mods folder:", error);
+      log.error("Error opening mods folder:", error);
       return false;
     }
   }

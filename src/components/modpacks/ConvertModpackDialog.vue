@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { createLogger } from "@/utils/logger";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
 import type { Modpack } from "@/types/electron";
+
+const log = createLogger("ConvertModpackDialog");
 
 const props = defineProps<{
     open: boolean;
@@ -259,7 +262,7 @@ async function convertModpack() {
                     continue;
                 }
 
-                console.log(`[Convert] Found file ${file.id} for ${mod.name} - gameVersions: ${file.gameVersions?.join(', ')}`);
+                log.debug("Found file for mod", { fileId: file.id, modName: mod.name, gameVersions: file.gameVersions });
 
                 // Map content_type to API format
                 const contentTypeMap: Record<string, "mods" | "resourcepacks" | "shaders"> = {
@@ -293,7 +296,7 @@ async function convertModpack() {
                     failedCount++;
                 }
             } catch (err) {
-                console.error(`Failed to convert mod ${mod.name}:`, err);
+                log.error("Failed to convert mod", { modName: mod.name, error: String(err) });
                 results.push({
                     modName: mod.name,
                     status: "failed",
@@ -318,7 +321,7 @@ async function convertModpack() {
         // Don't emit success here - let user review results and close manually
         // emit("success") is called when user clicks "Done" after reviewing
     } catch (err) {
-        console.error("Conversion failed:", err);
+        log.error("Conversion failed", { modpackId: props.modpack?.id, error: String(err) });
         toast.error("Conversion Failed", (err as Error).message);
     } finally {
         isConverting.value = false;
@@ -410,7 +413,7 @@ function handleClose() {
                     <div class="flex items-center justify-between text-sm">
                         <span class="text-muted-foreground">Converting mods...</span>
                         <span class="font-medium">{{ conversionProgress.current }} / {{ conversionProgress.total
-                        }}</span>
+                            }}</span>
                     </div>
                     <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
                         <div class="bg-primary h-full transition-all duration-300"

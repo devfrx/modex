@@ -17,6 +17,9 @@ import fs from "fs-extra";
 import { spawn, ChildProcess } from "child_process";
 import os from "os";
 import AdmZip from "adm-zip";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("Hytale");
 
 // ==================== TYPES ====================
 
@@ -188,10 +191,10 @@ export class HytaleService {
       if (await fs.pathExists(this.modMetadataCachePath)) {
         const data = await fs.readJson(this.modMetadataCachePath);
         this.modMetadataCache = new Map(Object.entries(data));
-        console.log(`[HytaleService] Loaded ${this.modMetadataCache.size} mod metadata entries`);
+        log.info(`Loaded ${this.modMetadataCache.size} mod metadata entries`);
       }
     } catch (error) {
-      console.error("[HytaleService] Error loading mod metadata cache:", error);
+      log.error("Error loading mod metadata cache:", error);
     }
   }
   
@@ -201,7 +204,7 @@ export class HytaleService {
       const data = Object.fromEntries(this.modMetadataCache);
       await fs.writeJson(this.modMetadataCachePath, data, { spaces: 2 });
     } catch (error) {
-      console.error("[HytaleService] Error saving mod metadata cache:", error);
+      log.error("Error saving mod metadata cache:", error);
     }
   }
   
@@ -221,7 +224,7 @@ export class HytaleService {
         this.launcherPath = config.launcherPath || DEFAULT_HYTALE_PATHS.launcher;
       }
     } catch (error) {
-      console.error("[HytaleService] Error loading config:", error);
+      log.error("Error loading config:", error);
     }
   }
 
@@ -232,7 +235,7 @@ export class HytaleService {
         launcherPath: this.launcherPath,
       }, { spaces: 2 });
     } catch (error) {
-      console.error("[HytaleService] Error saving config:", error);
+      log.error("Error saving config:", error);
     }
   }
 
@@ -256,7 +259,7 @@ export class HytaleService {
     this.installedMods.clear();
 
     if (!(await fs.pathExists(this.modsPath))) {
-      console.log("[HytaleService] Mods folder does not exist:", this.modsPath);
+      log.info("Mods folder does not exist:", this.modsPath);
       return [];
     }
 
@@ -291,7 +294,7 @@ export class HytaleService {
             logoUrl: modInfo.logoUrl,
           };
           
-          console.log(`[HytaleService] Found folder mod: ${mod.name} (hytaleModId: ${mod.hytaleModId}, cfProjectId: ${mod.cfProjectId})`);
+          log.info(`Found folder mod: ${mod.name} (hytaleModId: ${mod.hytaleModId}, cfProjectId: ${mod.cfProjectId})`);
           this.installedMods.set(mod.id, mod);
         } else if (
           entry.name.endsWith(".jar") || 
@@ -341,15 +344,15 @@ export class HytaleService {
             logoUrl: cachedMeta?.logoUrl,
           };
           
-          console.log(`[HytaleService] Found mod: ${mod.name} (id: ${mod.id}, hytaleModId: ${mod.hytaleModId}, cfProjectId: ${mod.cfProjectId})`);
+          log.info(`Found mod: ${mod.name} (id: ${mod.id}, hytaleModId: ${mod.hytaleModId}, cfProjectId: ${mod.cfProjectId})`);
           this.installedMods.set(mod.id, mod);
         }
       }
 
-      console.log(`[HytaleService] Scanned ${this.installedMods.size} mods`);
+      log.info(`Scanned ${this.installedMods.size} mods`);
       return Array.from(this.installedMods.values());
     } catch (error) {
-      console.error("[HytaleService] Error scanning mods:", error);
+      log.error("Error scanning mods:", error);
       return [];
     }
   }
@@ -453,12 +456,14 @@ export class HytaleService {
               cfProjectId: data.cfProjectId || data.curseforge?.projectId,
               cfFileId: data.cfFileId || data.curseforge?.fileId,
             };
-          } catch {}
+          } catch {
+            // JSON parsing failed - continue to next potential file
+          }
         }
       }
     } catch (err) {
       // JAR reading failed, that's okay
-      console.error("[HytaleService] Error reading JAR:", err);
+      log.error("Error reading JAR:", err);
     }
     
     return {};
@@ -495,7 +500,7 @@ export class HytaleService {
           // Get author from Authors array or author field
           let author: string | undefined;
           if (data.Authors && Array.isArray(data.Authors) && data.Authors.length > 0) {
-            author = data.Authors.map((a: any) => a.Name || a.name || a).join(", ");
+            author = data.Authors.map((a: { Name?: string; name?: string }) => a.Name || a.name || String(a)).join(", ");
           } else {
             author = data.author || data.authors?.[0]?.name || data.authors?.[0];
           }
@@ -511,7 +516,9 @@ export class HytaleService {
             cfFileId: data.cfFileId || data.curseforge?.fileId,
             logoUrl: data.logoUrl,
           };
-        } catch {}
+        } catch {
+          // JSON parsing failed - return empty
+        }
       }
     }
     
@@ -589,13 +596,13 @@ export class HytaleService {
         
         // Check if already exists
         if (await fs.pathExists(destPath)) {
-          console.log(`[HytaleService] Mod ${ext.toUpperCase()} already installed:`, filename);
+          log.info(`Mod ${ext.toUpperCase()} already installed:`, filename);
           return { success: true, folderName: filename };
         }
         
         // Copy file directly (no extraction - both work as archives)
         await fs.copy(sourceFilePath, destPath);
-        console.log(`[HytaleService] Copied ${ext.toUpperCase()} mod to: ${destPath}`);
+        log.info(`Copied ${ext.toUpperCase()} mod to: ${destPath}`);
         
         // Save metadata to cache for future scans
         if (metadata.cfProjectId || metadata.logoUrl) {
@@ -629,7 +636,7 @@ export class HytaleService {
         };
         this.installedMods.set(mod.id, mod);
         
-        console.log(`[HytaleService] Installed ${ext.toUpperCase()} mod: ${filename} (hytaleModId: ${mod.hytaleModId})`);
+        log.info(`Installed ${ext.toUpperCase()} mod: ${filename} (hytaleModId: ${mod.hytaleModId})`);
         return { success: true, folderName: filename, mod };
       }
       
@@ -638,7 +645,7 @@ export class HytaleService {
       const destFolder = path.join(this.modsPath, modFolderName);
       
       if (await fs.pathExists(destFolder)) {
-        console.log("[HytaleService] Mod already installed:", modFolderName);
+        log.info("Mod already installed:", modFolderName);
         return { success: true, folderName: modFolderName };
       }
 
@@ -677,10 +684,10 @@ export class HytaleService {
       };
       this.installedMods.set(mod.id, mod);
 
-      console.log(`[HytaleService] Installed mod: ${modFolderName}`);
+      log.info(`Installed mod: ${modFolderName}`);
       return { success: true, folderName: modFolderName, mod };
     } catch (error: any) {
-      console.error("[HytaleService] Error installing mod:", error);
+      log.error("Error installing mod:", error);
       return { success: false, error: error.message };
     }
   }
@@ -756,10 +763,10 @@ export class HytaleService {
         await fs.move(folderPath, backupPath, { overwrite: true });
       }
       this.installedMods.delete(id);
-      console.log(`[HytaleService] Removed mod: ${mod.folderName}`);
+      log.info(`Removed mod: ${mod.folderName}`);
       return true;
     } catch (error) {
-      console.error("[HytaleService] Error removing mod:", error);
+      log.error("Error removing mod:", error);
       return false;
     }
   }
@@ -794,10 +801,10 @@ export class HytaleService {
       mod.folderName = newFolderName;
       mod.isDisabled = !newEnabled;
 
-      console.log(`[HytaleService] Mod ${newEnabled ? "enabled" : "disabled"}: ${mod.name}`);
+      log.info(`Mod ${newEnabled ? "enabled" : "disabled"}: ${mod.name}`);
       return { enabled: newEnabled };
     } catch (error) {
-      console.error("[HytaleService] Error toggling mod:", error);
+      log.error("Error toggling mod:", error);
       return null;
     }
   }
@@ -830,7 +837,7 @@ export class HytaleService {
         this.modpacks = await fs.readJson(this.modpacksPath);
       }
     } catch (error) {
-      console.error("[HytaleService] Error loading modpacks:", error);
+      log.error("Error loading modpacks:", error);
       this.modpacks = [];
     }
   }
@@ -839,7 +846,7 @@ export class HytaleService {
     try {
       await fs.writeJson(this.modpacksPath, this.modpacks, { spaces: 2 });
     } catch (error) {
-      console.error("[HytaleService] Error saving modpacks:", error);
+      log.error("Error saving modpacks:", error);
     }
   }
 
@@ -910,7 +917,7 @@ export class HytaleService {
 
     const enabledCount = mods.filter(m => m.enabled).length;
     const disabledCount = mods.filter(m => !m.enabled).length;
-    console.log(`[HytaleService] Created modpack: ${modpack.name} (${enabledCount} enabled, ${disabledCount} disabled)`);
+    log.info(`Created modpack: ${modpack.name} (${enabledCount} enabled, ${disabledCount} disabled)`);
     return modpack;
   }
 
@@ -971,7 +978,7 @@ export class HytaleService {
     
     const enabledCount = mods.filter(m => m.enabled).length;
     const disabledCount = mods.filter(m => !m.enabled).length;
-    console.log(`[HytaleService] Saved to modpack: ${modpack.name} (${enabledCount} enabled, ${disabledCount} disabled)`);
+    log.info(`Saved to modpack: ${modpack.name} (${enabledCount} enabled, ${disabledCount} disabled)`);
     return true;
   }
 
@@ -1096,7 +1103,7 @@ export class HytaleService {
       modpack.lastActivated = new Date().toISOString();
       await this.saveModpacks();
 
-      console.log(`[HytaleService] Activated modpack: ${modpack.name} (enabled: ${result.enabled}, disabled: ${result.disabled})`);
+      log.info(`Activated modpack: ${modpack.name} (enabled: ${result.enabled}, disabled: ${result.disabled})`);
     } catch (error: any) {
       result.success = false;
       result.errors.push(error.message);
@@ -1227,7 +1234,7 @@ export class HytaleService {
     this.modpacks.push(duplicate);
     await this.saveModpacks();
     
-    console.log(`[HytaleService] Duplicated modpack: ${source.name} -> ${newName}`);
+    log.info(`Duplicated modpack: ${source.name} -> ${newName}`);
     return duplicate;
   }
 
@@ -1319,10 +1326,10 @@ export class HytaleService {
 
       child.unref();
 
-      console.log(`[HytaleService] Launched Hytale (PID: ${child.pid})`);
+      log.info(`Launched Hytale (PID: ${child.pid})`);
       return { success: true, pid: child.pid };
     } catch (error: any) {
-      console.error("[HytaleService] Launch error:", error);
+      log.error("Launch error:", error);
       return { success: false, error: error.message };
     }
   }
@@ -1334,7 +1341,7 @@ export class HytaleService {
       shell.openPath(this.modsPath);
       return true;
     } catch (error) {
-      console.error("[HytaleService] Error opening mods folder:", error);
+      log.error("Error opening mods folder:", error);
       return false;
     }
   }
@@ -1344,7 +1351,7 @@ export class HytaleService {
     try {
       const mod = this.installedMods.get(modId);
       if (!mod) {
-        console.error("[HytaleService] Mod not found:", modId);
+        log.error("Mod not found:", modId);
         return false;
       }
       const modPath = path.join(this.modsPath, mod.folderName);
@@ -1361,7 +1368,7 @@ export class HytaleService {
       }
       return false;
     } catch (error) {
-      console.error("[HytaleService] Error opening mod folder:", error);
+      log.error("Error opening mod folder:", error);
       return false;
     }
   }
@@ -1376,7 +1383,7 @@ export class HytaleService {
       }
       return false;
     } catch (error) {
-      console.error("[HytaleService] Error opening save folder:", error);
+      log.error("Error opening save folder:", error);
       return false;
     }
   }
@@ -1440,7 +1447,7 @@ export class HytaleService {
       const savesBasePath = this.savesPath();
       
       if (!(await fs.pathExists(savesBasePath))) {
-        console.log("[HytaleService] Saves folder does not exist:", savesBasePath);
+        log.info("Saves folder does not exist:", savesBasePath);
         return [];
       }
 
@@ -1469,7 +1476,9 @@ export class HytaleService {
         try {
           const stat = await fs.stat(savePath);
           lastPlayed = stat.mtime.toISOString();
-        } catch {}
+        } catch {
+          // Stat failed - no last played time available
+        }
 
         // Read mod configuration from config.json
         // Map hytaleModId from config.json to ModEx mod IDs
@@ -1503,7 +1512,7 @@ export class HytaleService {
             }
           }
         } catch (err) {
-          console.error(`[HytaleService] Error reading config for ${entry.name}:`, err);
+          log.error(`Error reading config for ${entry.name}:`, err);
         }
 
         // Get mod data folders in save's mods directory
@@ -1515,7 +1524,9 @@ export class HytaleService {
               .filter(f => f.isDirectory())
               .map(f => f.name);
           }
-        } catch {}
+        } catch {
+          // Failed to read mod folders - continue with empty list
+        }
 
         worlds.push({
           id: entry.name,
@@ -1529,10 +1540,10 @@ export class HytaleService {
         });
       }
 
-      console.log(`[HytaleService] Found ${worlds.length} saves:`, worlds.map(w => w.name));
+      log.info(`Found ${worlds.length} saves:`, worlds.map(w => w.name));
       return worlds;
     } catch (error) {
-      console.error("[HytaleService] Error getting worlds:", error);
+      log.error("Error getting worlds:", error);
       return [];
     }
   }
@@ -1560,7 +1571,9 @@ export class HytaleService {
         try {
           const files = await fs.readdir(modPath);
           hasData = files.length > 0;
-        } catch {}
+        } catch {
+          // Failed to read folder - assume no data
+        }
         
         mods.push({
           modName: entry.name,
@@ -1571,7 +1584,7 @@ export class HytaleService {
 
       return mods;
     } catch (error) {
-      console.error("[HytaleService] Error getting save mods:", error);
+      log.error("Error getting save mods:", error);
       return [];
     }
   }
@@ -1587,7 +1600,7 @@ export class HytaleService {
       const configPath = path.join(savePath, "config.json");
 
       if (!(await fs.pathExists(configPath))) {
-        console.error(`[HytaleService] Config not found for save: ${saveId}`);
+        log.error(`Config not found for save: ${saveId}`);
         return false;
       }
 
@@ -1605,7 +1618,7 @@ export class HytaleService {
         }
         
         if (!foundMod) {
-          console.warn(`[HytaleService] Mod not found in cache: ${modId}. Using modId as config key.`);
+          log.warn(`Mod not found in cache: ${modId}. Using modId as config key.`);
         }
       }
       
@@ -1613,10 +1626,10 @@ export class HytaleService {
       const configModId = mod?.hytaleModId || modId;
       
       if (!mod?.hytaleModId && mod) {
-        console.warn(`[HytaleService] Mod ${modId} has no hytaleModId. Using modId as fallback. This may not work correctly in Hytale.`);
+        log.warn(`Mod ${modId} has no hytaleModId. Using modId as fallback. This may not work correctly in Hytale.`);
       }
       
-      console.log(`[HytaleService] Toggling mod - modId: ${modId}, hytaleModId: ${configModId}`);
+      log.info(`Toggling mod - modId: ${modId}, hytaleModId: ${configModId}`);
 
       // Read current config
       const config = await fs.readJson(configPath);
@@ -1645,10 +1658,10 @@ export class HytaleService {
 
       // Write config back
       await fs.writeJson(configPath, config, { spaces: 2 });
-      console.log(`[HytaleService] ${enabled ? "Enabled" : "Disabled"} mod ${configModId} for save ${saveId}`);
+      log.info(`${enabled ? "Enabled" : "Disabled"} mod ${configModId} for save ${saveId}`);
       return true;
     } catch (error) {
-      console.error("[HytaleService] Error toggling save mod:", error);
+      log.error("Error toggling save mod:", error);
       return false;
     }
   }
@@ -1686,7 +1699,7 @@ export class HytaleService {
       
       return [];
     } catch (error) {
-      console.error("[HytaleService] Error getting world mod config:", error);
+      log.error("Error getting world mod config:", error);
       return [];
     }
   }
@@ -1701,7 +1714,7 @@ export class HytaleService {
       const configPath = path.join(savePath, "config.json");
 
       if (!(await fs.pathExists(configPath))) {
-        console.error(`[HytaleService] Config not found for world: ${worldId}`);
+        log.error(`Config not found for world: ${worldId}`);
         return false;
       }
 
@@ -1725,10 +1738,10 @@ export class HytaleService {
       }
 
       await fs.writeJson(configPath, config, { spaces: 2 });
-      console.log(`[HytaleService] Saved mod config for world ${worldId}: ${modConfigs.length} mods`);
+      log.info(`Saved mod config for world ${worldId}: ${modConfigs.length} mods`);
       return true;
     } catch (error) {
-      console.error("[HytaleService] Error saving world mod config:", error);
+      log.error("Error saving world mod config:", error);
       return false;
     }
   }
@@ -1762,7 +1775,7 @@ export class HytaleService {
         }
       }
 
-      console.log(`[HytaleService] Applied world ${worldId} config: ${result.enabled} enabled, ${result.disabled} disabled`);
+      log.info(`Applied world ${worldId} config: ${result.enabled} enabled, ${result.disabled} disabled`);
     } catch (error: any) {
       result.success = false;
       result.errors.push(error.message);

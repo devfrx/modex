@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import FilePickerDialog from "@/components/mods/FilePickerDialog.vue";
 import { useToast } from "@/composables/useToast";
 import type { Mod } from "@/types/electron";
+
+const log = createLogger("RecommendationsPanel");
 
 const props = defineProps<{
   modpackId: string;
@@ -74,7 +77,7 @@ async function loadRecommendations(randomize = false) {
 
     recommendations.value = result;
   } catch (err) {
-    console.error("Failed to load recommendations:", err);
+    log.error("Failed to load recommendations", { modpackId: props.modpackId, error: String(err) });
     toast.error("Error", "Failed to load recommendations");
   } finally {
     isLoading.value = false;

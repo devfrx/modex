@@ -13,7 +13,9 @@ import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import HytaleModCard from "@/components/hytale/HytaleModCard.vue";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("HytaleModpackEditorView");
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -129,7 +131,7 @@ async function loadModpack() {
             goBack();
         }
     } catch (err) {
-        console.error("[HytaleModpackEditorView] Error loading modpack:", err);
+        log.error("[HytaleModpackEditorView] Error loading modpack:", err);
         toast.error("Error", "Failed to load modpack");
         goBack();
     } finally {
@@ -142,7 +144,7 @@ async function loadComparison() {
     try {
         comparison.value = await window.api.hytale.compareWithModpack(modpackId.value);
     } catch (err) {
-        console.error("[HytaleModpackEditorView] Error loading comparison:", err);
+        log.error("[HytaleModpackEditorView] Error loading comparison:", err);
     }
 }
 
@@ -290,7 +292,7 @@ async function checkModUpdate(modId: string): Promise<void> {
             }
         }
     } catch (err) {
-        console.error(`Failed to check update for ${modId}:`, err);
+        log.error(`Failed to check update for ${modId}:`, err);
     } finally {
         checkingModUpdates.value[modId] = false;
     }
@@ -328,7 +330,7 @@ async function checkAllUpdates(): Promise<void> {
             toast.success("All Up to Date", "All mods are on the latest version");
         }
     } catch (err) {
-        console.error("Failed to check updates:", err);
+        log.error("Failed to check updates:", err);
         toast.error("Check Failed", "Couldn't check for updates");
     } finally {
         isCheckingUpdates.value = false;
@@ -351,7 +353,7 @@ async function applyUpdate(modId: string): Promise<void> {
             toast.error("Update Failed", result.error || "Unknown error");
         }
     } catch (err) {
-        console.error("Update failed:", err);
+        log.error("Update failed:", err);
         toast.error("Update Failed", (err as Error).message);
     } finally {
         updatingMods.value.delete(modId);
@@ -377,7 +379,7 @@ async function updateAllMods(): Promise<void> {
                 failCount++;
             }
         } catch (err) {
-            console.error(`Failed to update ${update.projectName}:`, err);
+            log.error(`Failed to update ${update.projectName}:`, err);
             failCount++;
         } finally {
             updatingMods.value.delete(update.modId);

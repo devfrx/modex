@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
+import { createLogger } from "@/utils/logger";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import Icon from "@/components/ui/Icon.vue";
 import type { CFModLoader } from "@/types/electron";
+
+const log = createLogger("CreateModpackDialog");
 
 const props = defineProps<{
   open: boolean;
@@ -93,9 +96,9 @@ async function fetchMinecraftVersions() {
       .filter((v: { approved: boolean }) => v.approved)
       .map((v: { versionString: string }) => v.versionString);
     fetchedMinecraftVersions.value = approvedVersions;
-    console.log(`[CreateModpackDialog] Fetched ${approvedVersions.length} MC versions`);
+    log.debug("Fetched MC versions", { count: approvedVersions.length });
   } catch (err) {
-    console.error("[CreateModpackDialog] Failed to fetch MC versions:", err);
+    log.error("Failed to fetch MC versions", { error: String(err) });
   } finally {
     isLoadingMinecraftVersions.value = false;
   }
@@ -146,7 +149,7 @@ const filteredLoaderVersions = computed(() => {
 
   // Fallback: if no results with type, try matching by name pattern
   if (filtered.length === 0 && availableLoaderVersions.value.length > 0) {
-    console.log(`[CreateModpackDialog] Type filter returned 0, falling back to name matching for "${loaderType}"`);
+    log.debug("Type filter returned 0, falling back to name matching", { loaderType });
     filtered = availableLoaderVersions.value.filter((l) => {
       const name = l.name.toLowerCase();
       if (loaderType === "forge") {
@@ -217,17 +220,18 @@ async function fetchLoaderVersions() {
   isLoadingLoaderVersions.value = true;
   try {
     const versions = await window.api.curseforge.getModLoaders(form.value.minecraft_version);
-    console.log(`[CreateModpackDialog] Received ${versions.length} loader versions for MC ${form.value.minecraft_version}`);
-    if (versions.length > 0) {
-      console.log(`[CreateModpackDialog] Sample loader:`, versions[0]);
-    }
+    log.debug("Received loader versions", {
+      mcVersion: form.value.minecraft_version,
+      count: versions.length,
+      sample: versions.length > 0 ? versions[0] : null
+    });
     availableLoaderVersions.value = versions;
 
     // Auto-select recommended version if available
     const loaderType = form.value.loader.toLowerCase();
     const expectedType = loaderTypeMap[loaderType];
     const filtered = filteredLoaderVersions.value;
-    console.log(`[CreateModpackDialog] Loader: ${loaderType}, expectedType: ${expectedType}, filtered count: ${filtered.length}`);
+    log.debug("Filtering loader versions", { loaderType, expectedType, filteredCount: filtered.length });
 
     // Find recommended or latest
     const recommended = filtered.find((l) => l.recommended);
@@ -243,7 +247,7 @@ async function fetchLoaderVersions() {
       form.value.loader_version = undefined;
     }
   } catch (err) {
-    console.error("Failed to fetch loader versions:", err);
+    log.error("Failed to fetch loader versions", { mcVersion: form.value.minecraft_version, error: String(err) });
     availableLoaderVersions.value = [];
     form.value.loader_version = undefined;
   } finally {

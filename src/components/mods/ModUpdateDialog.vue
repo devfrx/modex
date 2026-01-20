@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
+import { createLogger } from "@/utils/logger";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import type { ModUpdateInfo } from "@/types/electron";
+
+const log = createLogger("ModUpdateDialog");
 
 const props = defineProps<{
   open: boolean;
@@ -92,7 +95,7 @@ async function checkUpdate() {
       };
     }
   } catch (err) {
-    console.error("Failed to check update:", err);
+    log.error("Failed to check update", { modId: props.mod?.id, error: String(err) });
     toast.error("Couldn't check", (err as Error).message);
   } finally {
     isLoading.value = false;

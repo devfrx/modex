@@ -1,5 +1,8 @@
 import { ref, watch, computed } from "vue";
 import type { GameType } from "@/types";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Sidebar");
 
 export interface SidebarNavItem {
   id: string;
@@ -99,7 +102,7 @@ function loadSettings(): SidebarSettings {
       };
     }
   } catch (e) {
-    console.error("Failed to load sidebar settings:", e);
+    log.error("Failed to load sidebar settings:", e);
   }
   return { ...defaultSettings };
 }
@@ -108,7 +111,7 @@ function saveSettings() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings.value));
   } catch (e) {
-    console.error("Failed to save sidebar settings:", e);
+    log.error("Failed to save sidebar settings:", e);
   }
 }
 
@@ -136,6 +139,7 @@ export function useSidebar() {
 
   /** Set the active game to filter sidebar items */
   function setActiveGame(game: GameType) {
+    log.info('Switching active game', { from: activeGame.value, to: game });
     activeGame.value = game;
   }
 
@@ -144,10 +148,12 @@ export function useSidebar() {
   }
 
   function setCollapsed(collapsed: boolean) {
+    log.debug('Setting sidebar collapsed', { collapsed });
     settings.value.collapsed = collapsed;
   }
 
   function toggleCollapsed() {
+    log.debug('Toggling sidebar collapsed', { newState: !settings.value.collapsed });
     settings.value.collapsed = !settings.value.collapsed;
   }
 
@@ -156,6 +162,7 @@ export function useSidebar() {
   }
 
   function toggleItemEnabled(itemId: string) {
+    log.debug('Toggling sidebar item', { itemId, game: activeGame.value });
     // Check in current game's items
     const items = activeGame.value === "hytale" 
       ? settings.value.hytaleItems 
@@ -181,6 +188,7 @@ export function useSidebar() {
   }
 
   function resetSettings() {
+    log.info('Resetting sidebar settings to defaults');
     settings.value = { 
       ...defaultSettings, 
       items: [...defaultMinecraftItems],

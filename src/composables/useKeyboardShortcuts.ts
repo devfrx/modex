@@ -1,4 +1,7 @@
 import { onMounted, onUnmounted } from "vue";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("KeyboardShortcuts");
 
 type ShortcutHandler = () => void;
 
@@ -11,6 +14,8 @@ interface Shortcut {
 }
 
 export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
+  log.debug('Registering keyboard shortcuts', { count: shortcuts.length });
+
   function handleKeyDown(event: KeyboardEvent) {
     // Ignore if typing in input/textarea
     const target = event.target as HTMLElement;
@@ -26,6 +31,7 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
 
       if (keyMatch && ctrlMatch && shiftMatch && altMatch) {
         event.preventDefault();
+        log.debug('Shortcut triggered', { key: shortcut.key, ctrl: shortcut.ctrl, shift: shortcut.shift, alt: shortcut.alt });
         shortcut.handler();
         return;
       }

@@ -15,6 +15,9 @@ import type {
   InstanceLaunchResult,
   InstanceStats,
 } from "@/types";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Instances");
 
 // Running game info interface
 export interface RunningGameInfo {
@@ -58,16 +61,25 @@ const installingInstances = computed(() =>
  */
 async function loadInstances(): Promise<ModexInstance[]> {
   // If already loading, return the existing promise
-  if (loadingPromise) return loadingPromise;
+  if (loadingPromise) {
+    log.debug("loadInstances: Already loading, returning existing promise");
+    return loadingPromise;
+  }
 
+  log.info("Loading all instances from backend");
   isLoading.value = true;
   
   loadingPromise = (async () => {
     try {
+      const startTime = Date.now();
       instances.value = await window.api.instances.getAll();
+      log.info("Instances loaded successfully", { 
+        count: instances.value.length, 
+        durationMs: Date.now() - startTime 
+      });
       return instances.value;
     } catch (error) {
-      console.error("[useInstances] Error loading instances:", error);
+      log.error("Failed to load instances", { error });
       return [];
     } finally {
       isLoading.value = false;
@@ -82,6 +94,7 @@ async function loadInstances(): Promise<ModexInstance[]> {
  * Get a specific instance
  */
 async function getInstance(id: string): Promise<ModexInstance | null> {
+  log.debug("Getting instance by ID", { id });
   return window.api.instances.get(id);
 }
 
@@ -89,6 +102,7 @@ async function getInstance(id: string): Promise<ModexInstance | null> {
  * Get instance associated with a modpack
  */
 async function getInstanceByModpack(modpackId: string): Promise<ModexInstance | null> {
+  log.debug("Getting instance by modpack", { modpackId });
   return window.api.instances.getByModpack(modpackId);
 }
 
@@ -106,8 +120,11 @@ async function createInstance(options: {
   memory?: { min: number; max: number };
   source?: ModexInstance["source"];
 }): Promise<ModexInstance> {
+  log.info("Creating new instance", { name: options.name, loader: options.loader, version: options.minecraftVersion });
+  const startTime = Date.now();
   const instance = await window.api.instances.create(options);
   instances.value.unshift(instance);
+  log.info("Instance created successfully", { id: instance.id, durationMs: Date.now() - startTime });
   return instance;
 }
 
@@ -115,9 +132,13 @@ async function createInstance(options: {
  * Delete an instance
  */
 async function deleteInstance(id: string): Promise<boolean> {
+  log.info("Deleting instance", { id });
   const success = await window.api.instances.delete(id);
   if (success) {
     instances.value = instances.value.filter(i => i.id !== id);
+    log.info("Instance deleted successfully", { id });
+  } else {
+    log.warn("Failed to delete instance", { id });
   }
   return success;
 }
@@ -151,6 +172,9 @@ async function syncModpackToInstance(
     overridesZipPath?: string;
   }
 ): Promise<InstanceSyncResult> {
+  log.info("Starting modpack sync to instance", { instanceId, modpackId, options });
+  const startTime = Date.now();
+  
   // Update local state to show installing
   const index = instances.value.findIndex(i => i.id === instanceId);
   if (index !== -1) {
@@ -170,8 +194,20 @@ async function syncModpackToInstance(
       instances.value[index].modCount = result.modsDownloaded + result.modsSkipped;
     }
 
+    log.info("Modpack sync completed", {
+      instanceId,
+      modpackId,
+      success: result.success,
+      modsDownloaded: result.modsDownloaded,
+      modsSkipped: result.modsSkipped,
+      configsCopied: result.configsCopied,
+      errors: result.errors.length,
+      durationMs: Date.now() - startTime
+    });
+
     return result;
   } catch (error: any) {
+    log.error("Modpack sync failed", { instanceId, modpackId, error: error.message });
     if (index !== -1) {
       instances.value[index].state = "error";
     }
@@ -191,6 +227,8 @@ async function syncModpackToInstance(
  * Launch an instance
  */
 async function launchInstance(instanceId: string): Promise<InstanceLaunchResult> {
+  log.info("Launching instance", { instanceId });
+  const startTime = Date.now();
   const result = await window.api.instances.launch(instanceId);
   
   // Update lastPlayed in local state
@@ -199,6 +237,12 @@ async function launchInstance(instanceId: string): Promise<InstanceLaunchResult>
     if (index !== -1) {
       instances.value[index].lastPlayed = new Date().toISOString();
     }
+    log.info("Instance launched successfully", { 
+      instanceId, 
+      durationMs: Date.now() - startTime 
+    });
+  } else {
+    log.error("Instance launch failed", { instanceId, error: result.error });
   }
 
   return result;
@@ -333,14 +377,14 @@ export function useInstances() {
     try {
       const games = await window.api.instances.getAllRunningGames();
       if (games.length > 0) {
-        console.log(`[useInstances] Detected ${games.length} running game(s) from backend`);
+        log.info(`Detected ${games.length} running game(s) from backend`);
         for (const game of games) {
           runningGames.value.set(game.instanceId, game);
         }
         runningGames.value = new Map(runningGames.value);
       }
     } catch (err) {
-      console.warn("[useInstances] Failed to load running games:", err);
+      log.warn("Failed to load running games:", err);
     }
   });
 
@@ -360,12 +404,12 @@ export function useInstances() {
         fn();
       } catch (err) {
         errors.push(err as Error);
-        console.warn("[useInstances] Cleanup error:", err);
+        log.warn("Cleanup error:", err);
       }
     }
     
     if (errors.length > 0) {
-      console.error(`[useInstances] ${errors.length} cleanup error(s) occurred`);
+      log.error(`${errors.length} cleanup error(s) occurred`);
     }
   });
   

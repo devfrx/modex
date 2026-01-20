@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, useRouter } from "vue-router";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import { cn } from "@/lib/utils";
@@ -7,6 +8,8 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useSidebar } from "@/composables/useSidebar";
 import { useGameProfile } from "@/composables/useGameProfile";
 import GameSelector from "@/components/layout/GameSelector.vue";
+
+const log = createLogger("Sidebar");
 
 const router = useRouter();
 const { activeGameType, isLoading: isGameLoading, setActiveGame, initialize: initGameProfile } = useGameProfile();
@@ -101,7 +104,7 @@ async function loadStats() {
     favoriteModCount.value = validFavMods.length;
     favoritePackCount.value = validFavPacks.length;
   } catch (err) {
-    console.error("Failed to load stats:", err);
+    log.error("Failed to load stats", { error: String(err) });
   }
 }
 

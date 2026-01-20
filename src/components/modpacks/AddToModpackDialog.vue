@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { createLogger } from "@/utils/logger";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
 import type { Modpack, Mod } from "@/types/electron";
+
+const log = createLogger("AddToModpackDialog");
 
 const props = defineProps<{
   open: boolean;
@@ -84,7 +87,7 @@ async function loadModpacks() {
   try {
     modpacks.value = await window.api.modpacks.getAll();
   } catch (err) {
-    console.error("Failed to load modpacks", err);
+    log.error("Failed to load modpacks", { error: String(err) });
   } finally {
     isLoading.value = false;
   }

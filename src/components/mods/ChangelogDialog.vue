@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { createLogger } from "@/utils/logger";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
+
+const log = createLogger("ChangelogDialog");
 
 const props = defineProps<{
   open: boolean;
@@ -33,7 +36,7 @@ async function loadChangelog() {
       props.fileId
     );
   } catch (err) {
-    console.error("Failed to load changelog:", err);
+    log.error("Failed to load changelog", { modId: props.modId, fileId: props.fileId, error: String(err) });
     error.value = (err as Error).message;
     changelog.value = "";
   } finally {

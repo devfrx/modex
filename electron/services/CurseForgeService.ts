@@ -7,6 +7,9 @@
 
 import * as fs from "fs-extra";
 import * as path from "path";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("CurseForge");
 
 // ==================== TYPES ====================
 
@@ -187,8 +190,8 @@ export class CurseForgeService {
   /** Hytale content class IDs (populated from API) */
   private hytaleClassIds: Record<string, number> = {};
 
-  // Simple in-memory cache
-  private cache = new Map<string, { data: any; expires: number }>();
+  // Simple in-memory cache with typed entries
+  private cache = new Map<string, { data: unknown; expires: number }>();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   
   /** Default timeout for API requests in milliseconds */
@@ -263,7 +266,7 @@ export class CurseForgeService {
    */
   async fetchGameClasses(gameType?: GameType): Promise<{ id: number; name: string; slug: string }[]> {
     if (!this.apiKey) {
-      console.warn("[CurseForge] API key not set, cannot fetch game classes");
+      log.warn("API key not set, cannot fetch game classes");
       return [];
     }
 
@@ -276,7 +279,7 @@ export class CurseForgeService {
 
     try {
       const url = `${this.apiUrl}/categories?gameId=${gameId}&classesOnly=true`;
-      console.log(`[CurseForge] Fetching game classes from: ${url}`);
+      log.info(`Fetching game classes from: ${url}`);
 
       const response = await this.fetchWithTimeout(url, {
         headers: {
@@ -286,18 +289,24 @@ export class CurseForgeService {
       });
 
       if (!response.ok) {
-        console.warn(`[CurseForge] Failed to fetch game classes: ${response.status}`);
+        log.warn(`Failed to fetch game classes: ${response.status}`);
         return [];
       }
 
-      const data = await response.json();
-      const classes = (data.data || []).map((c: any) => ({
+      interface CFClassResponse {
+        id: number;
+        name: string;
+        slug: string;
+      }
+
+      const data = await response.json() as { data?: CFClassResponse[] };
+      const classes = (data.data || []).map((c: CFClassResponse) => ({
         id: c.id,
         name: c.name,
         slug: c.slug,
       }));
 
-      console.log(`[CurseForge] Game ${game} classes:`, classes);
+      log.info(`Game ${game} classes:`, classes);
 
       // Cache the results
       this.setCache(cacheKey, classes);
@@ -309,12 +318,12 @@ export class CurseForgeService {
           this.hytaleClassIds[slug] = cls.id;
         }
         this.hytaleClassesLoaded = true;
-        console.log(`[CurseForge] Hytale class IDs:`, this.hytaleClassIds);
+        log.info(`Hytale class IDs:`, this.hytaleClassIds);
       }
 
       return classes;
     } catch (error) {
-      console.error(`[CurseForge] Error fetching game classes:`, error);
+      log.error(`Error fetching game classes:`, error);
       return [];
     }
   }
@@ -353,7 +362,7 @@ export class CurseForgeService {
       // If we still don't have a class ID, return the first available class
       const classIds = Object.values(this.hytaleClassIds);
       if (classIds.length > 0) {
-        console.log(`[CurseForge] Using first available Hytale class ID: ${classIds[0]}`);
+        log.info(`Using first available Hytale class ID: ${classIds[0]}`);
         return classIds[0];
       }
     }
@@ -373,7 +382,7 @@ export class CurseForgeService {
     return null;
   }
 
-  private setCache(key: string, data: any): void {
+  private setCache(key: string, data: unknown): void {
     this.cache.set(key, { data, expires: Date.now() + this.CACHE_TTL });
   }
 
@@ -394,7 +403,7 @@ export class CurseForgeService {
   async setApiKey(apiKey: string): Promise<void> {
     this.apiKey = apiKey;
     const configFile = path.join(this.configPath, "config.json");
-    let config: any = {};
+    let config: Record<string, unknown> = {};
 
     if (await fs.pathExists(configFile)) {
       config = await fs.readJson(configFile);
@@ -430,7 +439,7 @@ export class CurseForgeService {
     const cached = this.getCached<CFMod[]>(cacheKey);
     if (cached) return cached;
 
-    console.log(`[CurseForge] Batch fetching ${modIds.length} mods`);
+    log.info(`Batch fetching ${modIds.length} mods`);
 
     const response = await this.fetchWithTimeout(`${this.apiUrl}/mods`, {
       method: "POST",
@@ -468,7 +477,7 @@ export class CurseForgeService {
     const cached = this.getCached<CFFile[]>(cacheKey);
     if (cached) return cached;
 
-    console.log(`[CurseForge] Batch fetching ${fileIds.length} files`);
+    log.info(`Batch fetching ${fileIds.length} files`);
 
     const response = await this.fetchWithTimeout(`${this.apiUrl}/mods/files`, {
       method: "POST",
@@ -513,7 +522,7 @@ export class CurseForgeService {
     const modIds = [...new Set(entries.map((e) => e.projectID))];
     const fileIds = [...new Set(entries.map((e) => e.fileID))];
 
-    console.log(`[CurseForge] Batch prefetch: ${modIds.length} mods, ${fileIds.length} files`);
+    log.info(`Batch prefetch: ${modIds.length} mods, ${fileIds.length} files`);
     const startTime = Date.now();
 
     // Fetch mods and files in parallel
@@ -536,7 +545,7 @@ export class CurseForgeService {
       files.set(file.id, file);
     }
 
-    console.log(`[CurseForge] Batch prefetch completed in ${Date.now() - startTime}ms`);
+    log.info(`Batch prefetch completed in ${Date.now() - startTime}ms`);
 
     return { mods, files, errors };
   }
@@ -703,7 +712,7 @@ export class CurseForgeService {
     }
 
     const url = `${this.apiUrl}/mods/search?${params}`;
-    console.log(`[CurseForge] Searching ${gameType}:`, url);
+    log.info(`Searching ${gameType}:`, url);
 
     const response = await this.fetchWithTimeout(url, {
       headers: {
@@ -1148,7 +1157,7 @@ export class CurseForgeService {
     }
 
     const url = `${this.apiUrl}/games/${this.HYTALE_GAME_ID}/versions`;
-    console.log(`[CurseForge] Fetching Hytale versions from: ${url}`);
+    log.info(`Fetching Hytale versions from: ${url}`);
 
     try {
       const response = await this.fetchWithTimeout(url, {
@@ -1159,21 +1168,27 @@ export class CurseForgeService {
       });
 
       if (!response.ok) {
-        console.warn(`[CurseForge] Failed to fetch Hytale versions: ${response.status}`);
+        log.warn(`Failed to fetch Hytale versions: ${response.status}`);
         return [];
       }
 
-      const data = await response.json();
+      interface HytaleVersionResponse {
+        id: number;
+        name?: string;
+        slug?: string;
+      }
+
+      const data = await response.json() as { data?: HytaleVersionResponse[] };
       const versions = data.data || [];
-      console.log(`[CurseForge] Received ${versions.length} Hytale versions`);
+      log.info(`Received ${versions.length} Hytale versions`);
 
       // Map to consistent format
-      return versions.map((v: any) => ({
+      return versions.map((v: HytaleVersionResponse) => ({
         versionString: v.name || v.slug || String(v.id),
         approved: true,
       }));
     } catch (error) {
-      console.error("[CurseForge] Error fetching Hytale versions:", error);
+      log.error("Error fetching Hytale versions:", error);
       return [];
     }
   }
@@ -1187,7 +1202,7 @@ export class CurseForgeService {
     }
 
     const url = `${this.apiUrl}/minecraft/version?sortDescending=true`;
-    console.log(`[CurseForge] Fetching Minecraft versions from: ${url}`);
+    log.info(`Fetching Minecraft versions from: ${url}`);
 
     const response = await this.fetchWithTimeout(url, {
       headers: {
@@ -1197,13 +1212,13 @@ export class CurseForgeService {
     });
 
     if (!response.ok) {
-      console.warn(`[CurseForge] Failed to fetch Minecraft versions: ${response.status}`);
+      log.warn(`Failed to fetch Minecraft versions: ${response.status}`);
       return [];
     }
 
     const data = await response.json();
     const versions = data.data || [];
-    console.log(`[CurseForge] Received ${versions.length} Minecraft versions`);
+    log.info(`Received ${versions.length} Minecraft versions`);
 
     return versions;
   }
@@ -1248,7 +1263,7 @@ export class CurseForgeService {
       url += `&version=${gameVersion}`;
     }
 
-    console.log(`[CurseForge] Fetching modloaders from: ${url}`);
+    log.info(`Fetching modloaders from: ${url}`);
 
     const response = await this.fetchWithTimeout(url, {
       headers: {
@@ -1258,15 +1273,15 @@ export class CurseForgeService {
     });
 
     if (!response.ok) {
-      console.warn(
-        `[CurseForge] Failed to fetch modloaders: ${response.status}`
+      log.warn(
+        `Failed to fetch modloaders: ${response.status}`
       );
       return [];
     }
 
     const data = await response.json();
     const loaders = data.data || [];
-    console.log(`[CurseForge] Received ${loaders.length} modloaders`);
+    log.info(`Received ${loaders.length} modloaders`);
 
     return loaders;
   }
@@ -1436,8 +1451,8 @@ export class CurseForgeService {
           }
         }
       } catch (err) {
-        console.warn(
-          `[CurseForge] Failed to get recommendations for category ${categoryId}:`,
+        log.warn(
+          `Failed to get recommendations for category ${categoryId}:`,
           err
         );
       }

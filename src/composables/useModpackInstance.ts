@@ -9,6 +9,9 @@
 import { ref, computed, Ref, ComputedRef } from 'vue';
 import { useInstances } from '@/composables/useInstances';
 import type { ModexInstance, InstanceSyncResult, Modpack } from '@/types';
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("ModpackInstance");
 
 // Re-export the type for consumers
 export interface InstanceStats {
@@ -157,7 +160,7 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
       
       // Check if modpackId changed during async operation
       if (modpackId.value !== currentModpackId) {
-        console.log('[useModpackInstance] modpackId changed during load, discarding results');
+        log.info('modpackId changed during load, discarding results');
         return;
       }
       
@@ -192,7 +195,7 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
         instanceSyncStatus.value = null;
       }
     } catch (err) {
-      console.error('Failed to load instance:', err);
+      log.error('Failed to load instance:', err);
     } finally {
       isLoadingInstance.value = false;
     }
@@ -209,7 +212,7 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
         showConfirmation: settings.showSyncConfirmation !== false,
       };
     } catch (err) {
-      console.error('Failed to load sync settings:', err);
+      log.error('Failed to load sync settings:', err);
     }
   }
 
@@ -257,7 +260,7 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
         autoSyncBeforeLaunch: newValue,
       });
     } catch (err) {
-      console.error('Failed to save sync setting:', err);
+      log.error('Failed to save sync setting:', err);
     }
   }
 
@@ -272,7 +275,7 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
         showSyncConfirmation: newValue,
       });
     } catch (err) {
-      console.error('Failed to save sync setting:', err);
+      log.error('Failed to save sync setting:', err);
     }
   }
 
@@ -517,7 +520,7 @@ export function useModpackInstance(options: UseModpackInstanceOptions) {
         modpackId.value
       );
     } catch (err) {
-      console.error('Failed to refresh sync status:', err);
+      log.error('Failed to refresh sync status:', err);
     }
   }
 

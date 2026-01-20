@@ -13,6 +13,9 @@
 import path from "path";
 import fs from "fs-extra";
 import AdmZip from "adm-zip";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("ModpackAnalyzer");
 
 // ==================== TYPES ====================
 
@@ -112,7 +115,7 @@ export class ModpackAnalyzerService {
 
       return null;
     } catch (error) {
-      console.error("Error previewing modpack:", error);
+      log.error("Error previewing modpack:", error);
       return null;
     }
   }
@@ -179,7 +182,7 @@ export class ModpackAnalyzerService {
 
       return preview;
     } catch (error) {
-      console.error("Error previewing CurseForge modpack:", error);
+      log.error("Error previewing CurseForge modpack:", error);
       return null;
     }
   }

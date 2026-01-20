@@ -13,6 +13,9 @@ import * as fs from "fs-extra";
 import * as path from "path";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("Download");
 
 // ==================== TYPES ====================
 
@@ -168,7 +171,7 @@ export class DownloadService {
           durationMs: Date.now() - startTime,
         };
       } catch (error: any) {
-        console.error(`[Download] Attempt ${attempt + 1} failed:`, error.message);
+        log.error(`Attempt ${attempt + 1} failed:`, error.message);
 
         // Don't retry on abort
         if (error.name === "AbortError") {
@@ -183,13 +186,15 @@ export class DownloadService {
         // Retry with exponential backoff
         if (attempt < retries) {
           const delay = retryDelay * Math.pow(2, attempt);
-          console.log(`[Download] Retrying in ${delay}ms...`);
+          log.info(`Retrying in ${delay}ms...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         } else {
           // Clean up failed download
           try {
             await fs.remove(destPath);
-          } catch {}
+          } catch {
+            // Ignore cleanup errors - file may not exist or already be removed
+          }
 
           return {
             success: false,

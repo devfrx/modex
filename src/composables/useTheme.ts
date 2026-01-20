@@ -1,4 +1,7 @@
 import { ref, watch, computed } from "vue";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Theme");
 
 export type Theme =
   | "dark"
@@ -195,7 +198,7 @@ function loadCustomization(): ThemeCustomization {
       return { ...defaultCustomization, ...JSON.parse(saved) };
     }
   } catch (e) {
-    console.error("Failed to load theme customization:", e);
+    log.error("Failed to load theme customization:", e);
   }
   return { ...defaultCustomization };
 }
@@ -207,12 +210,13 @@ function saveCustomization() {
       JSON.stringify(customization.value)
     );
   } catch (e) {
-    console.error("Failed to save theme customization:", e);
+    log.error("Failed to save theme customization:", e);
   }
 }
 
 export function useTheme() {
   function setTheme(theme: Theme) {
+    log.info('Setting theme', { from: currentTheme.value, to: theme });
     currentTheme.value = theme;
     // Apply to document
     document.documentElement.setAttribute("data-theme", theme);
@@ -221,11 +225,13 @@ export function useTheme() {
   }
 
   function toggleTheme() {
+    log.debug('Toggling theme');
     setTheme(currentTheme.value === "dark" ? "light" : "dark");
   }
 
   function initializeTheme() {
     const saved = localStorage.getItem("modex-theme") as Theme;
+    log.debug('Initializing theme', { savedTheme: saved });
     if (saved) {
       setTheme(saved);
     } else {

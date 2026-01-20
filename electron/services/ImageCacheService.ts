@@ -14,6 +14,9 @@ import fs from "fs-extra";
 import crypto from "crypto";
 import https from "https";
 import http from "http";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("ImageCache");
 
 // ==================== TYPES ====================
 
@@ -97,7 +100,7 @@ export class ImageCacheService {
 
       this.initialized = true;
     } catch (error) {
-      console.error("Error initializing image cache:", error);
+      log.error("Error initializing image cache:", error);
       this.cacheIndex = new Map();
     }
   }
@@ -175,7 +178,7 @@ export class ImageCacheService {
 
       return `atom:///${entry.localPath.replace(/\\/g, "/")}`;
     } catch (error) {
-      console.error(`Error caching image ${url}:`, error);
+      log.error(`Error caching image ${url}:`, error);
       return null;
     }
   }
@@ -327,7 +330,9 @@ export class ImageCacheService {
         toRemove.push(hash);
         try {
           await fs.remove(entry.localPath);
-        } catch {}
+        } catch {
+          // Ignore - file may already be removed
+        }
       }
     }
 
@@ -357,7 +362,9 @@ export class ImageCacheService {
         this.cacheIndex.delete(hash);
         this.memoryCache.delete(hash);
         totalSize -= entry.size;
-      } catch {}
+      } catch {
+        // Ignore cleanup errors - will be retried on next run
+      }
     }
   }
 
@@ -385,7 +392,7 @@ export class ImageCacheService {
       };
       await fs.writeJson(this.indexPath, data, { spaces: 2 });
     } catch (error) {
-      console.error("Error saving cache index:", error);
+      log.error("Error saving cache index:", error);
     }
   }
 
@@ -424,7 +431,7 @@ export class ImageCacheService {
       this.misses = 0;
       await this.saveIndex();
     } catch (error) {
-      console.error("Error clearing cache:", error);
+      log.error("Error clearing cache:", error);
     }
   }
 
@@ -443,7 +450,9 @@ export class ImageCacheService {
       if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"].includes(ext)) {
         return ext;
       }
-    } catch {}
+    } catch {
+      // Invalid URL - use default extension
+    }
     
     return ".png"; // Default
   }

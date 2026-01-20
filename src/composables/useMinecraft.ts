@@ -4,6 +4,9 @@
 
 import { ref, reactive, computed, onMounted } from "vue";
 import type { MinecraftInstallation } from "@/types";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Minecraft");
 
 export interface SyncProgress {
   current: number;
@@ -45,13 +48,19 @@ export function useMinecraft() {
    * Scan for Minecraft installations
    */
   async function scanInstallations(): Promise<MinecraftInstallation[]> {
+    log.info("Scanning for Minecraft installations");
     isScanning.value = true;
+    const startTime = Date.now();
     try {
       const detected = await window.api.minecraft.detectInstallations();
       installations.value = detected;
+      log.info("Installations scanned", { 
+        count: detected.length,
+        durationMs: Date.now() - startTime 
+      });
       return detected;
     } catch (error) {
-      console.error("Failed to scan installations:", error);
+      log.error("Failed to scan installations", { error: String(error) });
       return [];
     } finally {
       isScanning.value = false;
@@ -62,13 +71,15 @@ export function useMinecraft() {
    * Get cached installations (without rescanning)
    */
   async function getInstallations(): Promise<MinecraftInstallation[]> {
+    log.debug("Getting cached installations");
     isLoading.value = true;
     try {
       const result = await window.api.minecraft.getInstallations();
       installations.value = result;
+      log.debug("Installations retrieved", { count: result.length });
       return result;
     } catch (error) {
-      console.error("Failed to get installations:", error);
+      log.error("Failed to get installations", { error: String(error) });
       return [];
     } finally {
       isLoading.value = false;
@@ -83,14 +94,16 @@ export function useMinecraft() {
     mcPath: string,
     modsPath?: string
   ): Promise<MinecraftInstallation | null> {
+    log.info("Adding custom installation", { name, mcPath, modsPath });
     try {
       const installation = await window.api.minecraft.addCustom(name, mcPath, modsPath);
       if (installation) {
         installations.value.push(installation);
+        log.info("Custom installation added", { id: installation.id, name: installation.name });
       }
       return installation;
     } catch (error) {
-      console.error("Failed to add custom installation:", error);
+      log.error("Failed to add custom installation", { name, error: String(error) });
       return null;
     }
   }
@@ -99,6 +112,7 @@ export function useMinecraft() {
    * Remove an installation from the list
    */
   async function removeInstallation(id: string): Promise<boolean> {
+    log.info("Removing installation", { id });
     try {
       const success = await window.api.minecraft.remove(id);
       if (success) {
@@ -106,10 +120,11 @@ export function useMinecraft() {
         if (index !== -1) {
           installations.value.splice(index, 1);
         }
+        log.info("Installation removed", { id });
       }
       return success;
     } catch (error) {
-      console.error("Failed to remove installation:", error);
+      log.error("Failed to remove installation", { id, error: String(error) });
       return false;
     }
   }
@@ -118,16 +133,18 @@ export function useMinecraft() {
    * Set the default installation
    */
   async function setDefault(id: string): Promise<boolean> {
+    log.info("Setting default installation", { id });
     try {
       const success = await window.api.minecraft.setDefault(id);
       if (success) {
         installations.value.forEach(i => {
           i.isDefault = i.id === id;
         });
+        log.info("Default installation set", { id });
       }
       return success;
     } catch (error) {
-      console.error("Failed to set default installation:", error);
+      log.error("Failed to set default installation", { id, error: String(error) });
       return false;
     }
   }
@@ -146,6 +163,8 @@ export function useMinecraft() {
     errors: string[];
     syncedMods: string[];
   }> {
+    log.info("Syncing modpack to installation", { installationId, modpackId, options });
+    const startTime = Date.now();
     isSyncing.value = true;
     syncProgress.current = 0;
     syncProgress.total = 0;
@@ -164,8 +183,18 @@ export function useMinecraft() {
           syncProgress.percentage = total > 0 ? (current / total) * 100 : 0;
         }
       );
+      log.info("Modpack sync completed", {
+        installationId,
+        modpackId,
+        success: result.success,
+        synced: result.synced,
+        skipped: result.skipped,
+        errorsCount: result.errors.length,
+        durationMs: Date.now() - startTime
+      });
       return result;
     } catch (error: any) {
+      log.error("Modpack sync failed", { installationId, modpackId, error: String(error) });
       return {
         success: false,
         synced: 0,
@@ -182,10 +211,11 @@ export function useMinecraft() {
    * Open the mods folder of an installation
    */
   async function openModsFolder(installationId: string): Promise<boolean> {
+    log.debug("Opening mods folder", { installationId });
     try {
       return await window.api.minecraft.openModsFolder(installationId);
     } catch (error) {
-      console.error("Failed to open mods folder:", error);
+      log.error("Failed to open mods folder:", error);
       return false;
     }
   }
@@ -208,7 +238,7 @@ export function useMinecraft() {
     try {
       return await window.api.minecraft.selectFolder();
     } catch (error) {
-      console.error("Failed to select folder:", error);
+      log.error("Failed to select folder:", error);
       return null;
     }
   }
@@ -237,7 +267,7 @@ export function useMinecraft() {
     try {
       return await window.api.minecraft.getLauncherPaths();
     } catch (error) {
-      console.error("Failed to get launcher paths:", error);
+      log.error("Failed to get launcher paths:", error);
       return {};
     }
   }
@@ -249,7 +279,7 @@ export function useMinecraft() {
     try {
       return await window.api.minecraft.setLauncherPath(type, launcherPath);
     } catch (error) {
-      console.error("Failed to set launcher path:", error);
+      log.error("Failed to set launcher path:", error);
       return false;
     }
   }
@@ -261,7 +291,7 @@ export function useMinecraft() {
     try {
       return await window.api.minecraft.selectLauncher();
     } catch (error) {
-      console.error("Failed to select launcher:", error);
+      log.error("Failed to select launcher:", error);
       return null;
     }
   }

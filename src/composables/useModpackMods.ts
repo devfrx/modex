@@ -1,6 +1,9 @@
 import { ref, computed, type Ref } from "vue";
 import type { Mod, Modpack } from "@/types";
 import { useToast } from "./useToast";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("ModpackMods");
 
 // No more timeout - user dismisses manually
 // const RECENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
@@ -79,10 +82,11 @@ export function useModpackMods(options: UseModpackModsOptions) {
     
     // Prevent concurrent operations on the same mod
     if (pendingOperations.value.has(modId)) {
-      console.log(`[useModpackMods] Operation already pending for mod ${modId}`);
+      log.debug("Operation already pending for mod", { modId });
       return;
     }
     
+    log.info("Adding mod to modpack", { modpackId: modpackId.value, modId });
     pendingOperations.value = new Set([...pendingOperations.value, modId]);
     try {
       // Normal API call - backend handles instant sync if enabled
@@ -96,10 +100,11 @@ export function useModpackMods(options: UseModpackModsOptions) {
       // Refresh sync status (should show "in sync" if instant sync worked)
       await refreshSyncStatus();
       onUpdate();
+      log.info("Mod added successfully", { modpackId: modpackId.value, modId });
     } catch (err) {
       const errorMsg = (err as Error).message;
       toast.error("Cannot Add Mod", errorMsg);
-      console.error("Failed to add mod:", err);
+      log.error("Failed to add mod", { modpackId: modpackId.value, modId, error: errorMsg });
     } finally {
       // Remove from pending operations
       const newPending = new Set(pendingOperations.value);
@@ -128,7 +133,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
 
     // Prevent concurrent operations on the same mod
     if (pendingOperations.value.has(modId)) {
-      console.log(`[useModpackMods] Operation already pending for mod ${modId}`);
+      log.info(`Operation already pending for mod ${modId}`);
       return;
     }
 
@@ -155,7 +160,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
       // No impact, proceed directly
       await executeModRemoval(modId);
     } catch (err) {
-      console.error("Failed to remove mod:", err);
+      log.error("Failed to remove mod:", err);
     }
   }
 
@@ -163,10 +168,11 @@ export function useModpackMods(options: UseModpackModsOptions) {
   async function executeModRemoval(modId: string): Promise<void> {
     // Prevent concurrent operations on the same mod
     if (pendingOperations.value.has(modId)) {
-      console.log(`[useModpackMods] Operation already pending for mod ${modId}`);
+      log.debug("Operation already pending for mod", { modId });
       return;
     }
     
+    log.info("Removing mod from modpack", { modpackId: modpackId.value, modId });
     pendingOperations.value = new Set([...pendingOperations.value, modId]);
     try {
       // Normal API call - backend handles instant sync if enabled
@@ -175,8 +181,9 @@ export function useModpackMods(options: UseModpackModsOptions) {
       // Refresh sync status
       await refreshSyncStatus();
       onUpdate();
+      log.info("Mod removed successfully", { modpackId: modpackId.value, modId });
     } catch (err) {
-      console.error("Failed to remove mod:", err);
+      log.error("Failed to remove mod", { modpackId: modpackId.value, modId, error: (err as Error).message });
       toast.error("Remove Failed", (err as Error).message);
     } finally {
       // Remove from pending operations
@@ -199,12 +206,13 @@ export function useModpackMods(options: UseModpackModsOptions) {
 
     // Prevent concurrent operations on the same mod
     if (pendingOperations.value.has(modId)) {
-      console.log(`[useModpackMods] Operation already pending for mod ${modId}`);
+      log.debug("Operation already pending for mod", { modId });
       return;
     }
 
     // Check if we're disabling (mod is currently enabled)
     const isCurrentlyEnabled = !disabledModIds.value.has(modId);
+    log.info("Toggling mod state", { modId, currentlyEnabled: isCurrentlyEnabled });
 
     if (isCurrentlyEnabled) {
       // We're about to disable - check dependency impact
@@ -223,7 +231,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
           return;
         }
       } catch (err) {
-        console.error("Failed to check dependency impact:", err);
+        log.error("Failed to check dependency impact", { modId, error: (err as Error).message });
       }
     }
 
@@ -235,7 +243,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
   async function executeModToggle(modId: string): Promise<void> {
     // Prevent concurrent operations on the same mod
     if (pendingOperations.value.has(modId)) {
-      console.log(`[useModpackMods] Operation already pending for mod ${modId}`);
+      log.debug("Operation already pending for mod", { modId });
       return;
     }
     
@@ -263,7 +271,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
         onUpdate();
       }
     } catch (err) {
-      console.error("Failed to toggle mod:", err);
+      log.error("Failed to toggle mod:", err);
       toast.error("Toggle Failed", (err as Error).message);
     } finally {
       // Remove from pending operations
@@ -277,7 +285,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
   async function toggleModLocked(modId: string): Promise<void> {
     // Prevent concurrent operations on the same mod
     if (pendingOperations.value.has(modId)) {
-      console.log(`[useModpackMods] Operation already pending for mod ${modId}`);
+      log.info(`Operation already pending for mod ${modId}`);
       return;
     }
     
@@ -308,7 +316,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
         onUpdate();
       }
     } catch (err) {
-      console.error("Failed to toggle mod lock:", err);
+      log.error("Failed to toggle mod lock:", err);
       toast.error("Lock Failed", (err as Error).message);
     } finally {
       // Remove from pending operations
@@ -360,7 +368,7 @@ export function useModpackMods(options: UseModpackModsOptions) {
       noteDialogMod.value = null;
       noteDialogText.value = "";
     } catch (err) {
-      console.error("Failed to save mod note:", err);
+      log.error("Failed to save mod note:", err);
       toast.error("Save Failed", (err as Error).message);
     } finally {
       isSavingNote.value = false;

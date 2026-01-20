@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { createLogger } from "@/utils/logger";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
 import type { Mod } from "@/types";
 import { useToast } from "@/composables/useToast";
+
+const log = createLogger("ModDetailsModal");
 
 const props = defineProps<{
   open: boolean;
@@ -203,7 +206,7 @@ async function loadModData() {
       screenshots.value = cfModData.value.screenshots;
     }
   } catch (err) {
-    console.error("Failed to load mod data:", err);
+    log.error("Failed to load mod data", { projectId: props.mod?.cf_project_id, error: String(err) });
   }
 }
 
@@ -214,7 +217,7 @@ async function loadDescription() {
   try {
     description.value = await window.api.curseforge.getModDescription(props.mod.cf_project_id);
   } catch (err) {
-    console.error("Failed to load description:", err);
+    log.error("Failed to load description", { projectId: props.mod?.cf_project_id, error: String(err) });
     description.value = "<p class='text-muted-foreground'>Failed to load description</p>";
   } finally {
     isLoadingDescription.value = false;
@@ -253,7 +256,7 @@ async function loadFiles() {
       selectedFileId.value = filteredFiles.value[0].id;
     }
   } catch (err) {
-    console.error("Failed to load files:", err);
+    log.error("Failed to load files", { projectId: props.mod?.cf_project_id, error: String(err) });
   } finally {
     isLoadingFiles.value = false;
   }

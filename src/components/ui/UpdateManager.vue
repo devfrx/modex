@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { useToast } from "@/composables/useToast";
+import { createLogger } from "@/utils/logger";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Icon from "@/components/ui/Icon.vue";
+
+const log = createLogger("UpdateManager");
 
 const toast = useToast();
 
@@ -85,7 +88,7 @@ onMounted(() => {
         window.api.updates.onUpdateError((error) => {
             // AutoUpdater errors are logged but not shown to user
             // The fallback download method will handle it
-            console.log("[UpdateManager] AutoUpdater error (will use fallback):", error.message);
+            log.debug("AutoUpdater error (will use fallback)", { error: error.message });
         })
     );
 });

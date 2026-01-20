@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { createLogger } from "@/utils/logger";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
+
+const log = createLogger("FilePickerDialog");
 
 const props = defineProps<{
     open: boolean;
@@ -58,7 +61,7 @@ async function loadFiles() {
             selectedFileId.value = compatible[0].id;
         }
     } catch (err) {
-        console.error("Failed to load files:", err);
+        log.error("Failed to load files", { modId: props.mod?.id, error: String(err) });
     } finally {
         isLoading.value = false;
     }

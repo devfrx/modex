@@ -1,5 +1,8 @@
 import { ref, computed, watch, type Ref } from "vue";
+import { createLogger } from "@/utils/logger";
 import type { Mod } from "@/types";
+
+const log = createLogger("ModpackSelection");
 
 export interface UseModpackSelectionOptions {
   filteredMods: Ref<Mod[]>;
@@ -10,11 +13,14 @@ export interface UseModpackSelectionOptions {
 
 export function useModpackSelection(options: UseModpackSelectionOptions) {
   const { filteredMods, disabledModIds, lockedModIds, contentTypeTab } = options;
+  
+  log.debug('Initializing modpack selection');
 
   const selectedModIds = ref<Set<string>>(new Set());
 
   // Clear selection when content type tab changes
-  watch(contentTypeTab, () => {
+  watch(contentTypeTab, (newTab) => {
+    log.debug('Content type tab changed, clearing selection', { newTab });
     selectedModIds.value = new Set();
   });
 
@@ -22,8 +28,10 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
   function toggleSelect(modId: string): void {
     const newSet = new Set(selectedModIds.value);
     if (newSet.has(modId)) {
+      log.debug('Deselecting mod', { modId });
       newSet.delete(modId);
     } else {
+      log.debug('Selecting mod', { modId });
       newSet.add(modId);
     }
     selectedModIds.value = newSet;
@@ -31,6 +39,7 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
 
   // Select all visible mods
   function selectAll(): void {
+    log.debug('Selecting all visible mods', { count: filteredMods.value.length });
     const newSet = new Set(selectedModIds.value);
     for (const mod of filteredMods.value) {
       if (mod.id) {
@@ -46,6 +55,7 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
       (mod) =>
         mod.id && !disabledModIds.value.has(mod.id) && !lockedModIds.value.has(mod.id)
     );
+    log.debug('Selecting all enabled mods', { count: enabledUnlockedMods.length });
 
     const newSet = new Set<string>();
     for (const mod of enabledUnlockedMods) {
@@ -120,6 +130,7 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
 
   // Clear all selections
   function clearSelection(): void {
+    log.debug('Clearing all selections', { previousCount: selectedModIds.value.size });
     selectedModIds.value = new Set();
   }
 

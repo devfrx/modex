@@ -14,7 +14,9 @@ import type { HytaleModpack } from "@/types";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("HytaleView");
 const router = useRouter();
 const toast = useToast();
 

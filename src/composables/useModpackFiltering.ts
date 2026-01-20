@@ -1,6 +1,9 @@
 import { computed, ref, type Ref } from "vue";
+import { createLogger } from "@/utils/logger";
 import type { Mod } from "@/types";
 import type { CompatibilityResult } from "./useModpackCompatibility";
+
+const log = createLogger("ModpackFiltering");
 
 export type ModsFilterType =
   | "all"
@@ -31,6 +34,10 @@ export interface UseModpackFilteringOptions {
 }
 
 export function useModpackFiltering(options: UseModpackFilteringOptions) {
+  log.debug('Initializing modpack filtering', { 
+    modsCount: options.currentMods.value.length 
+  });
+  
   const {
     currentMods,
     disabledModIds,

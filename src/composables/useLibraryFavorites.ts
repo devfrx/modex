@@ -1,4 +1,7 @@
 import { ref } from "vue";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Favorites");
 
 const FAVORITES_KEY = "modex:favorites:mods";
 
@@ -14,9 +17,10 @@ export function useLibraryFavorites() {
       const stored = localStorage.getItem(FAVORITES_KEY);
       if (stored) {
         favoriteMods.value = new Set(JSON.parse(stored));
+        log.debug('Loaded favorites', { count: favoriteMods.value.size });
       }
     } catch (e) {
-      console.error("Failed to load favorites from localStorage:", e);
+      log.error("Failed to load favorites from localStorage:", e);
       favoriteMods.value = new Set();
     }
   }
@@ -31,9 +35,12 @@ export function useLibraryFavorites() {
   }
 
   function toggleFavorite(modId: string): void {
-    if (favoriteMods.value.has(modId)) {
+    const wasFavorite = favoriteMods.value.has(modId);
+    if (wasFavorite) {
+      log.debug('Removing mod from favorites', { modId });
       favoriteMods.value.delete(modId);
     } else {
+      log.debug('Adding mod to favorites', { modId });
       favoriteMods.value.add(modId);
     }
     saveFavorites();

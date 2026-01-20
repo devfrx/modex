@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { createLogger } from "@/utils/logger";
 import ModDetailsModal from "@/components/mods/ModDetailsModal.vue";
 import type { Mod } from "@/types/electron";
 
+const log = createLogger("ModDetailsView");
 const route = useRoute();
 const router = useRouter();
 
@@ -16,6 +18,7 @@ const isLoading = ref(true);
 
 // Navigate back
 function goBack() {
+    log.debug("Navigating back", { contextType: contextType.value, modpackId: modpackId.value });
     if (contextType.value === "modpack" && modpackId.value) {
         router.push(`/modpacks/${modpackId.value}`);
     } else {
@@ -27,19 +30,30 @@ function goBack() {
 async function loadMod() {
     if (!modId.value || !window.api) return;
 
+    log.info("Loading mod details", { modId: modId.value });
     isLoading.value = true;
     try {
         const mods = await window.api.mods.getAll();
         mod.value = mods.find((m) => m.id === modId.value) || null;
+        if (mod.value) {
+            log.debug("Mod loaded", { modId: modId.value, name: mod.value.name });
+        } else {
+            log.warn("Mod not found", { modId: modId.value });
+        }
     } catch (err) {
-        console.error("Failed to load mod:", err);
+        log.error("Failed to load mod", { modId: modId.value, error: String(err) });
     } finally {
         isLoading.value = false;
     }
 }
 
 onMounted(() => {
+    log.info("ModDetailsView mounted", { modId: modId.value });
     loadMod();
+});
+
+onUnmounted(() => {
+    log.debug("ModDetailsView unmounted");
 });
 </script>
 

@@ -13,6 +13,9 @@ import path from "path";
 import fs from "fs-extra";
 import { spawn, ChildProcess } from "child_process";
 import os from "os";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("Minecraft");
 
 // ==================== TYPES ====================
 
@@ -73,7 +76,7 @@ export class MinecraftService {
         this.launcherPaths = await fs.readJson(this.launcherPathsFile);
       }
     } catch (error) {
-      console.error("Failed to load launcher paths:", error);
+      log.error("Failed to load launcher paths:", error);
     }
   }
 
@@ -86,7 +89,7 @@ export class MinecraftService {
       }
       return false;
     } catch (error) {
-      console.error("Failed to save launcher path:", error);
+      log.error("Failed to save launcher path:", error);
       return false;
     }
   }
@@ -380,7 +383,7 @@ export class MinecraftService {
         });
       }
     } catch (error) {
-      console.error(`Error scanning ${type} instances:`, error);
+      log.error(`Error scanning ${type} instances:`, error);
     }
 
     return instances;
@@ -423,7 +426,7 @@ export class MinecraftService {
         return data.installations || [];
       }
     } catch (error) {
-      console.error("Error loading saved installations:", error);
+      log.error("Error loading saved installations:", error);
     }
     return [];
   }
@@ -433,7 +436,7 @@ export class MinecraftService {
       await fs.ensureDir(path.dirname(this.configPath));
       await fs.writeJson(this.configPath, { installations: this.installations }, { spaces: 2 });
     } catch (error) {
-      console.error("Error saving installations:", error);
+      log.error("Error saving installations:", error);
     }
   }
 
@@ -602,7 +605,7 @@ export class MinecraftService {
       await shell.openPath(installation.modsPath);
       return true;
     } catch (error) {
-      console.error("Error opening mods folder:", error);
+      log.error("Error opening mods folder:", error);
       return false;
     }
   }
@@ -746,7 +749,7 @@ export class MinecraftService {
       } // End of else block for custom path check
 
       if (launcherPath && await fs.pathExists(launcherPath)) {
-        console.log(`[MinecraftService] Launching: ${launcherPath} ${args.join(" ")}`);
+        log.info(`Launching: ${launcherPath} ${args.join(" ")}`);
         if (platform === "darwin" && launcherPath.endsWith(".app")) {
           spawn("open", [launcherPath, ...args], { detached: true, stdio: "ignore" });
         } else {

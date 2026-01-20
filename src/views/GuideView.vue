@@ -3,9 +3,14 @@ import { ref } from "vue";
 import Icon from "@/components/ui/Icon.vue";
 import WalkthroughModal from "@/components/ui/WalkthroughModal.vue";
 import Button from "@/components/ui/Button.vue";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("GuideView");
 
 const activeSection = ref("getting-started");
 const showWalkthrough = ref(false);
+
+log.debug('Guide view initialized', { activeSection: activeSection.value });
 
 const sections = [
     { id: "getting-started", name: "Getting Started", icon: "Zap" },

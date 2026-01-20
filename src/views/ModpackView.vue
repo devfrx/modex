@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "@/composables/useToast";
 import { useInstances } from "@/composables/useInstances";
+import { createLogger } from "@/utils/logger";
 import ModpackCard from "@/components/modpacks/ModpackCard.vue";
 import ModpackListItem from "@/components/modpacks/ModpackListItem.vue";
 import ModpackCompactCard from "@/components/modpacks/ModpackCompactCard.vue";
@@ -20,6 +21,7 @@ import Icon from "@/components/ui/Icon.vue";
 import type { Modpack, Mod } from "@/types/electron";
 import ModpackIcon from "@/assets/modex_modpack_icon2.png";
 
+const log = createLogger("ModpackView");
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -158,7 +160,7 @@ async function loadInstanceMapping() {
     }
     instanceToModpack.value = mapping;
   } catch (err) {
-    console.error("Failed to load instance mapping:", err);
+    log.error("Failed to load instance mapping", { error: String(err) });
   }
 }
 
@@ -169,6 +171,8 @@ async function loadModpacks() {
     return;
   }
 
+  log.info("Loading modpacks");
+  const startTime = Date.now();
   isLoading.value = true;
   error.value = null;
   try {
@@ -192,6 +196,11 @@ async function loadModpacks() {
     );
 
     modpacks.value = packsWithCounts;
+    log.info("Modpacks loaded", {
+      count: modpacks.value.length,
+      totalMods: modpacks.value.reduce((sum, p) => sum + p.modCount, 0),
+      durationMs: Date.now() - startTime
+    });
 
     // Verify cloud status in background (non-blocking)
     window.api.modpacks.verifyCloudStatus().then((cloudStatuses) => {
@@ -199,8 +208,9 @@ async function loadModpacks() {
         ...pack,
         cloudStatus: pack.id ? cloudStatuses[pack.id] ?? null : null,
       }));
+      log.debug("Cloud status verified", { statusCount: Object.keys(cloudStatuses).length });
     }).catch((err) => {
-      console.warn("Failed to verify cloud status:", err);
+      log.warn("Failed to verify cloud status", { error: String(err) });
     });
 
     const currentIds = new Set(modpacks.value.map((m) => m.id).filter((id): id is string => !!id));
@@ -208,7 +218,7 @@ async function loadModpacks() {
       if (!currentIds.has(id)) selectedModpackIds.value.delete(id);
     }
   } catch (err) {
-    console.error("Failed to load modpacks:", err);
+    log.error("Failed to load modpacks", { error: String(err) });
     error.value = "Failed to load modpacks: " + (err as Error).message;
   } finally {
     isLoading.value = false;
@@ -287,8 +297,10 @@ async function exportSelectedModpacks() {
   progressTitle.value = "Exporting Modpacks";
 
   const ids = Array.from(selectedModpackIds.value);
+  log.info("Exporting modpacks", { count: ids.length });
   let count = 0;
   let successCount = 0;
+  const startTime = Date.now();
 
   try {
     for (const id of ids) {
@@ -297,15 +309,21 @@ async function exportSelectedModpacks() {
         const result = await window.api.export.curseforge(id);
         if (result) successCount++;
       } catch (e) {
-        console.error(`Failed to export modpack ${id}:`, e);
+        log.error("Failed to export modpack", { modpackId: id, error: String(e) });
       }
     }
+    log.info("Modpacks exported", {
+      successCount,
+      total: ids.length,
+      durationMs: Date.now() - startTime
+    });
     clearSelection();
     toast.success(
       "Export ready ✓",
       `Exported ${successCount} of ${ids.length} packs`
     );
   } catch (err) {
+    log.error("Export failed", { error: String(err) });
     toast.error("Couldn't export", (err as Error).message);
   } finally {
     showProgress.value = false;
@@ -446,7 +464,7 @@ async function openSelectedFolders() {
     try {
       await window.api.modpacks.openFolder(id);
     } catch (e) {
-      console.error(`Failed to open folder for ${id}:`, e);
+      log.error(`Failed to open folder for ${id}:`, e);
     }
   }
 }
@@ -533,7 +551,7 @@ async function openInExplorer(modpackId: string) {
   try {
     await window.api.modpacks.openFolder(modpackId);
   } catch (err) {
-    console.error("Failed to open folder:", err);
+    log.error("Failed to open folder:", err);
   }
 }
 
@@ -562,7 +580,7 @@ async function importCurseForgeModpack() {
 
   try {
     const result = await window.api.import.curseforge();
-    console.log("[CF Import] Result:", result);
+    log.info("[CF Import] Result:", result);
 
     if (!result) {
       // User cancelled - cleanup and return
@@ -573,7 +591,7 @@ async function importCurseForgeModpack() {
 
     // Check if conflicts need resolution
     if (result.requiresResolution && result.conflicts) {
-      console.log(
+      log.info(
         `[CF Import] ${result.conflicts.length} conflicts detected, showing dialog`
       );
       removeProgressListener();
@@ -623,7 +641,7 @@ async function importCurseForgeModpack() {
     }
     document.body.focus();
     document.body.blur();
-    console.log(
+    log.info(
       "[ModpackView] Progress dialog closed, showProgress =",
       showProgress.value
     );
@@ -665,7 +683,7 @@ async function resolveCFConflicts() {
       toast.error("Couldn't import", result.errors[0] || "Unknown error");
     }
   } catch (err) {
-    console.error("[CF Conflicts] Resolution failed:", err);
+    log.error("[CF Conflicts] Resolution failed:", err);
     toast.error("Couldn't resolve conflicts", (err as Error).message);
   } finally {
     showProgress.value = false;
@@ -873,7 +891,7 @@ function loadSettings() {
       if (settings.selectedGameVersion) selectedGameVersion.value = settings.selectedGameVersion;
       if (settings.sourceFilter) sourceFilter.value = settings.sourceFilter;
     } catch (e) {
-      console.error("Failed to load modpack settings:", e);
+      log.error("Failed to load modpack settings:", e);
     }
   }
 }
@@ -1034,9 +1052,14 @@ function handleSyncComplete() {
 }
 
 onMounted(() => {
+  log.info("ModpackView mounted");
   loadSettings();
   loadFavoriteModpacks();
   loadModpacks();
+});
+
+onUnmounted(() => {
+  log.debug("ModpackView unmounted");
 });
 </script>
 

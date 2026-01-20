@@ -21,7 +21,9 @@ import Input from "@/components/ui/Input.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
 import HytaleModpackCard from "@/components/hytale/HytaleModpackCard.vue";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("HytaleModpacksView");
 const router = useRouter();
 const toast = useToast();
 
@@ -190,7 +192,7 @@ async function executeBulkDeleteModpacks() {
             await deleteModpack(modpack.id);
             successCount++;
         } catch (err) {
-            console.error(`Failed to delete modpack ${modpack.name}:`, err);
+            log.error(`Failed to delete modpack ${modpack.name}:`, err);
         }
     }
 

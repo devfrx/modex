@@ -6,16 +6,23 @@
  * - Update existing Gists
  * - Validate Gist access
  * - List user Gists
+ * - Secure token storage using Electron's safeStorage API
  */
 
 import path from "path";
 import fs from "fs-extra";
+import { safeStorage } from "electron";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("Gist");
 
 // ==================== TYPES ====================
 
 export interface GistConfig {
-  /** GitHub Personal Access Token with gist scope */
-  token: string;
+  /** Encrypted GitHub Personal Access Token (base64 encoded) */
+  encryptedToken?: string;
+  /** Legacy plain text token (for migration) - will be removed after migration */
+  token?: string;
   /** Default filename for manifests */
   defaultFilename?: string;
 }
@@ -64,10 +71,47 @@ export class GistService {
   private basePath: string;
   private configPath: string;
   private config: GistConfig | null = null;
+  private decryptedToken: string | null = null;
 
   constructor(basePath: string) {
     this.basePath = basePath;
     this.configPath = path.join(basePath, "gist-config.json");
+  }
+
+  /**
+   * Check if safeStorage encryption is available
+   */
+  private isEncryptionAvailable(): boolean {
+    return safeStorage.isEncryptionAvailable();
+  }
+
+  /**
+   * Encrypt a token using safeStorage
+   */
+  private encryptToken(token: string): string {
+    if (!this.isEncryptionAvailable()) {
+      log.warn("safeStorage not available, token will be stored in plain text");
+      return token;
+    }
+    const encrypted = safeStorage.encryptString(token);
+    return encrypted.toString("base64");
+  }
+
+  /**
+   * Decrypt a token using safeStorage
+   */
+  private decryptToken(encryptedBase64: string): string {
+    if (!this.isEncryptionAvailable()) {
+      // If encryption is not available, assume it's plain text
+      return encryptedBase64;
+    }
+    try {
+      const encrypted = Buffer.from(encryptedBase64, "base64");
+      return safeStorage.decryptString(encrypted);
+    } catch (error) {
+      log.error("Failed to decrypt token:", error);
+      return "";
+    }
   }
 
   /**
@@ -77,12 +121,30 @@ export class GistService {
     try {
       if (await fs.pathExists(this.configPath)) {
         this.config = await fs.readJson(this.configPath);
+        
+        // Migrate legacy plain text token to encrypted storage
+        if (this.config?.token && !this.config?.encryptedToken) {
+          log.info("Migrating plain text token to encrypted storage");
+          const plainToken = this.config.token;
+          this.config.encryptedToken = this.encryptToken(plainToken);
+          delete this.config.token;
+          await this.saveConfigInternal(this.config);
+        }
+        
         return this.config;
       }
     } catch (err) {
-      console.error("[GistService] Failed to load config:", err);
+      log.error("Failed to load config:", err);
     }
     return null;
+  }
+
+  /**
+   * Save Gist configuration to disk (internal, without token manipulation)
+   */
+  private async saveConfigInternal(config: GistConfig): Promise<void> {
+    this.config = config;
+    await fs.writeJson(this.configPath, config, { spaces: 2 });
   }
 
   /**
@@ -97,14 +159,29 @@ export class GistService {
    * Get the current token (if configured)
    */
   async getToken(): Promise<string> {
+    if (this.decryptedToken) {
+      return this.decryptedToken;
+    }
+    
     if (!this.config) {
       await this.loadConfig();
     }
-    return this.config?.token || "";
+    
+    if (this.config?.encryptedToken) {
+      this.decryptedToken = this.decryptToken(this.config.encryptedToken);
+      return this.decryptedToken;
+    }
+    
+    // Legacy plain text token (should have been migrated)
+    if (this.config?.token) {
+      return this.config.token;
+    }
+    
+    return "";
   }
 
   /**
-   * Set the GitHub token
+   * Set the GitHub token (encrypts before storage)
    */
   async setToken(token: string): Promise<{ success: boolean; error?: string }> {
     try {
@@ -114,15 +191,35 @@ export class GistService {
         return { success: false, error: "Invalid token or insufficient permissions. Ensure the token has 'gist' scope." };
       }
 
+      // Clear cached decrypted token
+      this.decryptedToken = null;
+
+      // Encrypt and save the token
+      const encryptedToken = this.encryptToken(token);
+      
       await this.saveConfig({
-        ...this.config,
-        token,
+        encryptedToken,
         defaultFilename: this.config?.defaultFilename || "modpack-manifest.json",
       });
+
+      // Cache the decrypted token
+      this.decryptedToken = token;
 
       return { success: true };
     } catch (err) {
       return { success: false, error: String(err) };
+    }
+  }
+
+  /**
+   * Clear the stored token
+   */
+  async clearToken(): Promise<void> {
+    this.decryptedToken = null;
+    if (this.config) {
+      delete this.config.encryptedToken;
+      delete this.config.token;
+      await this.saveConfig(this.config);
     }
   }
 
@@ -154,7 +251,7 @@ export class GistService {
 
       return gistsResponse.ok;
     } catch (err) {
-      console.error("[GistService] Token validation failed:", err);
+      log.error("Token validation failed:", err);
       return false;
     }
   }
@@ -191,7 +288,7 @@ export class GistService {
         avatarUrl: data.avatar_url,
       };
     } catch (err) {
-      console.error("[GistService] Failed to get user:", err);
+      log.error("Failed to get user:", err);
       return null;
     }
   }
@@ -235,7 +332,7 @@ export class GistService {
         updatedAt: gist.updated_at,
       }));
     } catch (err) {
-      console.error("[GistService] Failed to list gists:", err);
+      log.error("Failed to list gists:", err);
       return [];
     }
   }
@@ -284,7 +381,7 @@ export class GistService {
         rawUrl,
       };
     } catch (err) {
-      console.error("[GistService] Failed to create gist:", err);
+      log.error("Failed to create gist:", err);
       return { success: false, error: String(err) };
     }
   }
@@ -337,7 +434,7 @@ export class GistService {
         rawUrl,
       };
     } catch (err) {
-      console.error("[GistService] Failed to update gist:", err);
+      log.error("Failed to update gist:", err);
       return { success: false, error: String(err) };
     }
   }
@@ -377,7 +474,7 @@ export class GistService {
         updatedAt: gist.updated_at,
       };
     } catch (err) {
-      console.error("[GistService] Failed to get gist:", err);
+      log.error("Failed to get gist:", err);
       return null;
     }
   }
@@ -412,7 +509,7 @@ export class GistService {
       if (!response.ok) {
         // 404 means Gist was already deleted externally - treat as success
         if (response.status === 404) {
-          console.log(`[GistService] Gist ${gistId} already deleted (404)`);
+          log.info(`Gist ${gistId} already deleted (404)`);
           return { success: true, gistId };
         }
         const errorData = await response.json().catch(() => ({}));
@@ -421,7 +518,7 @@ export class GistService {
 
       return { success: true, gistId };
     } catch (err) {
-      console.error("[GistService] Failed to delete gist:", err);
+      log.error("Failed to delete gist:", err);
       return { success: false, error: String(err) };
     }
   }

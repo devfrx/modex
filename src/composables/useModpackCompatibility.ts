@@ -1,5 +1,8 @@
 import { computed, type Ref } from "vue";
+import { createLogger } from "@/utils/logger";
 import type { Mod, Modpack } from "@/types";
+
+const log = createLogger("ModpackCompatibility");
 
 export interface CompatibilityResult {
   compatible: boolean;
@@ -21,6 +24,11 @@ export interface UseModpackCompatibilityOptions {
 
 export function useModpackCompatibility(options: UseModpackCompatibilityOptions) {
   const { modpack, currentMods, contentTypeTab } = options;
+  
+  log.debug('Initializing modpack compatibility check', { 
+    modpackId: modpack.value?.id,
+    modsCount: currentMods.value.length 
+  });
 
   /**
    * Check mod compatibility with modpack

@@ -156,7 +156,7 @@
                                                 <div class="toggle-thumb" />
                                             </div>
                                             <span>{{ getEditValue(entry.keyPath, entry.value) ? 'Attivo' : 'Disattivo'
-                                                }}</span>
+                                            }}</span>
                                         </button>
                                     </template>
 
@@ -229,7 +229,7 @@
                                                             <span class="object-item-type">{{ Array.isArray(item) ?
                                                                 'array' : 'object' }}</span>
                                                             <span class="object-item-preview">{{ getObjectPreview(item)
-                                                                }}</span>
+                                                            }}</span>
                                                         </button>
 
                                                         <!-- Expanded Object Editor -->
@@ -308,9 +308,9 @@
                                                                                         @change="updateObjectArrayProperty(entry.keyPath, entry.value, index, String(propKey), arrIdx, ($event.target as HTMLInputElement).value)" />
                                                                                     <span v-else
                                                                                         class="prop-array-complex">{{
-                                                                                        typeof arrItem === 'object' ?
-                                                                                        JSON.stringify(arrItem) :
-                                                                                        arrItem }}</span>
+                                                                                            typeof arrItem === 'object' ?
+                                                                                                JSON.stringify(arrItem) :
+                                                                                                arrItem }}</span>
                                                                                 </div>
                                                                             </div>
                                                                         </div>
@@ -471,7 +471,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, reactive, nextTick } from 'vue';
+import { createLogger } from '@/utils/logger';
 import type { ConfigEntry, ConfigSection, ParsedConfig } from '@/types';
+
+const log = createLogger('ConfigStructuredEditor');
 
 interface GroupedSection {
     name: string;
@@ -637,7 +640,7 @@ const loadConfig = async () => {
         }
     } catch (err: any) {
         error.value = err.message || 'Errore nel caricamento della configurazione';
-        console.error('Failed to load structured config:', err);
+        log.error('Failed to load structured config', { instanceId: props.instanceId, configPath: props.configPath, error: String(err) });
         // Switch to raw mode on error if we have raw content
         if (rawContent.value) {
             editorMode.value = 'raw';
@@ -901,16 +904,15 @@ const saveChanges = async () => {
                 };
             });
 
-            console.log('[ConfigStructuredEditor] Saving modifications:', {
+            log.debug('Saving modifications', {
                 instanceId: props.instanceId,
                 configPath: props.configPath,
-                modifications,
-                editedValues: { ...editedValues }
+                modificationCount: modifications.length
             });
 
             await window.api.configs.saveStructured(props.instanceId, props.configPath, modifications);
 
-            console.log('[ConfigStructuredEditor] Save successful, reloading...');
+            log.debug('Save successful, reloading');
 
             // Reset of the edited values and reload config
             Object.keys(editedValues).forEach(key => delete editedValues[key]);
@@ -920,7 +922,7 @@ const saveChanges = async () => {
         emit('saved');
     } catch (err: any) {
         error.value = err.message || 'Errore nel salvataggio';
-        console.error('Failed to save structured config:', err);
+        log.error('Failed to save structured config', { instanceId: props.instanceId, configPath: props.configPath, error: String(err) });
     } finally {
         saving.value = false;
     }
@@ -930,12 +932,12 @@ const saveRawContent = async () => {
     try {
         await window.api.configs.write(props.instanceId, props.configPath, rawContent.value);
         originalRawContent.value = rawContent.value;
-        console.log('[ConfigStructuredEditor] Raw save successful');
+        log.debug('Raw save successful', { configPath: props.configPath });
         // Reload to get updated parsed config
         await loadConfig();
     } catch (err: any) {
         error.value = err.message || 'Errore nel salvataggio';
-        console.error('Failed to save raw config:', err);
+        log.error('Failed to save raw config', { instanceId: props.instanceId, configPath: props.configPath, error: String(err) });
         throw err;
     }
 };

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import { useToast } from "@/composables/useToast";
 import type { Mod, Modpack } from "@/types/electron";
+
+const log = createLogger("ModpackCompareDialog");
 
 const props = defineProps<{
   open: boolean;
@@ -117,7 +120,7 @@ async function loadComparison() {
     packAMods.value = modsA;
     packBMods.value = modsB;
   } catch (err) {
-    console.error("Failed to load mods:", err);
+    log.error("Failed to load mods for comparison", { packA: packAId.value, packB: packBId.value, error: String(err) });
   } finally {
     isLoading.value = false;
   }
@@ -412,7 +415,7 @@ watch(
           await loadComparison();
         }
       } catch (err) {
-        console.error("Failed to load modpacks for comparison:", err);
+        log.error("Failed to load modpacks for comparison", { error: String(err) });
         toast.error("Load Failed", "Could not load modpacks for comparison");
       }
     }

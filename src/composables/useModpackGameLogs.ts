@@ -7,8 +7,11 @@
  * Extracted from ModpackEditor.vue to reduce complexity and enable reuse.
  */
 import { ref, computed, Ref, onUnmounted } from 'vue';
+import { createLogger } from '@/utils/logger';
 import { useInstances } from '@/composables/useInstances';
 import type { ModexInstance } from '@/types';
+
+const log = createLogger('GameLogs');
 
 export interface GameLogEntry {
   time: string;
@@ -102,6 +105,7 @@ export function useModpackGameLogs(options: UseModpackGameLogsOptions) {
    * Should be called when the editor opens
    */
   function setupLogListener(): void {
+    log.debug('Setting up game log listener', { instanceId: instance.value?.id });
     // Prevent duplicate listeners
     if (removeLogListener) {
       removeLogListener();
@@ -122,6 +126,7 @@ export function useModpackGameLogs(options: UseModpackGameLogsOptions) {
         }
       }
     });
+    log.info('Game log listener active');
   }
 
   /**
@@ -129,6 +134,7 @@ export function useModpackGameLogs(options: UseModpackGameLogsOptions) {
    * Should be called when the editor closes
    */
   function cleanupLogListener(): void {
+    log.debug('Cleaning up game log listener');
     if (removeLogListener) {
       removeLogListener();
       removeLogListener = null;

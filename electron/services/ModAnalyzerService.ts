@@ -9,6 +9,9 @@
  */
 
 import { CurseForgeService, CFMod, CFFile } from './CurseForgeService';
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("ModAnalyzer");
 
 // ==================== TYPES ====================
 
@@ -72,7 +75,7 @@ export class ModAnalyzerService {
     game_version?: string;
     version?: string;
   }>): Promise<AnalysisResult> {
-    console.log(`[ModAnalyzer] Analyzing ${mods.length} mods...`);
+    log.info(`Analyzing ${mods.length} mods...`);
 
     const result: AnalysisResult = {
       dependencies: {
@@ -91,7 +94,7 @@ export class ModAnalyzerService {
       .map(m => m.curseforge_id!);
 
     if (cfModIds.length === 0) {
-      console.log('[ModAnalyzer] No CurseForge mods to analyze');
+      log.info('No CurseForge mods to analyze');
       return result;
     }
 
@@ -123,7 +126,7 @@ export class ModAnalyzerService {
       result.conflicts = this.analyzeConflicts(mods, cfMods);
 
     } catch (error) {
-      console.error('[ModAnalyzer] Analysis error:', error);
+      log.error('Analysis error:', error);
     }
 
     return result;
@@ -222,7 +225,7 @@ export class ModAnalyzerService {
           }
         }
       } catch (error) {
-        console.error('[ModAnalyzer] Failed to fetch dependency details:', error);
+        log.error('Failed to fetch dependency details:', error);
       }
     }
 
@@ -231,7 +234,7 @@ export class ModAnalyzerService {
     for (const dep of dependencyMap.values()) {
       // Skip dependencies without a compatible file
       if (!dep.suggestedFile) {
-        console.log(`[ModAnalyzer] Skipping ${dep.modName} - no compatible file for ${loader}/${gameVersion}`);
+        log.info(`Skipping ${dep.modName} - no compatible file for ${loader}/${gameVersion}`);
         continue;
       }
 
@@ -424,7 +427,7 @@ export class ModAnalyzerService {
         })(),
       }));
     } catch (error) {
-      console.error('[ModAnalyzer] Error checking dependencies:', error);
+      log.error('Error checking dependencies:', error);
       return [];
     }
   }

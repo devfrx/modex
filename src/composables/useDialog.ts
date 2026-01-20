@@ -1,4 +1,7 @@
 import { ref, shallowRef } from 'vue';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Dialog');
 
 export type DialogVariant = 'default' | 'danger' | 'warning' | 'info' | 'success';
 export type DialogIcon = 'trash' | 'warning' | 'info' | 'alert' | 'question' | 'success' | 'edit' | 'none';
@@ -58,6 +61,7 @@ let resolvePromise: ((value: any) => void) | null = null;
 let rejectPromise: ((reason?: any) => void) | null = null;
 
 function closeDialog() {
+  log.debug('Closing dialog', { dialogType: dialogType.value });
   isOpen.value = false;
   resolvePromise = null;
   rejectPromise = null;
@@ -67,11 +71,13 @@ function closeDialog() {
 }
 
 function handleConfirm() {
+  log.debug('Dialog confirmed', { dialogType: dialogType.value });
   if (dialogType.value === 'input') {
     const opts = dialogOptions.value as InputOptions;
     if (opts.validation) {
       const error = opts.validation(inputValue.value);
       if (error) {
+        log.debug('Input validation failed', { error });
         inputError.value = error;
         return;
       }
@@ -86,6 +92,7 @@ function handleConfirm() {
 }
 
 function handleCancel() {
+  log.debug('Dialog cancelled', { dialogType: dialogType.value });
   if (dialogType.value === 'confirm' || dialogType.value === 'input' || dialogType.value === 'select') {
     resolvePromise?.(dialogType.value === 'input' ? null : false);
   } else {
@@ -100,6 +107,7 @@ export function useDialog() {
    * @returns Promise<boolean> - true if confirmed, false if cancelled
    */
   const confirm = (options: ConfirmOptions): Promise<boolean> => {
+    log.debug('Opening confirm dialog', { title: options.title, variant: options.variant });
     return new Promise((resolve) => {
       dialogType.value = 'confirm';
       dialogOptions.value = {
@@ -119,6 +127,7 @@ export function useDialog() {
    * @returns Promise<void>
    */
   const alert = (options: AlertOptions): Promise<void> => {
+    log.debug('Opening alert dialog', { title: options.title, variant: options.variant });
     return new Promise((resolve) => {
       dialogType.value = 'alert';
       dialogOptions.value = {
@@ -137,6 +146,7 @@ export function useDialog() {
    * @returns Promise<string | null> - input value or null if cancelled
    */
   const input = (options: InputOptions): Promise<string | null> => {
+    log.debug('Opening input dialog', { title: options.title, inputType: options.inputType });
     return new Promise((resolve) => {
       dialogType.value = 'input';
       dialogOptions.value = {
@@ -158,6 +168,7 @@ export function useDialog() {
    * @returns Promise<T | null> - selected value or null if cancelled
    */
   const select = <T = string>(options: SelectOptions<T>): Promise<T | null> => {
+    log.debug('Opening select dialog', { title: options.title, optionsCount: options.options.length });
     return new Promise((resolve) => {
       dialogType.value = 'select';
       dialogOptions.value = options as SelectOptions;

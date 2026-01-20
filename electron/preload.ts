@@ -4,7 +4,18 @@
  * Exposes simplified API without file-based operations.
  */
 
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
+
+// Import type definitions
+import type {
+  UpdateInfo,
+  UpdateNotAvailableInfo,
+  DownloadProgressInfo,
+  UpdateDownloadedInfo,
+  UpdateErrorInfo,
+  RefreshDependenciesProgress,
+  RunningGameInfo,
+} from "./types/ipc";
 
 // ==================== TYPES ====================
 
@@ -240,8 +251,8 @@ contextBridge.exposeInMainWorld("api", {
       skipped: number;
       errors: string[];
     }> => ipcRenderer.invoke("modpacks:refreshDependencies", modpackId, force),
-    onRefreshDependenciesProgress: (callback: (data: { current: number; total: number; modName: string }) => void) => {
-      const handler = (_: any, data: any) => callback(data);
+    onRefreshDependenciesProgress: (callback: (data: RefreshDependenciesProgress) => void) => {
+      const handler = (_: IpcRendererEvent, data: RefreshDependenciesProgress) => callback(data);
       ipcRenderer.on("modpacks:refreshDependenciesProgress", handler);
       return () => ipcRenderer.removeListener("modpacks:refreshDependenciesProgress", handler);
     },
@@ -821,28 +832,28 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.on("update:checking", listener);
       return () => ipcRenderer.removeListener("update:checking", listener);
     },
-    onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string; releaseDate?: string }) => void) => {
-      const listener = (_: any, info: any) => callback(info);
+    onUpdateAvailable: (callback: (info: UpdateInfo) => void) => {
+      const listener = (_: IpcRendererEvent, info: UpdateInfo) => callback(info);
       ipcRenderer.on("update:available", listener);
       return () => ipcRenderer.removeListener("update:available", listener);
     },
-    onUpdateNotAvailable: (callback: (info: { version: string }) => void) => {
-      const listener = (_: any, info: any) => callback(info);
+    onUpdateNotAvailable: (callback: (info: UpdateNotAvailableInfo) => void) => {
+      const listener = (_: IpcRendererEvent, info: UpdateNotAvailableInfo) => callback(info);
       ipcRenderer.on("update:not-available", listener);
       return () => ipcRenderer.removeListener("update:not-available", listener);
     },
-    onDownloadProgress: (callback: (progress: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => {
-      const listener = (_: any, progress: any) => callback(progress);
+    onDownloadProgress: (callback: (progress: DownloadProgressInfo) => void) => {
+      const listener = (_: IpcRendererEvent, progress: DownloadProgressInfo) => callback(progress);
       ipcRenderer.on("update:download-progress", listener);
       return () => ipcRenderer.removeListener("update:download-progress", listener);
     },
-    onUpdateDownloaded: (callback: (info: { version: string; releaseNotes?: string }) => void) => {
-      const listener = (_: any, info: any) => callback(info);
+    onUpdateDownloaded: (callback: (info: UpdateDownloadedInfo) => void) => {
+      const listener = (_: IpcRendererEvent, info: UpdateDownloadedInfo) => callback(info);
       ipcRenderer.on("update:downloaded", listener);
       return () => ipcRenderer.removeListener("update:downloaded", listener);
     },
-    onUpdateError: (callback: (error: { message: string }) => void) => {
-      const listener = (_: any, error: any) => callback(error);
+    onUpdateError: (callback: (error: UpdateErrorInfo) => void) => {
+      const listener = (_: IpcRendererEvent, error: UpdateErrorInfo) => callback(error);
       ipcRenderer.on("update:error", listener);
       return () => ipcRenderer.removeListener("update:error", listener);
     },
@@ -2116,6 +2127,47 @@ contextBridge.exposeInMainWorld("api", {
     }>> => ipcRenderer.invoke("hytale:checkForUpdates"),
     applyUpdate: (modId: string, newFileId: number): Promise<{ success: boolean; error?: string; newModId?: string }> =>
       ipcRenderer.invoke("hytale:applyUpdate", modId, newFileId),
+  },
+
+  // ========== LOGGING ==========
+  logging: {
+    /** Send a log entry from renderer to main process */
+    log: (entry: {
+      timestamp: string;
+      level: "debug" | "info" | "warn" | "error";
+      context: string;
+      message: string;
+      data?: unknown;
+      stack?: string;
+    }): void => {
+      ipcRenderer.send("logging:log", entry);
+    },
+    
+    /** Get recent log entries */
+    getRecentLogs: (count?: number): Promise<Array<{
+      timestamp: string;
+      level: "debug" | "info" | "warn" | "error";
+      context: string;
+      message: string;
+      data?: unknown;
+      stack?: string;
+    }>> => ipcRenderer.invoke("logging:getRecentLogs", count),
+    
+    /** Get path to current log file */
+    getLogFilePath: (): Promise<string | null> => 
+      ipcRenderer.invoke("logging:getLogFilePath"),
+    
+    /** Get all log files */
+    getLogFiles: (): Promise<string[]> => 
+      ipcRenderer.invoke("logging:getLogFiles"),
+    
+    /** Clear all log files */
+    clearLogs: (): Promise<void> => 
+      ipcRenderer.invoke("logging:clearLogs"),
+    
+    /** Open logs folder in file explorer */
+    openLogsFolder: (): Promise<void> => 
+      ipcRenderer.invoke("logging:openLogsFolder"),
   },
 
   // ========== EVENTS ==========

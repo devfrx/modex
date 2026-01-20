@@ -13,12 +13,15 @@
  * - Favorite configs (starred)
  */
 import { ref, computed, watch, onMounted } from "vue";
+import { createLogger } from "@/utils/logger";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfigFolderItem from "./ConfigFolderItem.vue";
 import Icon from "@/components/ui/Icon.vue";
 import type { ConfigFolder, ConfigFile, ConfigBackup } from "@/types";
+
+const log = createLogger("ConfigBrowser");
 
 const props = defineProps<{
     instanceId: string;
@@ -72,7 +75,7 @@ const loadFavorites = () => {
             favorites.value = new Set(JSON.parse(stored));
         }
     } catch (e) {
-        console.error('Failed to load favorites:', e);
+        log.error("Failed to load favorites", { instanceId: props.instanceId, error: String(e) });
     }
 };
 
@@ -81,7 +84,7 @@ const saveFavorites = () => {
     try {
         localStorage.setItem(`config-favorites-${props.instanceId}`, JSON.stringify([...favorites.value]));
     } catch (e) {
-        console.error('Failed to save favorites:', e);
+        log.error("Failed to save favorites", { instanceId: props.instanceId, error: String(e) });
     }
 };
 
@@ -126,7 +129,7 @@ async function loadFolders() {
             allowedFolders.includes(f.name) && f.name !== 'local'
         );
     } catch (error: any) {
-        console.error("Failed to load config folders:", error);
+        log.error("Failed to load config folders", { instanceId: props.instanceId, error: String(error) });
         toast.error("Failed to load configs", error.message);
     } finally {
         isLoading.value = false;
@@ -189,7 +192,7 @@ async function searchConfigs() {
 
         searchResults.value = results;
     } catch (error: any) {
-        console.error("Failed to search configs:", error);
+        log.error("Failed to search configs", { instanceId: props.instanceId, query: searchQuery.value, error: String(error) });
         toast.error("Search failed", error.message);
     } finally {
         isSearching.value = false;
@@ -297,7 +300,7 @@ async function loadBackups() {
     try {
         backups.value = await window.api.configs.listBackups(props.instanceId);
     } catch (error: any) {
-        console.error("Failed to load backups:", error);
+        log.error("Failed to load backups", { instanceId: props.instanceId, error: String(error) });
         toast.error("Failed to load backups", error.message);
     }
 }

@@ -24,7 +24,9 @@ import BulkActionBar from "@/components/ui/BulkActionBar.vue";
 import LibraryPaginationControls from "@/components/library/LibraryPaginationControls.vue";
 import HytaleModCard from "@/components/hytale/HytaleModCard.vue";
 import HytaleModDetailsModal from "@/components/hytale/HytaleModDetailsModal.vue";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("HytaleModsView");
 const router = useRouter();
 const toast = useToast();
 
@@ -245,7 +247,7 @@ async function executeBulkDelete() {
             await removeMod(mod.id);
             successCount++;
         } catch (err) {
-            console.error(`Failed to delete mod ${mod.name}:`, err);
+            log.error(`Failed to delete mod ${mod.name}:`, err);
             failCount++;
         }
     }
@@ -271,7 +273,7 @@ async function bulkEnableMods() {
             await toggleMod(mod.id);
             successCount++;
         } catch (err) {
-            console.error(`Failed to enable mod ${mod.name}:`, err);
+            log.error(`Failed to enable mod ${mod.name}:`, err);
         }
     }
 
@@ -293,7 +295,7 @@ async function bulkDisableMods() {
             await toggleMod(mod.id);
             successCount++;
         } catch (err) {
-            console.error(`Failed to disable mod ${mod.name}:`, err);
+            log.error(`Failed to disable mod ${mod.name}:`, err);
         }
     }
 
@@ -356,7 +358,7 @@ async function checkModUpdate(mod: HytaleMod): Promise<void> {
             }
         }
     } catch (err) {
-        console.error(`Failed to check update for ${mod.name}:`, err);
+        log.error(`Failed to check update for ${mod.name}:`, err);
         toast.error("Check Failed", `Couldn't check updates for ${mod.name}`);
     } finally {
         checkingModUpdates.value[mod.id] = false;
@@ -401,7 +403,7 @@ async function checkAllUpdates(): Promise<void> {
                         }
                     }
                 } catch (err) {
-                    console.error(`Failed to check update for ${mod.name}:`, err);
+                    log.error(`Failed to check update for ${mod.name}:`, err);
                 } finally {
                     checkingModUpdates.value[mod.id] = false;
                 }
@@ -415,7 +417,7 @@ async function checkAllUpdates(): Promise<void> {
             toast.success("All Up to Date", "All mods are on the latest version");
         }
     } catch (err) {
-        console.error("Failed to check updates:", err);
+        log.error("Failed to check updates:", err);
         toast.error("Check Failed", "Couldn't check for updates");
     } finally {
         isCheckingAllUpdates.value = false;
@@ -438,7 +440,7 @@ async function applyModUpdate(mod: HytaleMod): Promise<void> {
             toast.error("Update Failed", result.error || "Unknown error");
         }
     } catch (err) {
-        console.error("Update failed:", err);
+        log.error("Update failed:", err);
         toast.error("Update Failed", (err as Error).message);
     } finally {
         updatingMods.value.delete(mod.id);
@@ -467,7 +469,7 @@ async function updateAllMods(): Promise<void> {
                 failCount++;
             }
         } catch (err) {
-            console.error(`Failed to update ${update.projectName}:`, err);
+            log.error(`Failed to update ${update.projectName}:`, err);
             failCount++;
         } finally {
             updatingMods.value.delete(update.modId);

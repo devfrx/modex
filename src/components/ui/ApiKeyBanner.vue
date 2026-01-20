@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
+
+const log = createLogger("ApiKeyBanner");
 
 const router = useRouter();
 
@@ -13,7 +16,7 @@ async function checkApiKey() {
   try {
     hasApiKey.value = await window.api.curseforge.hasApiKey();
   } catch (error) {
-    console.error("Failed to check API key:", error);
+    log.error("Failed to check API key", { error: String(error) });
     hasApiKey.value = false;
   } finally {
     isLoading.value = false;
@@ -43,7 +46,7 @@ onMounted(() => {
         }
       }
     } catch (err) {
-      console.error("Failed to check API key:", err);
+      log.error("Failed to check API key in interval", { error: String(err) });
     }
   }, 5000);
 

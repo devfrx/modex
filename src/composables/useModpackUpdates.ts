@@ -1,6 +1,9 @@
 import { ref, computed, type Ref } from "vue";
 import type { Mod, Modpack } from "@/types";
 import { useToast } from "./useToast";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("ModpackUpdates");
 
 // Removed RECENT_THRESHOLD_MS - badges are now dismissed manually by user
 
@@ -97,7 +100,7 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
         updateAvailable.value[mod.id] = null; // Checked, no update
       }
     } catch (err) {
-      console.error(`Failed to check update for ${mod.name}:`, err);
+      log.error(`Failed to check update for ${mod.name}:`, err);
     } finally {
       checkingUpdates.value[mod.id] = false;
     }
@@ -129,7 +132,7 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
         toast.error(`Couldn't update ${mod.name}: ${result.error}`);
       }
     } catch (err) {
-      console.error("Update failed:", err);
+      log.error("Update failed:", err);
       toast.error("Couldn't update mod");
     } finally {
       updatingMods.value.delete(mod.id);
@@ -194,7 +197,7 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
         toast.error(`Couldn't update ${mod.name}: ${result.error}`);
       }
     } catch (err) {
-      console.error("Update failed:", err);
+      log.error("Update failed:", err);
       toast.error(`Couldn't update ${mod.name}`);
     } finally {
       checkingUpdates.value[mod.id] = false;
@@ -322,7 +325,7 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
         toast.error(`Couldn't change version: ${result.error || "Unknown error"}`);
       }
     } catch (err: unknown) {
-      console.error("Version change failed:", err);
+      log.error("Version change failed:", err);
       toast.error(`Couldn't change version: ${(err as Error)?.message || "Unknown error"}`);
     } finally {
       // Remove from updating set

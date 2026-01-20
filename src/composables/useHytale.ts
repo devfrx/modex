@@ -10,6 +10,9 @@
 
 import { ref, computed, onMounted } from "vue";
 import type { HytaleMod, HytaleModpack, HytaleSyncResult, HytaleStats } from "@/types";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("Hytale");
 
 // Reactive state (shared across all component instances)
 const installedMods = ref<HytaleMod[]>([]);
@@ -80,13 +83,13 @@ async function initialize(): Promise<void> {
     stats.value = await window.api.hytale.getStats();
     
     isInitialized.value = true;
-    console.log("[useHytale] Initialized:", {
+    log.info("Initialized:", {
       isInstalled: isInstalled.value,
       modCount: installedMods.value.length,
       modpackCount: modpacks.value.length,
     });
   } catch (error) {
-    console.error("[useHytale] Error initializing:", error);
+    log.error("Error initializing:", error);
   } finally {
     isLoading.value = false;
   }
@@ -102,7 +105,7 @@ async function refreshMods(): Promise<void> {
     activeModpack.value = await window.api.hytale.getActiveModpack();
     stats.value = await window.api.hytale.getStats();
   } catch (error) {
-    console.error("[useHytale] Error refreshing mods:", error);
+    log.error("Error refreshing mods:", error);
   }
 }
 
@@ -121,7 +124,7 @@ async function toggleMod(id: string): Promise<boolean> {
     }
     return false;
   } catch (error) {
-    console.error("[useHytale] Error toggling mod:", error);
+    log.error("Error toggling mod:", error);
     return false;
   }
 }
@@ -138,7 +141,7 @@ async function removeMod(id: string): Promise<boolean> {
     }
     return success;
   } catch (error) {
-    console.error("[useHytale] Error removing mod:", error);
+    log.error("Error removing mod:", error);
     return false;
   }
 }
@@ -164,7 +167,7 @@ async function installMod(
     }
     return result;
   } catch (error: any) {
-    console.error("[useHytale] Error installing mod:", error);
+    log.error("Error installing mod:", error);
     return { success: false, error: error.message };
   }
 }
@@ -214,7 +217,7 @@ async function installFromCurseForge(
       logoUrl: mod.logo?.url || mod.logo?.thumbnailUrl,
     });
   } catch (error: any) {
-    console.error("[useHytale] Error installing from CurseForge:", error);
+    log.error("Error installing from CurseForge:", error);
     return { success: false, error: error.message };
   }
 }
@@ -233,7 +236,7 @@ async function createModpack(options: {
     modpacks.value.push(modpack);
     return modpack;
   } catch (error) {
-    console.error("[useHytale] Error creating modpack:", error);
+    log.error("Error creating modpack:", error);
     return null;
   }
 }
@@ -258,7 +261,7 @@ async function updateModpack(
     }
     return updated;
   } catch (error) {
-    console.error("[useHytale] Error updating modpack:", error);
+    log.error("Error updating modpack:", error);
     return null;
   }
 }
@@ -277,7 +280,7 @@ async function deleteModpack(id: string): Promise<boolean> {
     }
     return success;
   } catch (error) {
-    console.error("[useHytale] Error deleting modpack:", error);
+    log.error("Error deleting modpack:", error);
     return false;
   }
 }
@@ -294,7 +297,7 @@ async function saveToModpack(modpackId: string): Promise<boolean> {
     }
     return success;
   } catch (error) {
-    console.error("[useHytale] Error saving to modpack:", error);
+    log.error("Error saving to modpack:", error);
     return false;
   }
 }
@@ -318,7 +321,7 @@ async function activateModpack(modpackId: string): Promise<HytaleSyncResult> {
     
     return result;
   } catch (error: any) {
-    console.error("[useHytale] Error activating modpack:", error);
+    log.error("Error activating modpack:", error);
     return {
       success: false,
       installed: 0,
@@ -337,7 +340,7 @@ async function launch(): Promise<{ success: boolean; error?: string; pid?: numbe
   try {
     return await window.api.hytale.launch();
   } catch (error: any) {
-    console.error("[useHytale] Error launching:", error);
+    log.error("Error launching:", error);
     return { success: false, error: error.message };
   }
 }
@@ -349,7 +352,7 @@ async function openModsFolder(): Promise<boolean> {
   try {
     return await window.api.hytale.openModsFolder();
   } catch (error) {
-    console.error("[useHytale] Error opening mods folder:", error);
+    log.error("Error opening mods folder:", error);
     return false;
   }
 }
@@ -362,7 +365,7 @@ async function setConfig(newConfig: { modsPath?: string; launcherPath?: string }
     await window.api.hytale.setConfig(newConfig);
     config.value = await window.api.hytale.getConfig();
   } catch (error) {
-    console.error("[useHytale] Error setting config:", error);
+    log.error("Error setting config:", error);
   }
 }
 

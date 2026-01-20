@@ -4,12 +4,15 @@ import { useTheme, stylePresets } from "@/composables/useTheme";
 import { useToast } from "@/composables/useToast";
 import { useDialog } from "@/composables/useDialog";
 import { useSidebar } from "@/composables/useSidebar";
+import { createLogger } from "@/utils/logger";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import MinecraftInstallations from "@/components/ui/MinecraftInstallations.vue";
 import UpdateManager from "@/components/ui/UpdateManager.vue";
 import Icon from "@/components/ui/Icon.vue";
+
+const log = createLogger("SettingsView");
 
 // Sidebar settings
 const {
@@ -144,10 +147,11 @@ function getPrimaryColorPreview(): string {
 async function loadSettings() {
   if (!window.api) {
     apiAvailable.value = false;
-    console.error("Backend API not available");
+    log.error("Backend API not available");
     return;
   }
 
+  log.info("Loading settings");
   try {
     const mods = await window.api.mods.getAll();
     const modpacks = await window.api.modpacks.getAll();
@@ -167,16 +171,25 @@ async function loadSettings() {
     // Load Gist settings
     const gistSettingsData = await window.api.settings.getGist();
     gistSettings.value = gistSettingsData;
+
+    log.info("Settings loaded", {
+      modCount: modCount.value,
+      modpackCount: modpackCount.value,
+      hasGithubToken
+    });
   } catch (err) {
-    console.error("Failed to load stats:", err);
+    log.error("Failed to load settings", { error: String(err) });
   }
 }
 
 async function saveCfApiKey() {
+  log.info("Saving CurseForge API key");
   try {
     await window.api.updates.setApiKey(cfApiKey.value);
+    log.info("CurseForge API key saved");
     toast.success("Connected ✓", "CurseForge API key saved.");
   } catch (err) {
+    log.error("Failed to save CurseForge API key", { error: String(err) });
     toast.error("Couldn't save", "API key wasn't saved. Try again.");
   }
 }
@@ -187,17 +200,21 @@ async function saveGithubToken() {
     return;
   }
 
+  log.info("Saving GitHub token");
   isSavingGithubToken.value = true;
   try {
     const result = await window.api.gist.setToken(githubToken.value);
     if (result.success) {
       githubUser.value = await window.api.gist.getUser();
       githubToken.value = "••••••••••••••••"; // mask after save
+      log.info("GitHub token saved", { user: githubUser.value?.login });
       toast.success("Connected ✓", `Logged in as ${githubUser.value?.login || 'GitHub user'}`);
     } else {
+      log.warn("GitHub token validation failed", { error: result.error });
       toast.error("Invalid Token", result.error || "Token validation failed.");
     }
   } catch (err) {
+    log.error("Failed to save GitHub token", { error: String(err) });
     toast.error("Couldn't save", "GitHub token wasn't saved. Try again.");
   } finally {
     isSavingGithubToken.value = false;
@@ -205,12 +222,15 @@ async function saveGithubToken() {
 }
 
 async function clearGithubToken() {
+  log.info("Clearing GitHub token");
   try {
     await window.api.gist.setToken("");
     githubToken.value = "";
     githubUser.value = null;
+    log.info("GitHub token cleared");
     toast.success("Disconnected", "GitHub token removed.");
   } catch (err) {
+    log.error("Failed to clear GitHub token", { error: String(err) });
     toast.error("Error", "Couldn't remove GitHub token.");
   }
 }
@@ -221,16 +241,16 @@ async function saveGistSettings() {
     const plainSettings = {
       defaultManifestMode: gistSettings.value.defaultManifestMode,
     };
-    console.log("[SettingsView] Saving gist settings:", plainSettings);
+    log.debug("Saving gist settings", plainSettings);
     const result = await window.api.settings.setGist(plainSettings);
-    console.log("[SettingsView] Save gist settings result:", result);
+    log.debug("Gist settings save result", { success: result?.success });
     if (result?.success) {
       toast.success("Saved", "Gist settings updated.");
     } else {
       toast.error("Error", "Couldn't save Gist settings.");
     }
   } catch (err) {
-    console.error("[SettingsView] Failed to save gist settings:", err);
+    log.error("Failed to save gist settings", { error: String(err) });
     toast.error("Error", "Couldn't save Gist settings.");
   }
 }
@@ -266,7 +286,9 @@ async function clearAllData() {
     return;
   }
 
+  log.warn("Clearing all data");
   isClearingData.value = true;
+  const startTime = Date.now();
 
   try {
     // Delete modpacks first (they reference mods)
@@ -282,9 +304,15 @@ async function clearAllData() {
       await window.api.mods.bulkDelete(modIds);
     }
 
+    log.info("All data cleared", {
+      modpacksDeleted: modpacks.length,
+      modsDeleted: modIds.length,
+      durationMs: Date.now() - startTime
+    });
     await loadSettings();
     toast.success("Reset complete ✓", "All data has been cleared.");
   } catch (err) {
+    log.error("Failed to clear all data", { error: String(err) });
     toast.error(
       "Couldn't reset",
       "Something went wrong: " + (err as Error).message
@@ -300,6 +328,7 @@ async function refreshLibrary() {
 
 // Load instance sync settings
 async function loadSyncSettings() {
+  log.debug("Loading sync settings");
   try {
     const settings = await window.api.settings.getInstanceSync();
     syncSettings.value = {
@@ -308,13 +337,15 @@ async function loadSyncSettings() {
       defaultConfigSyncMode: settings.defaultConfigSyncMode ?? "new_only",
       instantSync: settings.instantSync ?? true,
     };
+    log.debug("Sync settings loaded", syncSettings.value);
   } catch (err) {
-    console.error("Failed to load sync settings:", err);
+    log.error("Failed to load sync settings", { error: String(err) });
   }
 }
 
 // Save instance sync settings
 async function saveSyncSettings() {
+  log.debug("Saving sync settings", syncSettings.value);
   try {
     // Create a plain object copy to avoid IPC serialization issues with Vue proxies
     const settingsToSave = {
@@ -324,14 +355,16 @@ async function saveSyncSettings() {
       instantSync: syncSettings.value.instantSync,
     };
     await window.api.settings.setInstanceSync(settingsToSave);
+    log.info("Sync settings saved");
     toast.success("Saved ✓", "Sync preferences updated.");
   } catch (err) {
-    console.error("Failed to save sync settings:", err);
+    log.error("Failed to save sync settings", { error: String(err) });
     toast.error("Couldn't save", "Sync settings weren't saved.");
   }
 }
 
 onMounted(() => {
+  log.info("SettingsView mounted");
   // Load theme
   // Handled by App.vue initialization
 

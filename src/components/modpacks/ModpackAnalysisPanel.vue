@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
+import { createLogger } from "@/utils/logger";
 import { useToast } from "@/composables/useToast";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
@@ -9,6 +10,8 @@ import type {
     ConflictInfo,
     OrphanedDependencyInfo,
 } from "@/types/electron";
+
+const log = createLogger("ModpackAnalysisPanel");
 
 const props = defineProps<{
     modpackId: string;
@@ -97,12 +100,12 @@ async function runAnalysis(syncDepsFirst: boolean = false) {
         // Step 1: Sync dependencies if needed
         if (syncDepsFirst && !hasSyncedDeps.value) {
             analysisProgress.value = { step: 1, totalSteps: 4, stepName: 'Fetching dependency data...', percentage: 15 };
-            console.log('[Analysis] Syncing dependencies before analysis...');
+            log.debug("Syncing dependencies before analysis", { modpackId: props.modpackId });
             try {
                 await window.api.modpacks.refreshDependencies(props.modpackId);
                 hasSyncedDeps.value = true;
             } catch (syncErr) {
-                console.warn('[Analysis] Failed to sync dependencies:', syncErr);
+                log.warn("Failed to sync dependencies", { modpackId: props.modpackId, error: String(syncErr) });
             }
         } else {
             analysisProgress.value = { step: 1, totalSteps: 4, stepName: 'Loading mod data...', percentage: 15 };
@@ -140,7 +143,7 @@ async function runAnalysis(syncDepsFirst: boolean = false) {
             toast.warning("Issues Found", `${issues} issue(s) need attention`);
         }
     } catch (err) {
-        console.error("Analysis failed:", err);
+        log.error("Analysis failed", { modpackId: props.modpackId, error: String(err) });
         toast.error("Analysis Failed", (err as Error).message);
     } finally {
         isLoading.value = false;
@@ -184,7 +187,7 @@ async function buildDependencyGraph() {
             (a, b) => b.dependencies.length - a.dependencies.length
         );
     } catch (err) {
-        console.error("Failed to build dependency graph:", err);
+        log.error("Failed to build dependency graph", { modpackId: props.modpackId, error: String(err) });
     }
 }
 
@@ -237,7 +240,7 @@ async function addDependency(dep: DependencyInfo) {
             await runAnalysis();
         }
     } catch (err) {
-        console.error("Failed to add dependency:", err);
+        log.error("Failed to add dependency", { modpackId: props.modpackId, modId: dep.modId, error: String(err) });
         toast.error("Failed to add", (err as Error).message);
     } finally {
         installingDepIds.value.delete(dep.modId);
@@ -309,7 +312,7 @@ async function installAllDependencies() {
             toast.error("Installation Failed", `Could not install ${failed} dependencies`);
         }
     } catch (err) {
-        console.error("Failed to install all dependencies:", err);
+        log.error("Failed to install all dependencies", { modpackId: props.modpackId, error: String(err) });
         toast.error("Failed", (err as Error).message);
     } finally {
         isInstallingAll.value = false;
@@ -339,10 +342,10 @@ async function refreshDependencies() {
         }
 
         if (result.errors.length > 0) {
-            console.warn("Dependency refresh errors:", result.errors);
+            log.warn("Dependency refresh had errors", { modpackId: props.modpackId, errors: result.errors });
         }
     } catch (err) {
-        console.error("Failed to refresh dependencies:", err);
+        log.error("Failed to refresh dependencies", { modpackId: props.modpackId, error: String(err) });
         toast.error("Refresh Failed", (err as Error).message);
     } finally {
         isRefreshingDeps.value = false;

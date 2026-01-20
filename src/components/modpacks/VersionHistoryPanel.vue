@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { createLogger } from "@/utils/logger";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Input from "@/components/ui/Input.vue";
@@ -7,6 +8,8 @@ import { useDialog } from "@/composables/useDialog";
 import { useToast } from "@/composables/useToast";
 import type { ModpackVersion, ModpackVersionHistory, ModpackChange } from "@/types/electron";
 import Icon from "@/components/ui/Icon.vue";
+
+const log = createLogger("VersionHistoryPanel");
 
 const props = defineProps<{
     modpackId: string;
@@ -113,7 +116,7 @@ async function loadUnsavedChanges() {
         // Emit unsaved changes count to parent
         emit("unsaved-changes", unsavedChangeCount.value);
     } catch (err) {
-        console.error("Failed to load unsaved changes:", err);
+        log.error("Failed to load unsaved changes", { modpackId: props.modpackId, error: String(err) });
     }
 }
 
@@ -167,7 +170,7 @@ async function loadHistory() {
         // Also load unsaved changes
         await loadUnsavedChanges();
     } catch (err) {
-        console.error("Failed to load version history:", err);
+        log.error("Failed to load version history", { modpackId: props.modpackId, error: String(err) });
     } finally {
         isLoading.value = false;
     }
@@ -283,7 +286,7 @@ async function rollbackTo(version: ModpackVersion) {
 
         if (!confirmed) return;
     } catch (err) {
-        console.error("Failed to validate rollback:", err);
+        log.error("Failed to validate rollback", { modpackId: props.modpackId, error: String(err) });
         // Fall back to simple confirmation
         const confirmed = await confirm({
             title: "Rollback to Version",
@@ -746,7 +749,7 @@ watch(() => props.modpackId, () => {
                                     @click="toggleChangeSection('configs')">
                                     <Icon name="Settings" class="w-3.5 h-3.5 text-purple-500" />
                                     <span>{{ configChangeCount }} config change{{ configChangeCount !== 1 ? 's' : ''
-                                        }}</span>
+                                    }}</span>
                                     <Icon :name="expandedChangeSections.has('configs') ? 'ChevronUp' : 'ChevronDown'"
                                         class="w-3 h-3 ml-auto" />
                                 </div>
@@ -758,7 +761,7 @@ watch(() => props.modpackId, () => {
                                         :key="idx"
                                         class="flex items-center gap-2 text-muted-foreground bg-black/20 rounded px-2 py-1">
                                         <span v-if="cfg.line" class="text-cyan-400 font-mono text-[10px]">L{{ cfg.line
-                                            }}</span>
+                                        }}</span>
                                         <span class="text-white/60 truncate max-w-[100px]" :title="cfg.filePath">{{
                                             getFileName(cfg.filePath) }}</span>
                                         <span class="text-white/80 font-medium truncate max-w-[80px]">{{

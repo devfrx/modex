@@ -5,7 +5,9 @@ import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import type { Modpack } from "@/types/electron";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("HomeView");
 const router = useRouter();
 
 // Data
@@ -15,7 +17,9 @@ const totalMods = ref(0);
 const totalSize = ref(0);
 
 async function loadData() {
+    log.info("Loading home data");
     isLoading.value = true;
+    const startTime = Date.now();
     try {
         const [modsData, modpacksData] = await Promise.all([
             window.api.mods.getAll(),
@@ -24,8 +28,14 @@ async function loadData() {
         totalMods.value = modsData.length;
         totalSize.value = modsData.reduce((sum, mod) => sum + (mod.file_size || 0), 0);
         modpacks.value = modpacksData;
+        log.info("Home data loaded", {
+            modsCount: modsData.length,
+            modpacksCount: modpacksData.length,
+            totalSizeBytes: totalSize.value,
+            durationMs: Date.now() - startTime
+        });
     } catch (err) {
-        console.error("Failed to load data:", err);
+        log.error("Failed to load home data", { error: err });
     } finally {
         isLoading.value = false;
     }

@@ -1,5 +1,8 @@
 import { ref, computed, type Ref, type ComputedRef } from "vue";
+import { createLogger } from "@/utils/logger";
 import type { Mod } from "@/types/electron";
+
+const log = createLogger("LibrarySelection");
 
 export interface UseLibrarySelectionOptions {
   mods: Ref<Mod[]>;
@@ -108,17 +111,22 @@ export function useLibrarySelection(options: UseLibrarySelectionOptions) {
 
   function toggleSelection(id: string): void {
     if (selectedModIds.value.has(id)) {
+      log.debug('Deselecting mod', { modId: id });
       selectedModIds.value.delete(id);
     } else {
+      log.debug('Selecting mod', { modId: id });
       selectedModIds.value.add(id);
     }
   }
 
   function clearSelection(): void {
+    log.debug('Clearing selection', { previousCount: selectedModIds.value.size });
     selectedModIds.value.clear();
   }
 
   function selectAll(): void {
+    const count = filteredMods.value.length;
+    log.debug('Selecting all mods', { count });
     for (const mod of filteredMods.value) {
       if (mod.id) {
         selectedModIds.value.add(mod.id);

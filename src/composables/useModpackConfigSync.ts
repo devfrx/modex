@@ -8,6 +8,9 @@
  */
 import { ref, computed, Ref } from 'vue';
 import type { ModexInstance } from '@/types';
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("ConfigSync");
 
 export interface ModifiedConfig {
   relativePath: string;
@@ -112,7 +115,7 @@ export function useModpackConfigSync(options: UseModpackConfigSyncOptions) {
           .map((c) => c.relativePath)
       );
     } catch (err) {
-      console.error('Failed to load modified configs:', err);
+      log.error('Failed to load modified configs:', err);
     }
   }
 

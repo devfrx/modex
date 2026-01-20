@@ -1,6 +1,9 @@
 import { ref, computed, type Ref, type ComputedRef } from "vue";
 import { refDebounced } from "@vueuse/core";
+import { createLogger } from "@/utils/logger";
 import type { Mod } from "@/types/electron";
+
+const log = createLogger("LibraryFiltering");
 
 export interface ModGroup {
   groupKey: string;
@@ -29,6 +32,10 @@ export interface UseLibraryFilteringOptions {
  * Handles all the complex filtering logic for the mod library.
  */
 export function useLibraryFiltering(options: UseLibraryFilteringOptions) {
+  log.debug('Initializing library filtering', { 
+    modsCount: options.mods.value.length 
+  });
+  
   const {
     mods,
     modUsageMap,

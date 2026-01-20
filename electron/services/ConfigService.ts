@@ -12,6 +12,9 @@
 import path from "path";
 import fs from "fs-extra";
 import AdmZip from "adm-zip";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("Config");
 
 // ==================== TYPES ====================
 
@@ -642,8 +645,11 @@ export class ConfigService {
     if (manifestEntry) {
       try {
         const manifest = JSON.parse(manifestEntry.getData().toString("utf-8"));
-        console.log(`[ConfigService] Importing configs from ${manifest.sourceInstanceName}`);
-      } catch {}
+        log.info(`Importing configs from ${manifest.sourceInstanceName}`);
+      } catch {
+        // Manifest is optional - continue without it
+        console.debug(`Could not parse manifest, continuing without it`);
+      }
     }
 
     // Import files
@@ -1452,7 +1458,7 @@ export class ConfigService {
     const ext = path.extname(configPath).toLowerCase().slice(1);
     const type = this.getConfigType(ext);
 
-    console.log("[ConfigService] saveConfigStructured called:", {
+    log.info("saveConfigStructured called:", {
       instancePath,
       configPath,
       fullPath,
@@ -1508,11 +1514,11 @@ export class ConfigService {
           }
       }
     } catch (error) {
-      console.error(`[ConfigService] Failed to rebuild ${type} config:`, error);
+      log.error(`Failed to rebuild ${type} config:`, error);
       throw new Error(`Failed to parse config file: ${(error as Error).message}`);
     }
 
-    console.log("[ConfigService] Content rebuild complete:", {
+    log.info("Content rebuild complete:", {
       type,
       modifiedEntriesCount: modifiedEntries.length,
       originalLength: originalContent.length,
@@ -1527,7 +1533,7 @@ export class ConfigService {
     // Write new content
     await fs.writeFile(fullPath, newContent, "utf-8");
     
-    console.log("[ConfigService] File written to:", fullPath);
+    log.info("File written to:", fullPath);
 
     // Store modifications for version control if modpackId provided
     if (modpackId && modifications.length > 0) {
@@ -1774,7 +1780,7 @@ export class ConfigService {
     instancePath: string,
     modifications: ConfigModification[]
   ): Promise<void> {
-    console.log("[ConfigService] saveModificationsToVersionControl called:", {
+    log.info("saveModificationsToVersionControl called:", {
       modpackId,
       instancePath,
       modificationsCount: modifications.length
@@ -1795,7 +1801,7 @@ export class ConfigService {
 
     // Append to changes log
     const logPath = path.join(changesDir, "config-changes.json");
-    console.log("[ConfigService] Writing to:", logPath);
+    log.info("Writing to:", logPath);
     
     let existingChanges: ConfigChangeSet[] = [];
 
@@ -1809,7 +1815,7 @@ export class ConfigService {
 
     existingChanges.push(changeSet);
     await fs.writeFile(logPath, JSON.stringify(existingChanges, null, 2));
-    console.log("[ConfigService] Config changes saved successfully");
+    log.info("Config changes saved successfully");
   }
 
   /**
@@ -1825,7 +1831,7 @@ export class ConfigService {
     try {
       return JSON.parse(await fs.readFile(logPath, "utf-8"));
     } catch (error) {
-      console.warn(`[ConfigService] Failed to parse config modifications log:`, error);
+      log.warn(`Failed to parse config modifications log:`, error);
       return [];
     }
   }

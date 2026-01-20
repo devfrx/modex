@@ -1,4 +1,7 @@
 import { ref, computed, watch, type Ref, type ComputedRef, type WatchSource } from "vue";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("LibraryPagination");
 
 export const ITEMS_PER_PAGE_OPTIONS = [25, 50, 100, 200] as const;
 
@@ -32,7 +35,9 @@ export function useLibraryPagination<T>(options: UseLibraryPaginationOptions<T>)
   const canGoNext = computed(() => currentPage.value < totalPages.value);
 
   function goToPage(page: number): void {
-    currentPage.value = Math.max(1, Math.min(page, totalPages.value));
+    const newPage = Math.max(1, Math.min(page, totalPages.value));
+    log.debug('Navigating to page', { from: currentPage.value, to: newPage, totalPages: totalPages.value });
+    currentPage.value = newPage;
   }
 
   function prevPage(): void {

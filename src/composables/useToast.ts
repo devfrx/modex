@@ -1,4 +1,7 @@
 import { ref } from 'vue';
+import { createLogger } from '@/utils/logger';
+
+const log = createLogger('Toast');
 
 export interface ToastMessage {
   id: number;
@@ -19,6 +22,7 @@ export function useToast() {
     duration?: number
   ) => {
     const id = nextId++;
+    log.debug('Showing toast', { id, type, title, message });
     messages.value.push({ id, type, title, message, duration });
   };
 
@@ -41,6 +45,7 @@ export function useToast() {
   const remove = (id: number) => {
     const index = messages.value.findIndex(m => m.id === id);
     if (index !== -1) {
+      log.debug('Removing toast', { id });
       messages.value.splice(index, 1);
     }
   };

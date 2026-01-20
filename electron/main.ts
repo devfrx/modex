@@ -28,7 +28,7 @@ import {
 import { getDownloadService } from "./services/DownloadService.js";
 import { MinecraftService, MinecraftInstallation, SyncResult } from "./services/MinecraftService.js";
 import { ImageCacheService } from "./services/ImageCacheService.js";
-import { ModpackAnalyzerService, ModpackPreview, ModpackAnalysis } from "./services/ModpackAnalyzerService.js";
+import { ModpackAnalyzerService, ModpackPreview } from "./services/ModpackAnalyzerService.js";
 import { 
   InstanceService, 
   ModexInstance, 
@@ -41,6 +41,7 @@ import { ConfigService, ConfigFile, ConfigFolder, ConfigContent, ConfigExport } 
 import { GistService, GistInfo, GistOperationResult } from "./services/GistService.js";
 import { GameService, GameType, GameProfile, GameConfig } from "./services/GameService.js";
 import { HytaleService, HytaleMod, HytaleModpack, HytaleSyncResult } from "./services/HytaleService.js";
+import { Logger, createLogger, LogEntry } from "./services/LoggerService.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -100,7 +101,14 @@ function createWindow() {
   }
 }
 
+// Create main logger
+const log = createLogger("Main");
+
 async function initializeBackend() {
+  // Initialize logging system first
+  await Logger.initialize();
+  log.info("Starting backend initialization");
+
   metadataManager = new MetadataManager();
   curseforgeService = new CurseForgeService(metadataManager.getBasePath());
   modAnalyzerService = new ModAnalyzerService(curseforgeService);
@@ -168,7 +176,7 @@ async function initializeBackend() {
 
   ipcMain.handle("mods:getById", async (_, id: string) => {
     if (!id || typeof id !== 'string') {
-      console.warn('[IPC] mods:getById called with invalid id:', id);
+      log.warn('mods:getById called with invalid id:', id);
       return undefined;
     }
     return metadataManager.getModById(id);
@@ -262,7 +270,7 @@ async function initializeBackend() {
   });
 
   ipcMain.handle("curseforge:search", async (_, options) => {
-    console.log("[Main] CurseForge search options:", JSON.stringify(options));
+    log.info("CurseForge search options:", JSON.stringify(options));
     const result = await curseforgeService.searchMods(options);
     return { mods: result.mods, pagination: result.pagination };
   });
@@ -366,8 +374,8 @@ async function initializeBackend() {
           fileId
         );
         if (existingMod) {
-          console.log(
-            `[IPC] Mod cf-${projectId}-${fileId} already exists in library, reusing. (Existing ID: ${existingMod.id})`
+          log.info(
+            `Mod cf-${projectId}-${fileId} already exists in library, reusing. (Existing ID: ${existingMod.id})`
           );
 
           // Verify content_type is correct by checking classId from API
@@ -379,7 +387,7 @@ async function initializeBackend() {
                 : "mod";
 
             if (existingMod.content_type !== mappedCorrectType) {
-              console.log(`[IPC] Correcting content_type for ${existingMod.name}: ${existingMod.content_type} -> ${mappedCorrectType}`);
+              log.info(`Correcting content_type for ${existingMod.name}: ${existingMod.content_type} -> ${mappedCorrectType}`);
               await metadataManager.updateMod(existingMod.id, { content_type: mappedCorrectType });
               existingMod.content_type = mappedCorrectType;
             }
@@ -433,7 +441,7 @@ async function initializeBackend() {
 
         return mod;
       } catch (error) {
-        console.error("Error adding mod from CurseForge:", error);
+        log.error("Error adding mod from CurseForge:", error);
         return null;
       }
     }
@@ -447,7 +455,7 @@ async function initializeBackend() {
 
   ipcMain.handle("modpacks:getById", async (_, id: string) => {
     if (!id || typeof id !== 'string') {
-      console.warn('[IPC] modpacks:getById called with invalid id:', id);
+      log.warn('modpacks:getById called with invalid id:', id);
       return undefined;
     }
     return metadataManager.getModpackById(id);
@@ -466,7 +474,7 @@ async function initializeBackend() {
             const exists = await gistService.gistExists(modpack.gist_config.gist_id);
             results[modpack.id] = exists ? "published" : "error";
           } catch (err) {
-            console.warn(`[verifyCloudStatus] Failed to verify gist for modpack ${modpack.id}:`, err);
+            log.warn(`verifyCloudStatus: Failed to verify gist for modpack ${modpack.id}:`, err);
             results[modpack.id] = "error";
           }
         }
@@ -477,7 +485,7 @@ async function initializeBackend() {
             const response = await fetch(modpack.remote_source.url, { method: "HEAD" });
             results[modpack.id] = response.ok ? "subscribed" : "error";
           } catch (err) {
-            console.warn(`[verifyCloudStatus] Failed to verify remote source for modpack ${modpack.id}:`, err);
+            log.warn(`verifyCloudStatus: Failed to verify remote source for modpack ${modpack.id}:`, err);
             results[modpack.id] = "error";
           }
         }
@@ -489,7 +497,7 @@ async function initializeBackend() {
 
       return results;
     } catch (error) {
-      console.error("[Main] Failed to verify cloud status:", error);
+      log.error("Failed to verify cloud status:", error);
       return {};
     }
   });
@@ -534,7 +542,7 @@ async function initializeBackend() {
     // First, find and delete any linked instance
     const linkedInstance = await instanceService.getInstanceByModpack(id);
     if (linkedInstance) {
-      console.log(`[Delete Modpack] Also deleting linked instance: ${linkedInstance.id}`);
+      log.info(`Delete Modpack: Also deleting linked instance: ${linkedInstance.id}`);
       await instanceService.deleteInstance(linkedInstance.id);
     }
 
@@ -597,11 +605,11 @@ async function initializeBackend() {
             });
           } catch (syncError) {
             // Rollback database change on sync failure (still within the same lock)
-            console.error(`[InstantSync] Failed to sync mod ${modId}, rolling back:`, syncError);
+            log.error(`InstantSync: Failed to sync mod ${modId}, rolling back:`, syncError);
             try {
               await metadataManager.removeModFromModpackUnlocked(modpackId, modId);
             } catch (rollbackError) {
-              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+              log.error(`InstantSync: Rollback also failed:`, rollbackError);
             }
             throw new Error(`Failed to sync mod to instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
           }
@@ -655,13 +663,13 @@ async function initializeBackend() {
             }
           } catch (syncError) {
             // Rollback: remove all successfully synced mods from database (still within lock)
-            console.error(`[InstantSync] Failed to sync batch, rolling back ${syncedModIds.length} mods:`, syncError);
+            log.error(`InstantSync: Failed to sync batch, rolling back ${syncedModIds.length} mods:`, syncError);
             try {
               for (const modId of syncedModIds) {
                 await metadataManager.removeModFromModpackUnlocked(modpackId, modId);
               }
             } catch (rollbackError) {
-              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+              log.error(`InstantSync: Rollback also failed:`, rollbackError);
             }
             throw new Error(`Failed to sync mods to instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
           }
@@ -751,11 +759,11 @@ async function initializeBackend() {
             });
           } catch (syncError) {
             // Rollback database change on sync failure (still within the same lock)
-            console.error(`[InstantSync] Failed to remove mod ${modId} from instance, rolling back:`, syncError);
+            log.error(`InstantSync: Failed to remove mod ${modId} from instance, rolling back:`, syncError);
             try {
               await metadataManager.addModToModpackUnlocked(modpackId, modId);
             } catch (rollbackError) {
-              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+              log.error(`InstantSync: Rollback also failed:`, rollbackError);
             }
             throw new Error(`Failed to remove mod from instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
           }
@@ -806,12 +814,12 @@ async function initializeBackend() {
             }, result.enabled);
           } catch (syncError) {
             // Rollback database change on sync failure (still within the same lock)
-            console.error(`[InstantSync] Failed to toggle mod ${modId} in instance, rolling back:`, syncError);
+            log.error(`InstantSync: Failed to toggle mod ${modId} in instance, rolling back:`, syncError);
             try {
               // Toggle back to previous state
               await metadataManager.toggleModInModpackUnlocked(modpackId, modId);
             } catch (rollbackError) {
-              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+              log.error(`InstantSync: Rollback also failed:`, rollbackError);
             }
             throw new Error(`Failed to toggle mod in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
           }
@@ -862,12 +870,12 @@ async function initializeBackend() {
             }, enabled);
           } catch (syncError) {
             // Rollback database change on sync failure (still within the same lock)
-            console.error(`[InstantSync] Failed to set mod ${modId} enabled=${enabled} in instance, rolling back:`, syncError);
+            log.error(`InstantSync: Failed to set mod ${modId} enabled=${enabled} in instance, rolling back:`, syncError);
             try {
               // Revert to opposite state
               await metadataManager.setModEnabledInModpackUnlocked(modpackId, modId, !enabled);
             } catch (rollbackError) {
-              console.error(`[InstantSync] Rollback also failed:`, rollbackError);
+              log.error(`InstantSync: Rollback also failed:`, rollbackError);
             }
             throw new Error(`Failed to update mod state in instance: ${syncError instanceof Error ? syncError.message : 'Unknown error'}`);
           }
@@ -943,14 +951,14 @@ async function initializeBackend() {
 
     // Don't sync if instance is currently installing/syncing
     if (instance.state === "installing") {
-      console.log(`[DirectSync] Skipping - instance ${instance.id} is currently installing`);
+      log.info(`DirectSync: Skipping - instance ${instance.id} is currently installing`);
       return { canSync: false, instance, reason: "installing" };
     }
 
     // Don't sync if game is running on this instance
     const runningGame = instanceService.getRunningGame(instance.id);
     if (runningGame) {
-      console.log(`[DirectSync] Skipping - game is running on instance ${instance.id}`);
+      log.info(`DirectSync: Skipping - game is running on instance ${instance.id}`);
       return { canSync: false, instance, reason: "game_running" };
     }
 
@@ -996,7 +1004,7 @@ async function initializeBackend() {
 
       // Skip if already exists
       if (await fs.pathExists(destPath) || await fs.pathExists(disabledDestPath)) {
-        console.log(`[DirectSync] Skipping ${mod.name} - already exists`);
+        log.info(`DirectSync: Skipping ${mod.name} - already exists`);
         return { success: true, skipped: true, reason: "already_exists" };
       }
 
@@ -1012,12 +1020,12 @@ async function initializeBackend() {
       // TODO: Add Modrinth URL support when mr_project_id/mr_version_id are available
 
       if (!downloadUrl) {
-        console.log(`[DirectSync] No download URL for ${mod.name} (local mod or missing CF IDs)`);
+        log.info(`DirectSync: No download URL for ${mod.name} (local mod or missing CF IDs)`);
         return { success: true, skipped: true, reason: "no_download_url" };
       }
 
       // Download the file with timeout
-      console.log(`[DirectSync] Downloading ${mod.filename}...`);
+      log.info(`DirectSync: Downloading ${mod.filename}...`);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
       
@@ -1031,7 +1039,7 @@ async function initializeBackend() {
 
         const buffer = Buffer.from(await response.arrayBuffer());
         await fs.writeFile(destPath, buffer);
-        console.log(`[DirectSync] Downloaded ${mod.filename} (${buffer.length} bytes)`);
+        log.info(`DirectSync: Downloaded ${mod.filename} (${buffer.length} bytes)`);
 
         return { success: true };
       } catch (fetchError: any) {
@@ -1042,7 +1050,7 @@ async function initializeBackend() {
         throw fetchError;
       }
     } catch (error: any) {
-      console.error(`[DirectSync] Error syncing ${mod.name}:`, error);
+      log.error(`DirectSync: Error syncing ${mod.name}:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -1084,12 +1092,12 @@ async function initializeBackend() {
       let removed = false;
       if (await fs.pathExists(filePath)) {
         await fs.remove(filePath);
-        console.log(`[DirectSync] Removed ${mod.filename}`);
+        log.info(`DirectSync: Removed ${mod.filename}`);
         removed = true;
       }
       if (await fs.pathExists(disabledPath)) {
         await fs.remove(disabledPath);
-        console.log(`[DirectSync] Removed ${mod.filename}.disabled`);
+        log.info(`DirectSync: Removed ${mod.filename}.disabled`);
         removed = true;
       }
 
@@ -1101,10 +1109,10 @@ async function initializeBackend() {
     } catch (error: any) {
       // Check for EBUSY (file locked)
       if (error.code === 'EBUSY' || error.code === 'EPERM') {
-        console.error(`[DirectSync] File is locked (game running?): ${mod.filename}`);
+        log.error(`DirectSync: File is locked (game running?): ${mod.filename}`);
         return { success: false, error: 'File is locked - is the game running?' };
       }
-      console.error(`[DirectSync] Error removing file:`, error);
+      log.error(`DirectSync: Error removing file:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -1147,7 +1155,7 @@ async function initializeBackend() {
         // Use atomic rename + catch ENOENT to avoid TOCTOU race condition
         try {
           await fs.rename(disabledPath, enabledPath);
-          console.log(`[DirectSync] Enabled ${mod.filename}`);
+          log.info(`DirectSync: Enabled ${mod.filename}`);
         } catch (err: any) {
           if (err.code === 'ENOENT') {
             // .disabled file doesn't exist, check if already enabled
@@ -1165,7 +1173,7 @@ async function initializeBackend() {
         // Use atomic rename + catch ENOENT to avoid TOCTOU race condition
         try {
           await fs.rename(enabledPath, disabledPath);
-          console.log(`[DirectSync] Disabled ${mod.filename}`);
+          log.info(`DirectSync: Disabled ${mod.filename}`);
         } catch (err: any) {
           if (err.code === 'ENOENT') {
             // Enabled file doesn't exist, check if already disabled
@@ -1184,10 +1192,10 @@ async function initializeBackend() {
     } catch (error: any) {
       // Check for EBUSY (file locked)
       if (error.code === 'EBUSY' || error.code === 'EPERM') {
-        console.error(`[DirectSync] File is locked (game running?): ${mod.filename}`);
+        log.error(`DirectSync: File is locked (game running?): ${mod.filename}`);
         return { success: false, error: 'File is locked - is the game running?' };
       }
-      console.error(`[DirectSync] Error toggling mod:`, error);
+      log.error(`DirectSync: Error toggling mod:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -1233,11 +1241,11 @@ async function initializeBackend() {
       
       if (await fs.pathExists(oldEnabledPath)) {
         await fs.remove(oldEnabledPath);
-        console.log(`[DirectSync] Removed old version: ${oldMod.filename}`);
+        log.info(`DirectSync: Removed old version: ${oldMod.filename}`);
       }
       if (await fs.pathExists(oldDisabledPath)) {
         await fs.remove(oldDisabledPath);
-        console.log(`[DirectSync] Removed old disabled version: ${oldMod.filename}.disabled`);
+        log.info(`DirectSync: Removed old disabled version: ${oldMod.filename}.disabled`);
       }
 
       // Build download URL for new file
@@ -1250,12 +1258,12 @@ async function initializeBackend() {
       }
 
       if (!downloadUrl) {
-        console.log(`[DirectSync] No download URL for ${newMod.name} (local mod or missing CF IDs)`);
+        log.info(`DirectSync: No download URL for ${newMod.name} (local mod or missing CF IDs)`);
         return { success: true, skipped: true, reason: "no_download_url" };
       }
 
       // Download new file with timeout
-      console.log(`[DirectSync] Downloading new version: ${newMod.filename}...`);
+      log.info(`DirectSync: Downloading new version: ${newMod.filename}...`);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
       
@@ -1274,7 +1282,7 @@ async function initializeBackend() {
         const destPath = isDisabled ? newPath + ".disabled" : newPath;
         
         await fs.writeFile(destPath, buffer);
-        console.log(`[DirectSync] Downloaded ${newMod.filename} (${buffer.length} bytes)${isDisabled ? ' [disabled]' : ''}`);
+        log.info(`DirectSync: Downloaded ${newMod.filename} (${buffer.length} bytes)${isDisabled ? ' [disabled]' : ''}`);
 
         return { success: true };
       } catch (fetchError: any) {
@@ -1286,10 +1294,10 @@ async function initializeBackend() {
       }
     } catch (error: any) {
       if (error.code === 'EBUSY' || error.code === 'EPERM') {
-        console.error(`[DirectSync] File is locked (game running?)`);
+        log.error(`DirectSync: File is locked (game running?)`);
         return { success: false, error: 'File is locked - is the game running?' };
       }
-      console.error(`[DirectSync] Error updating mod in instance:`, error);
+      log.error(`DirectSync: Error updating mod in instance:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -1490,11 +1498,11 @@ async function initializeBackend() {
               // Update the new instance to link to the new modpack
               newInstance.modpackId = newModpackId;
               await instanceService.updateInstance(newInstance.id, { modpackId: newModpackId });
-              console.log(`[Clone] Created instance ${newInstance.id} for cloned modpack ${newModpackId}`);
+              log.info(`Clone: Created instance ${newInstance.id} for cloned modpack ${newModpackId}`);
             }
           }
         } catch (err) {
-          console.error(`[Clone] Failed to clone instance:`, err);
+          log.error(`Clone: Failed to clone instance:`, err);
           // Don't fail the whole operation
         }
       }
@@ -1521,7 +1529,7 @@ async function initializeBackend() {
       await shell.openPath(modpacksDir);
       return true;
     } catch (err) {
-      console.error("Failed to open folder:", err);
+      log.error("Failed to open folder:", err);
       return false;
     }
   });
@@ -1616,7 +1624,7 @@ async function initializeBackend() {
           currentVersion: currentFile?.displayName || modpack.version,
         };
       } catch (error) {
-        console.error("[IPC] Error checking modpack update:", error);
+        log.error("Error checking modpack update:", error);
         return { hasUpdate: false };
       }
     }
@@ -1779,7 +1787,7 @@ async function initializeBackend() {
           } catch (importError: any) {
             // Handle VERSION_CONFLICTS - the modpack was still created successfully
             if (importError.code === "VERSION_CONFLICTS" && importError.partialData?.modpackId) {
-              console.log("[CF Update] Version conflicts detected but modpack created successfully");
+              log.info("CF Update: Version conflicts detected but modpack created successfully");
               importResult = {
                 modpackId: importError.partialData.modpackId,
                 modsImported: importError.partialData.newModIds?.length || 0,
@@ -1933,7 +1941,7 @@ async function initializeBackend() {
           };
         }
       } catch (error: any) {
-        console.error("[IPC] Error updating CF modpack:", error);
+        log.error("Error updating CF modpack:", error);
         return {
           success: false,
           modsImported: 0,
@@ -1951,7 +1959,7 @@ async function initializeBackend() {
       try {
         return await curseforgeService.getFileChangelog(cfProjectId, cfFileId);
       } catch (error) {
-        console.error("[IPC] Error getting modpack changelog:", error);
+        log.error("Error getting modpack changelog:", error);
         return "";
       }
     }
@@ -1983,7 +1991,7 @@ async function initializeBackend() {
           onProgress
         );
       } catch (error: any) {
-        console.error("[IPC] Error re-searching incompatible mods:", error);
+        log.error("Error re-searching incompatible mods:", error);
         throw error;
       }
     }
@@ -2067,7 +2075,7 @@ async function initializeBackend() {
           if (snapshot && snapshot.cf_file_id && mod.cf_file_id !== snapshot.cf_file_id) {
             // Same ID but file_id changed - this shouldn't happen with current ID scheme
             // but handle it anyway - we need to download the correct version
-            console.log(`[Rollback] Mod ${modId} exists but file_id differs: lib=${mod.cf_file_id} vs snapshot=${snapshot.cf_file_id}`);
+            log.info(`Rollback: Mod ${modId} exists but file_id differs: lib=${mod.cf_file_id} vs snapshot=${snapshot.cf_file_id}`);
             if (snapshot.cf_project_id) {
               modsToDownload.push({
                 targetModId: modId,
@@ -2170,9 +2178,9 @@ async function initializeBackend() {
 
             const addedMod = await metadataManager.addMod(formattedMod);
             restoredModIds.push(addedMod.id);
-            console.log(`[Rollback] Downloaded mod: ${cfMod.name} (${toDownload.reason})`);
+            log.info(`Rollback: Downloaded mod: ${cfMod.name} (${toDownload.reason})`);
           } catch (err) {
-            console.error(`[Rollback] Failed to download mod ${toDownload.cfProjectId}:`, err);
+            log.error(`Rollback: Failed to download mod ${toDownload.cfProjectId}:`, err);
             failedMods.push({
               modId: toDownload.targetModId,
               modName: toDownload.modName,
@@ -2209,7 +2217,7 @@ async function initializeBackend() {
         if (version.loader_version) loaderUpdate.loader_version = version.loader_version;
 
         await metadataManager.updateModpack(modpackId, loaderUpdate);
-        console.log(`[Rollback] Restored loader: ${version.loader} ${version.loader_version}`);
+        log.info(`Rollback: Restored loader: ${version.loader} ${version.loader_version}`);
 
         // Update linked instance loader version
         const linkedInstance = await instanceService.getInstanceByModpack(modpackId);
@@ -2218,7 +2226,7 @@ async function initializeBackend() {
             loader: version.loader,
             loaderVersion: version.loader_version
           });
-          console.log(`[Rollback] Updated instance loader: ${version.loader} ${version.loader_version}`);
+          log.info(`Rollback: Updated instance loader: ${version.loader} ${version.loader_version}`);
         }
       }
 
@@ -2226,7 +2234,7 @@ async function initializeBackend() {
       if (result) {
         const linkedInstance = await instanceService.getInstanceByModpack(modpackId);
         if (linkedInstance) {
-          console.log(`[Rollback] Syncing configs to instance ${linkedInstance.id}`);
+          log.info(`Rollback: Syncing configs to instance ${linkedInstance.id}`);
           const overridesPath = metadataManager.getOverridesPath(modpackId);
 
           const configFolders = ["config", "kubejs", "defaultconfigs", "scripts"];
@@ -2235,7 +2243,7 @@ async function initializeBackend() {
             const destPath = path.join(linkedInstance.path, folder);
             if (await fs.pathExists(srcPath)) {
               await fs.copy(srcPath, destPath, { overwrite: true });
-              console.log(`[Rollback] Synced ${folder} to instance`);
+              log.info(`Rollback: Synced ${folder} to instance`);
             }
           }
         }
@@ -2478,10 +2486,10 @@ async function initializeBackend() {
               modName: "Finalizing...",
             });
 
-            console.log(`[Gist Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+            log.info(`Gist Import: Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
           }
         } catch (autoFlowError) {
-          console.error(`[Gist Import] Auto-flow failed (non-fatal):`, autoFlowError);
+          log.error(`Gist Import: Auto-flow failed (non-fatal):`, autoFlowError);
           // Non-fatal: modpack was still imported successfully
         }
       }
@@ -2494,7 +2502,7 @@ async function initializeBackend() {
 
       return importResult;
     } catch (error: any) {
-      console.error("[Remote Import] Error:", error);
+      log.error("Remote Import: Error:", error);
       return { success: false, error: error.message };
     }
   });
@@ -2538,14 +2546,14 @@ async function initializeBackend() {
             zip.addLocalFile(srcPath, "overrides");
           }
         }
-        console.log(`[Export CF] Added overrides from ${overridesPath}`);
+        log.info(`Export CF: Added overrides from ${overridesPath}`);
       }
 
       zip.writeZip(result.filePath);
 
       return { success: true, path: result.filePath };
     } catch (error: any) {
-      console.error("Export error:", error);
+      log.error("Export error:", error);
       throw new Error(error.message);
     }
   });
@@ -2587,14 +2595,14 @@ async function initializeBackend() {
             zip.addLocalFile(srcPath, "overrides");
           }
         }
-        console.log(`[Export MODEX] Added overrides from ${overridesPath}`);
+        log.info(`Export MODEX: Added overrides from ${overridesPath}`);
       }
 
       zip.writeZip(result.filePath);
 
       return { success: true, code, path: result.filePath };
     } catch (error: any) {
-      console.error("Export error:", error);
+      log.error("Export error:", error);
       throw new Error(error.message);
     }
   });
@@ -2621,7 +2629,7 @@ async function initializeBackend() {
 
       return { success: true, path: result.filePath };
     } catch (error: any) {
-      console.error("Export manifest error:", error);
+      log.error("Export manifest error:", error);
       throw new Error(error.message);
     }
   });
@@ -2720,7 +2728,7 @@ async function initializeBackend() {
         );
 
         if (overridesResult.fileCount > 0) {
-          console.log(`[CF Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
+          log.info(`CF Import: Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
         }
 
         // AUTO-FLOW: Create instance -> sync -> version control
@@ -2807,22 +2815,22 @@ async function initializeBackend() {
             const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
             if (!existingHistory || existingHistory.versions.length === 0) {
               await metadataManager.initializeVersionControl(importResult.modpackId, "Initial version (with instance configs)");
-              console.log(`[CF Import] Version control initialized for modpack ${importResult.modpackId}`);
+              log.info(`CF Import: Version control initialized for modpack ${importResult.modpackId}`);
             }
 
-            console.log(`[CF Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+            log.info(`CF Import: Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
           }
         } catch (autoFlowError) {
-          console.error(`[CF Import] Auto-flow failed (non-fatal):`, autoFlowError);
+          log.error(`CF Import: Auto-flow failed (non-fatal):`, autoFlowError);
           // Still try to initialize version control even if instance creation failed
           try {
             const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
             if (!existingHistory || existingHistory.versions.length === 0) {
               await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from CurseForge");
-              console.log(`[CF Import] Version control initialized (fallback)`);
+              log.info(`CF Import: Version control initialized (fallback)`);
             }
           } catch (vcError) {
-            console.error(`[CF Import] Failed to initialize version control:`, vcError);
+            log.error(`CF Import: Failed to initialize version control:`, vcError);
           }
         }
       }
@@ -2836,12 +2844,10 @@ async function initializeBackend() {
         errors: importResult.errors,
       };
     } catch (error: any) {
-      console.log("[IPC] CF Import error caught:", error.code, error.message);
+      log.info("CF Import error caught:", { code: error.code, message: error.message });
       // Check if this is a version conflict error
       if (error.code === "VERSION_CONFLICTS") {
-        console.log(
-          `[IPC] Handling ${error.conflicts.length} CF import version conflicts`
-        );
+        log.info(`Handling ${error.conflicts.length} CF import version conflicts`);
         // Store conflict data in metadata manager for later resolution
         metadataManager.storePendingCFConflicts(
           error.partialData.modpackId,
@@ -2917,7 +2923,7 @@ async function initializeBackend() {
         };
       }
       // Log detailed error info for debugging
-      console.error("[IPC] CF Import error details:", {
+      log.error("CF Import error details:", {
         message: error.message,
         code: error.code,
         stack: error.stack,
@@ -3092,7 +3098,7 @@ async function initializeBackend() {
         } catch (importError: any) {
           // Handle VERSION_CONFLICTS - the modpack was still created successfully
           if (importError.code === "VERSION_CONFLICTS" && importError.partialData?.modpackId) {
-            console.log("[CF Import] Version conflicts detected but modpack created successfully");
+            log.info("CF Import: Version conflicts detected but modpack created successfully");
             importResult = {
               modpackId: importError.partialData.modpackId,
               modsImported: importError.partialData.newModIds?.length || 0,
@@ -3144,7 +3150,7 @@ async function initializeBackend() {
           );
 
           if (overridesResult.fileCount > 0) {
-            console.log(`[CF Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
+            log.info(`CF Import: Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
           }
 
           // AUTO-FLOW: Create instance -> sync -> version control
@@ -3225,22 +3231,22 @@ async function initializeBackend() {
               const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
               if (!existingHistory || existingHistory.versions.length === 0) {
                 await metadataManager.initializeVersionControl(importResult.modpackId, "Initial version (with instance configs)");
-                console.log(`[CF URL Import] Version control initialized for modpack ${importResult.modpackId}`);
+                log.info(`CF URL Import: Version control initialized for modpack ${importResult.modpackId}`);
               }
 
-              console.log(`[CF URL Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+              log.info(`CF URL Import: Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
             }
           } catch (autoFlowError) {
-            console.error(`[CF URL Import] Auto-flow failed (non-fatal):`, autoFlowError);
+            log.error(`CF URL Import: Auto-flow failed (non-fatal):`, autoFlowError);
             // Still try to initialize version control even if instance creation failed
             try {
               const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
               if (!existingHistory || existingHistory.versions.length === 0) {
                 await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from CurseForge URL");
-                console.log(`[CF URL Import] Version control initialized (fallback)`);
+                log.info(`CF URL Import: Version control initialized (fallback)`);
               }
             } catch (vcError) {
-              console.error(`[CF URL Import] Failed to initialize version control:`, vcError);
+              log.error(`CF URL Import: Failed to initialize version control:`, vcError);
             }
           }
         }
@@ -3256,7 +3262,7 @@ async function initializeBackend() {
           errors: importResult.errors,
         };
       } catch (error: any) {
-        console.error("[IPC] CF URL Import error:", error);
+        log.error("CF URL Import error:", error);
         return {
           success: false,
           modsImported: 0,
@@ -3351,7 +3357,7 @@ async function initializeBackend() {
         );
 
         if (overridesResult.fileCount > 0) {
-          console.log(`[MODEX Import] Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
+          log.info(`MODEX Import: Saved ${overridesResult.fileCount} override files for modpack ${importResult.modpackId}`);
         }
 
         // AUTO-FLOW: Create instance -> sync -> version control (only for new imports, not updates)
@@ -3432,22 +3438,22 @@ async function initializeBackend() {
               const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
               if (!existingHistory || existingHistory.versions.length === 0) {
                 await metadataManager.initializeVersionControl(importResult.modpackId, "Initial version (with instance configs)");
-                console.log(`[MODEX Import] Version control initialized for modpack ${importResult.modpackId}`);
+                log.info(`MODEX Import: Version control initialized for modpack ${importResult.modpackId}`);
               }
 
-              console.log(`[MODEX Import] Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
+              log.info(`MODEX Import: Auto-created instance ${instance.id} for modpack ${importResult.modpackId}`);
             }
           } catch (autoFlowError) {
-            console.error(`[MODEX Import] Auto-flow failed (non-fatal):`, autoFlowError);
+            log.error(`MODEX Import: Auto-flow failed (non-fatal):`, autoFlowError);
             // Still try to initialize version control even if instance creation failed
             try {
               const existingHistory = await metadataManager.getVersionHistory(importResult.modpackId);
               if (!existingHistory || existingHistory.versions.length === 0) {
                 await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from .modex file");
-                console.log(`[MODEX Import] Version control initialized (fallback)`);
+                log.info(`MODEX Import: Version control initialized (fallback)`);
               }
             } catch (vcError) {
-              console.error(`[MODEX Import] Failed to initialize version control:`, vcError);
+              log.error(`MODEX Import: Failed to initialize version control:`, vcError);
             }
           }
         }
@@ -3455,7 +3461,7 @@ async function initializeBackend() {
 
       return importResult;
     } catch (error: any) {
-      console.log("[IPC] Import error:", error.message);
+      log.info("Import error:", error.message);
       throw new Error(error.message);
     }
   });
@@ -3503,7 +3509,7 @@ async function initializeBackend() {
               // New import: initialize version control if empty
               if (versionCountAfterImport === 0) {
                 await metadataManager.initializeVersionControl(importResult.modpackId, "Initial import from remote manifest");
-                console.log(`[MODEX Manifest Import] Version control initialized for modpack ${importResult.modpackId}`);
+                log.info(`MODEX Manifest Import: Version control initialized for modpack ${importResult.modpackId}`);
               }
             } else {
               // Update: check if version history was imported from manifest
@@ -3530,16 +3536,16 @@ async function initializeBackend() {
                 true, // hasConfigChanges (manifest may include config updates)
                 true // forceCreate - always create to mark current state
               );
-              console.log(`[MODEX Manifest Update] Created sync version for modpack ${importResult.modpackId}`);
+              log.info(`MODEX Manifest Update: Created sync version for modpack ${importResult.modpackId}`);
             }
           } catch (vcError) {
-            console.error(`[MODEX Manifest Import] Failed to handle version control:`, vcError);
+            log.error(`MODEX Manifest Import: Failed to handle version control:`, vcError);
           }
         }
 
         return importResult;
       } catch (error: any) {
-        console.log("[IPC] Import manifest error:", error.message);
+        log.info("Import manifest error:", error.message);
         throw new Error(error.message);
       }
     }
@@ -3615,12 +3621,12 @@ async function initializeBackend() {
   
   // Send update events to renderer
   autoUpdater.on("checking-for-update", () => {
-    console.log("[AutoUpdater] Checking for updates...");
+    log.info("AutoUpdater: Checking for updates...");
     win?.webContents.send("update:checking");
   });
 
   autoUpdater.on("update-available", (info) => {
-    console.log("[AutoUpdater] Update available:", info.version);
+    log.info("AutoUpdater: Update available:", info.version);
     win?.webContents.send("update:available", {
       version: info.version,
       releaseNotes: info.releaseNotes,
@@ -3629,14 +3635,14 @@ async function initializeBackend() {
   });
 
   autoUpdater.on("update-not-available", (info) => {
-    console.log("[AutoUpdater] No update available, current:", info.version);
+    log.info("AutoUpdater: No update available, current:", info.version);
     win?.webContents.send("update:not-available", {
       version: info.version,
     });
   });
 
   autoUpdater.on("download-progress", (progress) => {
-    console.log(`[AutoUpdater] Download progress: ${progress.percent.toFixed(1)}%`);
+    log.info(`AutoUpdater: Download progress: ${progress.percent.toFixed(1)}%`);
     win?.webContents.send("update:download-progress", {
       percent: progress.percent,
       bytesPerSecond: progress.bytesPerSecond,
@@ -3646,7 +3652,7 @@ async function initializeBackend() {
   });
 
   autoUpdater.on("update-downloaded", (info) => {
-    console.log("[AutoUpdater] Update downloaded:", info.version);
+    log.info("AutoUpdater: Update downloaded:", info.version);
     win?.webContents.send("update:downloaded", {
       version: info.version,
       releaseNotes: info.releaseNotes,
@@ -3654,7 +3660,7 @@ async function initializeBackend() {
   });
 
   autoUpdater.on("error", (error) => {
-    console.error("[AutoUpdater] Error:", error);
+    log.error("AutoUpdater: Error:", error);
     // Don't send error to renderer during download attempts - it's handled in the IPC handler
     // Only send if it's an unexpected error (not during an active download/check operation)
   });
@@ -3735,7 +3741,7 @@ async function initializeBackend() {
         canAutoUpdate: isProduction, // Can only auto-update in production builds
       };
     } catch (error: any) {
-      console.error("[Updates] Failed to check for app updates:", error);
+      log.error("Updates: Failed to check for app updates:", error);
       return {
         hasUpdate: false,
         currentVersion: app.getVersion(),
@@ -3752,23 +3758,23 @@ async function initializeBackend() {
         return { success: false, error: "Auto-update not available in development mode" };
       }
       
-      console.log("[Updates] Starting update download...");
+      log.info("Updates: Starting update download...");
       
       // Try electron-updater first
       try {
         // Need to check for updates first to populate the update info
         const checkResult = await autoUpdater.checkForUpdates();
         if (checkResult && checkResult.updateInfo) {
-          console.log("[Updates] electron-updater found update, downloading...");
+          log.info("Updates: electron-updater found update, downloading...");
           await autoUpdater.downloadUpdate();
           return { success: true, method: "auto" };
         }
       } catch (autoUpdateError: any) {
-        console.log("[Updates] electron-updater failed, trying manual download:", autoUpdateError.message);
+        log.info("Updates: electron-updater failed, trying manual download:", autoUpdateError.message);
       }
       
       // Fallback: Download manually using GitHub API and our DownloadService
-      console.log("[Updates] Falling back to manual download...");
+      log.info("Updates: Falling back to manual download...");
       
       // Get releases from GitHub (use /releases to include pre-releases)
       const response = await fetch(
@@ -3834,7 +3840,7 @@ async function initializeBackend() {
         throw new Error(downloadResult.error || "Download failed");
       }
       
-      console.log("[Updates] Manual download complete:", downloadPath);
+      log.info("Updates: Manual download complete:", downloadPath);
       
       // Store the path for installation
       (global as any).__pendingUpdatePath = downloadPath;
@@ -3848,7 +3854,7 @@ async function initializeBackend() {
       
       return { success: true, method: "manual", installerPath: downloadPath };
     } catch (error: any) {
-      console.error("[Updates] Failed to download update:", error);
+      log.error("Updates: Failed to download update:", error);
       return { success: false, error: error.message || "Failed to download update" };
     }
   });
@@ -3856,13 +3862,13 @@ async function initializeBackend() {
   // Install the update and restart the app
   ipcMain.handle("updates:installUpdate", async () => {
     try {
-      console.log("[Updates] Installing update...");
+      log.info("Updates: Installing update...");
       
       // Check if we have a manually downloaded installer
       const manualInstallerPath = (global as any).__pendingUpdatePath;
       
       if (manualInstallerPath && await fs.pathExists(manualInstallerPath)) {
-        console.log("[Updates] Running manual installer:", manualInstallerPath);
+        log.info("Updates: Running manual installer:", manualInstallerPath);
         
         // Run the installer and quit the app
         const { spawn } = await import("child_process");
@@ -3883,7 +3889,7 @@ async function initializeBackend() {
       autoUpdater.quitAndInstall(false, true);
       return { success: true };
     } catch (error: any) {
-      console.error("[Updates] Failed to install update:", error);
+      log.error("Updates: Failed to install update:", error);
       return { success: false, error: error.message || "Failed to install update" };
     }
   });
@@ -3891,7 +3897,7 @@ async function initializeBackend() {
   ipcMain.handle(
     "updates:setApiKey",
     async (_, apiKey: string) => {
-      console.log(`[IPC] Setting CurseForge API key`);
+      log.info(`Setting CurseForge API key`);
       await metadataManager.setApiKey(apiKey);
       await curseforgeService.setApiKey(apiKey);
       return { success: true };
@@ -4001,7 +4007,7 @@ async function initializeBackend() {
         );
         return latestFile; // Return full file object or null
       } catch (err) {
-        console.error(`[IPC] Failed to check mod update for ${modId}:`, err);
+        log.error(`Failed to check mod update for ${modId}:`, err);
         return null;
       }
     }
@@ -4120,7 +4126,7 @@ async function initializeBackend() {
         if (existingNewMod) {
           // New version already exists in library, just use it
           newMod = existingNewMod;
-          console.log(`[Update] New version already exists: ${newMod.id}`);
+          log.info(`[Update] New version already exists: ${newMod.id}`);
         } else {
           // Download new version info and add to library
           const cfFile = await curseforgeService.getFile(
@@ -4151,7 +4157,7 @@ async function initializeBackend() {
 
           // Add as NEW mod (will get ID: cf-{projectId}-{newFileId})
           newMod = await metadataManager.addMod(modData);
-          console.log(`[Update] Created new mod version: ${newMod.id}`);
+          log.info(`[Update] Created new mod version: ${newMod.id}`);
         }
 
         if (!newMod) {
@@ -4168,7 +4174,7 @@ async function initializeBackend() {
           const isDisabled = modpack?.disabled_mod_ids?.includes(modId) || false;
           
           await metadataManager.replaceModInModpack(modpackId, modId, newMod.id);
-          console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${modpackId}`);
+          log.info(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${modpackId}`);
           
           updatedModpacks.push({ id: modpackId, isDisabled });
         } else {
@@ -4178,12 +4184,12 @@ async function initializeBackend() {
             if (mp.mod_ids.includes(modId)) {
               // Skip linked modpacks when updating globally
               if (mp.remote_source?.url) {
-                console.log(`[Update] Skipping linked modpack ${mp.id}`);
+                log.info(`[Update] Skipping linked modpack ${mp.id}`);
                 continue;
               }
               const isDisabled = mp.disabled_mod_ids?.includes(modId) || false;
               await metadataManager.replaceModInModpack(mp.id, modId, newMod.id);
-              console.log(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${mp.id}`);
+              log.info(`[Update] Replaced ${modId} with ${newMod.id} in modpack ${mp.id}`);
               
               updatedModpacks.push({ id: mp.id, isDisabled });
             }
@@ -4208,9 +4214,9 @@ async function initializeBackend() {
               isDisabled
             );
             if (syncResult.success && !syncResult.skipped) {
-              console.log(`[Update] Instant synced update to instance for modpack ${mpId}`);
+              log.info(`[Update] Instant synced update to instance for modpack ${mpId}`);
             } else if (syncResult.error) {
-              console.warn(`[Update] Instant sync failed for modpack ${mpId}: ${syncResult.error}`);
+              log.warn(`[Update] Instant sync failed for modpack ${mpId}: ${syncResult.error}`);
             }
           }
         }
@@ -4289,7 +4295,7 @@ async function initializeBackend() {
         satisfiedDependencies: result.dependencies.satisfied,
       };
     } catch (error: any) {
-      console.error("[Main] Analyzer error:", error);
+      log.error("Analyzer error:", error);
       throw error;
     }
   });
@@ -4308,7 +4314,7 @@ async function initializeBackend() {
 
       return await modAnalyzerService.analyzeModpack(mods);
     } catch (error: any) {
-      console.error("[Main] Analyzer error:", error);
+      log.error("Analyzer error:", error);
       throw error;
     }
   });
@@ -4323,7 +4329,7 @@ async function initializeBackend() {
           gameVersion
         );
       } catch (error: any) {
-        console.error("[Main] Dependency check error:", error);
+        log.error("Dependency check error:", error);
         return [];
       }
     }
@@ -4332,39 +4338,10 @@ async function initializeBackend() {
   ipcMain.handle(
     "analyzer:getPerformanceTips",
     async (_, modpackId: string) => {
-      try {
-        const modpack = await metadataManager.getModpackById(modpackId);
-        if (!modpack) {
-          return [];
-        }
-
-        const modIds = modpack.mod_ids || [];
-        const mods = await Promise.all(
-          modIds.map(async (modId) => {
-            const mod = await metadataManager.getModById(modId);
-            return mod;
-          })
-        );
-
-        const validMods = mods
-          .filter(
-            (m): m is NonNullable<typeof m> => m !== null && m !== undefined
-          )
-          .map((m) => ({
-            id: m.id,
-            name: m.name,
-            curseforge_id: m.cf_project_id,
-            loader: m.loader,
-            game_version: m.game_version,
-            version: m.version,
-          }));
-
-        const result = await modAnalyzerService.analyzeModpack(validMods);
-        return result.performance.map((p) => p.description);
-      } catch (error: any) {
-        console.error("[Main] Performance tips error:", error);
-        return [];
-      }
+      // Performance tips have been removed from ModAnalyzerService
+      // This handler is kept for backward compatibility
+      log.debug(`Performance tips requested for ${modpackId} but feature is deprecated`);
+      return [];
     }
   );
 
@@ -4422,7 +4399,7 @@ async function initializeBackend() {
 
         return { success: true, mod: savedMod };
       } catch (error: any) {
-        console.error("[Main] Install dependency error:", error);
+        log.error("Install dependency error:", error);
         return { success: false, error: error.message };
       }
     }
@@ -4480,7 +4457,7 @@ async function initializeBackend() {
 
       return result;
     } catch (err) {
-      console.error("[Main] Failed to delete Gist:", err);
+      log.error("Failed to delete Gist:", err);
       return { success: false, error: String(err) };
     }
   });
@@ -4530,7 +4507,7 @@ async function initializeBackend() {
       if (gistId) {
         const exists = await gistService.gistExists(gistId);
         if (!exists) {
-          console.log(`[Main] Gist ${gistId} no longer exists, will create new one`);
+          log.info(`Gist ${gistId} no longer exists, will create new one`);
           gistId = undefined;
           // Force public for new gist since old config is being cleared
           isPublic = options?.isPublic ?? true;
@@ -4569,7 +4546,7 @@ async function initializeBackend() {
 
       return result;
     } catch (error: any) {
-      console.error("[Main] Push manifest error:", error);
+      log.error("Push manifest error:", error);
       return { success: false, error: error.message };
     }
   });
@@ -4753,16 +4730,16 @@ async function initializeBackend() {
     configSyncMode?: "overwrite" | "new_only" | "skip";
     overridesZipPath?: string;
   }) => {
-    console.log(`[instance:syncModpack] Called with instanceId: ${instanceId}, modpackId: ${modpackId}`);
+    log.info(`[instance:syncModpack] Called with instanceId: ${instanceId}, modpackId: ${modpackId}`);
 
     // Get modpack and mods
     const modpack = await metadataManager.getModpackById(modpackId);
     if (!modpack) {
-      console.log(`[instance:syncModpack] Modpack not found: ${modpackId}`);
+      log.info(`[instance:syncModpack] Modpack not found: ${modpackId}`);
       return { success: false, modsDownloaded: 0, modsSkipped: 0, configsCopied: 0, configsSkipped: 0, errors: ["Modpack not found"], warnings: [] };
     }
 
-    console.log(`[instance:syncModpack] Found modpack: ${modpack.name}, mod_ids count: ${modpack.mod_ids?.length}, disabled_mod_ids: ${JSON.stringify(modpack.disabled_mod_ids)}`);
+    log.info(`[instance:syncModpack] Found modpack: ${modpack.name}, mod_ids count: ${modpack.mod_ids?.length}, disabled_mod_ids: ${JSON.stringify(modpack.disabled_mod_ids)}`);
 
     // Update instance loader and loaderVersion to match modpack (so next launch installs correct loader)
     const instance = await instanceService.getInstance(instanceId);
@@ -4772,7 +4749,7 @@ async function initializeBackend() {
         instance.loaderVersion !== modpack.loader_version;
 
       if (needsLoaderUpdate) {
-        console.log(`[instance:syncModpack] Updating instance loader: ${instance.loader}/${instance.loaderVersion} -> ${modpack.loader}/${modpack.loader_version}`);
+        log.info(`[instance:syncModpack] Updating instance loader: ${instance.loader}/${instance.loaderVersion} -> ${modpack.loader}/${modpack.loader_version}`);
         await instanceService.updateInstance(instanceId, {
           loader: modpack.loader,
           loaderVersion: modpack.loader_version
@@ -4783,13 +4760,13 @@ async function initializeBackend() {
     const mods = await metadataManager.getModsInModpack(modpackId);
     const disabledModIds = new Set(modpack.disabled_mod_ids || []);
 
-    console.log(`[instance:syncModpack] Modpack has ${mods.length} mods, ${disabledModIds.size} disabled`);
+    log.info(`[instance:syncModpack] Modpack has ${mods.length} mods, ${disabledModIds.size} disabled`);
 
     // Log mods without CF IDs (potential problems)
     const modsWithoutCFIds = mods.filter(m => !m.cf_project_id || !m.cf_file_id);
     if (modsWithoutCFIds.length > 0) {
-      console.log(`[instance:syncModpack] WARNING: ${modsWithoutCFIds.length} mods without CF IDs:`);
-      modsWithoutCFIds.forEach(m => console.log(`  - ${m.name} (id: ${m.id})`));
+      log.info(`[instance:syncModpack] WARNING: ${modsWithoutCFIds.length} mods without CF IDs:`);
+      modsWithoutCFIds.forEach(m => log.info(`  - ${m.name} (id: ${m.id})`));
     }
 
     // Prepare ALL mods data (including disabled) - they'll be renamed to .disabled after download
@@ -5149,10 +5126,10 @@ async function initializeBackend() {
         const existingHistory = await metadataManager.getVersionHistory(modpackId);
         if (!existingHistory || existingHistory.versions.length === 0) {
           await metadataManager.initializeVersionControl(modpackId, "Initial version (after instance sync)");
-          console.log(`[CreateFromModpack] Version control initialized for modpack ${modpackId}`);
+          log.info(`[CreateFromModpack] Version control initialized for modpack ${modpackId}`);
         }
       } catch (vcError) {
-        console.error(`[CreateFromModpack] Failed to initialize version control:`, vcError);
+        log.error(`[CreateFromModpack] Failed to initialize version control:`, vcError);
         // Don't fail the overall operation, just log the error
       }
     }
@@ -5198,7 +5175,7 @@ async function initializeBackend() {
       await metadataManager.setInstanceSyncSettings(settings);
       return { success: true };
     } catch (error) {
-      console.error("Failed to save instance sync settings:", error);
+      log.error("Failed to save instance sync settings:", error);
       throw error;
     }
   });
@@ -5214,7 +5191,7 @@ async function initializeBackend() {
       await metadataManager.setGistSettings(settings);
       return { success: true };
     } catch (error) {
-      console.error("Failed to save gist settings:", error);
+      log.error("Failed to save gist settings:", error);
       throw error;
     }
   });
@@ -5288,7 +5265,7 @@ async function initializeBackend() {
 
         // Update loader version on instance before sync if needed
         if (loaderVersionMismatch) {
-          console.log(`[smartLaunch] Updating instance loader: ${instance.loader}/${instance.loaderVersion} -> ${modpack.loader}/${modpack.loader_version}`);
+          log.info(`[smartLaunch] Updating instance loader: ${instance.loader}/${instance.loaderVersion} -> ${modpack.loader}/${modpack.loader_version}`);
           await instanceService.updateInstance(instanceId, {
             loader: modpack.loader,
             loaderVersion: modpack.loader_version
@@ -5697,7 +5674,7 @@ async function initializeBackend() {
 
     // Pass the modpackId from the instance for version control tracking
     const modpackId = instance.modpackId;
-    console.log("[config:saveStructured] Instance:", instance.id, "ModpackId:", modpackId);
+    log.info("[config:saveStructured] Instance and ModpackId:", { instanceId: instance.id, modpackId });
     await configService.saveConfigStructured(instance.path, configPath, entries, modpackId);
     return { success: true };
   });
@@ -5944,10 +5921,10 @@ async function initializeBackend() {
         throw new Error(result.error || "Download failed");
       }
       
-      console.log(`[Hytale] Downloaded mod file: ${fileName} -> ${destPath}`);
+      log.info(`[Hytale] Downloaded mod file: ${fileName} -> ${destPath}`);
       return destPath;
     } catch (error: any) {
-      console.error("[Hytale] Error downloading mod file:", error);
+      log.error("[Hytale] Error downloading mod file:", error);
       throw error;
     }
   });
@@ -6010,7 +5987,7 @@ async function initializeBackend() {
                 : null,
             };
           } catch (error) {
-            console.error(`[Hytale] Error checking update for ${mod.name}:`, error);
+            log.error(`[Hytale] Error checking update for ${mod.name}:`, error);
             return {
               modId: mod.id,
               hytaleModId: mod.hytaleModId,
@@ -6098,7 +6075,7 @@ async function initializeBackend() {
         return { success: false, error: installResult.error };
       }
     } catch (error: any) {
-      console.error("[Hytale] Error applying update:", error);
+      log.error("[Hytale] Error applying update:", error);
       return { success: false, error: error.message };
     }
   });
@@ -6122,6 +6099,61 @@ async function initializeBackend() {
       suggestedMax: suggestedMax
     };
   });
+
+  // ========== LOGGING IPC HANDLERS ==========
+
+  // Logger for renderer process logs
+  const rendererLogger = createLogger("Renderer");
+
+  // Receive logs from renderer process
+  ipcMain.on("logging:log", (_, entry: LogEntry) => {
+    const childLog = rendererLogger.child(entry.context);
+    switch (entry.level) {
+      case "debug":
+        childLog.debug(entry.message, entry.data);
+        break;
+      case "info":
+        childLog.info(entry.message, entry.data);
+        break;
+      case "warn":
+        childLog.warn(entry.message, entry.data);
+        break;
+      case "error":
+        childLog.error(entry.message, entry.data);
+        break;
+    }
+  });
+
+  // Get recent log entries
+  ipcMain.handle("logging:getRecentLogs", async (_, count?: number) => {
+    return Logger.getRecentLogs(count);
+  });
+
+  // Get current log file path
+  ipcMain.handle("logging:getLogFilePath", async () => {
+    return Logger.getLogFilePath();
+  });
+
+  // Get all log files
+  ipcMain.handle("logging:getLogFiles", async () => {
+    return Logger.getLogFiles();
+  });
+
+  // Clear all log files
+  ipcMain.handle("logging:clearLogs", async () => {
+    await Logger.clearLogs();
+    log.info("Log files cleared");
+  });
+
+  // Open logs folder in file explorer
+  ipcMain.handle("logging:openLogsFolder", async () => {
+    const logPath = Logger.getLogFilePath();
+    if (logPath) {
+      shell.showItemInFolder(logPath);
+    }
+  });
+
+  log.info("Backend initialization complete");
 }
 
 // Quit when all windows are closed
@@ -6130,6 +6162,12 @@ app.on("window-all-closed", () => {
     app.quit();
     win = null;
   }
+});
+
+// Graceful shutdown
+app.on("before-quit", async () => {
+  log.info("Application shutting down");
+  await Logger.shutdown();
 });
 
 app.on("activate", () => {

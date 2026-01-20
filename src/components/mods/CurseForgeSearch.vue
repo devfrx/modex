@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import ModDetailsModal from "./ModDetailsModal.vue";
 import { useToast } from "@/composables/useToast";
+import { createLogger } from "@/utils/logger";
 import type { Modpack, CFMod, CFFile, CFFileIndex, CFCategory } from "@/types/electron";
 import type { Mod } from "@/types";
 
+const log = createLogger("CurseForgeSearch");
 const toast = useToast();
 
 const props = defineProps<{
@@ -223,9 +225,9 @@ async function fetchGameVersions() {
       .filter((v: { approved: boolean }) => v.approved)
       .map((v: { versionString: string }) => v.versionString);
     fetchedGameVersions.value = approvedVersions;
-    console.log(`[CurseForgeSearch] Fetched ${approvedVersions.length} MC versions`);
+    log.debug("Fetched MC versions", { count: approvedVersions.length });
   } catch (err) {
-    console.error("[CurseForgeSearch] Failed to fetch MC versions:", err);
+    log.error("Failed to fetch MC versions", { error: String(err) });
   } finally {
     isLoadingGameVersions.value = false;
   }
@@ -240,9 +242,9 @@ async function fetchLoaderTypes() {
   try {
     const loaders = await window.api.curseforge.getLoaderTypes();
     fetchedLoaderTypes.value = loaders;
-    console.log(`[CurseForgeSearch] Fetched ${loaders.length} loader types:`, loaders);
+    log.debug("Fetched loader types", { count: loaders.length, loaders });
   } catch (err) {
-    console.error("[CurseForgeSearch] Failed to fetch loader types:", err);
+    log.error("Failed to fetch loader types", { error: String(err) });
   } finally {
     isLoadingLoaderTypes.value = false;
   }
@@ -282,7 +284,7 @@ onMounted(async () => {
   try {
     allModpacks.value = await window.api.modpacks.getAll();
   } catch (err) {
-    console.error("Failed to load modpacks:", err);
+    log.error("Failed to load modpacks", { error: String(err) });
   }
 
   if (!props.gameVersion) {
@@ -317,7 +319,7 @@ onMounted(async () => {
         ...cfCategories.map((cat: CFCategory) => ({ value: cat.id, label: cat.name })),
       ];
     } catch (err) {
-      console.error("Failed to load categories:", err);
+      log.error("Failed to load categories", { error: String(err) });
     }
     if (props.open) loadPopular();
   }
@@ -338,7 +340,7 @@ watch(selectedContentType, async (newType) => {
       ...cfCategories.map((cat: CFCategory) => ({ value: cat.id, label: cat.name })),
     ];
   } catch (err) {
-    console.error("Failed to load categories:", err);
+    log.error("Failed to load categories", { error: String(err) });
   }
 
   // Reload search results
@@ -513,7 +515,7 @@ async function addSelectedMods() {
           failCount.value++;
         }
       } catch (err) {
-        console.error(`Failed to add mod ${modId}:`, err);
+        log.error("Failed to add mod", { modId, error: String(err) });
         failCount.value++;
       }
     }
@@ -649,12 +651,13 @@ async function executeBulkAdd() {
           addedToPackCount++;
         } catch (err) {
           // Mod might be incompatible with modpack
-          console.warn(`Skipped adding mod ${modId} to modpack:`, err);
+          log.warn("Skipped adding mod to modpack", { modId, modpackId: targetModpackId.value, error: String(err) });
           skippedCount++;
         }
       }
 
       if (addedToPackCount > 0) {
+        log.info("Bulk added mods to modpack", { addedCount: addedToPackCount, skippedCount });
         toast.success(
           "Added to Modpack",
           `${addedToPackCount} mod(s) added to ${targetPack?.name || "modpack"
@@ -671,7 +674,7 @@ async function executeBulkAdd() {
 
     emit("added", null, addedModIds);
   } catch (e) {
-    console.error(e);
+    log.error("Bulk add failed", { error: String(e) });
     toast.error("Couldn't add", (e as Error).message);
   } finally {
     isAddingBulk.value = false;
@@ -700,7 +703,7 @@ async function loadPopular() {
     searchResults.value = result.mods;
     totalResults.value = result.pagination.totalCount;
   } catch (err) {
-    console.error(err);
+    log.error("Failed to load popular", { error: String(err) });
   } finally {
     isSearching.value = false;
   }
@@ -708,6 +711,13 @@ async function loadPopular() {
 
 async function searchMods() {
   if (!hasApiKey.value) return;
+  log.info("Searching CurseForge", {
+    query: searchQuery.value,
+    version: selectedVersion.value,
+    loader: selectedLoader.value,
+    contentType: selectedContentType.value
+  });
+  const startTime = Date.now();
   isSearching.value = true;
   currentPage.value = 0;
   try {
@@ -723,8 +733,13 @@ async function searchMods() {
     });
     searchResults.value = result.mods;
     totalResults.value = result.pagination.totalCount;
+    log.info("Search completed", {
+      resultsCount: result.mods.length,
+      totalCount: result.pagination.totalCount,
+      durationMs: Date.now() - startTime
+    });
   } catch (err) {
-    console.error(err);
+    log.error("Search failed", { error: String(err) });
   } finally {
     isSearching.value = false;
   }
@@ -734,6 +749,7 @@ async function loadMore() {
   if (!hasApiKey.value || isSearching.value) return;
   isSearching.value = true;
   currentPage.value++;
+  log.debug("Loading more results", { page: currentPage.value });
   try {
     const result = await window.api.curseforge.search({
       query: searchQuery.value || undefined,
@@ -746,8 +762,10 @@ async function loadMore() {
       contentType: selectedContentType.value,
     });
     searchResults.value = [...searchResults.value, ...result.mods];
+    log.debug("Loaded more results", { newCount: result.mods.length });
   } catch (err) {
     currentPage.value--;
+    log.error("Failed to load more results", { error: String(err) });
   } finally {
     isSearching.value = false;
   }
@@ -766,6 +784,7 @@ async function toggleExpand(mod: CFMod) {
 }
 
 async function fetchModFiles(modId: number) {
+  log.debug("Fetching mod files", { modId });
   isLoadingFiles.value = true;
   try {
     // For shaders/resourcepacks, don't filter by loader
@@ -779,8 +798,9 @@ async function fetchModFiles(modId: number) {
       (a: CFFile, b: CFFile) =>
         new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
     );
+    log.debug("Mod files loaded", { modId, filesCount: files.length });
   } catch (err) {
-    console.error(err);
+    log.error("Failed to fetch mod files", { modId, error: String(err) });
   } finally {
     isLoadingFiles.value = false;
   }
@@ -889,6 +909,7 @@ function isLatestFileInstalled(mod: CFMod): boolean {
 
 async function addFileToLibrary(mod: CFMod, file: CFFile) {
   isAddingMod.value = mod.id;
+  log.info("Adding file to library", { modId: mod.id, modName: mod.name, fileId: file.id });
   try {
     // For shaders/resourcepacks, don't pass loader
     const isModContent = selectedContentType.value === "mods";
@@ -900,6 +921,7 @@ async function addFileToLibrary(mod: CFMod, file: CFFile) {
       selectedContentType.value
     );
     if (addedMod) {
+      log.info("Mod added to library", { modId: mod.id, libraryId: addedMod.id });
       // Add to modpack if selected
       if (targetModpackId.value) {
         try {
@@ -922,7 +944,7 @@ async function addFileToLibrary(mod: CFMod, file: CFFile) {
       emit("added", addedMod);
     }
   } catch (err) {
-    console.error(err);
+    log.error("Failed to add file to library", { modId: mod.id, fileId: file.id, error: String(err) });
     toast.error("Couldn't add", (err as Error).message);
   } finally {
     isAddingMod.value = null;
@@ -973,6 +995,7 @@ async function quickDownload(mod: CFMod) {
       selectedContentType.value
     );
     if (addedMod) {
+      log.info("Quick download successful", { modId: mod.id, fileId: targetFile.id });
       // Add to modpack if selected
       if (targetModpackId.value) {
         try {
@@ -995,7 +1018,7 @@ async function quickDownload(mod: CFMod) {
       emit("added", addedMod);
     }
   } catch (err) {
-    console.error(err);
+    log.error("Quick download failed", { modId: mod.id, error: String(err) });
     toast.error("Couldn't add", (err as Error).message);
   } finally {
     isAddingMod.value = null;
@@ -1408,7 +1431,7 @@ function getReleaseColor(type: number) {
                     <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
                         formatDownloads(mod.downloadCount)
-                          }}</span>
+                      }}</span>
                         downloads</span>
                       <span class="w-1 h-1 rounded-full bg-border"></span>
                       <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>

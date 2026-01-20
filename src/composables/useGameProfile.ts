@@ -10,6 +10,9 @@
 
 import { ref, computed, onMounted, watch } from "vue";
 import type { GameType, GameProfile, GameConfig } from "@/types";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("GameProfile");
 
 // Reactive state (shared across all component instances)
 const activeGameType = ref<GameType>("minecraft");
@@ -92,13 +95,13 @@ async function initialize(): Promise<void> {
       profiles.value = await window.api.game.getProfiles();
       
       isInitialized.value = true;
-      console.log("[useGameProfile] Initialized:", {
+      log.info("Initialized:", {
         activeGameType: activeGameType.value,
         installedGames: installedGames.value,
         profileCount: profiles.value.length,
       });
     } catch (error) {
-      console.error("[useGameProfile] Error initializing:", error);
+      log.error("Error initializing:", error);
     } finally {
       isLoading.value = false;
       initPromise = null;
@@ -117,9 +120,9 @@ async function setActiveGame(gameType: GameType): Promise<void> {
   try {
     await window.api.game.setActiveGameType(gameType);
     activeGameType.value = gameType;
-    console.log("[useGameProfile] Switched to:", gameType);
+    log.info("Switched to:", gameType);
   } catch (error) {
-    console.error("[useGameProfile] Error switching game:", error);
+    log.error("Error switching game:", error);
     throw error;
   }
 }
@@ -233,7 +236,7 @@ async function reloadProfiles(): Promise<void> {
   try {
     profiles.value = await window.api.game.getProfiles();
   } catch (error) {
-    console.error("[useGameProfile] Error reloading profiles:", error);
+    log.error("Error reloading profiles:", error);
   }
 }
 

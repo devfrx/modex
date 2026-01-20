@@ -15,7 +15,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@shared/*": ["shared/*"]
     },
     "types": ["vite/client"]
   },
@@ -23,7 +24,8 @@
     "src/**/*.ts",
     "src/**/*.d.ts",
     "src/**/*.tsx",
-    "src/**/*.vue"
+    "src/**/*.vue",
+    "shared/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", "dist-electron", "electron"],
   "references": [{ "path": "./tsconfig.node.json" }]

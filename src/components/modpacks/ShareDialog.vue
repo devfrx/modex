@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { createLogger } from "@/utils/logger";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
 import Input from "@/components/ui/Input.vue";
+
+const log = createLogger("ShareDialog");
 
 const router = useRouter();
 
@@ -123,7 +126,7 @@ async function exportModex() {
       shareCode.value = result.code;
     }
   } catch (err) {
-    console.error("Export failed:", err);
+    log.error("Export failed", { modpackId: props.modpackId, error: String(err) });
     toast.error("Export Failed", (err as Error).message);
   } finally {
     isExporting.value = false;
@@ -160,7 +163,7 @@ async function importModex() {
 
   try {
     const result = await window.api.import.modex();
-    console.log('[Frontend] Import result:', result);
+    log.debug("Import result", { result });
     if (result) {
       // Check for API key or other errors
       const errors = (result as any).errors;
@@ -174,7 +177,7 @@ async function importModex() {
 
       // Check if conflicts need resolution
       if (result.requiresResolution && result.conflicts) {
-        console.log(`[Frontend] ${result.conflicts.length} conflicts detected, showing dialog`);
+        log.info("Conflicts detected during import", { conflictCount: result.conflicts.length });
         // Show conflict resolution dialog
         pendingConflicts.value = {
           conflicts: result.conflicts.map(c => ({ ...c, resolution: 'use_existing' })),
@@ -217,7 +220,7 @@ async function importModex() {
       emit("refresh");
     }
   } catch (err) {
-    console.error("Import failed:", err);
+    log.error("Import failed", { error: String(err) });
     toast.error("Import Failed", (err as Error).message);
   } finally {
     removeProgressListener();
@@ -265,7 +268,7 @@ async function importFromUrl() {
       urlImportError.value = result.error || "Import failed";
     }
   } catch (err) {
-    console.error("URL Import failed:", err);
+    log.error("URL Import failed", { url: importUrl.value, error: String(err) });
     urlImportError.value = (err as Error).message;
   } finally {
     removeProgressListener();
@@ -317,7 +320,7 @@ async function resolveConflicts() {
       emit("refresh");
     }
   } catch (err) {
-    console.error("Conflict resolution failed:", err);
+    log.error("Conflict resolution failed", { error: String(err) });
     toast.error("Resolution Failed", (err as Error).message);
   } finally {
     isImporting.value = false;

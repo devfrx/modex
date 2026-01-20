@@ -24,12 +24,14 @@ import { useLibrarySettings } from "@/composables/useLibrarySettings";
 import { useLibrarySelection } from "@/composables/useLibrarySelection";
 import { useLibraryFiltering, type ModGroup } from "@/composables/useLibraryFiltering";
 import { useLibraryPagination } from "@/composables/useLibraryPagination";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { Mod, Modpack } from "@/types/electron";
 import ModsIcon from "@/assets/modex_mods_icon.png";
 
+const log = createLogger("LibraryView");
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -283,6 +285,8 @@ async function loadMods() {
     return;
   }
 
+  log.info("Loading library mods");
+  const startTime = Date.now();
   isLoading.value = true;
   error.value = null;
   try {
@@ -298,6 +302,12 @@ async function loadMods() {
     // Show UI immediately, then load usage data in background
     isLoading.value = false;
 
+    log.info("Library loaded", {
+      modsCount: allMods.length,
+      modpacksCount: allModpacks.length,
+      durationMs: Date.now() - startTime
+    });
+
     // Detect duplicates (fast, local operation)
     detectDuplicates();
 
@@ -308,7 +318,7 @@ async function loadMods() {
     // Load usage data in background (deferred)
     loadUsageDataDeferred(allMods.map((m) => m.id));
   } catch (err) {
-    console.error("Failed to load mods:", err);
+    log.error("Failed to load library", { error: String(err) });
     error.value = "Failed to load mods: " + (err as Error).message;
     isLoading.value = false;
   }
@@ -318,6 +328,7 @@ async function loadMods() {
 async function loadUsageDataDeferred(modIds: string[]) {
   if (modIds.length === 0) return;
 
+  log.debug("Loading mod usage data", { modCount: modIds.length });
   try {
     const usageInfo = await window.api.mods.checkUsage(modIds);
     const usage = new Map<string, Set<string>>();
@@ -326,8 +337,9 @@ async function loadUsageDataDeferred(modIds: string[]) {
       usage.set(info.modId, packIds);
     }
     modUsageMap.value = usage;
+    log.debug("Mod usage data loaded", { modsWithUsage: usage.size });
   } catch (err) {
-    console.warn("Failed to load usage data:", err);
+    log.warn("Failed to load usage data", { error: String(err) });
   }
 }
 
@@ -400,14 +412,21 @@ async function deleteSelectedMods() {
   progressMessage.value = `Deleting ${selectedModIds.value.size} mods...`;
 
   const ids = Array.from(selectedModIds.value);
+  log.info("Bulk deleting mods", { count: ids.length });
+  const startTime = Date.now();
 
   try {
     // Use batch delete API for much better performance
     const deletedCount = await window.api.mods.bulkDelete(ids);
+    log.info("Bulk delete completed", {
+      deletedCount,
+      durationMs: Date.now() - startTime
+    });
     await loadMods();
     clearSelection();
     toast.success("Deleted ✓", `Removed ${deletedCount} mods.`);
   } catch (err) {
+    log.error("Bulk delete failed", { error: String(err) });
     toast.error("Couldn't delete", (err as Error).message);
   } finally {
     showProgress.value = false;
@@ -436,17 +455,30 @@ async function createModpackFromSelection(data: {
   progressTitle.value = "Creating Modpack";
   progressMessage.value = "Setting up modpack...";
 
+  const ids = Array.from(selectedModIds.value);
+  log.info("Creating modpack from selection", {
+    name: data.name,
+    modsCount: ids.length
+  });
+  const startTime = Date.now();
+
   try {
     const packId = await window.api.modpacks.create(data);
-    const ids = Array.from(selectedModIds.value);
     // Use batch API for better performance
     await window.api.modpacks.addModsBatch(packId, ids);
+    log.info("Modpack created from selection", {
+      packId,
+      name: data.name,
+      modsCount: ids.length,
+      durationMs: Date.now() - startTime
+    });
     clearSelection();
     toast.success(
       "Pack created ✓",
       `"${data.name}" now has ${ids.length} mods.`
     );
   } catch (err) {
+    log.error("Failed to create modpack from selection", { error: String(err) });
     toast.error("Couldn't create pack", (err as Error).message);
   } finally {
     showProgress.value = false;
@@ -460,6 +492,7 @@ async function addSelectionToModpack(
   showAddToModpackDialog.value = false;
 
   if (compatibleModIds.length === 0) {
+    log.warn("No compatible mods for modpack", { packId });
     toast.error(
       "No compatible mods",
       "The selected mods don't match this pack's version."
@@ -471,9 +504,21 @@ async function addSelectionToModpack(
   progressTitle.value = "Adding to Modpack";
   progressMessage.value = `Adding ${compatibleModIds.length} mods...`;
 
+  log.info("Adding mods to modpack", {
+    packId,
+    modsCount: compatibleModIds.length,
+    skippedCount: selectedModIds.value.size - compatibleModIds.length
+  });
+  const startTime = Date.now();
+
   try {
     // Use batch API for better performance
     await window.api.modpacks.addModsBatch(packId, compatibleModIds);
+    log.info("Mods added to modpack", {
+      packId,
+      count: compatibleModIds.length,
+      durationMs: Date.now() - startTime
+    });
     clearSelection();
 
     const skippedCount = selectedModIds.value.size - compatibleModIds.length;
@@ -489,6 +534,7 @@ async function addSelectionToModpack(
       );
     }
   } catch (err) {
+    log.error("Failed to add mods to modpack", { packId, error: String(err) });
     toast.error("Couldn't add mods", (err as Error).message);
   } finally {
     showProgress.value = false;
@@ -529,8 +575,10 @@ function handleModUpdated() {
 
 async function deleteMod() {
   if (!modToDelete.value || !isElectron()) return;
+  log.info("Deleting single mod", { modId: modToDelete.value });
   try {
     await window.api.mods.delete(modToDelete.value);
+    log.info("Mod deleted", { modId: modToDelete.value });
     await loadMods();
     showDeleteDialog.value = false;
     modToDelete.value = null;
@@ -538,6 +586,7 @@ async function deleteMod() {
       closeDetails();
     }
   } catch (err) {
+    log.error("Failed to delete mod", { modId: modToDelete.value, error: String(err) });
     toast.error("Couldn't delete", (err as Error).message);
   }
 }
@@ -545,6 +594,12 @@ async function deleteMod() {
 // Delete mods with modpack cleanup
 async function deleteModsWithCleanup(removeFromModpacks: boolean) {
   if (!isElectron() || pendingDeleteModIds.value.length === 0) return;
+
+  log.info("Deleting mods with cleanup", {
+    count: pendingDeleteModIds.value.length,
+    removeFromModpacks
+  });
+  const startTime = Date.now();
 
   try {
     // Ensure we pass a plain array, not a Proxy
@@ -554,6 +609,12 @@ async function deleteModsWithCleanup(removeFromModpacks: boolean) {
       ids,
       removeFromModpacks
     );
+
+    log.info("Mods deleted with cleanup", {
+      deletedCount: count,
+      removeFromModpacks,
+      durationMs: Date.now() - startTime
+    });
 
     await loadMods();
     showUsageWarningDialog.value = false;
@@ -573,6 +634,7 @@ async function deleteModsWithCleanup(removeFromModpacks: boolean) {
       closeDetails();
     }
   } catch (err) {
+    log.error("Failed to delete mods with cleanup", { error: String(err) });
     toast.error("Couldn't delete", (err as Error).message);
   }
 }
@@ -763,10 +825,15 @@ useKeyboardShortcuts([
 ]);
 
 onMounted(() => {
+  log.info("LibraryView mounted");
   loadFavorites();
   loadSettings();
   setupAutoSave(); // Enable auto-save after loading settings
   loadMods();
+});
+
+onUnmounted(() => {
+  log.debug("LibraryView unmounted");
 });
 </script>
 

@@ -12,6 +12,9 @@ import fs from "fs-extra";
 import { spawn, ChildProcess } from "child_process";
 import os from "os";
 import AdmZip from "adm-zip";
+import { createLogger } from "./LoggerService.js";
+
+const log = createLogger("Instance");
 
 // ==================== TYPES ====================
 
@@ -266,7 +269,7 @@ export class InstanceService {
         for (const instance of this.instances) {
           if (cmdLine.includes(instance.path) || cmdLine.includes(instance.path.replace(/\\/g, "/"))) {
             // Found a running game for this instance
-            console.log(`[InstanceService] Found running game for instance ${instance.id} (PID: ${proc.ProcessId})`);
+            log.info(`Found running game for instance ${instance.id} (PID: ${proc.ProcessId})`);
 
             const gameInfo: RunningGameInfo = {
               instanceId: instance.id,
@@ -291,10 +294,10 @@ export class InstanceService {
       }
 
       if (this.runningGames.size > 0) {
-        console.log(`[InstanceService] Detected ${this.runningGames.size} running game(s) from previous session`);
+        log.info(`Detected ${this.runningGames.size} running game(s) from previous session`);
       }
     } catch (error) {
-      console.warn("[InstanceService] Failed to scan for running games:", error);
+      log.warn("Failed to scan for running games:", error);
     }
   }
 
@@ -307,7 +310,7 @@ export class InstanceService {
         this.launcherConfig = { ...this.launcherConfig, ...config };
       }
     } catch (error) {
-      console.error("[InstanceService] Error loading config:", error);
+      log.error("Error loading config:", error);
     }
   }
 
@@ -339,7 +342,7 @@ export class InstanceService {
               path: instancePath
             });
           } catch (error) {
-            console.error(`[InstanceService] Error loading instance ${dir}:`, error);
+            log.error(`Error loading instance ${dir}:`, error);
           }
         }
       }
@@ -351,7 +354,7 @@ export class InstanceService {
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       });
     } catch (error) {
-      console.error("[InstanceService] Error loading instances:", error);
+      log.error("Error loading instances:", error);
     }
   }
 
@@ -439,7 +442,7 @@ export class InstanceService {
       this.instances = this.instances.filter(i => i.id !== id);
       return true;
     } catch (error) {
-      console.error(`[InstanceService] Error deleting instance ${id}:`, error);
+      log.error(`Error deleting instance ${id}:`, error);
       return false;
     }
   }
@@ -514,7 +517,7 @@ export class InstanceService {
     // Wait for any existing sync to complete
     const existingLock = this.syncLocks.get(instanceId);
     if (existingLock) {
-      console.log(`[InstanceService] Waiting for existing sync on instance ${instanceId} to complete...`);
+      log.info(`Waiting for existing sync on instance ${instanceId} to complete...`);
       await existingLock;
     }
 
@@ -656,7 +659,7 @@ export class InstanceService {
             const baseFilename = file.replace(".disabled", "");
             // Skip locked mods
             if (lockedFilenamesSet.has(baseFilename)) {
-              console.log(`[Sync] Preserving locked mod during clear: ${file}`);
+              log.info(`[Sync] Preserving locked mod during clear: ${file}`);
               continue;
             }
             await fs.remove(path.join(modsPath, file));
@@ -670,7 +673,7 @@ export class InstanceService {
           if (file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
             const baseFilename = file.replace(".disabled", "");
             if (lockedFilenamesSet.has(baseFilename)) {
-              console.log(`[Sync] Preserving locked resourcepack during clear: ${file}`);
+              log.info(`[Sync] Preserving locked resourcepack during clear: ${file}`);
               continue;
             }
             await fs.remove(path.join(resourcepacksPath, file));
@@ -683,7 +686,7 @@ export class InstanceService {
           if (file.endsWith(".zip") || file.endsWith(".zip.disabled")) {
             const baseFilename = file.replace(".disabled", "");
             if (lockedFilenamesSet.has(baseFilename)) {
-              console.log(`[Sync] Preserving locked shader during clear: ${file}`);
+              log.info(`[Sync] Preserving locked shader during clear: ${file}`);
               continue;
             }
             await fs.remove(path.join(shaderpacksPath, file));
@@ -715,7 +718,7 @@ export class InstanceService {
           // If enabled file exists, rename to disabled
           if (await fs.pathExists(enabledPath)) {
             await fs.rename(enabledPath, disabledPath);
-            console.log(`[Sync] Disabled mod: ${disabledMod.filename}`);
+            log.info(`[Sync] Disabled mod: ${disabledMod.filename}`);
           }
         }
       }
@@ -735,7 +738,7 @@ export class InstanceService {
             const disabledPath = path.join(modsPath, file);
             const enabledPath = path.join(modsPath, originalFilename);
             await fs.rename(disabledPath, enabledPath);
-            console.log(`[Sync] Re-enabled mod: ${originalFilename}`);
+            log.info(`[Sync] Re-enabled mod: ${originalFilename}`);
           }
         }
       }
@@ -756,7 +759,7 @@ export class InstanceService {
             const disabledPath = path.join(resourcepacksPath, file);
             const enabledPath = path.join(resourcepacksPath, originalFilename);
             await fs.rename(disabledPath, enabledPath);
-            console.log(`[Sync] Re-enabled resourcepack: ${originalFilename}`);
+            log.info(`[Sync] Re-enabled resourcepack: ${originalFilename}`);
           }
         }
       }
@@ -777,7 +780,7 @@ export class InstanceService {
             const disabledPath = path.join(shaderpacksPath, file);
             const enabledPath = path.join(shaderpacksPath, originalFilename);
             await fs.rename(disabledPath, enabledPath);
-            console.log(`[Sync] Re-enabled shader: ${originalFilename}`);
+            log.info(`[Sync] Re-enabled shader: ${originalFilename}`);
           }
         }
       }
@@ -799,7 +802,7 @@ export class InstanceService {
             file.endsWith(".zip") || file.endsWith(".zip.disabled");
           if (isModFile && !currentModFilenames.has(baseFilename)) {
             await fs.remove(path.join(modsPath, file));
-            console.log(`[Sync] Removed mod no longer in pack: ${file}`);
+            log.info(`[Sync] Removed mod no longer in pack: ${file}`);
             result.warnings.push(`Removed outdated mod: ${baseFilename}`);
           }
         }
@@ -836,7 +839,7 @@ export class InstanceService {
                   instanceBaseName.toLowerCase() === expectedBaseName.toLowerCase()) {
                 // Same base name, different version - this is an outdated version
                 isOutdatedVersion = true;
-                console.log(`[Sync] Removing outdated resourcepack: ${file} (replaced by ${expectedFilename})`);
+                log.info(`[Sync] Removing outdated resourcepack: ${file} (replaced by ${expectedFilename})`);
                 await fs.remove(path.join(resourcepacksPath, file));
                 result.warnings.push(`Removed outdated resourcepack: ${baseFile}`);
                 break;
@@ -844,7 +847,7 @@ export class InstanceService {
             }
             
             if (!isOutdatedVersion) {
-              console.log(`[Sync] User resourcepack (kept): ${file}`);
+              log.info(`[Sync] User resourcepack (kept): ${file}`);
             }
           }
         }
@@ -881,7 +884,7 @@ export class InstanceService {
                   instanceBaseName.toLowerCase() === expectedBaseName.toLowerCase()) {
                 // Same base name, different version - this is an outdated version
                 isOutdatedVersion = true;
-                console.log(`[Sync] Removing outdated shader: ${file} (replaced by ${expectedFilename})`);
+                log.info(`[Sync] Removing outdated shader: ${file} (replaced by ${expectedFilename})`);
                 await fs.remove(path.join(shaderpacksPath, file));
                 result.warnings.push(`Removed outdated shader: ${baseFile}`);
                 break;
@@ -889,7 +892,7 @@ export class InstanceService {
             }
             
             if (!isOutdatedVersion) {
-              console.log(`[Sync] User shader (kept): ${file}`);
+              log.info(`[Sync] User shader (kept): ${file}`);
             }
           }
         }
@@ -903,9 +906,9 @@ export class InstanceService {
       // Log resourcepacks and shaders to sync
       const resourcepacks = modpackData.mods.filter(m => m.content_type === "resourcepack");
       const shaders = modpackData.mods.filter(m => m.content_type === "shader");
-      console.log(`[Sync] Resourcepacks to sync: ${resourcepacks.length}`);
-      resourcepacks.forEach(r => console.log(`  - ${r.filename} (cf_file_id: ${r.cf_file_id})`));
-      console.log(`[Sync] Shaders to sync: ${shaders.length}`);
+      log.info(`[Sync] Resourcepacks to sync: ${resourcepacks.length}`);
+      resourcepacks.forEach(r => log.info(`  - ${r.filename} (cf_file_id: ${r.cf_file_id})`));
+      log.info(`[Sync] Shaders to sync: ${shaders.length}`);
 
       // Prepare download tasks
       const downloadTasks = modpackData.mods.map(mod => async () => {
@@ -915,7 +918,7 @@ export class InstanceService {
           switch (mod.content_type) {
             case "resourcepack":
               destFolder = resourcepacksPath;
-              console.log(`[Sync] Processing resourcepack: ${mod.filename} -> ${destFolder}`);
+              log.info(`[Sync] Processing resourcepack: ${mod.filename} -> ${destFolder}`);
               break;
             case "shader":
               destFolder = shaderpacksPath;
@@ -929,7 +932,7 @@ export class InstanceService {
 
           // Skip if already exists (either enabled or disabled version)
           if (await fs.pathExists(destPath) || await fs.pathExists(disabledDestPath)) {
-            console.log(`[Sync] Skipping ${mod.name} - already exists at ${destPath}`);
+            log.info(`[Sync] Skipping ${mod.name} - already exists at ${destPath}`);
             completed++;
             options.onProgress?.("Downloading content", completed, totalMods, mod.name);
             return { status: "skipped" as const, mod };
@@ -943,35 +946,35 @@ export class InstanceService {
             const part1 = fileIdStr.substring(0, 4);
             const part2 = fileIdStr.substring(4);
             downloadUrl = `https://edge.forgecdn.net/files/${part1}/${part2}/${encodeURIComponent(mod.filename)}`;
-            console.log(`[Sync] Built CF URL for ${mod.name}: ${downloadUrl}`);
+            log.info(`[Sync] Built CF URL for ${mod.name}: ${downloadUrl}`);
           } else {
-            console.log(`[Sync] No CF IDs for ${mod.name}: cf_project_id=${mod.cf_project_id}, cf_file_id=${mod.cf_file_id}`);
+            log.info(`[Sync] No CF IDs for ${mod.name}: cf_project_id=${mod.cf_project_id}, cf_file_id=${mod.cf_file_id}`);
           }
 
           if (!downloadUrl) {
-            console.log(`[Sync] NO URL for ${mod.name} - skipping`);
+            log.info(`[Sync] NO URL for ${mod.name} - skipping`);
             completed++;
             options.onProgress?.("Downloading content", completed, totalMods, mod.name);
             return { status: "no_url" as const, mod };
           }
 
           // Download
-          console.log(`[Sync] Downloading ${mod.content_type || 'mod'}: ${mod.filename} from ${downloadUrl}`);
+          log.info(`[Sync] Downloading ${mod.content_type || 'mod'}: ${mod.filename} from ${downloadUrl}`);
           const response = await fetch(downloadUrl);
           if (!response.ok) {
-            console.log(`[Sync] Download FAILED for ${mod.filename}: HTTP ${response.status}`);
+            log.info(`[Sync] Download FAILED for ${mod.filename}: HTTP ${response.status}`);
             throw new Error(`HTTP ${response.status}`);
           }
 
           const buffer = Buffer.from(await response.arrayBuffer());
           await fs.writeFile(destPath, buffer);
-          console.log(`[Sync] Successfully downloaded ${mod.filename} (${buffer.length} bytes) to ${destPath}`);
+          log.info(`[Sync] Successfully downloaded ${mod.filename} (${buffer.length} bytes) to ${destPath}`);
 
           completed++;
           options.onProgress?.("Downloading content", completed, totalMods, mod.name);
           return { status: "downloaded" as const, mod };
         } catch (error: any) {
-          console.log(`[Sync] ERROR downloading ${mod.filename}: ${error.message}`);
+          log.info(`[Sync] ERROR downloading ${mod.filename}: ${error.message}`);
           completed++;
           options.onProgress?.("Downloading content", completed, totalMods, mod.name);
           return { status: "error" as const, mod, error: error.message };
@@ -989,9 +992,9 @@ export class InstanceService {
       // Process results
       // Log resourcepack sync results
       const rpResults = downloadResults.filter(r => r.mod.content_type === "resourcepack");
-      console.log(`[Sync] Resourcepack results: ${rpResults.length} total`);
+      log.info(`[Sync] Resourcepack results: ${rpResults.length} total`);
       for (const rp of rpResults) {
-        console.log(`  - ${rp.mod.filename}: ${rp.status}${rp.error ? ` (${rp.error})` : ''}`);
+        log.info(`  - ${rp.mod.filename}: ${rp.status}${rp.error ? ` (${rp.error})` : ''}`);
       }
 
       for (const downloadResult of downloadResults) {
@@ -1037,7 +1040,7 @@ export class InstanceService {
           // If enabled file exists (just downloaded), rename to disabled
           if (await fs.pathExists(enabledPath)) {
             await fs.rename(enabledPath, disabledPath);
-            console.log(`[Sync] Disabled newly downloaded mod: ${disabledMod.filename}`);
+            log.info(`[Sync] Disabled newly downloaded mod: ${disabledMod.filename}`);
           }
         }
       }
@@ -1093,15 +1096,15 @@ export class InstanceService {
   ): Promise<{ filesCopied: number; filesSkipped: number; warnings: string[] }> {
     const result = { filesCopied: 0, filesSkipped: 0, warnings: [] as string[] };
 
-    console.log(`[InstanceService] extractOverrides called:`);
-    console.log(`  - instancePath: ${instancePath}`);
-    console.log(`  - overridesSource: ${overridesSource}`);
-    console.log(`  - configMode: ${configMode}`);
+    log.info(`extractOverrides called:`);
+    log.info(`  - instancePath: ${instancePath}`);
+    log.info(`  - overridesSource: ${overridesSource}`);
+    log.info(`  - configMode: ${configMode}`);
 
     try {
       // Check if source exists
       if (!await fs.pathExists(overridesSource)) {
-        console.log(`[InstanceService] overridesSource does not exist!`);
+        log.info(`overridesSource does not exist!`);
         result.warnings.push(`Overrides source not found: ${overridesSource}`);
         return result;
       }
@@ -1121,7 +1124,7 @@ export class InstanceService {
         }
 
         if (!hasContent) {
-          console.log(`[InstanceService] overridesSource directory is empty (no config folders found)`);
+          log.info(`overridesSource directory is empty (no config folders found)`);
           result.warnings.push("No configuration files found. For modpacks imported from URL, configs are not included in the remote manifest.");
           return result;
         }
@@ -1206,7 +1209,7 @@ export class InstanceService {
     let copied = 0;
     let skipped = 0;
 
-    console.log(`[InstanceService] copyOverridesDir: ${sourceDir} -> ${destDir}`);
+    log.info(`copyOverridesDir: ${sourceDir} -> ${destDir}`);
 
     const foldersToSync = ["config", "kubejs", "resourcepacks", "shaderpacks", "defaultconfigs", "scripts", "global_packs"];
 
@@ -1215,7 +1218,7 @@ export class InstanceService {
       const destPath = path.join(destDir, folder);
 
       const exists = await fs.pathExists(sourcePath);
-      console.log(`[InstanceService]   ${folder}: ${exists ? 'EXISTS' : 'not found'} at ${sourcePath}`);
+      log.info(`${folder}: ${exists ? 'EXISTS' : 'not found'} at ${sourcePath}`);
 
       if (exists) {
         if (configMode === "new_only") {
@@ -1308,10 +1311,10 @@ export class InstanceService {
             const launcherPaths = await fs.readJson(launcherPathsFile);
             if (launcherPaths.vanilla && await fs.pathExists(launcherPaths.vanilla)) {
               launcherPath = launcherPaths.vanilla;
-              console.log(`[InstanceService] Using launcher path from settings: ${launcherPath}`);
+              log.info(`Using launcher path from settings: ${launcherPath}`);
             }
           } catch (e) {
-            console.warn("[InstanceService] Could not read launcher-paths.json:", e);
+            log.warn("Could not read launcher-paths.json:", e);
           }
         }
       }
@@ -1339,7 +1342,7 @@ export class InstanceService {
           onProgress
         );
         if (!loaderInstalled.success) {
-          console.warn(`[InstanceService] Failed to install mod loader: ${loaderInstalled.error}`);
+          log.warn(`Failed to install mod loader: ${loaderInstalled.error}`);
           // Continue anyway - user might have installed it manually
         }
 
@@ -1355,7 +1358,7 @@ export class InstanceService {
         }
         
         if (verifyResult.repaired) {
-          console.log("[InstanceService] Installation was repaired before launch");
+          log.info("Installation was repaired before launch");
         }
       }
 
@@ -1367,9 +1370,9 @@ export class InstanceService {
 
       onProgress?.("profile", 1, 1, "Profile ready");
 
-      console.log(`[InstanceService] Launching: ${launcherPath}`);
-      console.log(`[InstanceService] Instance path: ${instance.path}`);
-      console.log(`[InstanceService] Profile created for: ${instance.name}`);
+      log.info(`Launching: ${launcherPath}`);
+      log.info(`Instance path: ${instance.path}`);
+      log.info(`Profile created for: ${instance.name}`);
 
       // Update last played
       instance.lastPlayed = new Date().toISOString();
@@ -1431,7 +1434,7 @@ export class InstanceService {
           profiles.profiles = {};
         }
       } catch (error) {
-        console.warn("[InstanceService] Could not read launcher_profiles.json, creating new");
+        log.warn("Could not read launcher_profiles.json, creating new");
         profiles = { profiles: {} };
       }
     }
@@ -1483,10 +1486,10 @@ export class InstanceService {
 
     // Save profiles
     await fs.writeJson(profilesPath, profiles, { spaces: 2 });
-    console.log(`[InstanceService] Created/updated launcher profile: ${profileId}`);
-    console.log(`[InstanceService] Version ID: ${versionId}`);
-    console.log(`[InstanceService] Game directory: ${instance.path}`);
-    console.log(`[InstanceService] Java args: ${javaArgs}`);
+    log.info(`Created/updated launcher profile: ${profileId}`);
+    log.info(`Version ID: ${versionId}`);
+    log.info(`Game directory: ${instance.path}`);
+    log.info(`Java args: ${javaArgs}`);
   }
 
   /**
@@ -1535,12 +1538,12 @@ export class InstanceService {
     const versionJsonPath = path.join(versionDir, `${versionId}.json`);
 
     if (await fs.pathExists(versionJsonPath)) {
-      console.log(`[InstanceService] Mod loader already installed: ${versionId}`);
+      log.info(`Mod loader already installed: ${versionId}`);
       onProgress?.("check", 1, 1, `${loader} ${loaderVersion} already installed`);
       return { success: true };
     }
 
-    console.log(`[InstanceService] Installing mod loader: ${versionId}`);
+    log.info(`Installing mod loader: ${versionId}`);
     onProgress?.("install", 0, 100, `Installing ${loader} ${loaderVersion}...`);
 
     try {
@@ -1556,7 +1559,7 @@ export class InstanceService {
 
       return { success: false, error: "Unknown loader type" };
     } catch (error: any) {
-      console.error(`[InstanceService] Failed to install mod loader:`, error);
+      log.error(`Failed to install mod loader:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -1575,7 +1578,7 @@ export class InstanceService {
     try {
       // Fetch version JSON from Fabric Meta API
       const metaUrl = `https://meta.fabricmc.net/v2/versions/loader/${minecraftVersion}/${loaderVersion}/profile/json`;
-      console.log(`[InstanceService] Fetching Fabric profile from: ${metaUrl}`);
+      log.info(`Fetching Fabric profile from: ${metaUrl}`);
       onProgress?.("install", 5, 100, "Fetching Fabric profile...");
 
       const response = await fetch(metaUrl);
@@ -1591,7 +1594,7 @@ export class InstanceService {
 
       // Save version JSON
       await fs.writeJson(versionJsonPath, versionJson, { spaces: 2 });
-      console.log(`[InstanceService] Saved Fabric version JSON: ${versionJsonPath}`);
+      log.info(`Saved Fabric version JSON: ${versionJsonPath}`);
       onProgress?.("install", 15, 100, "Downloading libraries...");
 
       // Download libraries
@@ -1611,17 +1614,17 @@ export class InstanceService {
       const verification = await this.verifyModLoaderInstallation("fabric", loaderVersion, minecraftVersion);
       
       if (!verification.isValid && verification.canRepair) {
-        console.warn("[InstanceService] Fabric installation verification found issues, attempting repair...");
+        log.warn("Fabric installation verification found issues, attempting repair...");
         onProgress?.("install", 96, 100, "Repairing libraries...");
         
         const repairResult = await this.repairModLoaderInstallation("fabric", loaderVersion, minecraftVersion);
         if (!repairResult.success) {
-          console.warn("[InstanceService] Fabric repair had issues:", repairResult.errors);
+          log.warn("Fabric repair had issues:", repairResult.errors);
         }
       }
 
       onProgress?.("install", 100, 100, `Fabric ${loaderVersion} installed!`);
-      console.log(`[InstanceService] Fabric ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
+      log.info(`Fabric ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -1642,7 +1645,7 @@ export class InstanceService {
     try {
       // Fetch version JSON from Quilt Meta API
       const metaUrl = `https://meta.quiltmc.org/v3/versions/loader/${minecraftVersion}/${loaderVersion}/profile/json`;
-      console.log(`[InstanceService] Fetching Quilt profile from: ${metaUrl}`);
+      log.info(`Fetching Quilt profile from: ${metaUrl}`);
       onProgress?.("install", 5, 100, "Fetching Quilt profile...");
 
       const response = await fetch(metaUrl);
@@ -1658,7 +1661,7 @@ export class InstanceService {
 
       // Save version JSON
       await fs.writeJson(versionJsonPath, versionJson, { spaces: 2 });
-      console.log(`[InstanceService] Saved Quilt version JSON: ${versionJsonPath}`);
+      log.info(`Saved Quilt version JSON: ${versionJsonPath}`);
       onProgress?.("install", 15, 100, "Downloading libraries...");
 
       // Download libraries
@@ -1678,17 +1681,17 @@ export class InstanceService {
       const verification = await this.verifyModLoaderInstallation("quilt", loaderVersion, minecraftVersion);
       
       if (!verification.isValid && verification.canRepair) {
-        console.warn("[InstanceService] Quilt installation verification found issues, attempting repair...");
+        log.warn("Quilt installation verification found issues, attempting repair...");
         onProgress?.("install", 96, 100, "Repairing libraries...");
         
         const repairResult = await this.repairModLoaderInstallation("quilt", loaderVersion, minecraftVersion);
         if (!repairResult.success) {
-          console.warn("[InstanceService] Quilt repair had issues:", repairResult.errors);
+          log.warn("Quilt repair had issues:", repairResult.errors);
         }
       }
 
       onProgress?.("install", 100, 100, `Quilt ${loaderVersion} installed!`);
-      console.log(`[InstanceService] Quilt ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
+      log.info(`Quilt ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -1713,7 +1716,7 @@ export class InstanceService {
       const forgeVersion = `${minecraftVersion}-${loaderVersion}`;
       const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeVersion}/forge-${forgeVersion}-installer.jar`;
 
-      console.log(`[InstanceService] Downloading Forge installer from: ${installerUrl}`);
+      log.info(`Downloading Forge installer from: ${installerUrl}`);
       onProgress?.("install", 5, 100, "Downloading Forge installer...");
 
       const response = await fetch(installerUrl);
@@ -1743,11 +1746,11 @@ export class InstanceService {
       const verification = await this.verifyModLoaderInstallation("forge", loaderVersion, minecraftVersion);
       
       if (!verification.isValid) {
-        console.warn("[InstanceService] Forge installation verification failed:", verification.errors);
+        log.warn("Forge installation verification failed:", verification.errors);
         
         // Try to repair if possible
         if (verification.canRepair && (verification.missingLibraries.length > 0 || verification.invalidLibraries.length > 0)) {
-          console.log("[InstanceService] Attempting to repair Forge installation...");
+          log.info("Attempting to repair Forge installation...");
           onProgress?.("install", 96, 100, "Repairing libraries...");
           
           const repairResult = await this.repairModLoaderInstallation(
@@ -1758,18 +1761,18 @@ export class InstanceService {
           );
           
           if (!repairResult.success) {
-            console.warn("[InstanceService] Forge repair failed:", repairResult.errors);
+            log.warn("Forge repair failed:", repairResult.errors);
           } else {
-            console.log(`[InstanceService] Forge repair succeeded: ${repairResult.librariesRepaired} libraries fixed`);
+            log.info(`Forge repair succeeded: ${repairResult.librariesRepaired} libraries fixed`);
           }
         }
       }
 
       onProgress?.("install", 100, 100, `Forge ${loaderVersion} installed!`);
-      console.log(`[InstanceService] Forge ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
+      log.info(`Forge ${loaderVersion} installed successfully for MC ${minecraftVersion}`);
       return { success: true };
     } catch (error: any) {
-      console.error("[InstanceService] Forge installation error:", error);
+      log.error("Forge installation error:", error);
       return { success: false, error: error.message };
     }
   }
@@ -1830,9 +1833,9 @@ export class InstanceService {
         }
       }
 
-      console.log(`[InstanceService] Using Java: ${javaPath}`);
-      console.log(`[InstanceService] Running Forge installer: ${installerPath}`);
-      console.log(`[InstanceService] Target .minecraft directory: ${minecraftDir}`);
+      log.info(`Using Java: ${javaPath}`);
+      log.info(`Running Forge installer: ${installerPath}`);
+      log.info(`Target .minecraft directory: ${minecraftDir}`);
 
       // Run installer in headless mode
       // The --installClient flag tells Forge to install the client version (not server)
@@ -1876,10 +1879,10 @@ export class InstanceService {
           fs.remove(installerPath).catch(() => { });
 
           if (code === 0) {
-            console.log("[InstanceService] Forge installer completed successfully");
+            log.info("Forge installer completed successfully");
             resolve();
           } else {
-            console.error("[InstanceService] Forge installer output:", output);
+            log.error("Forge installer output:", output);
             reject(new Error(`Forge installer exited with code ${code}`));
           }
         });
@@ -1917,7 +1920,7 @@ export class InstanceService {
       // Format: https://maven.neoforged.net/releases/net/neoforged/neoforge/VERSION/neoforge-VERSION-installer.jar
       const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${loaderVersion}/neoforge-${loaderVersion}-installer.jar`;
 
-      console.log(`[InstanceService] Downloading NeoForge installer from: ${installerUrl}`);
+      log.info(`Downloading NeoForge installer from: ${installerUrl}`);
       onProgress?.("install", 5, 100, "Downloading NeoForge installer...");
 
       const response = await fetch(installerUrl);
@@ -1938,11 +1941,11 @@ export class InstanceService {
       const verification = await this.verifyModLoaderInstallation("neoforge", loaderVersion, minecraftVersion);
       
       if (!verification.isValid) {
-        console.warn("[InstanceService] NeoForge installation verification failed:", verification.errors);
+        log.warn("NeoForge installation verification failed:", verification.errors);
         
         // Try to repair if possible
         if (verification.canRepair && (verification.missingLibraries.length > 0 || verification.invalidLibraries.length > 0)) {
-          console.log("[InstanceService] Attempting to repair NeoForge installation...");
+          log.info("Attempting to repair NeoForge installation...");
           onProgress?.("install", 96, 100, "Repairing libraries...");
           
           const repairResult = await this.repairModLoaderInstallation(
@@ -1953,19 +1956,19 @@ export class InstanceService {
           );
           
           if (!repairResult.success) {
-            console.warn("[InstanceService] NeoForge repair failed:", repairResult.errors);
+            log.warn("NeoForge repair failed:", repairResult.errors);
             // Still return success - the game might still work
           } else {
-            console.log(`[InstanceService] NeoForge repair succeeded: ${repairResult.librariesRepaired} libraries fixed`);
+            log.info(`NeoForge repair succeeded: ${repairResult.librariesRepaired} libraries fixed`);
           }
         }
       }
 
       onProgress?.("install", 100, 100, `NeoForge ${loaderVersion} installed!`);
-      console.log(`[InstanceService] NeoForge ${loaderVersion} installed successfully`);
+      log.info(`NeoForge ${loaderVersion} installed successfully`);
       return { success: true };
     } catch (error: any) {
-      console.error("[InstanceService] NeoForge installation error:", error);
+      log.error("NeoForge installation error:", error);
       return { success: false, error: error.message };
     }
   }
@@ -2023,9 +2026,9 @@ export class InstanceService {
         }
       }
 
-      console.log(`[InstanceService] Using Java: ${javaPath}`);
-      console.log(`[InstanceService] Running NeoForge installer: ${installerPath}`);
-      console.log(`[InstanceService] Target .minecraft directory: ${minecraftDir}`);
+      log.info(`Using Java: ${javaPath}`);
+      log.info(`Running NeoForge installer: ${installerPath}`);
+      log.info(`Target .minecraft directory: ${minecraftDir}`);
 
       return new Promise((resolve, reject) => {
         // NeoForge installer headless mode:
@@ -2068,10 +2071,10 @@ export class InstanceService {
           fs.remove(installerPath).catch(() => { });
 
           if (code === 0) {
-            console.log("[InstanceService] NeoForge installer completed successfully");
+            log.info("NeoForge installer completed successfully");
             resolve();
           } else {
-            console.error("[InstanceService] NeoForge installer output:", output);
+            log.error("NeoForge installer output:", output);
             reject(new Error(`NeoForge installer exited with code ${code}`));
           }
         });
@@ -2127,7 +2130,7 @@ export class InstanceService {
           return;
         }
         // File exists but is corrupted, will re-download
-        console.warn(`[InstanceService] Library ${lib.name} appears corrupted, re-downloading`);
+        log.warn(`Library ${lib.name} appears corrupted, re-downloading`);
         await fs.remove(libPath);
       } catch {
         // Stat failed, try to re-download
@@ -2138,10 +2141,10 @@ export class InstanceService {
     const downloadUrl = `${lib.url}${groupPath}/${artifact}/${version}/${jarName}`;
 
     try {
-      console.log(`[InstanceService] Downloading library: ${lib.name}`);
+      log.info(`Downloading library: ${lib.name}`);
       const response = await fetch(downloadUrl);
       if (!response.ok) {
-        console.warn(`[InstanceService] Failed to download ${lib.name}: ${response.statusText}`);
+        log.warn(`Failed to download ${lib.name}: ${response.statusText}`);
         return;
       }
 
@@ -2149,7 +2152,7 @@ export class InstanceService {
       
       // Validate download - check it's not empty or too small
       if (buffer.length < 100) {
-        console.warn(`[InstanceService] Downloaded library ${lib.name} is too small (${buffer.length} bytes), skipping`);
+        log.warn(`Downloaded library ${lib.name} is too small (${buffer.length} bytes), skipping`);
         return;
       }
 
@@ -2158,7 +2161,7 @@ export class InstanceService {
         const crypto = await import("crypto");
         const hash = crypto.createHash("sha1").update(buffer).digest("hex");
         if (hash !== lib.sha1) {
-          console.warn(`[InstanceService] SHA1 mismatch for ${lib.name}: expected ${lib.sha1}, got ${hash}`);
+          log.warn(`SHA1 mismatch for ${lib.name}: expected ${lib.sha1}, got ${hash}`);
           // Still save the file - Minecraft might be able to use it
         }
       }
@@ -2168,9 +2171,9 @@ export class InstanceService {
 
       // Save library
       await fs.writeFile(libPath, buffer);
-      console.log(`[InstanceService] Downloaded: ${jarName} (${buffer.length} bytes)`);
+      log.info(`Downloaded: ${jarName} (${buffer.length} bytes)`);
     } catch (error) {
-      console.warn(`[InstanceService] Failed to download ${lib.name}:`, error);
+      log.warn(`Failed to download ${lib.name}:`, error);
     }
   }
 
@@ -2231,7 +2234,7 @@ export class InstanceService {
       await shell.openPath(targetPath);
       return true;
     } catch (error) {
-      console.error("[InstanceService] Error opening folder:", error);
+      log.error("Error opening folder:", error);
       return false;
     }
   }
@@ -2309,7 +2312,7 @@ export class InstanceService {
       stats.totalSize = this.formatBytes(totalBytes);
 
     } catch (error) {
-      console.error("[InstanceService] Error getting stats:", error);
+      log.error("Error getting stats:", error);
     }
 
     return stats;
@@ -2366,9 +2369,9 @@ export class InstanceService {
       const modsPath = path.join(instance.path, "mods");
       const disabledSet = new Set(disabledModIds);
 
-      console.log(`[checkSyncStatus] Checking instance ${instance.id} at ${instance.path}`);
-      console.log(`[checkSyncStatus] Disabled mod IDs: ${[...disabledSet].join(', ')}`);
-      console.log(`[checkSyncStatus] Expected mods count: ${modpackMods.length}`);
+      log.info(`[checkSyncStatus] Checking instance ${instance.id} at ${instance.path}`);
+      log.info(`[checkSyncStatus] Disabled mod IDs: ${[...disabledSet].join(', ')}`);
+      log.info(`[checkSyncStatus] Expected mods count: ${modpackMods.length}`);
 
       // Get all mod files in instance (both enabled and disabled)
       // Mods can be .jar or .zip (datapacks, compat packs)
@@ -2376,7 +2379,7 @@ export class InstanceService {
 
       if (await fs.pathExists(modsPath)) {
         const files = await fs.readdir(modsPath);
-        console.log(`[checkSyncStatus] Files in mods folder: ${files.length}`);
+        log.info(`[checkSyncStatus] Files in mods folder: ${files.length}`);
         for (const file of files) {
           if (file.endsWith(".jar") || file.endsWith(".zip")) {
             instanceFiles.set(file, true);
@@ -2385,9 +2388,9 @@ export class InstanceService {
             instanceFiles.set(enabledName, false);
           }
         }
-        console.log(`[checkSyncStatus] Tracked instance files: ${[...instanceFiles.keys()].join(', ')}`);
+        log.info(`[checkSyncStatus] Tracked instance files: ${[...instanceFiles.keys()].join(', ')}`);
       } else {
-        console.log(`[checkSyncStatus] Mods folder does not exist: ${modsPath}`);
+        log.info(`[checkSyncStatus] Mods folder does not exist: ${modsPath}`);
       }
 
       // Build a map of cf_project_id -> expected filename for update detection
@@ -2426,7 +2429,7 @@ export class InstanceService {
               if (instanceBaseName && 
                   modBaseName.toLowerCase() === instanceBaseName.toLowerCase() &&
                   mod.filename !== instanceFile) {
-                console.log(`[checkSyncStatus] MOD UPDATE DETECTED: ${instanceFile} → ${mod.filename} (willBeDisabled: ${shouldBeDisabled})`);
+                log.info(`[checkSyncStatus] MOD UPDATE DETECTED: ${instanceFile} → ${mod.filename} (willBeDisabled: ${shouldBeDisabled})`);
                 result.updatesToApply.push({
                   oldFilename: instanceFile,
                   newFilename: mod.filename,
@@ -2441,7 +2444,7 @@ export class InstanceService {
           }
           
           if (!isUpdate) {
-            console.log(`[checkSyncStatus] MISSING: ${filename} (id: ${mod.id}, disabled: ${shouldBeDisabled})`);
+            log.info(`[checkSyncStatus] MISSING: ${filename} (id: ${mod.id}, disabled: ${shouldBeDisabled})`);
             result.missingInInstance.push({ filename, type: "mod" });
           }
         } else {
@@ -2454,8 +2457,8 @@ export class InstanceService {
         }
       }
 
-      console.log(`[checkSyncStatus] Missing in instance: ${result.missingInInstance.length}`);
-      console.log(`[checkSyncStatus] Updates to apply (mods): ${result.updatesToApply.filter(u => u.type === 'mod').length}`);
+      log.info(`[checkSyncStatus] Missing in instance: ${result.missingInInstance.length}`);
+      log.info(`[checkSyncStatus] Updates to apply (mods): ${result.updatesToApply.filter(u => u.type === 'mod').length}`);
 
       // Check for extra mods in instance (exclude mods that are part of an update)
       for (const [filename] of instanceFiles) {
@@ -2481,7 +2484,7 @@ export class InstanceService {
           }
         }
 
-        console.log(`[checkSyncStatus] Checking ${contentType}s: ${packMods.length} expected`);
+        log.info(`[checkSyncStatus] Checking ${contentType}s: ${packMods.length} expected`);
 
         // Also include packs from overrides folder (these are not tracked as mods)
         if (overridesPath) {
@@ -2513,8 +2516,8 @@ export class InstanceService {
           const allZipFiles = [...instancePackFiles.keys()];
           const zipFilesLower = new Map(allZipFiles.map(f => [f.toLowerCase(), f]));
 
-          console.log(`[checkSyncStatus] ${contentType} folder has enabled: ${[...instancePackFiles.entries()].filter(([_, v]) => v).map(([k]) => k).join(', ')}`);
-          console.log(`[checkSyncStatus] ${contentType} folder has disabled: ${[...instancePackFiles.entries()].filter(([_, v]) => !v).map(([k]) => k).join(', ')}`);
+          log.info(`[checkSyncStatus] ${contentType} folder has enabled: ${[...instancePackFiles.entries()].filter(([_, v]) => v).map(([k]) => k).join(', ')}`);
+          log.info(`[checkSyncStatus] ${contentType} folder has disabled: ${[...instancePackFiles.entries()].filter(([_, v]) => !v).map(([k]) => k).join(', ')}`);
 
           // Track which instance files are outdated versions (to be replaced by updates)
           const outdatedFilesInInstance = new Set<string>();
@@ -2539,7 +2542,7 @@ export class InstanceService {
                     if (modBaseName && instanceBaseName && 
                         modBaseName.toLowerCase() === instanceBaseName.toLowerCase() &&
                         mod.filename !== instanceFile) {
-                      console.log(`[checkSyncStatus] UPDATE DETECTED: ${instanceFile} → ${mod.filename} (willBeDisabled: ${shouldBeDisabled})`);
+                      log.info(`[checkSyncStatus] UPDATE DETECTED: ${instanceFile} → ${mod.filename} (willBeDisabled: ${shouldBeDisabled})`);
                       result.updatesToApply.push({
                         oldFilename: instanceFile,
                         newFilename: mod.filename,
@@ -2554,7 +2557,7 @@ export class InstanceService {
                 }
                 
                 if (!isUpdate) {
-                  console.log(`[checkSyncStatus] MISSING ${contentType}: ${mod.filename}`);
+                  log.info(`[checkSyncStatus] MISSING ${contentType}: ${mod.filename}`);
                   result.missingInInstance.push({ filename: mod.filename, type: contentType });
                 }
               } else {
@@ -2569,7 +2572,7 @@ export class InstanceService {
                 }
                 
                 if (!existsExact && existsCaseInsensitive) {
-                  console.log(`[checkSyncStatus] ${contentType} found with different case: expected "${mod.filename}", found "${actualFilename}"`);
+                  log.info(`[checkSyncStatus] ${contentType} found with different case: expected "${mod.filename}", found "${actualFilename}"`);
                 }
               }
             }
@@ -2582,7 +2585,7 @@ export class InstanceService {
             }
           }
         } else if (packMods.length > 0) {
-          console.log(`[checkSyncStatus] ${contentType} folder does not exist: ${folderPath}`);
+          log.info(`[checkSyncStatus] ${contentType} folder does not exist: ${folderPath}`);
           // Folder doesn't exist but we have packs
           for (const mod of packMods) {
             if (mod.filename) {
@@ -2606,7 +2609,7 @@ export class InstanceService {
       result.needsSync = result.totalDifferences > 0;
 
     } catch (error) {
-      console.error("[InstanceService] Error checking sync status:", error);
+      log.error("Error checking sync status:", error);
     }
 
     return result;
@@ -2805,14 +2808,14 @@ export class InstanceService {
           await fs.writeFile(overrideFilePath, content);
 
           result.imported++;
-          console.log(`[ConfigSync] Imported config: ${relPath}`);
+          log.info(`[ConfigSync] Imported config: ${relPath}`);
         } else {
           result.skipped++;
-          console.log(`[ConfigSync] Skipped (not found): ${relPath}`);
+          log.info(`[ConfigSync] Skipped (not found): ${relPath}`);
         }
       } catch (err: any) {
         result.errors.push(`Failed to import ${relPath}: ${err.message}`);
-        console.error(`[ConfigSync] Error importing ${relPath}:`, err);
+        log.error(`[ConfigSync] Error importing ${relPath}:`, err);
       }
     }
 
@@ -2850,7 +2853,7 @@ export class InstanceService {
         }
       }
     } catch (error) {
-      console.error("[InstanceService] Error counting config differences:", error);
+      log.error("Error counting config differences:", error);
     }
 
     return differences;
@@ -3046,7 +3049,7 @@ export class InstanceService {
       result.errors.push(`Verification error: ${error.message}`);
     }
 
-    console.log(`[InstanceService] Verification result for ${versionId}:`, {
+    log.info(`Verification result for ${versionId}:`, {
       isValid: result.isValid,
       validLibraries: result.validLibraries,
       totalLibraries: result.totalLibraries,
@@ -3211,7 +3214,7 @@ export class InstanceService {
 
     // If version JSON is missing/invalid, do full reinstall
     if (!verification.versionJsonValid) {
-      console.log("[InstanceService] Version JSON invalid, performing full reinstall");
+      log.info("Version JSON invalid, performing full reinstall");
       onProgress?.("reinstall", 0, 100, "Reinstalling mod loader...");
       result.fullReinstall = true;
       
@@ -3267,7 +3270,7 @@ export class InstanceService {
 
     result.success = result.librariesFailed === 0;
     
-    console.log(`[InstanceService] Repair complete: ${result.librariesRepaired} repaired, ${result.librariesFailed} failed`);
+    log.info(`Repair complete: ${result.librariesRepaired} repaired, ${result.librariesFailed} failed`);
     
     return result;
   }
@@ -3297,15 +3300,15 @@ export class InstanceService {
       }
 
       if (!downloadUrl || !destPath) {
-        console.warn(`[InstanceService] Cannot determine download URL for: ${lib.name}`);
+        log.warn(`Cannot determine download URL for: ${lib.name}`);
         return false;
       }
 
-      console.log(`[InstanceService] Downloading library: ${lib.name} from ${downloadUrl}`);
+      log.info(`Downloading library: ${lib.name} from ${downloadUrl}`);
       
       const response = await fetch(downloadUrl);
       if (!response.ok) {
-        console.warn(`[InstanceService] Failed to download ${lib.name}: HTTP ${response.status}`);
+        log.warn(`Failed to download ${lib.name}: HTTP ${response.status}`);
         return false;
       }
 
@@ -3313,7 +3316,7 @@ export class InstanceService {
       
       // Verify size
       if (buffer.length < 100) {
-        console.warn(`[InstanceService] Downloaded file too small for ${lib.name}`);
+        log.warn(`Downloaded file too small for ${lib.name}`);
         return false;
       }
 
@@ -3322,7 +3325,7 @@ export class InstanceService {
         const crypto = await import("crypto");
         const hash = crypto.createHash("sha1").update(buffer).digest("hex");
         if (hash !== lib.downloads.artifact.sha1) {
-          console.warn(`[InstanceService] SHA1 mismatch for ${lib.name}: expected ${lib.downloads.artifact.sha1}, got ${hash}`);
+          log.warn(`SHA1 mismatch for ${lib.name}: expected ${lib.downloads.artifact.sha1}, got ${hash}`);
           return false;
         }
       }
@@ -3331,11 +3334,11 @@ export class InstanceService {
       await fs.ensureDir(path.dirname(destPath));
       await fs.writeFile(destPath, buffer);
       
-      console.log(`[InstanceService] Successfully repaired: ${lib.name}`);
+      log.info(`Successfully repaired: ${lib.name}`);
       return true;
 
     } catch (error: any) {
-      console.error(`[InstanceService] Error repairing ${lib.name}:`, error);
+      log.error(`Error repairing ${lib.name}:`, error);
       return false;
     }
   }
@@ -3441,7 +3444,7 @@ export class InstanceService {
       zip.writeZip(destPath);
       return true;
     } catch (error) {
-      console.error("[InstanceService] Error exporting:", error);
+      log.error("Error exporting:", error);
       return false;
     }
   }
@@ -3480,7 +3483,7 @@ export class InstanceService {
       await this.saveInstanceMeta(newInstance);
       return newInstance;
     } catch (error) {
-      console.error("[InstanceService] Error duplicating:", error);
+      log.error("Error duplicating:", error);
       return null;
     }
   }
@@ -3581,7 +3584,7 @@ export class InstanceService {
                   gameInfo.status = "loading_mods";
                   gameInfo.gameProcessRunning = true; // Now the actual game is running
                   this.onGameStatusChange?.(instance.id, gameInfo);
-                  console.log(`[InstanceService] Found game process PID: ${pid}`);
+                  log.info(`Found game process PID: ${pid}`);
                   clearInterval(checkInterval);
 
                   // Start monitoring process health
@@ -3591,11 +3594,11 @@ export class InstanceService {
               }
             }
           } catch (e) {
-            console.warn("[InstanceService] PowerShell process query failed:", e);
+            log.warn("PowerShell process query failed:", e);
           }
         }
       } catch (error) {
-        console.warn("[InstanceService] Error checking for game process:", error);
+        log.warn("Error checking for game process:", error);
       }
     }, 2000);
 
@@ -3604,7 +3607,7 @@ export class InstanceService {
       clearInterval(checkInterval);
       const info = this.runningGames.get(instance.id);
       if (info && !info.gamePid) {
-        console.log("[InstanceService] Timeout waiting for game process");
+        log.info("Timeout waiting for game process");
       }
     }, 120000);
   }
@@ -3622,7 +3625,7 @@ export class InstanceService {
         process.kill(gameInfo.gamePid!, 0); // Signal 0 just checks if process exists
       } catch (error) {
         // Process no longer exists
-        console.log(`[InstanceService] Game process ${gameInfo.gamePid} exited`);
+        log.info(`Game process ${gameInfo.gamePid} exited`);
         clearInterval(checkInterval);
         this.stopGameTracking(instance.id);
       }
@@ -3645,7 +3648,7 @@ export class InstanceService {
     }
 
     if (!(await fs.pathExists(logsPath))) {
-      console.warn("[InstanceService] Logs directory not found after 30s");
+      log.warn("Logs directory not found after 30s");
       return;
     }
 
@@ -3668,16 +3671,16 @@ export class InstanceService {
         // If the log file was modified before we launched, skip its content
         if (stats.mtimeMs < launchTime) {
           lastSize = stats.size;
-          console.log(`[InstanceService] Skipping existing log content (${lastSize} bytes)`);
+          log.info(`Skipping existing log content (${lastSize} bytes)`);
         } else {
           // File was modified after launch start, read from beginning
           lastSize = 0;
-          console.log("[InstanceService] Log file is fresh, reading from start");
+          log.info("Log file is fresh, reading from start");
         }
       }
     } catch (err) {
       // Non-critical: log file may not exist yet
-      console.debug("[InstanceService] Log file init check failed (expected during startup):", err);
+      console.debug("Log file init check failed (expected during startup):", err);
     }
 
     /**
@@ -3706,7 +3709,7 @@ export class InstanceService {
           lastSize = 0;
           lastInode = currentInode;
           lineBuffer = "";
-          console.log("[InstanceService] Log file was replaced, reading from start");
+          log.info("Log file was replaced, reading from start");
         }
 
         if (stats.size === lastSize) {
@@ -3771,7 +3774,7 @@ export class InstanceService {
       } catch (error: any) {
         // Ignore file access errors (file might be locked by game)
         if (error.code !== "EBUSY" && error.code !== "EACCES" && error.code !== "ENOENT") {
-          console.warn("[InstanceService] Error reading log:", error.message);
+          log.warn("Error reading log:", error.message);
         }
       } finally {
         isReading = false;
@@ -3795,12 +3798,12 @@ export class InstanceService {
       });
 
       watcher.on("error", (err) => {
-        console.warn("[InstanceService] Log watcher error:", err.message);
+        log.warn("Log watcher error:", err.message);
       });
 
-      console.log("[InstanceService] File watcher active for logs");
+      log.info("File watcher active for logs");
     } catch (err) {
-      console.warn("[InstanceService] Could not set up file watcher, using polling only");
+      log.warn("Could not set up file watcher, using polling only");
     }
 
     // Also use fast polling as fallback (fs.watch can be unreliable on some systems)
@@ -4085,7 +4088,7 @@ export class InstanceService {
       try {
         (gameInfo as any).logFileWatcher.close();
       } catch (err) {
-        console.debug("[InstanceService] Failed to close log file watcher:", err);
+        console.debug("Failed to close log file watcher:", err);
       }
     }
 
@@ -4117,9 +4120,9 @@ export class InstanceService {
           } else {
             process.kill(gameInfo.gamePid, "SIGKILL");
           }
-          console.log(`[InstanceService] Killed game process ${gameInfo.gamePid}`);
+          log.info(`Killed game process ${gameInfo.gamePid}`);
         } catch (e) {
-          console.warn(`[InstanceService] Failed to kill game PID ${gameInfo.gamePid}:`, e);
+          log.warn(`Failed to kill game PID ${gameInfo.gamePid}:`, e);
         }
       }
 
@@ -4132,9 +4135,9 @@ export class InstanceService {
           } else {
             process.kill(gameInfo.launcherPid, "SIGKILL");
           }
-          console.log(`[InstanceService] Killed launcher process ${gameInfo.launcherPid}`);
+          log.info(`Killed launcher process ${gameInfo.launcherPid}`);
         } catch (e) {
-          console.warn(`[InstanceService] Failed to kill launcher PID ${gameInfo.launcherPid}:`, e);
+          log.warn(`Failed to kill launcher PID ${gameInfo.launcherPid}:`, e);
         }
       }
 
@@ -4159,7 +4162,7 @@ export class InstanceService {
               if (proc.CommandLine.includes(instance.path) || proc.CommandLine.includes(instance.path.replace(/\\/g, "/"))) {
                 try {
                   execSync(`taskkill /F /PID ${proc.ProcessId}`);
-                  console.log(`[InstanceService] Killed related java process ${proc.ProcessId}`);
+                  log.info(`Killed related java process ${proc.ProcessId}`);
                 } catch { }
               }
             }
@@ -4184,7 +4187,7 @@ export class InstanceService {
               if (proc && proc.Id) {
                 try {
                   execSync(`taskkill /F /T /PID ${proc.Id}`);
-                  console.log(`[InstanceService] Killed Minecraft Launcher process ${proc.Id}`);
+                  log.info(`Killed Minecraft Launcher process ${proc.Id}`);
                 } catch { }
               }
             }
@@ -4195,7 +4198,7 @@ export class InstanceService {
       this.stopGameTracking(instanceId);
       return true;
     } catch (error) {
-      console.error("[InstanceService] Error killing game:", error);
+      log.error("Error killing game:", error);
       return false;
     }
   }

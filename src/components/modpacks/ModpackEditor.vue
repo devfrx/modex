@@ -10,6 +10,7 @@ import { useModpackUpdates, type UpdateInfo } from "@/composables/useModpackUpda
 import { useModpackInstance } from "@/composables/useModpackInstance";
 import { useModpackGameLogs } from "@/composables/useModpackGameLogs";
 import { useModpackConfigSync } from "@/composables/useModpackConfigSync";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -47,6 +48,7 @@ const emit = defineEmits<{
   (e: "launched", instance: ModexInstance): void;
 }>();
 
+const log = createLogger("ModpackEditor");
 const toast = useToast();
 
 // Create a ref from the prop for composable compatibility
@@ -508,7 +510,7 @@ async function refreshUnsavedChangesCount() {
       versionUnsavedCount.value = 0;
     }
   } catch (err) {
-    console.error("Failed to refresh unsaved changes count:", err);
+    log.error("Failed to refresh unsaved changes count:", err);
   }
 }
 
@@ -654,7 +656,7 @@ const filteredLoaderVersions = computed(() => {
 
   // Fallback: if no results with type, try matching by name pattern
   if (filtered.length === 0 && availableLoaderVersions.value.length > 0) {
-    console.log(`[ModpackEditor] Type filter returned 0, falling back to name matching for "${loaderType}"`);
+    log.debug("Type filter returned 0, falling back to name matching", { loaderType });
     filtered = availableLoaderVersions.value.filter((l) => {
       const name = l.name.toLowerCase();
       if (loaderType === "forge") {
@@ -709,16 +711,16 @@ async function fetchLoaderVersions() {
   isLoadingLoaderVersions.value = true;
   try {
     const versions = await window.api.curseforge.getModLoaders(editForm.value.minecraft_version);
-    console.log(`[ModpackEditor] Received ${versions.length} loader versions for MC ${editForm.value.minecraft_version}`);
-    if (versions.length > 0) {
-      console.log(`[ModpackEditor] Sample loader:`, versions[0]);
-    }
+    log.debug("Received loader versions", {
+      count: versions.length,
+      mcVersion: editForm.value.minecraft_version
+    });
     availableLoaderVersions.value = versions;
 
     const loaderType = editForm.value.loader?.toLowerCase() || "";
     const expectedType = loaderTypeMap[loaderType];
     const filtered = filteredLoaderVersions.value;
-    console.log(`[ModpackEditor] Loader: ${loaderType}, expectedType: ${expectedType}, filtered count: ${filtered.length}`);
+    log.debug("Loader filtering", { loaderType, expectedType, filteredCount: filtered.length });
 
     // If no version is selected, auto-select recommended or latest
     if (!editForm.value.loader_version && editForm.value.loader) {
@@ -733,7 +735,7 @@ async function fetchLoaderVersions() {
       }
     }
   } catch (err) {
-    console.error("Failed to fetch loader versions:", err);
+    log.error("Failed to fetch loader versions", { error: String(err) });
     availableLoaderVersions.value = [];
   } finally {
     isLoadingLoaderVersions.value = false;
@@ -748,14 +750,14 @@ async function fetchMinecraftVersions() {
   isLoadingGameVersions.value = true;
   try {
     const versions = await window.api.curseforge.getMinecraftVersions();
-    console.log(`[ModpackEditor] Received ${versions.length} Minecraft versions`);
+    log.debug("Received Minecraft versions", { count: versions.length });
     // Filter to approved versions and extract version strings
     const approvedVersions = versions
       .filter((v: { approved: boolean }) => v.approved)
       .map((v: { versionString: string }) => v.versionString);
     fetchedGameVersions.value = approvedVersions;
   } catch (err) {
-    console.error("Failed to fetch Minecraft versions:", err);
+    log.error("Failed to fetch Minecraft versions", { error: String(err) });
     // Keep using fallback
   } finally {
     isLoadingGameVersions.value = false;
@@ -770,10 +772,10 @@ async function fetchLoaderTypes() {
   isLoadingLoaderTypes.value = true;
   try {
     const types = await window.api.curseforge.getLoaderTypes();
-    console.log(`[ModpackEditor] Received loader types:`, types);
+    log.debug("Received loader types", { types });
     fetchedLoaderTypes.value = types;
   } catch (err) {
-    console.error("Failed to fetch loader types:", err);
+    log.error("Failed to fetch loader types", { error: String(err) });
     // Keep using fallback
   } finally {
     isLoadingLoaderTypes.value = false;
@@ -898,7 +900,7 @@ async function handleModDetailsVersionChange(fileId: number) {
       toast.error(`Couldn't change version: ${result.error || 'Unknown error'}`);
     }
   } catch (err: any) {
-    console.error("Version change failed:", err);
+    log.error("Version change failed:", err);
     toast.error(`Couldn't change version: ${err?.message || 'Unknown error'}`);
   } finally {
     updatingMods.value.delete(modId);
@@ -1066,7 +1068,10 @@ async function loadData() {
 
     // Race condition check: if a newer request was made, discard this result
     if (currentRequestId !== loadRequestId) {
-      console.log(`[loadData] Discarding stale result (request ${currentRequestId}, current ${loadRequestId})`);
+      log.debug("Discarding stale loadData result", {
+        currentRequestId,
+        latestRequestId: loadRequestId
+      });
       return;
     }
 
@@ -1088,7 +1093,7 @@ async function loadData() {
       try {
         instanceSyncStatus.value = await window.api.instances.checkSyncStatus(linkedInstance.id, props.modpackId);
       } catch (err) {
-        console.error("Failed to refresh sync status:", err);
+        log.error("Failed to refresh sync status:", err);
       }
     } else {
       instance.value = null;
@@ -1127,7 +1132,7 @@ async function loadData() {
 
     }
   } catch (err) {
-    console.error("Failed to load modpack data:", err);
+    log.error("Failed to load modpack data:", err);
     // Only show error toast if this is still the current request
     if (currentRequestId === loadRequestId) {
       toast.error("Couldn't load pack", "Try again or refresh the page.");
@@ -1203,7 +1208,7 @@ async function saveModpackInfo() {
     emit("update");
     toast.success("Saved ✓", "Pack settings updated.");
   } catch (err) {
-    console.error("Failed to save modpack info:", err);
+    log.error("Failed to save modpack info:", err);
     toast.error("Couldn't save", (err as Error).message);
   } finally {
     isSaving.value = false;
@@ -1279,7 +1284,7 @@ async function removeSelectedMods() {
       return;
     }
   } catch (err) {
-    console.error("Failed to check bulk dependency impact:", err);
+    log.error("Failed to check bulk dependency impact:", err);
   }
 
   // No impact, proceed with removal
@@ -1296,7 +1301,7 @@ async function executeBulkRemove(idsToRemove: string[]) {
     emit("update");
     toast.success("Mods Removed", `Removed ${idsToRemove.length} mod(s) from modpack`);
   } catch (err) {
-    console.error("Failed to remove mods:", err);
+    log.error("Failed to remove mods:", err);
     toast.error("Remove Failed", (err as Error).message);
   }
 }
@@ -1332,7 +1337,7 @@ async function bulkEnableSelected() {
       disabledModIds.value.delete(modId);
       successCount++;
     } catch (err) {
-      console.error(`Failed to enable mod ${modId}:`, err);
+      log.error("Failed to enable mod", { modpackId: props.modpackId, modId, error: String(err) });
       failCount++;
     }
   }
@@ -1412,7 +1417,7 @@ async function bulkDisableSelected() {
       return;
     }
   } catch (err) {
-    console.error("Failed to check bulk dependency impact:", err);
+    log.error("Failed to check bulk dependency impact:", err);
   }
 
   // No impact, proceed with disabling
@@ -1428,7 +1433,7 @@ async function executeBulkDisable(modsToDisable: string[], skippedLocked: number
       disabledModIds.value.add(modId);
       successCount++;
     } catch (err) {
-      console.error(`Failed to disable mod ${modId}:`, err);
+      log.error("Failed to disable mod", { modpackId: props.modpackId, modId, error: String(err) });
       failCount++;
     }
   }
@@ -1467,7 +1472,7 @@ async function bulkLockSelected() {
         successCount++;
       }
     } catch (err) {
-      console.error(`Failed to lock mod ${modId}:`, err);
+      log.error("Failed to lock mod", { modpackId: props.modpackId, modId, error: String(err) });
       failCount++;
     }
   }
@@ -1501,7 +1506,7 @@ async function bulkUnlockSelected() {
         successCount++;
       }
     } catch (err) {
-      console.error(`Failed to unlock mod ${modId}:`, err);
+      log.error("Failed to unlock mod", { modpackId: props.modpackId, modId, error: String(err) });
       failCount++;
     }
   }
@@ -1548,7 +1553,7 @@ async function confirmRemoveIncompatibleMods() {
       await window.api.modpacks.removeMod(props.modpackId, mod.id);
       removed++;
     } catch (err) {
-      console.error(`Failed to remove mod ${mod.id}:`, err);
+      log.error("Failed to remove incompatible mod", { modpackId: props.modpackId, modId: mod.id, error: String(err) });
     }
   }
 
@@ -1777,7 +1782,7 @@ async function handleAddModFromAnalysis(cfProjectId: number, fileId?: number) {
       toast.success("Mod added", `${cfMod.name} has been added`);
     }
   } catch (err) {
-    console.error("Failed to add mod from analysis:", err);
+    log.error("Failed to add mod from analysis:", err);
     toast.error("Failed to add mod", (err as Error).message);
   }
 }
@@ -1794,7 +1799,7 @@ async function exportManifest(mode: 'full' | 'current' = 'full') {
       `JSON copied to clipboard (${mode === 'full' ? 'full history' : 'current version only'}). You can now paste it into a GitHub Gist.`
     );
   } catch (err) {
-    console.error("Failed to export manifest:", err);
+    log.error("Failed to export manifest:", err);
     toast.error("Export Failed", (err as Error).message);
   }
 }
@@ -1817,7 +1822,7 @@ async function exportResourceList(format: 'simple' | 'detailed' | 'markdown') {
       `${result.stats.total} resources copied to clipboard in ${format} format.`
     );
   } catch (err) {
-    console.error("Failed to export resource list:", err);
+    log.error("Failed to export resource list:", err);
     toast.error("Export Failed", (err as Error).message);
   } finally {
     isExportingResourceList.value = false;
@@ -1869,7 +1874,7 @@ async function deleteGistFromRemote() {
       toast.error("Delete Failed", result.error || "Unknown error");
     }
   } catch (err) {
-    console.error("Failed to delete Gist:", err);
+    log.error("Failed to delete Gist:", err);
     toast.error("Delete Failed", (err as Error).message);
   } finally {
     isDeletingGist.value = false;
@@ -1925,7 +1930,7 @@ async function pushToGist(mode?: 'full' | 'current') {
       toast.error("Push Failed", result.error || "Unknown error");
     }
   } catch (err) {
-    console.error("Failed to push to Gist:", err);
+    log.error("Failed to push to Gist:", err);
     toast.error("Push Failed", (err as Error).message);
   } finally {
     isPushingToGist.value = false;
@@ -2070,7 +2075,7 @@ async function checkForRemoteUpdates() {
       toast.success("Up to Date", "No updates available from remote source");
     }
   } catch (error) {
-    console.error("Failed to check updates:", error);
+    log.error("Failed to check updates:", error);
     toast.error("Check Failed", (error as Error).message);
   } finally {
     isCheckingUpdate.value = false;
@@ -2143,7 +2148,7 @@ async function applyRemoteUpdate() {
       toast.error("Update Failed", result?.errors?.[0] || "Unknown error");
     }
   } catch (err) {
-    console.error("Failed to apply update:", err);
+    log.error("Failed to apply update:", err);
     toast.error("Update Error", (err as Error).message);
   } finally {
     showProgressDialog.value = false;
@@ -2168,7 +2173,7 @@ async function checkForCFUpdate() {
       toast.success("Up to Date", "You have the latest version");
     }
   } catch (error) {
-    console.error("Failed to check CF update:", error);
+    log.error("Failed to check CF update:", error);
     toast.error("Check Failed", (error as Error).message);
   } finally {
     isCheckingCFUpdate.value = false;
@@ -2190,7 +2195,7 @@ async function viewCFChangelog(fileId?: number) {
       targetFileId
     );
   } catch (error) {
-    console.error("Failed to load changelog:", error);
+    log.error("Failed to load changelog:", error);
     cfChangelog.value = "Failed to load changelog";
   } finally {
     isLoadingChangelog.value = false;
@@ -2244,7 +2249,7 @@ async function applyCFUpdate(createNew: boolean) {
       toast.error("Update Failed", result.errors[0] || "Unknown error");
     }
   } catch (error) {
-    console.error("Failed to apply CF update:", error);
+    log.error("Failed to apply CF update:", error);
     toast.error("Update Failed", (error as Error).message);
   } finally {
     isApplyingCFUpdate.value = false;
@@ -2285,7 +2290,7 @@ async function reSearchIncompatibleMods() {
       );
     }
   } catch (error) {
-    console.error("Failed to re-search incompatible mods:", error);
+    log.error("Failed to re-search incompatible mods:", error);
     toast.error("Re-search Failed", (error as Error).message);
   } finally {
     isReSearching.value = false;
@@ -2323,7 +2328,7 @@ watch(
         // Check gist exists after modpack data is loaded
         await checkGistExists();
       } catch (err) {
-        console.error("[ModpackEditor] Error during initial load:", err);
+        log.error("[ModpackEditor] Error during initial load:", err);
         loadError.value = (err as Error).message || "Failed to load modpack data";
       }
 
@@ -2363,7 +2368,7 @@ watch(
         // Check gist exists after modpack data is loaded
         await checkGistExists();
       } catch (err) {
-        console.error("[ModpackEditor] Error loading modpack on ID change:", err);
+        log.error("[ModpackEditor] Error loading modpack on ID change:", err);
         loadError.value = (err as Error).message || "Failed to load modpack";
       }
 

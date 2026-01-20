@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
+import { createLogger } from "@/utils/logger";
 import { useToast } from "@/composables/useToast";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
@@ -7,6 +8,8 @@ import Input from "@/components/ui/Input.vue";
 import Icon from "@/components/ui/Icon.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import type { ModUpdateInfo } from "@/types/electron";
+
+const log = createLogger("UpdatesDialog");
 
 const props = defineProps<{
   open: boolean;
@@ -78,7 +81,7 @@ watch(
       try {
         curseforgeApiKey.value = await window.api.updates.getApiKey();
       } catch (err) {
-        console.error("Failed to load API key:", err);
+        log.error("Failed to load API key", { error: String(err) });
       }
     }
   }
@@ -106,7 +109,7 @@ async function checkForUpdates() {
       updates.value = await window.api.updates.checkAll();
     }
   } catch (err) {
-    console.error("Failed to check updates:", err);
+    log.error("Failed to check updates", { modpackId: props.modpackId, error: String(err) });
     toast.error("Couldn't check updates", (err as Error).message);
   } finally {
     cleanupProgressListener();
@@ -186,7 +189,7 @@ async function applyAllUpdates() {
             updates.value = updates.value.filter((u) => u.modId !== update.modId);
           }
         } catch (err) {
-          console.error(`Failed to update ${update.projectName}:`, err);
+          log.error("Failed to update mod", { modId: update.modId, error: String(err) });
         } finally {
           updatingMods.value.delete(update.modId);
         }

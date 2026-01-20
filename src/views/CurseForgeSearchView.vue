@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { createLogger } from "@/utils/logger";
 import CurseForgeSearch from "@/components/mods/CurseForgeSearch.vue";
 import type { Mod } from "@/types";
 
+const log = createLogger("CurseForgeSearchView");
 const route = useRoute();
 const router = useRouter();
 
@@ -33,24 +35,33 @@ const installedProjectFiles = computed(() => {
 
 // Load library mods on mount
 onMounted(async () => {
+    log.info("CurseForgeSearchView mounted", { contentType: contentType.value });
     try {
         libraryMods.value = await window.api.mods.getAll();
+        log.debug("Library mods loaded for tracking", { count: libraryMods.value.length });
     } catch (err) {
-        console.error("Failed to load library mods:", err);
+        log.error("Failed to load library mods", { error: String(err) });
     }
+});
+
+onUnmounted(() => {
+    log.debug("CurseForgeSearchView unmounted");
 });
 
 // Navigate back to library
 function goBack() {
+    log.debug("Navigating back to library");
     router.push("/library");
 }
 
 // Handle mod added - reload library mods to update installed state
 async function handleAdded() {
+    log.debug("Mod added, reloading library");
     try {
         libraryMods.value = await window.api.mods.getAll();
+        log.debug("Library mods reloaded", { count: libraryMods.value.length });
     } catch (err) {
-        console.error("Failed to reload library mods:", err);
+        log.error("Failed to reload library mods", { error: String(err) });
     }
 }
 </script>

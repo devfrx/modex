@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRouter } from "vue-router";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import type { Mod, Modpack, ModexInstance } from "@/types";
 import { useToast } from "@/composables/useToast";
 import { useInstances } from "@/composables/useInstances";
 
+const log = createLogger("GlobalSearch");
 const router = useRouter();
 const toast = useToast();
 const { launchInstance, smartLaunch, openInstanceFolder } = useInstances();
@@ -222,7 +224,7 @@ async function loadData() {
         modpacks.value = modpacksData;
         instances.value = instancesData || [];
     } catch (err) {
-        console.error("Failed to load data for search:", err);
+        log.error("Failed to load data for search", { error: String(err) });
     }
 }
 

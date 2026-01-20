@@ -19,7 +19,9 @@ import Input from "@/components/ui/Input.vue";
 import HytaleCFModDetailsModal from "@/components/hytale/HytaleCFModDetailsModal.vue";
 import { useHytale } from "@/composables/useHytale";
 import { useToast } from "@/composables/useToast";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("HytaleBrowseView");
 const router = useRouter();
 const toast = useToast();
 const {
@@ -119,7 +121,7 @@ async function search(resetPagination = true) {
         searchResults.value = result.mods;
         pagination.value = result.pagination;
     } catch (err: any) {
-        console.error("[HytaleBrowse] Search error:", err);
+        log.error("[HytaleBrowse] Search error:", err);
         error.value = err.message || "Failed to search mods";
     } finally {
         isSearching.value = false;
@@ -132,7 +134,7 @@ async function loadCategories() {
         const cats = await window.api.curseforge.getCategories("mods", "hytale");
         categories.value = cats;
     } catch (err) {
-        console.error("[HytaleBrowse] Error loading categories:", err);
+        log.error("[HytaleBrowse] Error loading categories:", err);
     }
 }
 
@@ -183,7 +185,7 @@ async function handleInstall(mod: CFMod, fileId?: number) {
             throw new Error(result.error || "Failed to install mod");
         }
     } catch (err: any) {
-        console.error("[HytaleBrowse] Install error:", err);
+        log.error("[HytaleBrowse] Install error:", err);
         toast.error("Install failed", err.message);
     } finally {
         installingMods.value.delete(mod.id);

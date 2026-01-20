@@ -7,7 +7,9 @@ import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import Input from "@/components/ui/Input.vue";
+import { createLogger } from "@/utils/logger";
 
+const log = createLogger("MinecraftInstallations");
 const toast = useToast();
 
 const {
@@ -129,8 +131,10 @@ function getTypeColor(type: MinecraftInstallation["type"]): string {
 }
 
 async function handleSelectPath() {
+  log.debug('Selecting installation path');
   const path = await selectFolder();
   if (path) {
+    log.debug('Path selected', { path });
     newInstallation.value.path = path;
     // Auto-suggest mods path
     if (!newInstallation.value.modsPath) {
@@ -149,6 +153,7 @@ async function handleSelectModsPath() {
 async function handleAddInstallation() {
   if (!newInstallation.value.name || !newInstallation.value.path) return;
 
+  log.info('Adding custom installation', { name: newInstallation.value.name, path: newInstallation.value.path });
   isAdding.value = true;
   try {
     await addCustomInstallation(
@@ -156,6 +161,7 @@ async function handleAddInstallation() {
       newInstallation.value.path,
       newInstallation.value.modsPath || undefined
     );
+    log.info('Custom installation added successfully');
     showAddDialog.value = false;
     newInstallation.value = { name: "", path: "", modsPath: "" };
   } finally {
@@ -164,11 +170,14 @@ async function handleAddInstallation() {
 }
 
 async function handleLaunch(installation: MinecraftInstallation) {
+  log.info('Launching game', { installationId: installation.id, type: installation.type });
   toast.info("Starting...", `Opening ${getTypeName(installation.type)}`);
   const result = await launchGame(installation.id);
   if (result.success) {
+    log.info('Game launched successfully', { installationId: installation.id });
     toast.success("Launched ✓", `${getTypeName(installation.type)} is starting.`);
   } else if (result.error) {
+    log.warn('Game launch warning', { installationId: installation.id, error: result.error });
     toast.warning("Heads up", result.error);
   }
 }

@@ -1,4 +1,7 @@
 import { ref, watch, type Ref } from "vue";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("LibrarySettings");
 
 const SETTINGS_KEY = "modex:library:settings";
 
@@ -39,6 +42,7 @@ export function useLibrarySettings() {
   const enableGrouping = ref<boolean>(true);
 
   function saveSettings(): void {
+    log.debug('Saving library settings');
     const settings = {
       viewMode: viewMode.value,
       sortBy: sortBy.value,
@@ -58,6 +62,7 @@ export function useLibrarySettings() {
   }
 
   function loadSettings(): void {
+    log.debug('Loading library settings');
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (stored) {
@@ -84,7 +89,7 @@ export function useLibrarySettings() {
           enableGrouping.value = settings.enableGrouping;
       }
     } catch (e) {
-      console.warn("Failed to load settings", e);
+      log.warn("Failed to load settings", e);
     }
   }
 

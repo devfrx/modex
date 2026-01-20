@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
+import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ChangelogDialog from "@/components/mods/ChangelogDialog.vue";
 import { useToast } from "@/composables/useToast";
+
+const log = createLogger("CurseForgeModpackSearch");
 
 const toast = useToast();
 
@@ -143,7 +146,7 @@ async function search(reset = true) {
         }
         totalResults.value = result.pagination.totalCount;
     } catch (err) {
-        console.error("Search failed:", err);
+        log.error("Search failed", { query: searchQuery.value, error: String(err) });
         toast.error("Search failed", (err as Error).message);
     } finally {
         isSearching.value = false;
@@ -174,7 +177,7 @@ async function toggleExpand(modpackId: number) {
         });
         modpackFiles.value = files;
     } catch (err) {
-        console.error("Failed to load files:", err);
+        log.error("Failed to load files", { modpackId: expandedModpackId.value, error: String(err) });
         toast.error("Error", "Failed to load modpack files");
     } finally {
         isLoadingFiles.value = false;
@@ -251,7 +254,7 @@ async function importModpack(modpack: any, file: any) {
             emit("imported");
         }
     } catch (err) {
-        console.error("Import failed:", err);
+        log.error("Import failed", { modpackId: modpack.id, fileId: file.id, error: String(err) });
         toast.error("Import Failed", (err as Error).message);
     } finally {
         importingModpackId.value = null;
@@ -290,7 +293,7 @@ async function quickImport(modpack: any) {
 
         await importModpack(modpack, releaseFile);
     } catch (err) {
-        console.error("Quick import failed:", err);
+        log.error("Quick import failed", { modpackId: modpack.id, error: String(err) });
         toast.error("Import Failed", (err as Error).message);
         importingModpackId.value = null;
         importingFileId.value = null;
@@ -599,7 +602,7 @@ onMounted(async () => {
                                                 <h3 class="font-medium text-foreground truncate">{{ modpack.name }}</h3>
                                                 <p class="text-xs text-muted-foreground line-clamp-2 mt-0.5">{{
                                                     modpack.summary
-                                                    }}
+                                                }}
                                                 </p>
                                             </div>
 

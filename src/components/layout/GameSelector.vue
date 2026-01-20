@@ -9,8 +9,11 @@
  */
 
 import { ref, onMounted, watch, computed, onUnmounted } from "vue";
+import { createLogger } from "@/utils/logger";
 import type { GameType, GameConfig } from "@/types";
 import Icon from "@/components/ui/Icon.vue";
+
+const log = createLogger("GameSelector");
 
 // Game icons from assets
 import minecraftIcon from "@/assets/metro_minecraft.ico";
@@ -71,7 +74,7 @@ async function loadGameData() {
             };
         }
     } catch (error) {
-        console.error("[GameSelector] Error loading game data:", error);
+        log.error("Error loading game data", { error: String(error) });
     } finally {
         isLoading.value = false;
     }

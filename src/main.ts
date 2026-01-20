@@ -2,6 +2,9 @@ import { createApp } from "vue";
 import "./style.css";
 import App from "./App.vue";
 import router from "./router";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("App");
 
 // Initialize theme from localStorage before mounting
 const savedTheme = localStorage.getItem("modex:theme") || "dark";
@@ -53,6 +56,6 @@ createApp(App)
     
     // Use contextBridge
     window.ipcRenderer.on("main-process-message", (_event, message) => {
-      console.log(message);
+      log.info(message);
     });
   });

@@ -5,6 +5,9 @@ import { useMinecraft } from "@/composables/useMinecraft";
 import type { MinecraftInstallation } from "@/types";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("SyncModpackDialog");
 
 const props = defineProps<{
   open: boolean;
@@ -53,6 +56,7 @@ watch([() => props.open, () => installations.value], () => {
 // Reset state when dialog opens
 watch(() => props.open, (open) => {
   if (open) {
+    log.debug('Sync dialog opened', { modpackId: props.modpackId, modpackName: props.modpackName });
     syncResult.value = null;
     clearExisting.value = false;
     createBackup.value = true;
@@ -81,6 +85,12 @@ function getTypeIcon(type: MinecraftInstallation["type"]): string {
 async function handleSync() {
   if (!selectedInstallation.value) return;
 
+  log.info('Starting modpack sync', {
+    modpackId: props.modpackId,
+    installationId: selectedInstallation.value,
+    clearExisting: clearExisting.value,
+    createBackup: createBackup.value
+  });
   syncResult.value = null;
 
   const result = await syncModpack(
@@ -89,12 +99,19 @@ async function handleSync() {
     { clearExisting: clearExisting.value, createBackup: createBackup.value }
   );
 
+  log.info('Sync completed', {
+    success: result.success,
+    synced: result.synced,
+    skipped: result.skipped,
+    errors: result.errors?.length || 0
+  });
   syncResult.value = result;
   emit("synced", { success: result.success, synced: result.synced });
 }
 
 async function handleLaunch() {
   if (!selectedInstallation.value) return;
+  log.info('Launching game after sync', { installationId: selectedInstallation.value });
   await launchGame(selectedInstallation.value);
   emit("close");
 }

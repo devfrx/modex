@@ -17,10 +17,12 @@ import Button from "@/components/ui/Button.vue";
 import { useHytale } from "@/composables/useHytale";
 import { useToast } from "@/composables/useToast";
 import type { HytaleWorld } from "@/types";
+import { createLogger } from "@/utils/logger";
 
 // Use HytaleWorld directly from types
 type HytaleSave = HytaleWorld;
 
+const log = createLogger("HytaleWorldsView");
 const router = useRouter();
 const toast = useToast();
 const { installedMods, refreshMods, isLoading: isHytaleLoading, config, initialize } = useHytale();
@@ -41,7 +43,7 @@ async function loadSaves() {
         const saveData = await window.api.hytale?.getWorlds?.() || [];
         saves.value = saveData;
 
-        console.log("[HytaleWorlds] Loaded saves:", saves.value);
+        log.info("[HytaleWorlds] Loaded saves:", saves.value);
 
         // Update selected save if it exists
         if (selectedSave.value) {
@@ -53,7 +55,7 @@ async function loadSaves() {
             selectSave(saves.value[0]);
         }
     } catch (err) {
-        console.error("[HytaleWorlds] Error loading saves:", err);
+        log.error("[HytaleWorlds] Error loading saves:", err);
         toast.error("Failed to load saves", "Could not fetch save data");
     } finally {
         isLoading.value = false;
@@ -113,7 +115,7 @@ async function toggleSaveMod(modId: string) {
             );
         }
     } catch (err: any) {
-        console.error("[HytaleWorlds] Error toggling mod:", err);
+        log.error("[HytaleWorlds] Error toggling mod:", err);
         toast.error("Failed to toggle mod", err.message);
     }
 }

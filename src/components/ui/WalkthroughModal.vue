@@ -4,6 +4,9 @@ import { useRouter } from "vue-router";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
+import { createLogger } from "@/utils/logger";
+
+const log = createLogger("WalkthroughModal");
 
 const props = defineProps<{
     open: boolean;
@@ -74,21 +77,25 @@ const progress = computed(() => ((currentStep.value + 1) / steps.length) * 100);
 
 function nextStep() {
     if (!isLastStep.value) {
+        log.debug('Navigating to next step', { from: currentStep.value, to: currentStep.value + 1 });
         currentStep.value++;
     }
 }
 
 function prevStep() {
     if (!isFirstStep.value) {
+        log.debug('Navigating to previous step', { from: currentStep.value, to: currentStep.value - 1 });
         currentStep.value--;
     }
 }
 
 function goToStep(index: number) {
+    log.debug('Jumping to step', { from: currentStep.value, to: index });
     currentStep.value = index;
 }
 
 function handleClose() {
+    log.info('Closing walkthrough', { dontShowAgain: dontShowAgain.value, completedStep: currentStepData.value.id });
     if (dontShowAgain.value) {
         localStorage.setItem(WALKTHROUGH_STORAGE_KEY, "true");
     }
@@ -97,24 +104,29 @@ function handleClose() {
 }
 
 function goToSettings() {
+    log.info('User navigating to settings from walkthrough');
     handleClose();
     router.push("/settings");
 }
 
 function goToGuide() {
+    log.info('User navigating to guide from walkthrough');
     handleClose();
     router.push("/guide");
 }
 
 function openCurseForgeConsole() {
+    log.debug('Opening CurseForge console');
     window.open("https://console.curseforge.com/", "_blank");
 }
 
 function openGitHubTokens() {
+    log.debug('Opening GitHub tokens page');
     window.open("https://github.com/settings/tokens", "_blank");
 }
 
 onMounted(() => {
+    log.debug('Walkthrough modal mounted', { open: props.open });
     currentStep.value = 0;
 });
 </script>

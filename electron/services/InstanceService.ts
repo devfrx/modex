@@ -13,6 +13,7 @@ import { spawn, ChildProcess } from "child_process";
 import os from "os";
 import AdmZip from "adm-zip";
 import { createLogger } from "./LoggerService.js";
+import { fetchWithTimeout } from "../utils/fetchWithTimeout.js";
 
 const log = createLogger("Instance");
 
@@ -960,7 +961,7 @@ export class InstanceService {
 
           // Download
           log.info(`[Sync] Downloading ${mod.content_type || 'mod'}: ${mod.filename} from ${downloadUrl}`);
-          const response = await fetch(downloadUrl);
+          const response = await fetchWithTimeout(downloadUrl, {}, 120000); // 2 min timeout for large files
           if (!response.ok) {
             log.info(`[Sync] Download FAILED for ${mod.filename}: HTTP ${response.status}`);
             throw new Error(`HTTP ${response.status}`);
@@ -1581,7 +1582,7 @@ export class InstanceService {
       log.info(`Fetching Fabric profile from: ${metaUrl}`);
       onProgress?.("install", 5, 100, "Fetching Fabric profile...");
 
-      const response = await fetch(metaUrl);
+      const response = await fetchWithTimeout(metaUrl, {}, 30000);
       if (!response.ok) {
         return { success: false, error: `Failed to fetch Fabric profile: ${response.statusText}` };
       }
@@ -1648,7 +1649,7 @@ export class InstanceService {
       log.info(`Fetching Quilt profile from: ${metaUrl}`);
       onProgress?.("install", 5, 100, "Fetching Quilt profile...");
 
-      const response = await fetch(metaUrl);
+      const response = await fetchWithTimeout(metaUrl, {}, 30000);
       if (!response.ok) {
         return { success: false, error: `Failed to fetch Quilt profile: ${response.statusText}` };
       }
@@ -1719,11 +1720,11 @@ export class InstanceService {
       log.info(`Downloading Forge installer from: ${installerUrl}`);
       onProgress?.("install", 5, 100, "Downloading Forge installer...");
 
-      const response = await fetch(installerUrl);
+      const response = await fetchWithTimeout(installerUrl, {}, 120000);
       if (!response.ok) {
         // Try alternative URL format (some versions use different naming)
         const altUrl = `https://files.minecraftforge.net/maven/net/minecraftforge/forge/${forgeVersion}/forge-${forgeVersion}-installer.jar`;
-        const altResponse = await fetch(altUrl);
+        const altResponse = await fetchWithTimeout(altUrl, {}, 120000);
         if (!altResponse.ok) {
           return {
             success: false,
@@ -1923,7 +1924,7 @@ export class InstanceService {
       log.info(`Downloading NeoForge installer from: ${installerUrl}`);
       onProgress?.("install", 5, 100, "Downloading NeoForge installer...");
 
-      const response = await fetch(installerUrl);
+      const response = await fetchWithTimeout(installerUrl, {}, 120000);
       if (!response.ok) {
         return {
           success: false,
@@ -2142,7 +2143,7 @@ export class InstanceService {
 
     try {
       log.info(`Downloading library: ${lib.name}`);
-      const response = await fetch(downloadUrl);
+      const response = await fetchWithTimeout(downloadUrl, {}, 60000);
       if (!response.ok) {
         log.warn(`Failed to download ${lib.name}: ${response.statusText}`);
         return;
@@ -3306,7 +3307,7 @@ export class InstanceService {
 
       log.info(`Downloading library: ${lib.name} from ${downloadUrl}`);
       
-      const response = await fetch(downloadUrl);
+      const response = await fetchWithTimeout(downloadUrl, {}, 60000);
       if (!response.ok) {
         log.warn(`Failed to download ${lib.name}: HTTP ${response.status}`);
         return false;

@@ -178,6 +178,7 @@ export function registerAllHandlers(deps: AllIpcDeps): void {
   safeRegister("Export", () => registerExportHandlers({
     metadataManager: deps.metadataManager,
     curseforgeService: deps.curseforgeService,
+    instanceService: deps.instanceService,
     getWindow: deps.getWindow,
     log: deps.log,
   }));

@@ -303,10 +303,15 @@ onMounted(async () => {
   // Load Saved Release Types
   const savedTypes = localStorage.getItem(STORAGE_KEYS.RELEASE_TYPES);
   if (savedTypes) {
-    const types = JSON.parse(savedTypes);
-    filterRelease.value = types.release ?? true;
-    filterBeta.value = types.beta ?? false;
-    filterAlpha.value = types.alpha ?? false;
+    try {
+      const types = JSON.parse(savedTypes);
+      filterRelease.value = types.release ?? true;
+      filterBeta.value = types.beta ?? false;
+      filterAlpha.value = types.alpha ?? false;
+    } catch (e) {
+      log.error("Failed to parse release types from localStorage:", e);
+      localStorage.removeItem(STORAGE_KEYS.RELEASE_TYPES);
+    }
   }
 
   if (hasApiKey.value) {
@@ -1431,7 +1436,7 @@ function getReleaseColor(type: number) {
                     <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
                         formatDownloads(mod.downloadCount)
-                      }}</span>
+                          }}</span>
                         downloads</span>
                       <span class="w-1 h-1 rounded-full bg-border"></span>
                       <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>
@@ -1615,11 +1620,11 @@ function getReleaseColor(type: number) {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(100, 100, 100, 0.2);
-  border-radius: 10px;
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 100, 100, 0.4);
+  background: hsl(var(--muted-foreground) / 0.4);
 }
 </style>

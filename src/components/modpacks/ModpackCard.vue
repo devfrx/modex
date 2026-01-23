@@ -41,6 +41,7 @@ defineEmits<{
   (e: "share", id: string, name: string): void;
   (e: "convert", id: string): void;
   (e: "play", id: string): void;
+  (e: "export", id: string): void;
 }>();
 
 const showMenu = ref(false);
@@ -232,6 +233,10 @@ const imageUrl = computed(() => {
             leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 translate-y-0 scale-100"
             leave-to-class="opacity-0 translate-y-2 scale-95">
             <div v-if="showMenu" class="dock-menu">
+              <button class="menu-item" @click.stop="$emit('export', modpack.id); showMenu = false;">
+                <Icon name="Download" class="w-4 h-4" />
+                <span>Export</span>
+              </button>
               <button class="menu-item" @click.stop="$emit('clone', modpack.id); showMenu = false;">
                 <Icon name="Copy" class="w-4 h-4" />
                 <span>Duplicate</span>
@@ -280,10 +285,10 @@ const imageUrl = computed(() => {
   inset: 0;
   display: flex;
   flex-direction: column;
-  border-radius: 16px;
+  border-radius: calc(var(--radius) + 8px);
   overflow: hidden;
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border) / 0.5);
+  border: var(--border-width) solid hsl(var(--border) / 0.5);
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -332,12 +337,12 @@ const imageUrl = computed(() => {
 .rest-badges>span {
   width: 24px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   display: flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: var(--border-width) solid hsl(var(--foreground) / 0.1);
 }
 
 .badge-live {
@@ -355,23 +360,23 @@ const imageUrl = computed(() => {
 }
 
 .badge-source {
-  background: rgba(249, 115, 22, 0.2);
-  color: rgb(251, 146, 60);
+  background: hsl(var(--warning) / 0.2);
+  color: hsl(var(--warning));
 }
 
 .badge-cloud {
-  background: rgba(34, 197, 94, 0.2);
-  color: rgb(74, 222, 128);
+  background: hsl(var(--success) / 0.2);
+  color: hsl(var(--success));
 }
 
 .badge-sync {
-  background: rgba(168, 85, 247, 0.2);
-  color: rgb(192, 132, 252);
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
 }
 
 .badge-error {
-  background: rgba(239, 68, 68, 0.2);
-  color: rgb(248, 113, 113);
+  background: hsl(var(--destructive) / 0.2);
+  color: hsl(var(--destructive));
 }
 
 /* Rest - Info */
@@ -403,7 +408,7 @@ const imageUrl = computed(() => {
 
 .rest-loader {
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -411,23 +416,23 @@ const imageUrl = computed(() => {
 }
 
 .loader-forge {
-  background: rgba(249, 115, 22, 0.15);
-  color: rgb(251, 146, 60);
+  background: hsl(var(--warning) / 0.15);
+  color: hsl(var(--warning));
 }
 
 .loader-fabric {
-  background: rgba(245, 158, 11, 0.15);
-  color: rgb(252, 211, 77);
+  background: hsl(var(--warning) / 0.12);
+  color: hsl(var(--warning));
 }
 
 .loader-neoforge {
-  background: rgba(239, 68, 68, 0.15);
-  color: rgb(248, 113, 113);
+  background: hsl(var(--destructive) / 0.15);
+  color: hsl(var(--destructive));
 }
 
 .loader-quilt {
-  background: rgba(168, 85, 247, 0.15);
-  color: rgb(192, 132, 252);
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
 }
 
 .loader-default {
@@ -460,12 +465,12 @@ const imageUrl = computed(() => {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   font-size: 10px;
   font-weight: 600;
-  background: rgba(251, 191, 36, 0.15);
-  color: rgb(251, 191, 36);
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: hsl(var(--warning) / 0.15);
+  color: hsl(var(--warning));
+  border: var(--border-width) solid hsl(var(--warning) / 0.3);
   animation: pulse-subtle 2s ease-in-out infinite;
 }
 
@@ -476,13 +481,13 @@ const imageUrl = computed(() => {
   right: 10px;
   width: 24px;
   height: 24px;
-  border-radius: 6px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  background: rgba(0, 0, 0, 0.4);
+  border-radius: calc(var(--radius) - 2px);
+  border: 2px solid hsl(var(--foreground) / 0.3);
+  background: hsl(var(--background) / 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: hsl(var(--foreground));
   opacity: 0;
   transform: scale(0.8);
   transition: all 0.2s ease;
@@ -498,7 +503,7 @@ const imageUrl = computed(() => {
   background: hsl(var(--primary));
   border-color: hsl(var(--primary));
   box-shadow: 0 0 0 3px hsl(var(--primary) / 0.3), 0 2px 8px hsl(var(--primary) / 0.4);
-  color: white;
+  color: hsl(var(--primary-foreground));
 }
 
 /* Rest - Favorite */
@@ -508,9 +513,9 @@ const imageUrl = computed(() => {
   right: 14px;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: calc(var(--radius) + 2px);
   background: hsl(var(--muted) / 0.8);
-  border: 1px solid hsl(var(--border) / 0.5);
+  border: var(--border-width) solid hsl(var(--border) / 0.5);
   color: hsl(var(--muted-foreground));
   display: flex;
   align-items: center;
@@ -532,9 +537,9 @@ const imageUrl = computed(() => {
 }
 
 .rest-fav.is-active {
-  background: rgba(244, 63, 94, 0.15);
-  border-color: rgba(244, 63, 94, 0.3);
-  color: rgb(251, 113, 133);
+  background: hsl(var(--destructive) / 0.15);
+  border-color: hsl(var(--destructive) / 0.3);
+  color: hsl(var(--destructive));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -543,15 +548,15 @@ const imageUrl = computed(() => {
 .card-hover {
   position: absolute;
   inset: 0;
-  border-radius: 16px;
+  border-radius: calc(var(--radius) + 8px);
   overflow: hidden;
   opacity: 0;
   transform: scale(1.02);
   pointer-events: none;
   transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 25px 50px -12px hsl(var(--background) / 0.5),
+    inset 0 1px 0 hsl(var(--foreground) / 0.1);
 }
 
 .modpack-card:hover .card-hover {
@@ -578,9 +583,9 @@ const imageUrl = computed(() => {
   position: absolute;
   inset: 0;
   background: linear-gradient(to top,
-      rgba(0, 0, 0, 0.95) 0%,
-      rgba(0, 0, 0, 0.5) 50%,
-      rgba(0, 0, 0, 0.3) 100%);
+      hsl(var(--background) / 0.95) 0%,
+      hsl(var(--background) / 0.5) 50%,
+      hsl(var(--background) / 0.3) 100%);
 }
 
 /* Hover - Favorite (matches rest position) - ENTERS FROM RIGHT */
@@ -590,11 +595,11 @@ const imageUrl = computed(() => {
   right: 14px;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: calc(var(--radius) + 2px);
+  background: hsl(var(--foreground) / 0.1);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.7);
+  border: var(--border-width) solid hsl(var(--foreground) / 0.15);
+  color: hsl(var(--foreground) / 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -614,15 +619,15 @@ const imageUrl = computed(() => {
 }
 
 .hover-fav:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: hsl(var(--foreground) / 0.2);
+  color: hsl(var(--foreground));
   transform: scale(1.05);
 }
 
 .hover-fav.is-active {
-  background: rgba(244, 63, 94, 0.25);
-  border-color: rgba(244, 63, 94, 0.4);
-  color: rgb(251, 113, 133);
+  background: hsl(var(--destructive) / 0.25);
+  border-color: hsl(var(--destructive) / 0.4);
+  color: hsl(var(--destructive));
 }
 
 /* Hover - Selection (matches rest position) - ENTERS FROM TOP-RIGHT */
@@ -632,14 +637,14 @@ const imageUrl = computed(() => {
   right: 12px;
   width: 26px;
   height: 26px;
-  border-radius: 8px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  border: 2px solid hsl(var(--foreground) / 0.35);
+  background: hsl(var(--foreground) / 0.1);
   backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: hsl(var(--foreground));
   cursor: pointer;
   opacity: 0;
   transform: translate(15px, -15px) scale(0.8);
@@ -656,15 +661,15 @@ const imageUrl = computed(() => {
 }
 
 .hover-select:hover {
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.15);
+  border-color: hsl(var(--foreground) / 0.5);
+  background: hsl(var(--foreground) / 0.15);
 }
 
 .hover-select.is-checked {
   background: hsl(var(--primary));
   border-color: hsl(var(--primary));
   box-shadow: 0 0 0 3px hsl(var(--primary) / 0.3), 0 2px 8px hsl(var(--primary) / 0.4);
-  color: white;
+  color: hsl(var(--primary-foreground));
 }
 
 /* Hover - Live badge - ENTERS FROM TOP-LEFT */
@@ -676,7 +681,7 @@ const imageUrl = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: 20px;
+  border-radius: 999px;
   background: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
   font-size: 10px;
@@ -714,14 +719,14 @@ const imageUrl = computed(() => {
 .hover-title {
   font-size: 18px;
   font-weight: 700;
-  color: white;
+  color: hsl(var(--foreground));
   line-height: 1.2;
   margin-bottom: 6px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2px 8px hsl(var(--background) / 0.3);
   opacity: 0;
   transform: translateX(-25px);
   transition:
@@ -736,7 +741,7 @@ const imageUrl = computed(() => {
 
 .hover-subtitle {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: hsl(var(--foreground) / 0.6);
   opacity: 0;
   transform: translateX(-20px);
   transition:
@@ -760,10 +765,10 @@ const imageUrl = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 0 6px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: calc(var(--radius) + 6px);
+  background: hsl(var(--foreground) / 0.08);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: var(--border-width) solid hsl(var(--foreground) / 0.12);
   opacity: 0;
   transform: translateY(30px);
   transition:
@@ -779,27 +784,27 @@ const imageUrl = computed(() => {
 .dock-play {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: white;
-  color: black;
+  border-radius: calc(var(--radius) + 2px);
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px hsl(var(--background) / 0.2);
 }
 
 .dock-play:hover {
   transform: scale(1.08);
-  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 16px hsl(var(--foreground) / 0.25);
 }
 
 .dock-running {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: calc(var(--radius) + 2px);
   background: hsl(var(--primary) / 0.2);
-  border: 1px solid hsl(var(--primary) / 0.4);
+  border: var(--border-width) solid hsl(var(--primary) / 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -816,16 +821,16 @@ const imageUrl = computed(() => {
 .dock-divider {
   width: 1px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.15);
+  background: hsl(var(--foreground) / 0.15);
   margin: 0 4px;
 }
 
 .dock-btn {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+  color: hsl(var(--foreground) / 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -833,8 +838,8 @@ const imageUrl = computed(() => {
 }
 
 .dock-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: hsl(var(--foreground) / 0.1);
+  color: hsl(var(--foreground));
 }
 
 /* Dock - More menu */
@@ -850,11 +855,11 @@ const imageUrl = computed(() => {
   margin-bottom: 8px;
   width: 180px;
   padding: 6px;
-  border-radius: 12px;
+  border-radius: calc(var(--radius) + 4px);
   background: hsl(var(--popover) / 0.95);
   backdrop-filter: blur(20px);
-  border: 1px solid hsl(var(--border));
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  border: var(--border-width) solid hsl(var(--border));
+  box-shadow: 0 20px 40px hsl(var(--background) / 0.4);
 }
 
 .menu-item {
@@ -863,7 +868,7 @@ const imageUrl = computed(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
   color: hsl(var(--foreground) / 0.8);
   transition: all 0.15s ease;
@@ -915,9 +920,9 @@ const imageUrl = computed(() => {
 
 .modpack-card.is-running .card-hover {
   box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 25px 50px -12px hsl(var(--background) / 0.5),
     0 0 30px -5px hsl(var(--primary) / 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    inset 0 1px 0 hsl(var(--foreground) / 0.1);
 }
 
 .modpack-card.is-favorite .rest-fav {
@@ -931,7 +936,7 @@ const imageUrl = computed(() => {
 .hover-glow-border {
   position: absolute;
   inset: 0;
-  border-radius: 16px;
+  border-radius: calc(var(--radius) + 8px);
   pointer-events: none;
   border: 1.4px solid transparent;
   opacity: 0;
@@ -979,12 +984,12 @@ const imageUrl = computed(() => {
 .status-badge {
   width: 30px;
   height: 30px;
-  border-radius: 10px;
+  border-radius: calc(var(--radius) + 2px);
   display: flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: var(--border-width) solid hsl(var(--foreground) / 0.15);
   transition: transform 0.2s ease;
 }
 
@@ -993,33 +998,33 @@ const imageUrl = computed(() => {
 }
 
 .status-cf {
-  background: rgba(249, 115, 22, 0.25);
-  color: rgb(251, 146, 60);
-  border-color: rgba(249, 115, 22, 0.4);
+  background: hsl(var(--warning) / 0.25);
+  color: hsl(var(--warning));
+  border-color: hsl(var(--warning) / 0.4);
 }
 
 .status-published {
-  background: rgba(34, 197, 94, 0.25);
-  color: rgb(74, 222, 128);
-  border-color: rgba(34, 197, 94, 0.4);
+  background: hsl(var(--success) / 0.25);
+  color: hsl(var(--success));
+  border-color: hsl(var(--success) / 0.4);
 }
 
 .status-synced {
-  background: rgba(168, 85, 247, 0.25);
-  color: rgb(192, 132, 252);
-  border-color: rgba(168, 85, 247, 0.4);
+  background: hsl(var(--primary) / 0.25);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.4);
 }
 
 .status-error {
-  background: rgba(239, 68, 68, 0.25);
-  color: rgb(248, 113, 113);
-  border-color: rgba(239, 68, 68, 0.4);
+  background: hsl(var(--destructive) / 0.25);
+  color: hsl(var(--destructive));
+  border-color: hsl(var(--destructive) / 0.4);
 }
 
 .status-unsaved {
-  background: rgba(251, 191, 36, 0.25);
-  color: rgb(252, 211, 77);
-  border-color: rgba(251, 191, 36, 0.4);
+  background: hsl(var(--warning) / 0.25);
+  color: hsl(var(--warning));
+  border-color: hsl(var(--warning) / 0.4);
   animation: pulse-subtle 2s ease-in-out infinite;
 }
 </style>

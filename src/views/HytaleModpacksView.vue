@@ -459,7 +459,7 @@ function isModpackActive(modpack: HytaleModpack): boolean {
     align-items: center;
     gap: 16px;
     padding: 16px 20px;
-    border-radius: 12px;
+    border-radius: calc(var(--radius) + 4px);
     border: 1px solid hsl(38 92% 50% / 0.3);
     background: hsl(38 92% 50% / 0.1);
 }
@@ -502,7 +502,7 @@ function isModpackActive(modpack: HytaleModpack): boolean {
     align-items: center;
     gap: 10px;
     padding: 12px 16px;
-    border-radius: 10px;
+    border-radius: calc(var(--radius) + 2px);
     background: hsl(142 76% 36% / 0.1);
     border: 1px solid hsl(142 76% 36% / 0.3);
     color: hsl(142 76% 46%);

@@ -6,7 +6,7 @@
 
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 
-// Import type definitions
+// Import type definitions from IPC
 import type {
   UpdateInfo,
   UpdateNotAvailableInfo,
@@ -17,76 +17,11 @@ import type {
   RunningGameInfo,
 } from "./types/ipc";
 
-// ==================== TYPES ====================
+// Import shared types - canonical source for Mod and Modpack
+import type { Mod, Modpack } from "../shared/types";
 
-export interface Mod {
-  id: string;
-  name: string;
-  slug?: string;
-  version: string;
-  game_version: string;
-  loader: string;
-  description?: string;
-  author?: string;
-  thumbnail_url?: string;
-  download_count?: number;
-  release_type?: "release" | "beta" | "alpha";
-  date_released?: string;
-  created_at: string;
-  filename: string;
-  source: "curseforge" | "modrinth";
-  cf_project_id?: number;
-  cf_file_id?: number;
-  mr_project_id?: string;
-  mr_version_id?: string;
-  tags?: string[];
-  favorite?: boolean;
-}
-
-export interface Modpack {
-  id: string;
-  name: string;
-  version: string;
-  minecraft_version?: string;
-  loader?: string;
-  loader_version?: string;
-  description?: string;
-  image_url?: string;
-  created_at: string;
-  updated_at?: string;
-  mod_count?: number;
-  favorite?: boolean;
-  share_code?: string;
-  last_sync?: string;
-  mod_ids: string[];
-  disabled_mod_ids?: string[];
-  locked_mod_ids?: string[];
-  mod_notes?: Record<string, string>;
-  remote_source?: {
-    url: string;
-    auto_check: boolean;
-    last_checked?: string;
-    skip_initial_check?: boolean;
-  };
-  /** Gist publishing configuration for this modpack */
-  gist_config?: {
-    gist_id: string;
-    filename: string;
-    is_public: boolean;
-    last_pushed?: string;
-    raw_url?: string;
-    html_url?: string;
-  };
-  incompatible_mods?: Array<{
-    cf_project_id: number;
-    name: string;
-    reason: string;
-  }>;
-  cf_project_id?: number;
-  cf_file_id?: number;
-  cf_slug?: string;
-  overridesPath?: string;
-}
+// Re-export for consumers that import from preload
+export type { Mod, Modpack };
 
 // ==================== API ====================
 
@@ -606,10 +541,31 @@ contextBridge.exposeInMainWorld("api", {
 
   // ========== EXPORT ==========
   export: {
-    curseforge: (
+    /** Get folder tree for export selection UI */
+    getOverridesTree: (
       modpackId: string
+    ): Promise<Array<{
+      name: string;
+      type: "folder" | "file";
+      path: string;
+      children?: Array<{ name: string; type: "folder" | "file"; path: string }>;
+    }>> =>
+      ipcRenderer.invoke("export:getOverridesTree", modpackId),
+    curseforge: (
+      modpackId: string,
+      options?: {
+        profileName?: string;
+        version?: string;
+        selectedFolders?: string[];
+        /** Specific file/folder paths to exclude (relative paths like "config/mymod.toml") */
+        excludedPaths?: string[];
+        includeRamRecommendation?: boolean;
+        ramRecommendation?: number;
+        /** If true, only include server-side mods (isServerPack=true or unspecified) */
+        serverModsOnly?: boolean;
+      }
     ): Promise<{ success: boolean; path: string } | null> =>
-      ipcRenderer.invoke("export:curseforge", modpackId),
+      ipcRenderer.invoke("export:curseforge", modpackId, options),
     modex: (
       modpackId: string,
       options?: {

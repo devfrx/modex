@@ -1134,7 +1134,7 @@ function handleConfigReverted(event: Event) {
                                                         class="w-3 h-3" />
                                                     <Icon v-else name="Package" class="w-3 h-3" />
                                                     <span class="truncate line-through opacity-60">{{ item.oldFilename
-                                                    }}</span>
+                                                        }}</span>
                                                     <span class="text-orange-400">→</span>
                                                     <span class="truncate text-orange-400">{{ item.newFilename }}</span>
                                                     <span v-if="item.willBeDisabled"
@@ -1154,7 +1154,7 @@ function handleConfigReverted(event: Event) {
                                                 <Icon name="Trash2" class="w-4 h-4" />
                                                 <span class="font-medium">Mods to remove ({{
                                                     syncStatus.extraInInstance.filter(i => i.type === 'mod').length
-                                                    }})</span>
+                                                }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These mods are not in the modpack and will be removed during sync.
@@ -1181,7 +1181,7 @@ function handleConfigReverted(event: Event) {
                                                 <Icon name="Package" class="w-4 h-4" />
                                                 <span class="font-medium">Extra files ({{
                                                     syncStatus.extraInInstance.filter(i => i.type !== 'mod').length
-                                                    }})</span>
+                                                }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These files will be preserved.
@@ -1328,9 +1328,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                }}</span>
+                                                    }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                }}%</span>
+                                                    }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1364,7 +1364,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1374,7 +1374,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                            }}</div>
+                                                }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">
@@ -1584,9 +1584,9 @@ function handleConfigReverted(event: Event) {
 }
 
 .header-status-ready {
-    background-color: rgb(34 197 94 / 0.15);
-    color: rgb(74 222 128);
-    border: 1px solid rgb(34 197 94 / 0.3);
+    background-color: hsl(var(--success) / 0.15);
+    color: hsl(var(--success));
+    border: 1px solid hsl(var(--success) / 0.3);
 }
 
 .header-status-installing {
@@ -1659,7 +1659,7 @@ function handleConfigReverted(event: Event) {
 
 .feature-check {
     @apply w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0;
-    background-color: rgb(34 197 94 / 0.2);
+    background-color: hsl(var(--success) / 0.2);
 }
 
 /* Progress */
@@ -1704,7 +1704,7 @@ function handleConfigReverted(event: Event) {
 .tab-active {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    box-shadow: 0 1px 3px 0 hsl(var(--background) / 0.3);
     border: 1px solid hsl(var(--border) / 0.5);
 }
 
@@ -1752,7 +1752,7 @@ function handleConfigReverted(event: Event) {
 
 .log-console-content {
     @apply h-48 overflow-y-auto font-mono text-xs p-3 space-y-0.5;
-    background: hsl(0 0% 5%);
+    background: hsl(var(--background));
 }
 
 .log-empty {
@@ -2025,8 +2025,8 @@ function handleConfigReverted(event: Event) {
 /* Warning */
 .warning-card {
     @apply flex items-center gap-3 p-3 rounded-xl mt-6;
-    background-color: rgb(234 179 8 / 0.1);
-    border: 1px solid rgb(234 179 8 / 0.3);
+    background-color: hsl(var(--warning) / 0.1);
+    border: 1px solid hsl(var(--warning) / 0.3);
 }
 
 /* Options */
@@ -2076,8 +2076,8 @@ function handleConfigReverted(event: Event) {
 }
 
 .config-option-warning.config-option-active {
-    border-color: rgb(249 115 22 / 0.4);
-    background-color: rgb(249 115 22 / 0.1);
+    border-color: hsl(var(--warning) / 0.4);
+    background-color: hsl(var(--warning) / 0.1);
 }
 
 /* Results */
@@ -2086,13 +2086,13 @@ function handleConfigReverted(event: Event) {
 }
 
 .result-success {
-    background-color: rgb(34 197 94 / 0.1);
-    border: 1px solid rgb(34 197 94 / 0.3);
+    background-color: hsl(var(--success) / 0.1);
+    border: 1px solid hsl(var(--success) / 0.3);
 }
 
 .result-error {
-    background-color: rgb(239 68 68 / 0.1);
-    border: 1px solid rgb(239 68 68 / 0.3);
+    background-color: hsl(var(--destructive) / 0.1);
+    border: 1px solid hsl(var(--destructive) / 0.3);
 }
 
 .result-icon {
@@ -2100,11 +2100,11 @@ function handleConfigReverted(event: Event) {
 }
 
 .result-icon-success {
-    background-color: rgb(34 197 94 / 0.2);
+    background-color: hsl(var(--success) / 0.2);
 }
 
 .result-icon-error {
-    background-color: rgb(239 68 68 / 0.2);
+    background-color: hsl(var(--destructive) / 0.2);
 }
 
 .stat-box {
@@ -2119,8 +2119,8 @@ function handleConfigReverted(event: Event) {
 
 .error-notice {
     @apply mt-3 p-2 rounded-lg text-xs;
-    background-color: rgb(239 68 68 / 0.1);
-    color: rgb(248 113 113);
+    background-color: hsl(var(--destructive) / 0.1);
+    color: hsl(var(--destructive));
 }
 
 /* Config Browser Container */
@@ -2163,81 +2163,81 @@ function handleConfigReverted(event: Event) {
 
 /* Folder Color Variants */
 .folder-orange .folder-icon {
-    background-color: rgb(249 115 22 / 0.1);
-    color: rgb(251 146 60);
+    background-color: hsl(var(--warning) / 0.1);
+    color: hsl(var(--warning));
 }
 
 .folder-orange:hover {
-    border-color: rgb(249 115 22 / 0.3);
+    border-color: hsl(var(--warning) / 0.3);
 }
 
 .folder-orange:hover .folder-icon {
-    background-color: rgb(249 115 22 / 0.2);
+    background-color: hsl(var(--warning) / 0.2);
 }
 
 .folder-blue .folder-icon {
-    background-color: rgb(59 130 246 / 0.1);
-    color: rgb(96 165 250);
+    background-color: hsl(var(--info) / 0.1);
+    color: hsl(var(--info));
 }
 
 .folder-blue:hover {
-    border-color: rgb(59 130 246 / 0.3);
+    border-color: hsl(var(--info) / 0.3);
 }
 
 .folder-blue:hover .folder-icon {
-    background-color: rgb(59 130 246 / 0.2);
+    background-color: hsl(var(--info) / 0.2);
 }
 
 .folder-green .folder-icon {
-    background-color: rgb(34 197 94 / 0.1);
-    color: rgb(74 222 128);
+    background-color: hsl(var(--success) / 0.1);
+    color: hsl(var(--success));
 }
 
 .folder-green:hover {
-    border-color: rgb(34 197 94 / 0.3);
+    border-color: hsl(var(--success) / 0.3);
 }
 
 .folder-green:hover .folder-icon {
-    background-color: rgb(34 197 94 / 0.2);
+    background-color: hsl(var(--success) / 0.2);
 }
 
 .folder-purple .folder-icon {
-    background-color: rgb(168 85 247 / 0.1);
-    color: rgb(192 132 252);
+    background-color: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
 }
 
 .folder-purple:hover {
-    border-color: rgb(168 85 247 / 0.3);
+    border-color: hsl(var(--primary) / 0.3);
 }
 
 .folder-purple:hover .folder-icon {
-    background-color: rgb(168 85 247 / 0.2);
+    background-color: hsl(var(--primary) / 0.2);
 }
 
 .folder-yellow .folder-icon {
-    background-color: rgb(234 179 8 / 0.1);
-    color: rgb(250 204 21);
+    background-color: hsl(var(--warning) / 0.1);
+    color: hsl(var(--warning));
 }
 
 .folder-yellow:hover {
-    border-color: rgb(234 179 8 / 0.3);
+    border-color: hsl(var(--warning) / 0.3);
 }
 
 .folder-yellow:hover .folder-icon {
-    background-color: rgb(234 179 8 / 0.2);
+    background-color: hsl(var(--warning) / 0.2);
 }
 
 .folder-pink .folder-icon {
-    background-color: rgb(236 72 153 / 0.1);
-    color: rgb(244 114 182);
+    background-color: hsl(var(--destructive) / 0.1);
+    color: hsl(var(--destructive));
 }
 
 .folder-pink:hover {
-    border-color: rgb(236 72 153 / 0.3);
+    border-color: hsl(var(--destructive) / 0.3);
 }
 
 .folder-pink:hover .folder-icon {
-    background-color: rgb(236 72 153 / 0.2);
+    background-color: hsl(var(--destructive) / 0.2);
 }
 
 /* Structured Editor Container */
@@ -2261,20 +2261,20 @@ function handleConfigReverted(event: Event) {
 }
 
 .game-status-icon.launching {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.05) 100%);
-    border-color: rgba(59, 130, 246, 0.5);
+    background: linear-gradient(135deg, hsl(var(--info) / 0.2) 0%, hsl(var(--info) / 0.05) 100%);
+    border-color: hsl(var(--info) / 0.5);
     animation: pulse-blue 2s ease-in-out infinite;
 }
 
 .game-status-icon.loading {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%);
-    border-color: rgba(245, 158, 11, 0.5);
+    background: linear-gradient(135deg, hsl(var(--warning) / 0.2) 0%, hsl(var(--warning) / 0.05) 100%);
+    border-color: hsl(var(--warning) / 0.5);
     animation: pulse-amber 2s ease-in-out infinite;
 }
 
 .game-status-icon.running {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.05) 100%);
-    border-color: rgba(34, 197, 94, 0.5);
+    background: linear-gradient(135deg, hsl(var(--success) / 0.2) 0%, hsl(var(--success) / 0.05) 100%);
+    border-color: hsl(var(--success) / 0.5);
     animation: pulse-green 2s ease-in-out infinite;
 }
 
@@ -2282,11 +2282,11 @@ function handleConfigReverted(event: Event) {
 
     0%,
     100% {
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        box-shadow: 0 0 20px hsl(var(--info) / 0.3);
     }
 
     50% {
-        box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
+        box-shadow: 0 0 40px hsl(var(--info) / 0.5);
     }
 }
 
@@ -2294,11 +2294,11 @@ function handleConfigReverted(event: Event) {
 
     0%,
     100% {
-        box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+        box-shadow: 0 0 20px hsl(var(--warning) / 0.3);
     }
 
     50% {
-        box-shadow: 0 0 40px rgba(245, 158, 11, 0.5);
+        box-shadow: 0 0 40px hsl(var(--warning) / 0.5);
     }
 }
 
@@ -2306,11 +2306,11 @@ function handleConfigReverted(event: Event) {
 
     0%,
     100% {
-        box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        box-shadow: 0 0 20px hsl(var(--success) / 0.3);
     }
 
     50% {
-        box-shadow: 0 0 40px rgba(34, 197, 94, 0.5);
+        box-shadow: 0 0 40px hsl(var(--success) / 0.5);
     }
 }
 
@@ -2319,7 +2319,7 @@ function handleConfigReverted(event: Event) {
 }
 
 .progress-bar-fill.mod-progress {
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.8), rgba(245, 158, 11, 1));
+    background: linear-gradient(90deg, hsl(var(--warning) / 0.8), hsl(var(--warning)));
 }
 
 .game-running-info {
@@ -2327,7 +2327,7 @@ function handleConfigReverted(event: Event) {
 }
 
 .loading-tips {
-    border: 1px solid rgba(251, 191, 36, 0.2);
+    border: 1px solid hsl(var(--warning) / 0.2);
     max-width: 20rem;
 }
 </style>

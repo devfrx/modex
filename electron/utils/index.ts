@@ -5,6 +5,7 @@
 // Core utilities
 export * from './retry';
 export * from './minecraft-version';
+export * from './fetchWithTimeout';
 
 // Error handling
 export * from "./errors";

@@ -736,7 +736,7 @@ watch(() => route.params.id, async () => {
 .back-btn {
     width: 40px;
     height: 40px;
-    border-radius: 10px;
+    border-radius: calc(var(--radius) + 2px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -796,7 +796,7 @@ watch(() => route.params.id, async () => {
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-radius: 12px;
+    border-radius: calc(var(--radius) + 4px);
     background: hsl(var(--card));
     border: 1px solid hsl(var(--border));
 }
@@ -848,7 +848,7 @@ watch(() => route.params.id, async () => {
     padding: 6px 12px;
     font-size: 13px;
     font-weight: 500;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: hsl(var(--muted) / 0.5);
     color: hsl(var(--muted-foreground));
     transition: all 0.15s ease;
@@ -876,7 +876,7 @@ watch(() => route.params.id, async () => {
     padding: 6px 12px;
     font-size: 13px;
     font-weight: 500;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: hsl(var(--primary) / 0.15);
     color: hsl(var(--primary));
     border: 1px solid hsl(var(--primary) / 0.3);
@@ -904,7 +904,7 @@ watch(() => route.params.id, async () => {
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    border-radius: 10px;
+    border-radius: calc(var(--radius) + 2px);
     border: 1px solid;
 }
 
@@ -977,7 +977,7 @@ watch(() => route.params.id, async () => {
     transform: translateY(-50%);
     width: 24px;
     height: 24px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -994,7 +994,7 @@ watch(() => route.params.id, async () => {
     display: flex;
     gap: 4px;
     padding: 4px;
-    border-radius: 10px;
+    border-radius: calc(var(--radius) + 2px);
     background: hsl(var(--muted) / 0.5);
 }
 
@@ -1003,7 +1003,7 @@ watch(() => route.params.id, async () => {
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     font-size: 12px;
     font-weight: 500;
     color: hsl(var(--muted-foreground));
@@ -1018,7 +1018,7 @@ watch(() => route.params.id, async () => {
 .filter-btn.active {
     color: hsl(var(--foreground));
     background: hsl(var(--background));
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px hsl(var(--background) / 0.3);
 }
 
 .filter-enabled.active {
@@ -1051,7 +1051,7 @@ watch(() => route.params.id, async () => {
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    border-radius: 10px;
+    border-radius: calc(var(--radius) + 2px);
     background: hsl(var(--card));
     border: 1px solid hsl(var(--border));
     transition: all 0.15s ease;
@@ -1094,7 +1094,7 @@ watch(() => route.params.id, async () => {
     border-radius: 50%;
     background: white;
     transition: all 0.2s ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 3px hsl(var(--background) / 0.4);
 }
 
 .toggle-on .toggle-thumb {
@@ -1150,7 +1150,7 @@ watch(() => route.params.id, async () => {
 .mod-version {
     font-size: 11px;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: calc(var(--radius) - 4px);
     background: hsl(var(--muted));
     color: hsl(var(--muted-foreground));
     white-space: nowrap;
@@ -1167,7 +1167,7 @@ watch(() => route.params.id, async () => {
 .mod-update {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1188,7 +1188,7 @@ watch(() => route.params.id, async () => {
 .mod-remove {
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1222,7 +1222,7 @@ watch(() => route.params.id, async () => {
     align-items: center;
     gap: 12px;
     padding: 12px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     transition: all 0.15s ease;
     text-align: left;
 }

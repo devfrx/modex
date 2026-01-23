@@ -14,6 +14,7 @@ import fs from "fs-extra";
 import { spawn, ChildProcess } from "child_process";
 import os from "os";
 import { createLogger } from "./LoggerService.js";
+import { fetchWithTimeout } from "../utils/fetchWithTimeout.js";
 
 const log = createLogger("Minecraft");
 
@@ -556,7 +557,7 @@ export class MinecraftService {
 
           // Download the mod if we have a URL
           if (mod.downloadUrl) {
-            const response = await fetch(mod.downloadUrl);
+            const response = await fetchWithTimeout(mod.downloadUrl, {}, 120000);
             if (!response.ok) {
               throw new Error(`HTTP ${response.status}`);
             }

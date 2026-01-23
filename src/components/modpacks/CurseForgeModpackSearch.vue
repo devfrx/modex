@@ -602,7 +602,7 @@ onMounted(async () => {
                                                 <h3 class="font-medium text-foreground truncate">{{ modpack.name }}</h3>
                                                 <p class="text-xs text-muted-foreground line-clamp-2 mt-0.5">{{
                                                     modpack.summary
-                                                }}
+                                                    }}
                                                 </p>
                                             </div>
 
@@ -802,11 +802,11 @@ onMounted(async () => {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: hsl(var(--muted-foreground) / 0.1);
     border-radius: 3px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: hsl(var(--muted-foreground) / 0.2);
 }
 </style>

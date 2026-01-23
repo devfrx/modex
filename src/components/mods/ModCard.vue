@@ -265,10 +265,10 @@ const imageUrl = computed(() => {
     inset: 0;
     display: flex;
     flex-direction: column;
-    border-radius: 14px;
+    border-radius: calc(var(--radius) + 6px);
     overflow: hidden;
     background: hsl(var(--card));
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: var(--border-width) solid hsl(var(--border) / 0.5);
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -284,8 +284,8 @@ const imageUrl = computed(() => {
 }
 
 .mod-card.is-duplicate .card-rest {
-    border-color: rgb(249, 115, 22);
-    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.3);
+    border-color: hsl(var(--warning));
+    box-shadow: 0 0 0 1px hsl(var(--warning) / 0.3);
 }
 
 /* Rest - Image */
@@ -329,19 +329,19 @@ const imageUrl = computed(() => {
 
 .rest-badges>span {
     padding: 4px 6px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     display: flex;
     align-items: center;
     gap: 3px;
     font-size: 10px;
     font-weight: 600;
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: var(--border-width) solid hsl(var(--foreground) / 0.1);
 }
 
 .badge-warning {
-    background: rgba(249, 115, 22, 0.8);
-    color: white;
+    background: hsl(var(--warning) / 0.8);
+    color: hsl(var(--foreground));
     animation: pulse-subtle 2s ease-in-out infinite;
 }
 
@@ -359,11 +359,11 @@ const imageUrl = computed(() => {
     align-items: center;
     gap: 4px;
     padding: 4px 8px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     font-size: 10px;
     font-weight: 600;
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: var(--border-width) solid hsl(var(--foreground) / 0.1);
 }
 
 .type-mod {
@@ -372,13 +372,13 @@ const imageUrl = computed(() => {
 }
 
 .type-resource {
-    background: rgba(59, 130, 246, 0.8);
-    color: white;
+    background: hsl(var(--info) / 0.8);
+    color: hsl(var(--foreground));
 }
 
 .type-shader {
-    background: rgba(236, 72, 153, 0.8);
-    color: white;
+    background: hsl(var(--destructive) / 0.6);
+    color: hsl(var(--foreground));
 }
 
 /* Rest - Info */
@@ -416,7 +416,7 @@ const imageUrl = computed(() => {
 
 .rest-loader {
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: calc(var(--radius) - 4px);
     font-size: 9px;
     font-weight: 600;
     text-transform: uppercase;
@@ -424,23 +424,23 @@ const imageUrl = computed(() => {
 }
 
 .loader-forge {
-    background: rgba(249, 115, 22, 0.15);
-    color: rgb(251, 146, 60);
+    background: hsl(var(--warning) / 0.15);
+    color: hsl(var(--warning));
 }
 
 .loader-fabric {
-    background: rgba(245, 158, 11, 0.15);
-    color: rgb(252, 211, 77);
+    background: hsl(var(--warning) / 0.12);
+    color: hsl(var(--warning));
 }
 
 .loader-neoforge {
-    background: rgba(239, 68, 68, 0.15);
-    color: rgb(248, 113, 113);
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
 }
 
 .loader-quilt {
-    background: rgba(168, 85, 247, 0.15);
-    color: rgb(192, 132, 252);
+    background: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
 }
 
 .loader-default {
@@ -464,12 +464,12 @@ const imageUrl = computed(() => {
     gap: 4px;
     margin-top: 8px;
     padding: 4px 8px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     font-size: 10px;
     font-weight: 500;
     background: hsl(var(--muted) / 0.5);
     color: hsl(var(--muted-foreground));
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: var(--border-width) solid hsl(var(--border) / 0.5);
     transition: all 0.2s ease;
 }
 
@@ -500,14 +500,14 @@ const imageUrl = computed(() => {
     right: 8px;
     width: 20px;
     height: 20px;
-    border-radius: 5px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    background: rgba(0, 0, 0, 0.3);
+    border-radius: calc(var(--radius) - 3px);
+    border: 2px solid hsl(var(--foreground) / 0.3);
+    background: hsl(var(--background) / 0.3);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: hsl(var(--foreground));
     opacity: 0;
     transform: scale(0.8);
     transition: all 0.2s ease;
@@ -531,9 +531,9 @@ const imageUrl = computed(() => {
     right: 12px;
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: hsl(var(--muted) / 0.8);
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: var(--border-width) solid hsl(var(--border) / 0.5);
     color: hsl(var(--muted-foreground));
     display: flex;
     align-items: center;
@@ -555,9 +555,9 @@ const imageUrl = computed(() => {
 }
 
 .rest-fav.is-active {
-    background: rgba(244, 63, 94, 0.15);
-    border-color: rgba(244, 63, 94, 0.3);
-    color: rgb(251, 113, 133);
+    background: hsl(var(--destructive) / 0.15);
+    border-color: hsl(var(--destructive) / 0.3);
+    color: hsl(var(--destructive));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -566,15 +566,15 @@ const imageUrl = computed(() => {
 .card-hover {
     position: absolute;
     inset: 0;
-    border-radius: 14px;
+    border-radius: calc(var(--radius) + 6px);
     overflow: hidden;
     opacity: 0;
     transform: scale(1.02);
     pointer-events: none;
     transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow:
-        0 20px 40px -10px rgba(0, 0, 0, 0.5),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        0 20px 40px -10px hsl(var(--background) / 0.5),
+        inset 0 1px 0 hsl(var(--foreground) / 0.1);
 }
 
 .mod-card:hover .card-hover {
@@ -610,9 +610,9 @@ const imageUrl = computed(() => {
     position: absolute;
     inset: 0;
     background: linear-gradient(to top,
-            rgba(0, 0, 0, 0.95) 0%,
-            rgba(0, 0, 0, 0.5) 50%,
-            rgba(0, 0, 0, 0.3) 100%);
+            hsl(var(--background) / 0.95) 0%,
+            hsl(var(--background) / 0.5) 50%,
+            hsl(var(--background) / 0.3) 100%);
 }
 
 /* Hover - Favorite - ENTERS FROM RIGHT */
@@ -622,11 +622,11 @@ const imageUrl = computed(() => {
     right: 12px;
     width: 32px;
     height: 32px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius);
+    background: hsl(var(--foreground) / 0.1);
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.7);
+    border: var(--border-width) solid hsl(var(--foreground) / 0.15);
+    color: hsl(var(--foreground) / 0.7);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -645,14 +645,14 @@ const imageUrl = computed(() => {
 }
 
 .hover-fav:hover {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
+    background: hsl(var(--foreground) / 0.2);
+    color: hsl(var(--foreground));
 }
 
 .hover-fav.is-active {
-    background: rgba(244, 63, 94, 0.25);
-    border-color: rgba(244, 63, 94, 0.4);
-    color: rgb(251, 113, 133);
+    background: hsl(var(--destructive) / 0.25);
+    border-color: hsl(var(--destructive) / 0.4);
+    color: hsl(var(--destructive));
 }
 
 /* Hover - Selection - ENTERS FROM TOP-RIGHT */
@@ -662,14 +662,14 @@ const imageUrl = computed(() => {
     right: 10px;
     width: 24px;
     height: 24px;
-    border-radius: 6px;
-    border: 2px solid rgba(255, 255, 255, 0.35);
-    background: rgba(255, 255, 255, 0.1);
+    border-radius: calc(var(--radius) - 2px);
+    border: 2px solid hsl(var(--foreground) / 0.35);
+    background: hsl(var(--foreground) / 0.1);
     backdrop-filter: blur(12px);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: hsl(var(--foreground));
     cursor: pointer;
     opacity: 0;
     transform: translate(12px, -12px) scale(0.8);
@@ -686,8 +686,8 @@ const imageUrl = computed(() => {
 }
 
 .hover-select:hover {
-    border-color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.15);
+    border-color: hsl(var(--foreground) / 0.5);
+    background: hsl(var(--foreground) / 0.15);
 }
 
 .hover-select.is-checked {
@@ -704,9 +704,9 @@ const imageUrl = computed(() => {
     align-items: center;
     gap: 4px;
     padding: 5px 8px;
-    border-radius: 8px;
-    background: rgba(249, 115, 22, 0.9);
-    color: white;
+    border-radius: var(--radius);
+    background: hsl(var(--warning) / 0.9);
+    color: hsl(var(--foreground));
     font-size: 10px;
     font-weight: 600;
     opacity: 0;
@@ -732,14 +732,14 @@ const imageUrl = computed(() => {
 .hover-title {
     font-size: 15px;
     font-weight: 700;
-    color: white;
+    color: hsl(var(--foreground));
     line-height: 1.2;
     margin-bottom: 2px;
     display: -webkit-box;
     -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 2px 6px hsl(var(--background) / 0.3);
     opacity: 0;
     transform: translateX(-20px);
     transition:
@@ -754,7 +754,7 @@ const imageUrl = computed(() => {
 
 .hover-author {
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.5);
+    color: hsl(var(--foreground) / 0.5);
     margin-bottom: 6px;
     opacity: 0;
     transform: translateX(-15px);
@@ -786,11 +786,11 @@ const imageUrl = computed(() => {
 
 .hover-tag {
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: calc(var(--radius) - 4px);
     font-size: 9px;
     font-weight: 600;
-    background: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.8);
+    background: hsl(var(--foreground) / 0.15);
+    color: hsl(var(--foreground) / 0.8);
     text-transform: uppercase;
     letter-spacing: 0.3px;
 }
@@ -806,10 +806,10 @@ const imageUrl = computed(() => {
     align-items: center;
     gap: 4px;
     padding: 0 4px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.08);
+    border-radius: calc(var(--radius) + 2px);
+    background: hsl(var(--foreground) / 0.08);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: var(--border-width) solid hsl(var(--foreground) / 0.12);
     opacity: 0;
     transform: translateY(20px);
     transition:
@@ -825,37 +825,37 @@ const imageUrl = computed(() => {
 .dock-primary {
     flex: 1;
     height: 30px;
-    border-radius: 7px;
+    border-radius: calc(var(--radius) - 1px);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     font-size: 11px;
     font-weight: 600;
-    background: white;
-    color: black;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
     transition: all 0.2s ease;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 6px hsl(var(--background) / 0.2);
 }
 
 .dock-primary:hover {
     transform: scale(1.02);
-    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px hsl(var(--foreground) / 0.2);
 }
 
 .dock-divider {
     width: 1px;
     height: 20px;
-    background: rgba(255, 255, 255, 0.15);
+    background: hsl(var(--foreground) / 0.15);
     margin: 0 2px;
 }
 
 .dock-btn {
     width: 30px;
     height: 30px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     background: transparent;
-    color: rgba(255, 255, 255, 0.6);
+    color: hsl(var(--foreground) / 0.6);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -863,8 +863,8 @@ const imageUrl = computed(() => {
 }
 
 .dock-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: hsl(var(--foreground) / 0.1);
+    color: hsl(var(--foreground));
 }
 
 /* Dock - More menu */
@@ -880,11 +880,11 @@ const imageUrl = computed(() => {
     margin-bottom: 6px;
     width: 160px;
     padding: 4px;
-    border-radius: 10px;
+    border-radius: calc(var(--radius) + 2px);
     background: hsl(var(--popover) / 0.95);
     backdrop-filter: blur(20px);
-    border: 1px solid hsl(var(--border));
-    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+    border: var(--border-width) solid hsl(var(--border));
+    box-shadow: 0 15px 30px hsl(var(--background) / 0.4);
 }
 
 .menu-item {
@@ -893,7 +893,7 @@ const imageUrl = computed(() => {
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     font-size: 12px;
     color: hsl(var(--foreground) / 0.8);
     transition: all 0.15s ease;
@@ -922,7 +922,7 @@ const imageUrl = computed(() => {
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: hsl(var(--primary) / 0.9);
     color: hsl(var(--primary-foreground));
     font-size: 10px;
@@ -939,21 +939,21 @@ const imageUrl = computed(() => {
 /* Hover - Group expand button */
 .hover-group-btn {
     position: absolute;
-    bottom: 60px;
+    top: 12px;
     left: 12px;
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    border-radius: 8px;
-    background: hsl(var(--muted) / 0.95);
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    background: hsl(var(--background) / 0.85);
     backdrop-filter: blur(12px);
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: var(--border-width) solid hsl(var(--border) / 0.5);
     color: hsl(var(--foreground));
     font-size: 11px;
     font-weight: 600;
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(-10px);
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s;
     z-index: 10;
 }
@@ -967,6 +967,7 @@ const imageUrl = computed(() => {
     background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
     border-color: hsl(var(--primary));
+    transform: scale(1.02);
 }
 
 .hover-group-btn.is-expanded {
@@ -989,7 +990,7 @@ const imageUrl = computed(() => {
 .hover-glow-border {
     position: absolute;
     inset: 0;
-    border-radius: 14px;
+    border-radius: calc(var(--radius) + 6px);
     pointer-events: none;
     border: 1.4px solid transparent;
     opacity: 0;

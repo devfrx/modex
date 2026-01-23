@@ -4,6 +4,7 @@ import { useTheme, stylePresets } from "@/composables/useTheme";
 import { useToast } from "@/composables/useToast";
 import { useDialog } from "@/composables/useDialog";
 import { useSidebar } from "@/composables/useSidebar";
+import { useGameProfile } from "@/composables/useGameProfile";
 import { createLogger } from "@/utils/logger";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import Button from "@/components/ui/Button.vue";
@@ -13,6 +14,9 @@ import UpdateManager from "@/components/ui/UpdateManager.vue";
 import Icon from "@/components/ui/Icon.vue";
 
 const log = createLogger("SettingsView");
+
+// Game profile for syncing game selection
+const { setActiveGame } = useGameProfile();
 
 // Sidebar settings
 const {
@@ -27,6 +31,12 @@ const {
   defaultItems,
 } = useSidebar();
 
+// Handle sidebar game change - also syncs game profile
+async function handleSidebarGameChange(gameType: "minecraft" | "hytale") {
+  await setActiveGame(gameType);
+  setSidebarGame(gameType);
+}
+
 // Icon mapping for sidebar items
 const sidebarIconMap: Record<string, string> = {
   Home: "Home",
@@ -36,6 +46,8 @@ const sidebarIconMap: Record<string, string> = {
   BarChart3: "BarChart3",
   LayoutGrid: "LayoutGrid",
   BookOpen: "BookOpen",
+  Globe: "Globe",
+  Compass: "Compass",
 };
 
 // App version from package.json
@@ -1064,13 +1076,13 @@ onMounted(() => {
 
             <!-- Game switcher for sidebar items -->
             <div class="flex gap-2 p-1 bg-muted/50 rounded-lg w-fit">
-              <button @click="setSidebarGame('minecraft')"
+              <button @click="handleSidebarGameChange('minecraft')"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors" :class="sidebarActiveGame === 'minecraft'
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'">
                 Minecraft
               </button>
-              <button @click="setSidebarGame('hytale')"
+              <button @click="handleSidebarGameChange('hytale')"
                 class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors" :class="sidebarActiveGame === 'hytale'
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'">

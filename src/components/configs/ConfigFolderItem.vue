@@ -199,30 +199,30 @@ function formatSize(bytes: number): string {
 }
 
 .file-action-delete:hover {
-    color: rgb(248 113 113);
-    background-color: rgb(239 68 68 / 0.1);
+    color: hsl(var(--destructive));
+    background-color: hsl(var(--destructive) / 0.1);
 }
 
 .file-action-structured:hover {
-    color: rgb(168 85 247);
-    background-color: rgb(168 85 247 / 0.1);
+    color: hsl(var(--primary));
+    background-color: hsl(var(--primary) / 0.1);
 }
 
 /* File Type Colors */
 .file-json {
-    color: rgb(250 204 21);
+    color: hsl(var(--warning));
 }
 
 .file-toml {
-    color: rgb(96 165 250);
+    color: hsl(var(--info));
 }
 
 .file-yaml {
-    color: rgb(74 222 128);
+    color: hsl(var(--success));
 }
 
 .file-cfg {
-    color: rgb(192 132 252);
+    color: hsl(var(--primary));
 }
 
 .file-default {

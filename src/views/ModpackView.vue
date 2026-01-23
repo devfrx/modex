@@ -12,6 +12,8 @@ import CreateModpackDialog from "@/components/modpacks/CreateModpackDialog.vue";
 import ShareDialog from "@/components/modpacks/ShareDialog.vue";
 import ConvertModpackDialog from "@/components/modpacks/ConvertModpackDialog.vue";
 import SyncModpackDialog from "@/components/modpacks/SyncModpackDialog.vue";
+import ExportProfileDialog from "@/components/modpacks/ExportProfileDialog.vue";
+import type { ExportOptions } from "@/components/modpacks/ExportProfileDialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
@@ -96,6 +98,10 @@ const shareModpackName = ref<string>("");
 // Convert State
 const showConvertDialog = ref(false);
 const convertModpack = ref<Modpack | null>(null);
+
+// Export Profile State
+const showExportDialog = ref(false);
+const exportModpackData = ref<Modpack | null>(null);
 
 // Import State
 const showProgress = ref(false);
@@ -492,7 +498,45 @@ async function createModpack(data: {
   }
 }
 
-// Export Modpack as CurseForge ZIP
+// Open Export Profile Dialog
+function openExportDialog(modpackId: string) {
+  const modpack = modpacks.value.find((p) => p.id === modpackId);
+  if (!modpack) return;
+  exportModpackData.value = modpack;
+  showExportDialog.value = true;
+}
+
+// Export Modpack as CurseForge ZIP with options
+async function handleExportWithOptions(options: ExportOptions) {
+  if (!exportModpackData.value) return;
+
+  showExportDialog.value = false;
+  showProgress.value = true;
+  progressTitle.value = "Exporting Modpack";
+  progressMessage.value = "Creating CurseForge manifest...";
+
+  try {
+    const result = await window.api.export.curseforge(exportModpackData.value.id, {
+      profileName: options.profileName,
+      version: options.version,
+      selectedFolders: options.selectedFolders,
+      excludedPaths: options.excludedPaths,
+      includeRamRecommendation: options.includeRamRecommendation,
+      ramRecommendation: options.ramRecommendation,
+      serverModsOnly: options.serverModsOnly,
+    });
+    if (result) {
+      toast.success("Export Complete", `Exported to: ${result.path}`);
+    }
+  } catch (err) {
+    toast.error("Export Failed", (err as Error).message);
+  } finally {
+    showProgress.value = false;
+    exportModpackData.value = null;
+  }
+}
+
+// Legacy export function (used by bulk export)
 async function exportModpack(modpackId: string) {
   showProgress.value = true;
   progressTitle.value = "Exporting Modpack";
@@ -827,7 +871,13 @@ async function handleDrop(event: DragEvent) {
 function loadFavoriteModpacks() {
   const stored = localStorage.getItem("modex:favorites:modpacks");
   if (stored) {
-    favoriteModpacks.value = new Set(JSON.parse(stored));
+    try {
+      favoriteModpacks.value = new Set(JSON.parse(stored));
+    } catch (e) {
+      log.error("Failed to parse favorites from localStorage:", e);
+      favoriteModpacks.value = new Set();
+      localStorage.removeItem("modex:favorites:modpacks");
+    }
   }
 }
 
@@ -1023,10 +1073,10 @@ watch(
       await importCurseForgeModpack();
       router.replace({ query: { ...route.query, action: undefined } });
     } else if (action === 'export') {
-      // Export requires an id
+      // Export requires an id - open export dialog
       const id = route.query.id as string;
       if (id) {
-        await exportModpack(id);
+        openExportDialog(id);
       }
       router.replace({ query: { ...route.query, action: undefined } });
     }
@@ -1406,7 +1456,7 @@ onUnmounted(() => {
               :favorite="favoriteModpacks.has(pack.id)" :is-running="isModpackRunning(pack.id ?? '')"
               @delete="confirmDelete" @edit="openEditorWithAnimation" @toggle-select="toggleSelection"
               @clone="cloneModpack" @open-folder="openInExplorer" @toggle-favorite="toggleFavoriteModpack"
-              @share="openShareExport" @convert="openConvertDialog" @play="openPlayTab" />
+              @share="openShareExport" @convert="openConvertDialog" @play="openPlayTab" @export="openExportDialog" />
           </div>
         </div>
 
@@ -1434,7 +1484,8 @@ onUnmounted(() => {
             <ModpackListItem :modpack="pack" :selected="selectedModpackIds.has(pack.id)"
               :favorite="favoriteModpacks.has(pack.id)" @delete="confirmDelete" @edit="openEditor"
               @toggle-select="toggleSelection" @clone="cloneModpack" @open-folder="openInExplorer"
-              @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog" />
+              @toggle-favorite="toggleFavoriteModpack" @share="openShareExport" @convert="openConvertDialog"
+              @export="openExportDialog" />
           </div>
         </div>
 
@@ -1522,6 +1573,10 @@ onUnmounted(() => {
       @confirm="deleteSelectedModpacks" @cancel="showBulkDeleteDialog = false" @close="showBulkDeleteDialog = false" />
 
     <ProgressDialog :open="showProgress" :title="progressTitle" :message="progressMessage" />
+
+    <!-- Export Profile Dialog -->
+    <ExportProfileDialog :open="showExportDialog" :modpack="exportModpackData" @close="showExportDialog = false"
+      @export="handleExportWithOptions" />
 
     <!-- Share Dialog -->
     <ShareDialog :open="showShareDialog" :modpack-id="shareModpackId ?? undefined" :modpack-name="shareModpackName"

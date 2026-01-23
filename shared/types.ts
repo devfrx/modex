@@ -17,6 +17,15 @@
 export type ModContentType = "mod" | "resourcepack" | "shader";
 
 /**
+ * Mod environment/side compatibility type.
+ * - client: Client-side only (e.g., minimap mods, shaders)
+ * - server: Server-side only (e.g., server utilities)
+ * - both: Required on both client and server
+ * - unknown: Not specified by the mod author
+ */
+export type ModEnvironment = "client" | "server" | "both" | "unknown";
+
+/**
  * CurseForge API content type (plural form)
  * Used when communicating with CurseForge API
  */
@@ -226,6 +235,24 @@ export interface Mod {
 
   /** Wiki URL */
   wiki_url?: string;
+
+  /**
+   * Mod environment/side compatibility.
+   * - client: Client-side only (won't affect server)
+   * - server: Server-side only (required on server, optional on client)  
+   * - both: Required on both client and server
+   * - unknown: Not specified by the mod author
+   */
+  environment?: ModEnvironment;
+
+  /** 
+   * Whether this file is a server pack (CurseForge metadata).
+   * Used to identify server-side only mods for export filtering.
+   * - true: Server pack/server-side only
+   * - false: Client-side (or both)
+   * - undefined/null: Unknown/not specified
+   */
+  isServerPack?: boolean | null;
 }
 
 // ==================== MODPACK ====================
@@ -340,6 +367,9 @@ export interface Modpack {
 
   /** Path to saved overrides */
   overridesPath?: string;
+
+  /** Recommended RAM in MB (from CurseForge manifest) */
+  recommended_ram?: number;
 }
 
 // ==================== MODPACK CREATION ====================
@@ -351,6 +381,8 @@ export interface CreateModpackData {
   loader?: string;
   loader_version?: string;
   description?: string;
+  /** Recommended RAM in MB */
+  recommended_ram?: number;
 }
 
 // ==================== VERSION CONTROL ====================
@@ -617,7 +649,7 @@ export interface RemoteModChange {
 }
 
 export interface RemoteUpdateResult {
-  hasUpdates: boolean;
+  hasUpdate: boolean;
   remoteManifest?: ModexManifest;
   changes: {
     modsAdded: ModexManifestMod[];

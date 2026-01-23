@@ -152,6 +152,22 @@ export interface Mod {
     source_url?: string;
     /** Wiki URL */
     wiki_url?: string;
+    /**
+     * Mod environment/side compatibility.
+     * - client: Client-side only (won't affect server)
+     * - server: Server-side only (required on server, optional on client)  
+     * - both: Required on both client and server
+     * - unknown: Not specified by the mod author
+     */
+    environment?: "client" | "server" | "both" | "unknown";
+    /** 
+     * Whether this file is a server pack (CurseForge metadata).
+     * Used to identify server-side only mods for export filtering.
+     * - true: Server pack/server-side only
+     * - false: Client-side (or both)
+     * - undefined/null: Unknown/not specified
+     */
+    isServerPack?: boolean | null;
 }
 /** Remote source configuration for modpack collaboration/updates */
 export interface ModpackRemoteSource {
@@ -467,7 +483,7 @@ export interface RemoteModChange {
     oldNote?: string;
 }
 export interface RemoteUpdateResult {
-    hasUpdates: boolean;
+    hasUpdate: boolean;
     remoteManifest?: ModexManifest;
     changes: {
         modsAdded: ModexManifestMod[];

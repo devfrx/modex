@@ -1288,6 +1288,9 @@ export function registerModpacksHandlers(deps: ModpacksIpcDeps): void {
                 dependencies: formattedMod.dependencies,
                 categories: formattedMod.categories,
                 file_size: formattedMod.file_size,
+                // Environment from CurseForge gameVersions
+                environment: formattedMod.environment,
+                isServerPack: formattedMod.isServerPack ?? null,
               });
 
               newModIds.push(mod.id);

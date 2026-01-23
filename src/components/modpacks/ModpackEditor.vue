@@ -187,6 +187,7 @@ const {
   sortBy,
   sortDir,
   contentTypeCounts,
+  environmentCounts,
   filteredInstalledMods,
   toggleSort,
   clearFilters,
@@ -215,6 +216,7 @@ const {
   selectHalfEnabled,
   selectAllDisabled,
   selectHalfDisabled,
+  selectByEnvironment,
   clearSelection,
   isSelected,
 } = useModpackSelection({
@@ -453,7 +455,7 @@ function startLogConsoleResize(e: MouseEvent) {
 // More Menu State (for secondary tabs)
 const showMoreMenu = ref(false);
 const showImageMenu = ref(false);
-const moreMenuPosition = ref({ top: '0px', right: '0px' });
+const moreMenuPosition = ref({ top: '0px', left: '0px' });
 const moreButtonRef = ref<HTMLButtonElement | null>(null);
 const secondaryTabs = ['discover', 'health', 'versions', 'remote'] as const;
 const isSecondaryTab = computed(() => secondaryTabs.includes(activeTab.value as any));
@@ -464,7 +466,7 @@ function toggleMoreMenu(event: MouseEvent) {
     const rect = button.getBoundingClientRect();
     moreMenuPosition.value = {
       top: `${rect.bottom + 8}px`,
-      right: `${window.innerWidth - rect.right}px`
+      left: `${rect.left}px`
     };
   }
   showMoreMenu.value = !showMoreMenu.value;
@@ -472,6 +474,9 @@ function toggleMoreMenu(event: MouseEvent) {
 
 // Mods Filter overflow menu
 const showModsFilterMenu = ref(false);
+
+// Quick select menu
+const showSelectMenu = ref(false);
 
 // Linked instance (for config sync in version control)
 const linkedInstanceId = ref<string | null>(null);
@@ -1041,8 +1046,16 @@ const enabledModCount = computed(() => {
 // refreshSyncStatus is now provided by useModpackInstance composable
 
 // Refresh data and notify parent to update modpack list (e.g., for unsaved changes icon)
+// Also refresh sync status in case mods were reverted/rolled back
+// If auto-sync is enabled and instance exists, automatically sync after revert/rollback
 async function refreshAndNotify() {
   await loadData();
+  // Refresh sync status after revert/rollback so instance sync panel shows updated differences
+  await refreshSyncStatus();
+  // Auto-sync to instance if enabled (handles revert/rollback scenarios)
+  if (instance.value && syncSettings.value.autoSyncEnabled) {
+    await handleSyncInstance();
+  }
   emit("update");
 }
 
@@ -1304,6 +1317,12 @@ async function executeBulkRemove(idsToRemove: string[]) {
     log.error("Failed to remove mods:", err);
     toast.error("Remove Failed", (err as Error).message);
   }
+}
+
+// Handle row click - select on row, open details on name
+function handleRowClick(event: MouseEvent, mod: { id: string }) {
+  if (isLinked.value) return;
+  toggleSelect(mod.id);
 }
 
 // Selection functions (toggleSelect, selectAll, selectAllEnabled, selectHalfEnabled,
@@ -2549,81 +2568,90 @@ watch(
             " :is-checking="isCheckingUpdate" @update="showReviewDialog = true" />
         </div>
 
-        <!-- Tab Navigation -->
+        <!-- Tab Navigation - Modern Segmented Control -->
         <div class="relative px-4 sm:px-6 pb-4">
           <div class="flex justify-center items-center gap-3">
-            <div class="inline-flex items-center gap-1 p-1 rounded-2xl bg-muted/50 border border-border/50">
-              <!-- Primary Tabs -->
-              <button class="tab-pill" :class="activeTab === 'mods' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'mods'">
-                <Icon name="Layers" class="w-3.5 h-3.5" />
-                <span>Resources</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'configs' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'configs'">
-                <Icon name="FileCode" class="w-3.5 h-3.5" />
-                <span>Configs</span>
-              </button>
-              <button class="tab-pill" :class="activeTab === 'settings' ? 'tab-pill-active' : 'tab-pill-inactive'"
-                @click="activeTab = 'settings'">
-                <Icon name="Settings" class="w-3.5 h-3.5" />
-                <span>Details</span>
-              </button>
-
-              <!-- More dropdown for secondary tabs -->
-              <div class="relative">
-                <button class="tab-pill" :class="isSecondaryTab ? 'tab-pill-active' : 'tab-pill-inactive'"
-                  @click="toggleMoreMenu($event)">
-                  <Icon name="MoreHorizontal" class="w-3.5 h-3.5" />
-                  <span class="hidden sm:inline">More</span>
-                  <span v-if="versionUnsavedCount > 0 && !isSecondaryTab"
-                    class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                  <Icon name="ChevronDown" class="w-3 h-3 transition-transform"
-                    :class="showMoreMenu ? 'rotate-180' : ''" />
+            <!-- Main Tab Group -->
+            <div class="tabs-container">
+              <div class="tabs-track">
+                <!-- Tab Items -->
+                <button data-tab="mods" class="tab-item" :class="{ 'tab-item--active': activeTab === 'mods' }"
+                  @click="activeTab = 'mods'">
+                  <Icon name="Layers" class="tab-item__icon" />
+                  <span class="tab-item__label">Resources</span>
+                  <span v-if="currentMods.length" class="tab-item__badge">{{ currentMods.length }}</span>
                 </button>
+
+                <button data-tab="configs" class="tab-item" :class="{ 'tab-item--active': activeTab === 'configs' }"
+                  @click="activeTab = 'configs'">
+                  <Icon name="FileCode" class="tab-item__icon" />
+                  <span class="tab-item__label">Configs</span>
+                </button>
+
+                <button data-tab="settings" class="tab-item" :class="{ 'tab-item--active': activeTab === 'settings' }"
+                  @click="activeTab = 'settings'">
+                  <Icon name="Settings" class="tab-item__icon" />
+                  <span class="tab-item__label">Details</span>
+                </button>
+
+                <!-- More dropdown trigger -->
+                <div class="relative">
+                  <button data-tab="more" class="tab-item" :class="{ 'tab-item--active': isSecondaryTab }"
+                    @click="toggleMoreMenu($event)">
+                    <Icon name="Sparkles" class="tab-item__icon" />
+                    <span class="tab-item__label hidden sm:inline">More</span>
+                    <span v-if="versionUnsavedCount > 0 && !isSecondaryTab" class="tab-item__dot"></span>
+                    <Icon name="ChevronDown" class="w-3 h-3 ml-0.5 transition-transform duration-200"
+                      :class="showMoreMenu ? 'rotate-180' : ''" />
+                  </button>
+                </div>
               </div>
             </div>
 
-            <!-- Cloud Sync Button - Separate from main tabs -->
-            <button class="tab-pill" :class="activeTab === 'remote' ? 'tab-pill-active' : 'tab-pill-inactive'"
+            <!-- Cloud Sync - Separate floating action -->
+            <button class="tab-float" :class="{ 'tab-float--active': activeTab === 'remote' }"
               @click="activeTab = 'remote'" title="Sync with cloud & share your modpack">
-              <Icon name="CloudUpload" class="w-3.5 h-3.5" />
-              <span class="hidden sm:inline">Share</span>
-              <span v-if="gistExistsRemotely || editForm.remote_url" class="w-2 h-2 rounded-full bg-primary"></span>
+              <Icon name="CloudUpload" class="w-4 h-4" />
+              <span class="hidden sm:inline text-sm font-medium">Share</span>
+              <span v-if="gistExistsRemotely || editForm.remote_url" class="tab-float__indicator"></span>
             </button>
           </div>
 
-          <!-- Dropdown menu - Positioned outside the tab container for proper z-index -->
+          <!-- Dropdown menu for secondary tabs -->
           <Teleport to="body">
-            <Transition name="fade">
+            <Transition name="dropdown-fade">
               <div v-if="showMoreMenu" class="fixed inset-0 z-[200]" @click="showMoreMenu = false">
-                <div
-                  class="absolute w-48 bg-popover/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl py-1.5 overflow-hidden"
-                  :style="moreMenuPosition" @click.stop>
-                  <button
-                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
-                    :class="activeTab === 'discover' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                <div class="more-menu" :style="moreMenuPosition" @click.stop>
+                  <button class="more-menu__item" :class="{ 'more-menu__item--active': activeTab === 'discover' }"
                     @click="activeTab = 'discover'; showMoreMenu = false">
-                    <Icon name="Sparkles" class="w-4 h-4" />
-                    Add Mods
+                    <div class="more-menu__icon-wrap">
+                      <Icon name="Sparkles" class="w-4 h-4" />
+                    </div>
+                    <div class="more-menu__content">
+                      <span class="more-menu__title">Add Mods</span>
+                      <span class="more-menu__desc">Browse & install new mods</span>
+                    </div>
                   </button>
-                  <button
-                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
-                    :class="activeTab === 'health' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                  <button class="more-menu__item" :class="{ 'more-menu__item--active': activeTab === 'health' }"
                     @click="activeTab = 'health'; showMoreMenu = false">
-                    <Icon name="Stethoscope" class="w-4 h-4" />
-                    Diagnostics
+                    <div class="more-menu__icon-wrap">
+                      <Icon name="Stethoscope" class="w-4 h-4" />
+                    </div>
+                    <div class="more-menu__content">
+                      <span class="more-menu__title">Diagnostics</span>
+                      <span class="more-menu__desc">Check compatibility issues</span>
+                    </div>
                   </button>
-                  <button
-                    class="w-full px-3 py-2.5 text-left text-sm flex items-center gap-2.5 hover:bg-muted/60 transition-colors"
-                    :class="activeTab === 'versions' ? 'bg-primary/10 text-primary' : 'text-foreground'"
+                  <button class="more-menu__item" :class="{ 'more-menu__item--active': activeTab === 'versions' }"
                     @click="activeTab = 'versions'; showMoreMenu = false">
-                    <Icon name="GitBranch" class="w-4 h-4" />
-                    History
-                    <span v-if="versionUnsavedCount > 0"
-                      class="ml-auto px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                      {{ versionUnsavedCount }}
-                    </span>
+                    <div class="more-menu__icon-wrap">
+                      <Icon name="GitBranch" class="w-4 h-4" />
+                    </div>
+                    <div class="more-menu__content">
+                      <span class="more-menu__title">History</span>
+                      <span class="more-menu__desc">Version snapshots</span>
+                    </div>
+                    <span v-if="versionUnsavedCount > 0" class="more-menu__badge">{{ versionUnsavedCount }}</span>
                   </button>
                 </div>
               </div>
@@ -3084,93 +3112,71 @@ watch(
 
         <!-- Mods Tab -->
         <template v-else-if="activeTab === 'mods'">
-          <!-- Header Bar (ModpackView style) -->
-          <div class="shrink-0 px-4 py-3 border-b border-border/30 bg-muted/10">
-            <div class="flex items-center justify-between gap-4">
-              <!-- Left: Content Type Tabs -->
-              <div class="flex items-center gap-1">
-                <button
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1.5"
-                  :class="contentTypeTab === 'mods'
-                    ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                    : 'hover:bg-muted/50 text-muted-foreground'
-                    " @click="contentTypeTab = 'mods'">
-                  <Icon name="Layers" class="w-3.5 h-3.5" />
-                  Mods
-                  <span class="text-[10px] px-1 py-0.5 rounded bg-primary/10">{{
-                    contentTypeCounts.mods
-                  }}</span>
-                </button>
-                <button
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1.5"
-                  :class="contentTypeTab === 'resourcepacks'
-                    ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
-                    : 'hover:bg-muted/50 text-muted-foreground'
-                    " @click="contentTypeTab = 'resourcepacks'">
-                  <Icon name="Image" class="w-3.5 h-3.5" />
-                  Packs
-                  <span class="text-[10px] px-1 py-0.5 rounded bg-primary/10">{{
-                    contentTypeCounts.resourcepacks
-                  }}</span>
-                </button>
-                <button
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 flex items-center gap-1.5"
-                  :class="contentTypeTab === 'shaders'
-                    ? 'bg-pink-500/15 text-pink-400 ring-1 ring-pink-500/30'
-                    : 'hover:bg-muted/50 text-muted-foreground'
-                    " @click="contentTypeTab = 'shaders'">
-                  <Icon name="Sparkles" class="w-3.5 h-3.5" />
-                  Shaders
-                  <span class="text-[10px] px-1 py-0.5 rounded bg-primary/10">{{
-                    contentTypeCounts.shaders
-                  }}</span>
-                </button>
+          <!-- Modern Unified Toolbar -->
+          <div class="shrink-0 resource-toolbar">
+            <div class="resource-toolbar__inner">
+              <!-- Left Section: Content Type Selector -->
+              <div class="resource-toolbar__section">
+                <div class="content-type-selector">
+                  <button class="content-type-btn" :class="{ 'content-type-btn--active': contentTypeTab === 'mods' }"
+                    @click="contentTypeTab = 'mods'">
+                    <Icon name="Layers" class="content-type-btn__icon" />
+                    <span class="content-type-btn__label">Mods</span>
+                    <span class="content-type-btn__count"
+                      :class="{ 'content-type-btn__count--active': contentTypeTab === 'mods' }">{{
+                      contentTypeCounts.mods }}</span>
+                  </button>
+                  <button class="content-type-btn"
+                    :class="{ 'content-type-btn--active': contentTypeTab === 'resourcepacks' }"
+                    @click="contentTypeTab = 'resourcepacks'">
+                    <Icon name="Image" class="content-type-btn__icon" />
+                    <span class="content-type-btn__label">Packs</span>
+                    <span class="content-type-btn__count"
+                      :class="{ 'content-type-btn__count--active': contentTypeTab === 'resourcepacks' }">{{
+                      contentTypeCounts.resourcepacks }}</span>
+                  </button>
+                  <button class="content-type-btn" :class="{ 'content-type-btn--active': contentTypeTab === 'shaders' }"
+                    @click="contentTypeTab = 'shaders'">
+                    <Icon name="Sparkles" class="content-type-btn__icon" />
+                    <span class="content-type-btn__label">Shaders</span>
+                    <span class="content-type-btn__count"
+                      :class="{ 'content-type-btn__count--active': contentTypeTab === 'shaders' }">{{
+                      contentTypeCounts.shaders }}</span>
+                  </button>
+                </div>
               </div>
 
-              <!-- Right: Actions -->
-              <div class="flex items-center gap-2">
-                <!-- Quick Filters (simplified - show only actionable items) -->
-                <div class="flex items-center gap-1 p-1 bg-muted/30 rounded-lg">
-                  <button class="px-2.5 py-1 text-[10px] rounded-md transition-all" :class="modsFilter === 'all'
-                    ? 'bg-background text-foreground ring-1 ring-border/50'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'" @click="modsFilter = 'all'">
+              <!-- Center Section: Filter Pills -->
+              <div class="resource-toolbar__section resource-toolbar__section--center">
+                <div class="filter-pills">
+                  <button class="filter-pill" :class="{ 'filter-pill--active': modsFilter === 'all' }"
+                    @click="modsFilter = 'all'">
                     All
                   </button>
-                  <!-- Issues: incompatible + warnings combined visually -->
-                  <button v-if="incompatibleModCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'incompatible'
-                      ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/40'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
+                  <button v-if="incompatibleModCount > 0" class="filter-pill filter-pill--error"
+                    :class="{ 'filter-pill--active': modsFilter === 'incompatible' }"
                     @click="modsFilter = 'incompatible'" title="Incompatible mods">
-                    <Icon name="AlertCircle" class="w-3 h-3" />
+                    <Icon name="AlertCircle" class="filter-pill__icon" />
                     {{ incompatibleModCount }}
                   </button>
-                  <!-- Updates available (most actionable) -->
-                  <button v-if="updatesAvailableCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'updates'
-                      ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'updates'" title="Updates available">
-                    <Icon name="ArrowUpCircle" class="w-3 h-3" />
+                  <button v-if="updatesAvailableCount > 0" class="filter-pill filter-pill--primary"
+                    :class="{ 'filter-pill--active': modsFilter === 'updates' }" @click="modsFilter = 'updates'"
+                    title="Updates available">
+                    <Icon name="ArrowUpCircle" class="filter-pill__icon" />
                     {{ updatesAvailableCount }}
                   </button>
-                  <!-- Disabled mods -->
-                  <button v-if="disabledModCount > 0"
-                    class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5" :class="modsFilter === 'disabled'
-                      ? 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'"
-                    @click="modsFilter = 'disabled'" title="Disabled mods">
-                    <Icon name="ToggleLeft" class="w-3 h-3" />
+                  <button v-if="disabledModCount > 0" class="filter-pill filter-pill--warning"
+                    :class="{ 'filter-pill--active': modsFilter === 'disabled' }" @click="modsFilter = 'disabled'"
+                    title="Disabled mods">
+                    <Icon name="ToggleLeft" class="filter-pill__icon" />
                     {{ disabledModCount }}
                   </button>
-                  <!-- Overflow: Less common filters in dropdown -->
+                  <!-- More filters dropdown -->
                   <div
-                    v-if="warningModCount > 0 || lockedModCount > 0 || modsWithNotesCount > 0 || recentlyUpdatedCount > 0 || recentlyAddedCount > 0"
+                    v-if="warningModCount > 0 || lockedModCount > 0 || modsWithNotesCount > 0 || recentlyUpdatedCount > 0 || recentlyAddedCount > 0 || environmentCounts.client > 0 || environmentCounts.server > 0 || environmentCounts.both > 0 || environmentCounts.unknown > 0"
                     class="relative">
-                    <button
-                      class="px-2 py-1 text-[10px] rounded-md transition-all flex items-center gap-0.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                      @click="showModsFilterMenu = !showModsFilterMenu">
-                      <Icon name="MoreHorizontal" class="w-3 h-3" />
+                    <button class="filter-pill filter-pill--ghost" @click="showModsFilterMenu = !showModsFilterMenu">
+                      <Icon name="SlidersHorizontal" class="filter-pill__icon" />
                     </button>
                     <div v-if="showModsFilterMenu"
                       class="absolute top-full right-0 mt-1 w-36 bg-popover border border-border rounded-lg shadow-lg z-50 py-1 overflow-hidden">
@@ -3221,55 +3227,83 @@ watch(
                         <Icon name="CheckCheck" class="w-3 h-3" />
                         Dismiss All Badges
                       </button>
+                      <!-- Environment Filters -->
+                      <div
+                        v-if="environmentCounts.client > 0 || environmentCounts.server > 0 || environmentCounts.both > 0 || environmentCounts.unknown > 0"
+                        class="h-px bg-border my-1"></div>
+                      <div
+                        v-if="environmentCounts.client > 0 || environmentCounts.server > 0 || environmentCounts.both > 0 || environmentCounts.unknown > 0"
+                        class="px-3 py-1 text-[10px] text-muted-foreground uppercase tracking-wide">Environment</div>
+                      <button v-if="environmentCounts.client > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'env-client' ? 'bg-orange-500/10 text-orange-400' : 'text-foreground'"
+                        @click="modsFilter = 'env-client'; showModsFilterMenu = false">
+                        <Icon name="Monitor" class="w-3 h-3" />
+                        Client Only ({{ environmentCounts.client }})
+                      </button>
+                      <button v-if="environmentCounts.server > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'env-server' ? 'bg-emerald-500/10 text-emerald-400' : 'text-foreground'"
+                        @click="modsFilter = 'env-server'; showModsFilterMenu = false">
+                        <Icon name="Server" class="w-3 h-3" />
+                        Server Only ({{ environmentCounts.server }})
+                      </button>
+                      <button v-if="environmentCounts.both > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'env-both' ? 'bg-violet-500/10 text-violet-400' : 'text-foreground'"
+                        @click="modsFilter = 'env-both'; showModsFilterMenu = false">
+                        <Icon name="Layers" class="w-3 h-3" />
+                        Both Sides ({{ environmentCounts.both }})
+                      </button>
+                      <button v-if="environmentCounts.unknown > 0"
+                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                        :class="modsFilter === 'env-unknown' ? 'bg-gray-500/10 text-gray-400' : 'text-foreground'"
+                        @click="modsFilter = 'env-unknown'; showModsFilterMenu = false">
+                        <Icon name="HelpCircle" class="w-3 h-3" />
+                        Unknown ({{ environmentCounts.unknown }})
+                      </button>
                     </div>
                     <div v-if="showModsFilterMenu" class="fixed inset-0 z-40" @click="showModsFilterMenu = false"></div>
                   </div>
                 </div>
 
-                <!-- Check Updates Button - For all content types with CurseForge support -->
-                <button @click="checkAllUpdates" :disabled="isCheckingAllUpdates"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="isCheckingAllUpdates
-                    ? 'bg-primary/20 text-primary cursor-wait'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary'"
-                  :title="isCheckingAllUpdates ? 'Checking for updates...' : 'Check all resources for updates'">
-                  <Icon name="RefreshCw" class="w-3.5 h-3.5" :class="{ 'animate-spin': isCheckingAllUpdates }" />
-                  <span>{{ isCheckingAllUpdates ? 'Checking...' : 'Check Updates' }}</span>
+              </div>
+
+              <!-- Right Section: Quick Actions -->
+              <div class="resource-toolbar__section resource-toolbar__section--actions">
+                <!-- Bulk Actions -->
+                <div v-if="updatesAvailableCount > 0 || incompatibleModCount > 0" class="toolbar-action-group">
+                  <button v-if="updatesAvailableCount > 0 && !isLinked" class="toolbar-action toolbar-action--primary"
+                    @click="updateAllMods">
+                    <Icon name="ArrowUpCircle" class="toolbar-action__icon" />
+                    Update All
+                  </button>
+                  <button v-if="incompatibleModCount > 0 && !isLinked" class="toolbar-action toolbar-action--danger"
+                    @click="removeIncompatibleMods">
+                    <Icon name="Trash2" class="toolbar-action__icon" />
+                    Remove Broken
+                  </button>
+                </div>
+
+                <div class="toolbar-divider"></div>
+
+                <!-- Check Updates -->
+                <button @click="checkAllUpdates" :disabled="isCheckingAllUpdates" class="toolbar-btn"
+                  :class="{ 'toolbar-btn--active': isCheckingAllUpdates }"
+                  :title="isCheckingAllUpdates ? 'Checking...' : 'Check for updates'">
+                  <Icon name="RefreshCw" class="toolbar-btn__icon" :class="{ 'animate-spin': isCheckingAllUpdates }" />
                 </button>
 
                 <!-- Library Toggle -->
-                <button @click="isLibraryCollapsed = !isLibraryCollapsed"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-all" :class="!isLibraryCollapsed
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'">
-                  <Icon name="Package" class="w-3.5 h-3.5" />
-                  <span>Library</span>
+                <button @click="isLibraryCollapsed = !isLibraryCollapsed" class="toolbar-btn"
+                  :class="{ 'toolbar-btn--active': !isLibraryCollapsed }" title="Toggle Library">
+                  <Icon name="Package" class="toolbar-btn__icon" />
                 </button>
 
                 <!-- CurseForge Button -->
-                <button v-if="!isLinked"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-orange-500 hover:bg-orange-600 text-white transition-colors shadow-sm"
-                  @click="showCFSearch = true">
-                  <Icon name="Globe" class="w-3.5 h-3.5" />
-                  <span>CurseForge</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Action Buttons (non-selection actions) -->
-            <div v-if="updatesAvailableCount > 0 || incompatibleModCount > 0"
-              class="flex items-center justify-end mt-2 pt-2 border-t border-border/20">
-              <div class="flex items-center gap-2">
-                <button v-if="updatesAvailableCount > 0 && !isLinked"
-                  class="h-6 text-[10px] px-2.5 rounded flex items-center gap-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
-                  @click="updateAllMods">
-                  <Icon name="ArrowUpCircle" class="w-3 h-3" />
-                  Update All ({{ updatesAvailableCount }})
-                </button>
-                <button v-if="incompatibleModCount > 0 && !isLinked"
-                  class="h-6 text-[10px] px-2.5 rounded flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
-                  @click="removeIncompatibleMods">
-                  <Icon name="Trash2" class="w-3 h-3" />
-                  Remove Incompatible
+                <button v-if="!isLinked" class="toolbar-btn-cta" @click="showCFSearch = true">
+                  <Icon name="Globe" class="toolbar-btn__icon" />
+                  <span>Browse</span>
                 </button>
               </div>
             </div>
@@ -3277,502 +3311,408 @@ watch(
 
           <!-- Content Split View -->
           <div class="flex-1 flex overflow-hidden">
-            <!-- Left: Installed Mods -->
-            <div class="flex-1 border-r border-border/50 flex flex-col"
-              :class="isLibraryCollapsed ? '' : 'max-w-[60%]'">
-              <!-- Compact Header with Search -->
-              <div class="shrink-0 px-3 py-2 border-b border-border/20 bg-muted/10">
-                <div class="flex items-center justify-between gap-3">
-                  <!-- Left: Count & Status -->
-                  <div class="flex items-center gap-2 shrink-0">
-                    <span class="text-xs font-medium text-muted-foreground">
-                      {{ filteredInstalledMods.length }} installed
-                      <span v-if="disabledModCount > 0" class="text-amber-500">({{ disabledModCount }} disabled)</span>
-                    </span>
+            <!-- Left: Installed Resources -->
+            <div class="resource-list-container" :class="isLibraryCollapsed ? 'resource-list-container--full' : ''">
+
+              <!-- Secondary Toolbar: Search, Sort, Select -->
+              <div class="resource-subheader">
+                <div class="resource-subheader__left">
+                  <!-- Search -->
+                  <div class="resource-search">
+                    <Icon name="Search" class="resource-search__icon" />
+                    <input v-model="searchQueryInstalled" placeholder="Search..." class="resource-search__input" />
+                    <button v-if="searchQueryInstalled" @click="searchQueryInstalled = ''"
+                      class="resource-search__clear">
+                      <Icon name="X" class="w-3 h-3" />
+                    </button>
                   </div>
 
-                  <!-- Center: Search Bar -->
-                  <div class="flex-1 max-w-xs">
-                    <div class="relative group">
-                      <Icon name="Search"
-                        class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors" />
-                      <input v-model="searchQueryInstalled" placeholder="Search resources..."
-                        class="w-full h-8 pl-9 pr-8 text-sm rounded-lg bg-background/80 border border-border/50 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:text-muted-foreground/50" />
-                      <button v-if="searchQueryInstalled" @click="searchQueryInstalled = ''"
-                        class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                        <Icon name="X" class="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                  <!-- Count badge -->
+                  <div class="resource-count">
+                    <span class="resource-count__number">{{ filteredInstalledMods.length }}</span>
+                    <span class="resource-count__label">items</span>
+                  </div>
+                </div>
+
+                <div class="resource-subheader__right">
+                  <!-- Sort Control -->
+                  <div class="sort-control">
+                    <button class="sort-control__btn" :class="{ 'sort-control__btn--active': sortBy === 'name' }"
+                      @click="toggleSort('name')">
+                      <Icon name="ArrowDownAZ" class="sort-control__icon" />
+                    </button>
+                    <button class="sort-control__btn" :class="{ 'sort-control__btn--active': sortBy === 'date' }"
+                      @click="toggleSort('date')">
+                      <Icon name="Calendar" class="sort-control__icon" />
+                    </button>
+                    <button class="sort-control__btn" :class="{ 'sort-control__btn--active': sortBy === 'version' }"
+                      @click="toggleSort('version')">
+                      <Icon name="Tag" class="sort-control__icon" />
+                    </button>
+                    <button class="sort-control__dir" @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'">
+                      <Icon :name="sortDir === 'asc' ? 'ArrowUp' : 'ArrowDown'" class="sort-control__icon" />
+                    </button>
                   </div>
 
-                  <!-- Right: Sort & Select -->
-                  <div class="flex items-center gap-2 shrink-0">
-                    <!-- Sort buttons -->
-                    <div class="flex rounded-md border border-border/40 overflow-hidden bg-muted/20">
-                      <button class="h-6 text-[10px] px-2.5 transition-colors font-medium" :class="sortBy === 'name'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'hover:bg-muted/50 text-muted-foreground'
-                        " @click="toggleSort('name')">
-                        Name
+                  <!-- Selection Controls -->
+                  <div v-if="currentMods.length > 0 && !isLinked" class="select-controls">
+                    <button class="select-controls__btn" @click="selectAll" title="Select all visible">
+                      <Icon name="CheckSquare" class="select-controls__icon" />
+                    </button>
+                    <button class="select-controls__btn" @click="clearSelection" title="Clear selection">
+                      <Icon name="Square" class="select-controls__icon" />
+                    </button>
+
+                    <!-- Quick Select Dropdown -->
+                    <div class="select-dropdown">
+                      <button class="select-dropdown__trigger" @click="showSelectMenu = !showSelectMenu"
+                        title="Quick select options">
+                        <Icon name="ChevronDown" class="select-controls__icon" />
                       </button>
-                      <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
-                        :class="sortBy === 'date'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'hover:bg-muted/50 text-muted-foreground'
-                          " @click="toggleSort('date')">
-                        Date
-                      </button>
-                      <button class="h-6 text-[10px] px-2.5 border-l border-border/30 transition-colors font-medium"
-                        :class="sortBy === 'version'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'hover:bg-muted/50 text-muted-foreground'
-                          " @click="toggleSort('version')">
-                        Version
-                      </button>
-                    </div>
-                    <!-- Select Enabled / Disabled / Clear -->
-                    <div v-if="currentMods.length > 0 && !isLinked" class="flex items-center gap-1.5 text-[10px]">
-                      <span class="text-muted-foreground/70">Select:</span>
-                      <div
-                        class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
-                        <button class="text-primary hover:text-primary/80 transition-colors" @click="selectAllEnabled"
-                          title="Select all enabled mods (excludes disabled and locked)">All</button>
-                        <span class="text-primary/40">·</span>
-                        <button class="text-primary hover:text-primary/80 transition-colors" @click="selectHalfEnabled"
-                          title="Select half of enabled mods (excludes disabled and locked)">½</button>
+                      <div v-if="showSelectMenu" class="select-dropdown__menu">
+                        <button class="select-dropdown__item" @click="selectAllEnabled(); showSelectMenu = false">
+                          <Icon name="ToggleRight" class="select-dropdown__icon" />
+                          Select All Enabled ({{ enabledUnlockedCount }})
+                        </button>
+                        <button class="select-dropdown__item" @click="selectHalfEnabled(); showSelectMenu = false">
+                          <Icon name="ToggleRight" class="select-dropdown__icon" />
+                          Select Half Enabled ({{ Math.ceil(enabledUnlockedCount / 2) }})
+                        </button>
+                        <button class="select-dropdown__item" @click="selectAllDisabled(); showSelectMenu = false">
+                          <Icon name="ToggleLeft" class="select-dropdown__icon" />
+                          Select All Disabled ({{ disabledUnlockedCount }})
+                        </button>
+                        <button class="select-dropdown__item" @click="selectHalfDisabled(); showSelectMenu = false">
+                          <Icon name="ToggleLeft" class="select-dropdown__icon" />
+                          Select Half Disabled ({{ Math.ceil(disabledUnlockedCount / 2) }})
+                        </button>
+                        <div class="select-dropdown__divider"></div>
+                        <button v-if="environmentCounts.client > 0" class="select-dropdown__item"
+                          @click="selectByEnvironment('client'); showSelectMenu = false">
+                          <Icon name="Monitor" class="select-dropdown__icon" />
+                          Select Client-side ({{ environmentCounts.client }})
+                        </button>
+                        <button v-if="environmentCounts.server > 0" class="select-dropdown__item"
+                          @click="selectByEnvironment('server'); showSelectMenu = false">
+                          <Icon name="Server" class="select-dropdown__icon" />
+                          Select Server-side ({{ environmentCounts.server }})
+                        </button>
+                        <button v-if="environmentCounts.both > 0" class="select-dropdown__item"
+                          @click="selectByEnvironment('both'); showSelectMenu = false">
+                          <Icon name="Layers" class="select-dropdown__icon" />
+                          Select Both-sides ({{ environmentCounts.both }})
+                        </button>
                       </div>
-                      <div
-                        class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
-                        <button class="text-amber-500 hover:text-amber-400 transition-colors" @click="selectAllDisabled"
-                          title="Select all disabled mods (excludes locked)">All</button>
-                        <span class="text-amber-500/40">·</span>
-                        <button class="text-amber-500 hover:text-amber-400 transition-colors"
-                          @click="selectHalfDisabled" title="Select half of disabled mods (excludes locked)">½</button>
+                      <div v-if="showSelectMenu" class="select-dropdown__backdrop" @click="showSelectMenu = false">
                       </div>
-                      <button class="text-muted-foreground hover:text-foreground transition-colors"
-                        @click="clearSelection">None</button>
                     </div>
+
+                    <!-- Selection count -->
+                    <span v-if="selectedCount > 0" class="select-controls__count">{{ selectedCount }}</span>
                   </div>
                 </div>
               </div>
 
-              <!-- Mod List -->
-              <div class="flex-1 overflow-y-auto p-2 space-y-2">
-                <div v-for="mod in installedModsWithCompatibility" :key="mod.id"
-                  class="resource-card group relative rounded-xl transition-all duration-150" :class="[
-                    selectedModIds.has(mod.id)
-                      ? 'bg-primary/12 ring-1 ring-primary/40'
-                      : !mod.isCompatible
-                        ? 'bg-red-500/5 hover:bg-red-500/8'
-                        : mod.hasWarning
-                          ? 'bg-amber-500/5 hover:bg-amber-500/8'
-                          : 'bg-muted/30 ring-1 ring-border/20 hover:bg-muted/50 hover:ring-border/40',
-                    disabledModIds.has(mod.id) ? 'opacity-50' : '',
-                    isLinked ? 'cursor-default' : 'cursor-pointer',
-                  ]" @click="!isLinked && toggleSelect(mod.id)">
+              <!-- Resource List - Tabular Design -->
+              <div class="resource-list">
+                <div v-for="mod in installedModsWithCompatibility" :key="mod.id" class="resource-row group" :class="[
+                  selectedModIds.has(mod.id) ? 'resource-row--selected' : '',
+                  disabledModIds.has(mod.id) ? 'resource-row--disabled' : '',
+                  isLinked ? '' : 'resource-row--selectable',
+                ]" @click="handleRowClick($event, mod)">
 
-                  <!-- Main Content Row -->
-                  <div class="flex items-center gap-3 p-2.5">
-                    <!-- Thumbnail -->
-                    <div class="relative">
-                      <div class="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-muted/50">
-                        <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
-                          class="w-full h-full object-cover" alt="" loading="lazy"
-                          @error="($event.target as HTMLImageElement).style.display = 'none'" />
-                        <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/40">
-                          <Icon v-if="mod.content_type === 'mod' || !mod.content_type" name="Layers" class="w-4 h-4" />
-                          <Icon v-else-if="mod.content_type === 'resourcepack'" name="Image" class="w-4 h-4" />
-                          <Icon v-else name="Sparkles" class="w-4 h-4" />
-                        </div>
-                      </div>
-                      <!-- Selection indicator overlay -->
-                      <div v-if="selectedModIds.has(mod.id)"
-                        class="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center ring-2 ring-background">
-                        <Icon name="Check" class="w-2.5 h-2.5 text-primary-foreground" />
-                      </div>
+                  <!-- Selection Checkbox -->
+                  <div class="resource-row__checkbox" v-if="!isLinked" @click.stop="toggleSelect(mod.id)">
+                    <div class="checkbox-indicator"
+                      :class="{ 'checkbox-indicator--checked': selectedModIds.has(mod.id) }">
+                      <Icon v-if="selectedModIds.has(mod.id)" name="Check" class="checkbox-indicator__icon" />
+                    </div>
+                  </div>
+
+                  <!-- Thumbnail -->
+                  <div class="resource-row__thumb">
+                    <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
+                      class="resource-thumb__img" alt="" loading="lazy"
+                      @error="($event.target as HTMLImageElement).style.display = 'none'" />
+                    <div v-else class="resource-thumb__placeholder">
+                      <Icon v-if="mod.content_type === 'mod' || !mod.content_type" name="Layers"
+                        class="resource-thumb__icon" />
+                      <Icon v-else-if="mod.content_type === 'resourcepack'" name="Image" class="resource-thumb__icon" />
+                      <Icon v-else name="Sparkles" class="resource-thumb__icon" />
+                    </div>
+                  </div>
+
+                  <!-- Name & Badges -->
+                  <div class="resource-row__name">
+                    <div class="resource-name__row">
+                      <span class="resource-name__text" @click.stop="openModDetails(mod)" title="Click for details">
+                        {{ mod.name }}
+                      </span>
+                      <!-- Environment indicator -->
+                      <span v-if="mod.environment === 'client'" class="env-badge env-badge--client"
+                        title="Client-side only">
+                        <Icon name="Monitor" class="env-badge__icon" />
+                      </span>
+                      <span v-else-if="mod.environment === 'server'" class="env-badge env-badge--server"
+                        title="Server-side only">
+                        <Icon name="Server" class="env-badge__icon" />
+                      </span>
+                      <span v-else-if="mod.environment === 'both'" class="env-badge env-badge--both"
+                        title="Client & Server">
+                        <Icon name="Layers" class="env-badge__icon" />
+                      </span>
+                    </div>
+                    <div class="resource-name__badges">
+                      <!-- NEW badge with dismiss -->
+                      <span v-if="recentlyAddedMods.has(mod.id)" class="badge badge--new">
+                        <span class="badge__text">NEW</span>
+                        <button class="badge__dismiss" @click.stop="dismissNewMod(mod.id)" title="Dismiss">
+                          <Icon name="X" class="badge__dismiss-icon" />
+                        </button>
+                      </span>
+                      <!-- UPDATED badge with dismiss -->
+                      <span v-if="recentlyUpdatedMods.has(mod.id)" class="badge badge--updated">
+                        <span class="badge__text">UPDATED</span>
+                        <button class="badge__dismiss" @click.stop="dismissUpdatedMod(mod.id)" title="Dismiss">
+                          <Icon name="X" class="badge__dismiss-icon" />
+                        </button>
+                      </span>
+                      <!-- Locked badge -->
+                      <span v-if="lockedModIds.has(mod.id)" class="badge badge--locked"
+                        title="Locked - version changes disabled">
+                        <Icon name="Lock" class="badge__icon" />
+                        <span class="badge__label">Locked</span>
+                      </span>
+                      <!-- Note badge -->
+                      <span v-if="getModNote(mod.id)" class="badge badge--note" :title="getModNote(mod.id)"
+                        @click.stop="openModNoteDialog(mod)">
+                        <Icon name="StickyNote" class="badge__icon" />
+                        <span class="badge__label">Note</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Version Cell -->
+                  <div class="resource-row__version">
+                    <span class="version-text">{{ mod.version || '-' }}</span>
+                  </div>
+
+                  <!-- Game Version Cell -->
+                  <div class="resource-row__game">
+                    <span v-if="mod.game_versions?.length >= 1" class="game-version"
+                      :class="{ 'game-version--error': !mod.isCompatible }" :title="mod.game_versions.join(', ')">
+                      {{ mod.game_versions[0] }}
+                    </span>
+                    <span v-else-if="mod.game_version && mod.game_version !== 'unknown'" class="game-version"
+                      :class="{ 'game-version--error': !mod.isCompatible }">
+                      {{ mod.game_version }}
+                    </span>
+                    <span v-else class="game-version game-version--na">-</span>
+                  </div>
+
+                  <!-- Loader Cell -->
+                  <div class="resource-row__loader">
+                    <span v-if="mod.loader && mod.loader !== 'unknown'" class="loader-badge"
+                      :class="{ 'loader-badge--warning': mod.hasWarning }">
+                      {{ mod.loader }}
+                    </span>
+                    <span v-else class="loader-badge loader-badge--na">-</span>
+                  </div>
+
+                  <!-- Status Cell - Multiple indicators can show -->
+                  <div class="resource-row__status">
+                    <!-- Compatible indicator (always show when compatible) -->
+                    <span v-if="mod.isCompatible" class="status-indicator status-indicator--ok" title="Compatible">
+                      <Icon name="Check" class="status-indicator__icon" />
+                    </span>
+                    <!-- Incompatible indicator with reason -->
+                    <span v-if="!mod.isCompatible" class="status-indicator status-indicator--error"
+                      :title="`Incompatible: ${mod.incompatibilityReason || 'Game version mismatch'}`">
+                      <Icon name="AlertCircle" class="status-indicator__icon" />
+                    </span>
+                    <!-- Warning indicator with reason -->
+                    <span v-if="mod.hasWarning" class="status-indicator status-indicator--warning"
+                      :title="`Warning: ${mod.incompatibilityReason || 'Loader mismatch'}`">
+                      <Icon name="AlertTriangle" class="status-indicator__icon" />
+                    </span>
+                    <!-- Update indicator (always show if update available) -->
+                    <span v-if="updateAvailable[mod.id]" class="status-indicator status-indicator--update"
+                      :title="`Update available: ${updateAvailable[mod.id]?.displayName || 'newer version'}`"
+                      @click.stop="quickUpdateMod(mod)">
+                      <Icon name="ArrowUpCircle" class="status-indicator__icon" />
+                    </span>
+                  </div>
+
+                  <!-- Actions Cell -->
+                  <div class="resource-row__actions" @click.stop>
+                    <!-- Loading state -->
+                    <div v-if="updatingMods.has(mod.id) || checkingUpdates[mod.id]" class="action-spinner">
+                      <Icon name="Loader2" class="action-spinner__icon animate-spin" />
                     </div>
 
-                    <!-- Info Section -->
-                    <div class="flex-1 min-w-0">
-                      <!-- Title Row -->
-                      <div class="flex items-center gap-2 mb-1">
-                        <h4
-                          class="font-medium text-sm truncate text-foreground hover:text-primary cursor-pointer transition-colors"
-                          @click.stop="openModDetails(mod)" title="Click to view details">
-                          {{ mod.name }}
-                        </h4>
-
-                        <!-- Status Badges -->
-                        <div class="flex items-center gap-1 shrink-0">
-                          <span v-if="recentlyUpdatedMods.has(mod.id)"
-                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium group/badge cursor-pointer hover:bg-primary/25 transition-colors"
-                            @click.stop="dismissUpdatedMod(mod.id)" title="Click to dismiss">
-                            <Icon name="ArrowUpCircle" class="w-2.5 h-2.5" />
-                            Updated
-                            <Icon name="X" class="w-2 h-2 opacity-0 group-hover/badge:opacity-100 transition-opacity" />
-                          </span>
-                          <span v-else-if="recentlyAddedMods.has(mod.id)"
-                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 font-medium group/badge cursor-pointer hover:bg-emerald-500/25 transition-colors"
-                            @click.stop="dismissNewMod(mod.id)" title="Click to dismiss">
-                            <Icon name="Plus" class="w-2.5 h-2.5" />
-                            New
-                            <Icon name="X" class="w-2 h-2 opacity-0 group-hover/badge:opacity-100 transition-opacity" />
-                          </span>
-                          <span v-if="!mod.isCompatible"
-                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium">
-                            <Icon name="AlertCircle" class="w-2.5 h-2.5" />
-                            Incompatible
-                          </span>
-                          <span v-else-if="mod.hasWarning"
-                            class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 font-medium"
-                            title="This mod uses a different loader but may work via compatibility layers">
-                            <Icon name="AlertTriangle" class="w-2.5 h-2.5" />
-                            Loader
-                          </span>
-                        </div>
-                      </div>
-
-                      <!-- Meta Row -->
-                      <div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <!-- Version -->
-                        <span v-if="mod.version" class="font-mono truncate max-w-[100px]" :title="mod.version">
-                          v{{ mod.version }}
-                        </span>
-
-                        <span v-if="mod.version && (mod.game_versions?.length || mod.game_version)"
-                          class="opacity-40">•</span>
-
-                        <!-- Game Version -->
-                        <span v-if="mod.game_versions && mod.game_versions.length >= 1" class="font-medium"
-                          :class="mod.isCompatible ? 'text-primary/80' : 'text-red-500/80'"
-                          :title="mod.game_versions.join(', ')">
-                          {{ mod.game_versions[0] }}{{ mod.game_versions.length > 1 ? ` +${mod.game_versions.length -
-                            1}` : '' }}
-                        </span>
-                        <span v-else-if="mod.game_version && mod.game_version !== 'unknown'" class="font-medium"
-                          :class="mod.isCompatible ? 'text-primary/80' : 'text-red-500/80'">
-                          {{ mod.game_version }}
-                        </span>
-
-                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="opacity-40">•</span>
-
-                        <!-- Loader -->
-                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="capitalize font-medium"
-                          :class="mod.hasWarning ? 'text-amber-500/80' : ''">
-                          {{ mod.loader }}
-                        </span>
-
-                        <!-- Incompatibility reason -->
-                        <span v-if="!mod.isCompatible && mod.incompatibilityReason"
-                          class="text-red-500/70 truncate max-w-[150px] ml-1" :title="mod.incompatibilityReason">
-                          — {{ mod.incompatibilityReason }}
-                        </span>
-                        <span v-else-if="mod.hasWarning && mod.incompatibilityReason"
-                          class="text-amber-500/70 truncate max-w-[150px] ml-1" :title="mod.incompatibilityReason">
-                          — {{ mod.incompatibilityReason }}
-                        </span>
-                      </div>
-
-                      <!-- Note Preview Row -->
-                      <div v-if="getModNote(mod.id)"
-                        class="flex items-center gap-1.5 text-[10px] text-blue-400/80 mt-1">
-                        <Icon name="MessageSquare" class="w-3 h-3 shrink-0" />
-                        <span class="truncate italic" :title="getModNote(mod.id)">
-                          {{ getModNote(mod.id) }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Right Side Controls -->
-                    <div class="flex items-center gap-2 pl-2 shrink-0">
-                      <!-- (buttons will be shown near lock-state) -->
-
-                      <!-- Hover-only action buttons -->
-                      <div
-                        class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                        <!-- Note Button -->
-                        <button
-                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="updatingMods.has(mod.id)
-                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
-                            : getModNote(mod.id)
-                              ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-500/50'
-                              : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-blue-400 border-border/40 hover:border-blue-500/50'"
-                          :disabled="updatingMods.has(mod.id)"
-                          :title="updatingMods.has(mod.id) ? 'Updating...' : getModNote(mod.id) ? 'Edit note' : 'Add note'"
-                          @click.stop="!updatingMods.has(mod.id) && openModNoteDialog(mod)">
-                          <Icon v-if="getModNote(mod.id)" name="MessageSquare" class="w-3.5 h-3.5" />
-                          <Icon v-else name="MessageSquarePlus" class="w-3.5 h-3.5" />
-                        </button>
-
-                        <!-- Lock/Unlock Button (action) -->
-                        <button v-if="!isLinked"
-                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="updatingMods.has(mod.id)
-                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
-                            : lockedModIds.has(mod.id)
-                              ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 hover:border-amber-500/50'
-                              : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-amber-500 border-border/40 hover:border-amber-500/50'"
-                          :disabled="updatingMods.has(mod.id)"
-                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'"
-                          @click.stop="!updatingMods.has(mod.id) && toggleModLocked(mod.id)">
-                          <Icon v-if="lockedModIds.has(mod.id)" name="Lock" class="w-3.5 h-3.5" />
-                          <Icon v-else name="LockOpen" class="w-3.5 h-3.5" />
-                        </button>
-
-                        <!-- Change Version Button -->
-                        <button v-if="!isLinked && mod.cf_project_id"
-                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="(lockedModIds.has(mod.id) || updatingMods.has(mod.id))
-                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
-                            : 'bg-muted/60 hover:bg-muted text-muted-foreground hover:text-primary border-border/40 hover:border-primary/50'"
-                          :disabled="lockedModIds.has(mod.id) || updatingMods.has(mod.id)"
-                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock to change' : 'Change version'"
-                          @click.stop="!(lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && openVersionPicker(mod)">
-                          <Icon name="GitBranch" class="w-3.5 h-3.5" />
-                        </button>
-
-                        <!-- Remove Button -->
-                        <button v-if="!isLinked"
-                          class="w-7 h-7 flex items-center justify-center rounded-lg border transition-all duration-150"
-                          :class="(lockedModIds.has(mod.id) || updatingMods.has(mod.id))
-                            ? 'opacity-40 cursor-not-allowed bg-muted/30 text-muted-foreground/40 border-border/20'
-                            : 'bg-muted/60 hover:bg-destructive/15 text-muted-foreground hover:text-destructive border-border/40 hover:border-destructive/50'"
-                          :disabled="lockedModIds.has(mod.id) || updatingMods.has(mod.id)"
-                          :title="updatingMods.has(mod.id) ? 'Updating...' : lockedModIds.has(mod.id) ? 'Unlock to remove' : 'Remove'"
-                          @click.stop="!(lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && removeMod(mod.id)">
-                          <Icon name="Trash2" class="w-3.5 h-3.5" />
-                        </button>
-
-                        <!-- Managed indicator -->
-                        <div v-if="isLinked"
-                          class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/30 text-muted-foreground/40 border border-border/20"
-                          title="Remote managed">
-                          <Icon name="Lock" class="w-3.5 h-3.5" />
-                        </div>
-                      </div>
-
-                      <!-- Lock state indicator and update/changelog (moved next to toggle) -->
-                      <div class="flex items-center ml-1 gap-1">
-                        <!-- Updating Indicator (shows while updating - takes precedence) -->
-                        <div v-if="!isLinked && updatingMods.has(mod.id)"
-                          class="w-6 h-6 flex items-center justify-center rounded-md bg-primary/10" title="Updating...">
-                          <Icon name="RefreshCw" class="w-3.5 h-3.5 animate-spin text-primary" />
-                        </div>
-
-                        <!-- Checking Indicator (shows while checking, not updating) -->
-                        <div v-else-if="!isLinked && mod.cf_project_id && checkingUpdates[mod.id]"
-                          class="w-6 h-6 flex items-center justify-center rounded-md bg-primary/10" title="Checking...">
-                          <Icon name="RefreshCw" class="w-3.5 h-3.5 animate-spin text-primary/70" />
-                        </div>
-
-                        <!-- View Changelog (hidden while updating) -->
-                        <button
-                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id] && !updatingMods.has(mod.id)"
-                          class="w-7 h-7 flex items-center justify-center rounded-lg bg-muted/60 text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground transition-all duration-150"
-                          title="View changelog" @click.stop="viewModChangelog(mod)">
-                          <Icon name="FileText" class="w-3.5 h-3.5" />
-                        </button>
-
-                        <!-- Update Available (hidden while updating) -->
-                        <button
-                          v-if="!isLinked && mod.cf_project_id && updateAvailable[mod.id] && !checkingUpdates[mod.id] && !updatingMods.has(mod.id)"
-                          class="w-7 h-7 flex items-center justify-center rounded-lg bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 hover:border-primary/50 transition-all duration-150"
-                          :title="`Update to ${updateAvailable[mod.id]?.displayName || 'latest version'}`"
-                          @click.stop="quickUpdateMod(mod)">
-                          <Icon name="ArrowUpCircle" class="w-3.5 h-3.5" />
-                        </button>
-
-                        <!-- Lock state icon (indicator only) -->
-                        <div v-if="lockedModIds.has(mod.id)"
-                          class="w-6 h-6 flex items-center justify-center text-amber-500" title="Locked">
-                          <Icon name="Lock" class="w-3.5 h-3.5" />
-                        </div>
-
-                        <!-- Note indicator (always visible when note exists) -->
-                        <button v-if="getModNote(mod.id)"
-                          class="w-6 h-6 flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors"
-                          :title="getModNote(mod.id)" @click.stop="openModNoteDialog(mod)">
-                          <Icon name="MessageSquare" class="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      <!-- Enable/Disable Toggle (moved to far right) -->
-                      <button class="w-8 h-5 rounded-full relative shrink-0 transition-all duration-200 shadow-inner"
-                        :class="[
-                          disabledModIds.has(mod.id)
-                            ? 'bg-muted-foreground/20'
-                            : 'bg-primary shadow-primary/20',
-                          (isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90',
-                        ]"
-                        @click.stop="!(isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && toggleModEnabled(mod.id)"
-                        :title="isLinked
-                          ? 'Managed by remote source'
-                          : updatingMods.has(mod.id)
-                            ? 'Updating...'
-                            : lockedModIds.has(mod.id)
-                              ? 'Unlock mod to change state'
-                              : disabledModIds.has(mod.id)
-                                ? 'Click to enable mod'
-                                : 'Click to disable mod'"
-                        :disabled="isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)">
-                        <span
-                          class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-200"
-                          :class="disabledModIds.has(mod.id) ? 'left-0.5' : 'left-[14px]'" />
+                    <template v-else>
+                      <!-- Update button -->
+                      <button v-if="updateAvailable[mod.id] && !lockedModIds.has(mod.id) && !isLinked"
+                        class="action-btn action-btn--update" @click.stop="quickUpdateMod(mod)"
+                        :title="`Update to ${updateAvailable[mod.id]?.displayName || 'latest'}`">
+                        <Icon name="ArrowUpCircle" class="action-btn__icon" />
                       </button>
-                    </div>
+
+                      <!-- Version picker -->
+                      <button v-if="mod.cf_project_id && !lockedModIds.has(mod.id) && !isLinked"
+                        class="action-btn action-btn--ghost" @click.stop="openVersionPicker(mod)"
+                        title="Change version">
+                        <Icon name="GitBranch" class="action-btn__icon" />
+                      </button>
+
+                      <!-- Lock toggle -->
+                      <button v-if="!isLinked" class="action-btn"
+                        :class="lockedModIds.has(mod.id) ? 'action-btn--locked' : 'action-btn--ghost'"
+                        @click.stop="toggleModLocked(mod.id)" :title="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'">
+                        <Icon :name="lockedModIds.has(mod.id) ? 'Lock' : 'LockOpen'" class="action-btn__icon" />
+                      </button>
+
+                      <!-- Note button -->
+                      <button class="action-btn" :class="getModNote(mod.id) ? 'action-btn--note' : 'action-btn--ghost'"
+                        @click.stop="openModNoteDialog(mod)" :title="getModNote(mod.id) ? 'Edit note' : 'Add note'">
+                        <Icon name="MessageSquare" class="action-btn__icon" />
+                      </button>
+
+                      <!-- Remove button -->
+                      <button v-if="!isLinked && !lockedModIds.has(mod.id)" class="action-btn action-btn--danger"
+                        @click.stop="removeMod(mod.id)" title="Remove">
+                        <Icon name="Trash2" class="action-btn__icon" />
+                      </button>
+                    </template>
+                  </div>
+
+                  <!-- Toggle Cell -->
+                  <div class="resource-row__toggle" @click.stop>
+                    <button class="toggle-switch" :class="[
+                      !disabledModIds.has(mod.id) ? 'toggle-switch--on' : 'toggle-switch--off',
+                      (isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) ? 'toggle-switch--locked' : ''
+                    ]"
+                      @click.stop="!(isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && toggleModEnabled(mod.id)"
+                      :title="disabledModIds.has(mod.id) ? 'Enable' : 'Disable'"
+                      :disabled="isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)">
+                      <span class="toggle-switch__thumb" />
+                    </button>
                   </div>
                 </div>
 
                 <!-- Empty State -->
-                <div v-if="filteredInstalledMods.length === 0"
-                  class="flex flex-col items-center justify-center py-12 px-4">
-                  <div class="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-4">
-                    <Icon v-if="contentTypeTab === 'mods'" name="Layers" class="w-8 h-8 text-muted-foreground/40" />
-                    <Icon v-else-if="contentTypeTab === 'resourcepacks'" name="Image"
-                      class="w-8 h-8 text-muted-foreground/40" />
-                    <Icon v-else name="Sparkles" class="w-8 h-8 text-muted-foreground/40" />
+                <div v-if="filteredInstalledMods.length === 0" class="resource-empty">
+                  <div class="resource-empty__icon">
+                    <Icon v-if="contentTypeTab === 'mods'" name="Layers" class="w-8 h-8" />
+                    <Icon v-else-if="contentTypeTab === 'resourcepacks'" name="Image" class="w-8 h-8" />
+                    <Icon v-else name="Sparkles" class="w-8 h-8" />
                   </div>
-                  <p class="text-sm font-medium text-muted-foreground mb-1">
+                  <p class="resource-empty__title">
                     {{ searchQueryInstalled ? "No matching items" : "Nothing here yet" }}
                   </p>
-                  <p class="text-xs text-muted-foreground/70">
-                    {{
-                      searchQueryInstalled
-                        ? "Try a different search term"
-                        : contentTypeTab === "mods"
-                          ? "Add mods from the library or CurseForge"
-                          : contentTypeTab === "resourcepacks"
-                            ? "Add resource packs from your library"
-                            : "Add shaders from your library"
-                    }}
+                  <p class="resource-empty__desc">
+                    {{ searchQueryInstalled ? "Try a different search" : "Add from the library or CurseForge" }}
                   </p>
                 </div>
               </div>
             </div>
 
-            <!-- Right: Available Mods (Library) -->
-            <div v-if="!isLibraryCollapsed" class="flex flex-col bg-muted/5 transition-all duration-150 w-[40%]">
-              <!-- Header -->
-              <div class="shrink-0 px-3 py-2.5 border-b border-border/20 bg-muted/10">
-                <div class="flex items-center justify-between mb-2">
-                  <div class="flex items-center gap-2">
-                    <Icon name="Package" class="w-3.5 h-3.5 text-primary" />
-                    <span class="text-xs font-medium">Library</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">{{
-                      compatibleCount }}</span>
-                    <span v-if="warningAvailableCount > 0" class="text-[10px] text-amber-500" title="Different loader">
-                      +{{ warningAvailableCount }}
-                    </span>
-                  </div>
-                  <button @click="isLibraryCollapsed = true"
-                    class="w-5 h-5 rounded hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
-                    title="Collapse">
-                    <Icon name="X" class="w-3 h-3" />
-                  </button>
+            <!-- Right: Library Panel -->
+            <div v-if="!isLibraryCollapsed" class="library-panel">
+              <!-- Library Header -->
+              <div class="library-panel__header">
+                <div class="library-panel__title">
+                  <Icon name="Package" class="library-panel__icon" />
+                  <span>Library</span>
+                  <span class="library-panel__count">{{ compatibleCount }}</span>
+                  <span v-if="warningAvailableCount > 0" class="library-panel__warning-count"
+                    :title="`${warningAvailableCount} with loader mismatch`">
+                    +{{ warningAvailableCount }}
+                  </span>
                 </div>
-                <div class="relative">
-                  <Icon name="Search"
-                    class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/60" />
-                  <input v-model="searchQueryAvailable" placeholder="Search..."
-                    class="w-full h-7 pl-7 pr-3 text-xs rounded-lg bg-background/50 border border-border/30 focus:border-primary/40 focus:bg-background outline-none transition-all" />
+                <button @click="isLibraryCollapsed = true" class="library-panel__close">
+                  <Icon name="X" class="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <!-- Library Search -->
+              <div class="library-panel__search">
+                <div class="library-search">
+                  <Icon name="Search" class="library-search__icon" />
+                  <input v-model="searchQueryAvailable" placeholder="Search library..." class="library-search__input" />
                 </div>
               </div>
 
               <!-- Mod List -->
-              <div class="flex-1 overflow-y-auto p-2 space-y-2">
-                <div v-for="mod in filteredAvailableMods" :key="mod.id"
-                  class="library-card group relative rounded-lg transition-all duration-150" :class="[
-                    mod.isCompatible
-                      ? mod.hasWarning
-                        ? 'bg-amber-500/5 ring-1 ring-amber-500/20 hover:bg-amber-500/10 cursor-pointer'
-                        : 'bg-muted/30 ring-1 ring-border/20 hover:bg-muted/50 hover:ring-border/40 cursor-pointer'
-                      : 'bg-muted/10 opacity-40 cursor-not-allowed'
-                  ]">
-                  <div class="flex items-center p-2 gap-2.5">
-                    <!-- Thumbnail -->
-                    <div class="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-muted/50">
-                      <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
-                        class="w-full h-full object-cover" alt="" loading="lazy"
-                        @error="($event.target as HTMLImageElement).style.display = 'none'" />
-                      <div v-else class="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                        <Icon v-if="mod.content_type === 'mod' || !mod.content_type" name="Layers"
-                          class="w-3.5 h-3.5" />
-                        <Icon v-else-if="mod.content_type === 'resourcepack'" name="Image" class="w-3.5 h-3.5" />
-                        <Icon v-else name="Sparkles" class="w-3.5 h-3.5" />
-                      </div>
+              <div class="library-panel__list">
+                <div v-for="mod in filteredAvailableMods" :key="mod.id" class="library-item" :class="[
+                  mod.isCompatible ? (mod.hasWarning ? 'library-item--warning' : '') : 'library-item--incompatible'
+                ]" @click="mod.isCompatible && !isLinked && addMod(mod.id)">
+
+                  <!-- Thumbnail -->
+                  <div class="library-item__thumb">
+                    <img v-if="mod.thumbnail_url || mod.logo_url" :src="mod.thumbnail_url || mod.logo_url"
+                      class="library-item__img" alt="" loading="lazy"
+                      @error="($event.target as HTMLImageElement).style.display = 'none'" />
+                    <div v-else class="library-item__placeholder">
+                      <Icon v-if="mod.content_type === 'mod' || !mod.content_type" name="Layers" class="w-3.5 h-3.5" />
+                      <Icon v-else-if="mod.content_type === 'resourcepack'" name="Image" class="w-3.5 h-3.5" />
+                      <Icon v-else name="Sparkles" class="w-3.5 h-3.5" />
                     </div>
+                  </div>
 
-                    <!-- Info -->
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-1.5">
-                        <span class="font-medium text-xs truncate hover:text-primary cursor-pointer transition-colors"
-                          @click.stop="openModDetails(mod)" title="Click for details">
-                          {{ mod.name }}
-                        </span>
-                        <Icon v-if="!mod.isCompatible" name="AlertCircle" class="w-2.5 h-2.5 text-red-500 shrink-0" />
-                        <Icon v-else-if="mod.hasWarning" name="AlertTriangle"
-                          class="w-2.5 h-2.5 text-amber-500 shrink-0" />
-                      </div>
-                      <div class="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <!-- Game Version -->
-                        <span v-if="mod.game_versions && mod.game_versions.length >= 1" class="text-primary/70"
-                          :title="mod.game_versions.join(', ')">
-                          {{ mod.game_versions[0] }}{{ mod.game_versions.length > 1 ? `+${mod.game_versions.length - 1}`
-                            : '' }}
-                        </span>
-                        <span v-else-if="mod.game_version && mod.game_version !== 'unknown'" class="text-primary/70">
-                          {{ mod.game_version }}
-                        </span>
-
-                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="opacity-40">•</span>
-
-                        <!-- Loader -->
-                        <span v-if="mod.loader && mod.loader !== 'unknown'" class="capitalize"
-                          :class="mod.hasWarning ? 'text-amber-500/80' : ''">
-                          {{ mod.loader }}
-                        </span>
-
-                        <span v-if="mod.version" class="opacity-40">•</span>
-
-                        <!-- Version -->
-                        <span v-if="mod.version" class="font-mono truncate max-w-[60px]" :title="mod.version">
-                          {{ mod.version }}
-                        </span>
-                      </div>
-
-                      <!-- Error/Warning reason -->
-                      <div v-if="!mod.isCompatible && mod.incompatibilityReason"
-                        class="text-[9px] text-red-500/80 mt-0.5 truncate" :title="mod.incompatibilityReason">
-                        {{ mod.incompatibilityReason }}
-                      </div>
-                      <div v-else-if="mod.hasWarning && mod.incompatibilityReason"
-                        class="text-[9px] text-amber-500/80 mt-0.5 truncate" :title="mod.incompatibilityReason">
-                        {{ mod.incompatibilityReason }}
-                      </div>
+                  <!-- Info -->
+                  <div class="library-item__info">
+                    <div class="library-item__name">
+                      <span class="library-item__name-text" @click.stop="openModDetails(mod)" title="Click for details">
+                        {{ mod.name }}
+                      </span>
+                      <Icon v-if="!mod.isCompatible" name="AlertCircle"
+                        class="library-item__status-icon library-item__status-icon--error" />
+                      <Icon v-else-if="mod.hasWarning" name="AlertTriangle"
+                        class="library-item__status-icon library-item__status-icon--warning" />
                     </div>
+                    <div class="library-item__meta">
+                      <span v-if="mod.game_versions?.length >= 1" class="library-item__version"
+                        :title="mod.game_versions.join(', ')">
+                        {{ mod.game_versions[0] }}
+                      </span>
+                      <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
+                        class="library-item__version">
+                        {{ mod.game_version }}
+                      </span>
+                      <span v-if="mod.loader && mod.loader !== 'unknown'" class="library-item__loader"
+                        :class="{ 'library-item__loader--warning': mod.hasWarning }">
+                        {{ mod.loader }}
+                      </span>
+                    </div>
+                    <div v-if="!mod.isCompatible && mod.incompatibilityReason"
+                      class="library-item__reason library-item__reason--error">
+                      {{ mod.incompatibilityReason }}
+                    </div>
+                    <div v-else-if="mod.hasWarning && mod.incompatibilityReason"
+                      class="library-item__reason library-item__reason--warning">
+                      {{ mod.incompatibilityReason }}
+                    </div>
+                  </div>
 
-                    <!-- Add Button -->
-                    <button v-if="mod.isCompatible && !isLinked"
-                      class="w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                      :class="mod.hasWarning
-                        ? 'text-amber-500 hover:bg-amber-500/10'
-                        : 'text-primary hover:bg-primary/10'" @click.stop="addMod(mod.id)"
+                  <!-- Add Button -->
+                  <div class="library-item__action">
+                    <button v-if="mod.isCompatible && !isLinked" class="library-item__add"
+                      :class="{ 'library-item__add--warning': mod.hasWarning }" @click.stop="addMod(mod.id)"
                       :title="mod.hasWarning ? 'Add (different loader)' : 'Add'">
                       <Icon name="Plus" class="w-3.5 h-3.5" />
                     </button>
-                    <div v-else-if="!mod.isCompatible"
-                      class="w-6 h-6 flex items-center justify-center shrink-0 text-muted-foreground/20">
+                    <div v-else-if="!mod.isCompatible" class="library-item__locked">
                       <Icon name="Lock" class="w-3 h-3" />
                     </div>
                   </div>
                 </div>
 
                 <!-- Empty State -->
-                <div v-if="filteredAvailableMods.length === 0"
-                  class="flex flex-col items-center justify-center py-8 px-4">
-                  <Icon name="Package" class="w-8 h-8 text-muted-foreground/25 mb-2" />
-                  <p class="text-xs text-muted-foreground">No items available</p>
+                <div v-if="filteredAvailableMods.length === 0" class="library-panel__empty">
+                  <Icon name="Package" class="w-8 h-8" />
+                  <p>No items available</p>
                 </div>
               </div>
             </div>
@@ -5236,6 +5176,259 @@ watch(
   @apply text-muted-foreground hover:text-foreground hover:bg-muted/60;
 }
 
+/* =============================================
+   INNOVATIVE TAB SYSTEM - Segmented Control
+   ============================================= */
+
+.tabs-container {
+  position: relative;
+  background: hsl(var(--muted) / 0.4);
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 1rem;
+  padding: 4px;
+}
+
+.tabs-track {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.tab-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  justify-content: center;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  border-radius: 0.75rem;
+  transition: all 200ms ease;
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+
+.tab-item:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.5);
+}
+
+.tab-item--active {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  background: hsl(var(--background));
+  box-shadow:
+    0 1px 3px hsl(var(--foreground) / 0.08),
+    0 0 0 1px hsl(var(--border) / 0.4);
+}
+
+.tab-item--active:hover {
+  background: hsl(var(--background));
+}
+
+.tab-item__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 200ms ease;
+}
+
+.tab-item:hover .tab-item__icon {
+  transform: scale(1.1);
+}
+
+.tab-item--active .tab-item__icon {
+  color: hsl(var(--primary));
+}
+
+.tab-item__label {
+  transition: opacity 150ms ease;
+}
+
+.tab-item__badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: calc(var(--radius) + 2px);
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  margin-left: 2px;
+}
+
+.tab-item__dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--warning));
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+}
+
+/* Floating Share Button */
+.tab-float {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: hsl(var(--muted) / 0.4);
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 1rem;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 200ms ease;
+  position: relative;
+}
+
+.tab-float:hover {
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+
+.tab-float--active {
+  background: hsl(var(--primary) / 0.1);
+  border-color: hsl(var(--primary) / 0.3);
+  color: hsl(var(--primary));
+}
+
+.tab-float__indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
+}
+
+/* More Menu Dropdown */
+.more-menu {
+  position: absolute;
+  width: 260px;
+  background: hsl(var(--popover) / 0.98);
+  backdrop-filter: blur(20px);
+  border: 1px solid hsl(var(--border) / 0.6);
+  border-radius: 1rem;
+  box-shadow:
+    0 10px 40px hsl(var(--foreground) / 0.15),
+    0 0 0 1px hsl(var(--border) / 0.1);
+  padding: 6px;
+  overflow: hidden;
+}
+
+.more-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 0.75rem;
+  text-align: left;
+  transition: all 150ms ease;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  position: relative;
+}
+
+.more-menu__item:hover {
+  background: hsl(var(--muted) / 0.6);
+}
+
+.more-menu__item--active {
+  background: hsl(var(--primary) / 0.1);
+}
+
+.more-menu__item--active .more-menu__icon-wrap {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+}
+
+.more-menu__icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+  transition: all 150ms ease;
+}
+
+.more-menu__item:hover .more-menu__icon-wrap {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.more-menu__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.more-menu__title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.more-menu__desc {
+  font-size: 0.6875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.more-menu__badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: calc(var(--radius) + 2px);
+  background: hsl(var(--warning) / 0.15);
+  color: hsl(var(--warning));
+  border: 1px solid hsl(var(--warning) / 0.3);
+}
+
+/* Dropdown animation */
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+}
+
+.dropdown-fade-enter-from .more-menu,
+.dropdown-fade-leave-to .more-menu {
+  transform: translateY(-8px) scale(0.96);
+}
+
 /* Sub-tab Styles */
 .sub-tab {
   @apply px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200;
@@ -5364,7 +5557,7 @@ watch(
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: 16px;
+  border-radius: calc(var(--radius) * 2);
   background: hsl(var(--card) / 0.95);
   backdrop-filter: blur(20px);
   border: 1px solid hsl(var(--border) / 0.5);
@@ -5408,7 +5601,7 @@ watch(
 .floating-bar-minimize-btn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: hsl(var(--muted) / 0.5);
   color: hsl(var(--muted-foreground));
   display: flex;
@@ -5447,7 +5640,7 @@ watch(
 .floating-bar-play {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: calc(var(--radius) + 4px);
   background: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
   display: flex;
@@ -5536,7 +5729,7 @@ watch(
 .floating-bar-count {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
+  color: hsl(var(--foreground) / 0.7);
   padding: 0 8px;
   white-space: nowrap;
 }
@@ -5544,9 +5737,9 @@ watch(
 .floating-bar-btn {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: calc(var(--radius) + 2px);
   background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+  color: hsl(var(--foreground) / 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5554,8 +5747,8 @@ watch(
 }
 
 .floating-bar-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: hsl(var(--foreground) / 0.1);
+  color: hsl(var(--foreground));
 }
 
 .floating-bar-btn-enable:hover {
@@ -5564,23 +5757,23 @@ watch(
 }
 
 .floating-bar-btn-disable:hover {
-  background: rgba(251, 191, 36, 0.2);
-  color: rgb(251, 191, 36);
+  background: hsl(var(--warning) / 0.2);
+  color: hsl(var(--warning));
 }
 
 .floating-bar-btn-danger:hover {
-  background: rgba(239, 68, 68, 0.2);
-  color: rgb(248, 113, 113);
+  background: hsl(var(--destructive) / 0.2);
+  color: hsl(var(--destructive));
 }
 
 /* Delete Instance - Orange/Amber style to differentiate from Remove Mod (red) */
 .floating-bar-btn-delete-instance {
-  color: rgb(251, 191, 36);
+  color: hsl(var(--warning));
 }
 
 .floating-bar-btn-delete-instance:hover {
-  background: rgba(251, 191, 36, 0.2);
-  color: rgb(252, 211, 77);
+  background: hsl(var(--warning) / 0.2);
+  color: hsl(var(--warning));
 }
 
 .floating-bar-btn-clear {
@@ -5588,8 +5781,8 @@ watch(
 }
 
 .floating-bar-btn-clear:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
+  background: hsl(var(--foreground) / 0.15);
+  color: hsl(var(--foreground));
 }
 
 .floating-bar-btn-active {
@@ -5654,7 +5847,7 @@ watch(
   max-height: calc(100vh - 150px);
   background: hsl(var(--card) / 0.98);
   backdrop-filter: blur(20px);
-  border-radius: 16px;
+  border-radius: calc(var(--radius) * 2);
   border: 1px solid hsl(var(--border) / 0.5);
   box-shadow: 0 25px 50px -12px hsl(var(--background) / 0.5);
   z-index: 55;
@@ -5706,7 +5899,7 @@ watch(
   padding: 2px 8px;
   background: hsl(142 76% 36% / 0.2);
   border: 1px solid hsl(142 76% 36% / 0.4);
-  border-radius: 10px;
+  border-radius: calc(var(--radius) + 2px);
   font-size: 10px;
   font-weight: 600;
   color: hsl(142 76% 50%);
@@ -5737,7 +5930,7 @@ watch(
 .log-console-btn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
   color: hsl(var(--muted-foreground));
   display: flex;
@@ -5757,7 +5950,7 @@ watch(
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 11px;
   font-weight: 600;
   color: hsl(var(--muted-foreground));
@@ -5800,7 +5993,7 @@ watch(
 .log-filter-count {
   font-size: 10px;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: calc(var(--radius) + 2px);
   background: hsl(var(--muted) / 0.6);
   color: inherit;
   font-weight: 700;
@@ -5843,29 +6036,29 @@ watch(
 }
 
 .log-console-entry {
-  color: rgba(255, 255, 255, 0.6);
+  color: hsl(var(--foreground) / 0.6);
   word-break: break-word;
   padding: 2px 0;
 }
 
 .log-console-entry.text-blue-400 {
-  color: rgb(96, 165, 250);
+  color: hsl(var(--info));
 }
 
 .log-console-entry.text-amber-400 {
-  color: rgb(251, 191, 36);
+  color: hsl(var(--warning));
 }
 
 .log-console-entry.text-red-400 {
-  color: rgb(248, 113, 113);
+  color: hsl(var(--destructive));
 }
 
 .log-console-entry.text-muted-foreground {
-  color: rgba(255, 255, 255, 0.5);
+  color: hsl(var(--foreground) / 0.5);
 }
 
 .log-time {
-  color: rgba(255, 255, 255, 0.4);
+  color: hsl(var(--foreground) / 0.4);
   margin-right: 8px;
   font-size: 10px;
 }
@@ -5886,7 +6079,7 @@ watch(
   margin-bottom: 12px;
   background: hsl(var(--card) / 0.98);
   backdrop-filter: blur(20px);
-  border-radius: 16px;
+  border-radius: calc(var(--radius) * 2);
   border: 1px solid hsl(var(--border) / 0.5);
   box-shadow: 0 25px 50px -12px hsl(var(--background) / 0.5);
   overflow: hidden;
@@ -5906,7 +6099,7 @@ watch(
 .sync-panel-close {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   background: transparent;
   color: hsl(var(--muted-foreground));
   display: flex;
@@ -5931,7 +6124,7 @@ watch(
 
 .sync-section {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: calc(var(--radius) + 2px);
   background: hsl(var(--muted) / 0.3);
 }
 
@@ -5957,15 +6150,15 @@ watch(
 
 .sync-section-extra {
   border-left: 3px solid hsl(200 70% 50%);
-  background: rgba(255, 255, 255, 0.02);
+  background: hsl(var(--foreground) / 0.02);
 }
 
 .sync-item-issue {
   font-size: 9px;
   padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  color: rgba(255, 255, 255, 0.5);
+  background: hsl(var(--foreground) / 0.08);
+  border-radius: calc(var(--radius) - 4px);
+  color: hsl(var(--foreground) / 0.5);
 }
 
 .sync-section-title {
@@ -5995,7 +6188,7 @@ watch(
 .sync-item-type {
   padding: 1px 4px;
   background: hsl(var(--muted) / 0.5);
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   font-size: 9px;
   text-transform: uppercase;
   font-weight: 600;
@@ -6033,7 +6226,7 @@ watch(
   padding: 1px 5px;
   background: hsl(280 60% 55% / 0.2);
   color: hsl(280 60% 65%);
-  border-radius: 4px;
+  border-radius: calc(var(--radius) - 4px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -6063,7 +6256,7 @@ watch(
   padding: 6px 10px;
   font-size: 11px;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   background: hsl(var(--muted) / 0.3);
   color: hsl(var(--muted-foreground));
   border: 1px solid transparent;
@@ -6097,12 +6290,12 @@ watch(
    FLOATING BAR - SYNC INDICATOR
    ═══════════════════════════════════════════════════════════════════ */
 .floating-bar-btn-sync {
-  color: rgb(251, 191, 36);
+  color: hsl(var(--warning));
   position: relative;
 }
 
 .floating-bar-btn-sync:hover {
-  background: rgba(251, 191, 36, 0.2);
+  background: hsl(var(--warning) / 0.2);
 }
 
 .floating-bar-sync-count {
@@ -6144,7 +6337,7 @@ watch(
   padding: 8px 14px;
   background: hsl(var(--card) / 0.95);
   backdrop-filter: blur(12px);
-  border-radius: 12px;
+  border-radius: calc(var(--radius) + 4px);
   border: 1px solid hsl(var(--primary) / 0.3);
   font-size: 11px;
   color: hsl(var(--foreground) / 0.8);
@@ -6165,7 +6358,7 @@ watch(
   padding: 10px 14px;
   background: hsl(var(--card) / 0.95);
   backdrop-filter: blur(12px);
-  border-radius: 12px;
+  border-radius: calc(var(--radius) + 4px);
   border: 1px solid hsl(var(--primary) / 0.3);
   pointer-events: auto;
 }
@@ -6204,7 +6397,7 @@ watch(
   -webkit-appearance: none;
   appearance: none;
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: hsl(var(--foreground) / 0.1);
   border-radius: 3px;
   outline: none;
   cursor: pointer;
@@ -6218,13 +6411,13 @@ watch(
   border-radius: 50%;
   background: hsl(var(--primary));
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 6px hsl(var(--background) / 0.3);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .styled-range::-webkit-slider-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 3px 10px hsl(var(--background) / 0.4);
 }
 
 .styled-range::-moz-range-thumb {
@@ -6234,12 +6427,1606 @@ watch(
   background: hsl(var(--primary));
   cursor: pointer;
   border: none;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 6px hsl(var(--background) / 0.3);
 }
 
 .styled-range::-moz-range-track {
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: hsl(var(--foreground) / 0.1);
   border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESOURCE TAB - MODERN TOOLBAR & TABULAR VIEW
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Main Toolbar */
+.resource-toolbar {
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--card) / 0.8);
+  border-bottom: 1px solid hsl(var(--border) / 0.4);
+}
+
+.resource-toolbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+}
+
+.resource-toolbar__section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resource-toolbar__section--center {
+  flex: 1;
+  justify-content: center;
+}
+
+.resource-toolbar__section--actions {
+  gap: 12px;
+}
+
+/* Content Type Selector (Mods/Packs/Shaders) */
+.content-type-selector {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid hsl(var(--border) / 0.3);
+}
+
+.content-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border-radius: calc(var(--radius) + 2px);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.content-type-btn__icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.7;
+}
+
+.content-type-btn__label {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .content-type-btn__label {
+    display: inline;
+  }
+}
+
+.content-type-btn:hover:not(.content-type-btn--active) {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.8);
+}
+
+.content-type-btn--active {
+  color: hsl(var(--foreground));
+  background: hsl(var(--card));
+  box-shadow: 0 2px 8px hsl(var(--background) / 0.3), 0 1px 2px hsl(var(--background) / 0.2);
+}
+
+.content-type-btn--active .content-type-btn__icon {
+  opacity: 1;
+}
+
+.content-type-btn--active.content-type-btn--mods {
+  color: hsl(var(--primary));
+}
+
+.content-type-btn--active.content-type-btn--packs {
+  color: hsl(280 60% 65%);
+}
+
+.content-type-btn--active.content-type-btn--shaders {
+  color: hsl(38 92% 50%);
+}
+
+.content-type-btn__count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: calc(var(--radius));
+  background: hsl(var(--muted) / 0.6);
+  color: inherit;
+  min-width: 20px;
+  text-align: center;
+}
+
+.content-type-btn__count--active {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+}
+
+.content-type-btn--active .content-type-btn__count {
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+}
+
+/* Filter Pills */
+.filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.4);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: calc(var(--radius) + 2px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-pill__icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.8;
+}
+
+.filter-pill:hover:not(.filter-pill--active) {
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border) / 0.5);
+}
+
+.filter-pill--active {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+.filter-pill--primary:not(.filter-pill--active) {
+  color: hsl(var(--primary) / 0.8);
+}
+
+.filter-pill--primary.filter-pill--active {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+.filter-pill--warning:not(.filter-pill--active) {
+  color: hsl(38 92% 50% / 0.8);
+}
+
+.filter-pill--warning.filter-pill--active {
+  background: hsl(38 92% 50% / 0.15);
+  color: hsl(38 92% 50%);
+  border-color: hsl(38 92% 50% / 0.4);
+}
+
+.filter-pill--error:not(.filter-pill--active) {
+  color: hsl(0 84% 60% / 0.8);
+}
+
+.filter-pill--error.filter-pill--active {
+  background: hsl(0 84% 60% / 0.15);
+  color: hsl(0 84% 60%);
+  border-color: hsl(0 84% 60% / 0.4);
+}
+
+.filter-pill--ghost {
+  background: transparent;
+  border-color: transparent;
+  padding: 6px 8px;
+}
+
+.filter-pill--ghost:hover {
+  background: hsl(var(--muted) / 0.5);
+}
+
+/* Toolbar Action Groups */
+.toolbar-action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  background: hsl(var(--muted) / 0.4);
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border) / 0.3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.toolbar-action__icon {
+  width: 14px;
+  height: 14px;
+}
+
+.toolbar-action:hover {
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+}
+
+.toolbar-action--primary {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.toolbar-action--primary:hover {
+  background: hsl(var(--primary) / 0.25);
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.toolbar-action--danger {
+  background: hsl(0 84% 60% / 0.1);
+  color: hsl(0 84% 60% / 0.9);
+  border-color: hsl(0 84% 60% / 0.2);
+}
+
+.toolbar-action--danger:hover {
+  background: hsl(0 84% 60% / 0.2);
+  border-color: hsl(0 84% 60% / 0.4);
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: hsl(var(--border) / 0.4);
+  margin: 0 4px;
+}
+
+/* Toolbar Buttons */
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  background: hsl(var(--muted) / 0.3);
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border) / 0.3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toolbar-btn__icon {
+  width: 16px;
+  height: 16px;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border) / 0.5);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn--active {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.toolbar-btn-cta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.3);
+}
+
+.toolbar-btn-cta:hover:not(:disabled) {
+  background: hsl(var(--primary) / 0.9);
+  box-shadow: 0 4px 12px hsl(var(--primary) / 0.4);
+  transform: translateY(-1px);
+}
+
+.toolbar-btn-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Resource List Container */
+.resource-list-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.resource-list-container--full {
+  width: 100%;
+}
+
+/* Resource Subheader (search, sort, select) */
+.resource-subheader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: hsl(var(--muted) / 0.15);
+  border-bottom: 1px solid hsl(var(--border) / 0.2);
+}
+
+.resource-subheader__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.resource-subheader__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Search Input */
+.resource-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.resource-search__icon {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--muted-foreground) / 0.5);
+  pointer-events: none;
+}
+
+.resource-search__input {
+  width: 200px;
+  padding: 6px 10px 6px 32px;
+  font-size: 12px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--card) / 0.8);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: var(--radius);
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.resource-search__input::placeholder {
+  color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.resource-search__input:focus {
+  border-color: hsl(var(--primary) / 0.5);
+  background: hsl(var(--card));
+}
+
+.resource-search__clear {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: hsl(var(--muted-foreground) / 0.6);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.resource-search__clear:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+/* Resource Count */
+.resource-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  padding: 5px 10px;
+  background: hsl(var(--muted) / 0.3);
+  border-radius: calc(var(--radius));
+}
+
+.resource-count__number {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.resource-count__label {
+  opacity: 0.7;
+}
+
+/* Sort Control */
+.sort-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sort-control__select {
+  padding: 5px 8px;
+  font-size: 11px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--card) / 0.8);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  outline: none;
+}
+
+.sort-control__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--muted) / 0.3);
+  color: hsl(var(--muted-foreground));
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sort-control__btn:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.sort-control__btn--active {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+}
+
+.sort-control__icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Select Controls */
+.select-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.select-controls__icon {
+  width: 14px;
+  height: 14px;
+}
+
+.select-controls__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.select-controls__btn:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--primary));
+}
+
+.select-controls__count {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+}
+
+/* Select Dropdown */
+.select-dropdown {
+  position: relative;
+}
+
+.select-dropdown__trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.select-dropdown__trigger:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.select-dropdown__trigger--active {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.select-dropdown__trigger-icon {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+}
+
+.select-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px -4px hsl(var(--background) / 0.4);
+  z-index: 100;
+  padding: 4px;
+  animation: dropdownFadeIn 0.15s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.select-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: hsl(var(--foreground));
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-align: left;
+}
+
+.select-dropdown__item:hover {
+  background: hsl(var(--muted) / 0.5);
+}
+
+.select-dropdown__item--danger {
+  color: hsl(var(--destructive));
+}
+
+.select-dropdown__item--danger:hover {
+  background: hsl(var(--destructive) / 0.1);
+}
+
+.select-dropdown__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.select-dropdown__icon--client {
+  color: hsl(38 92% 50%);
+}
+
+.select-dropdown__icon--server {
+  color: hsl(142 76% 45%);
+}
+
+.select-dropdown__icon--both {
+  color: hsl(280 60% 55%);
+}
+
+.select-dropdown__divider {
+  height: 1px;
+  background: hsl(var(--border) / 0.3);
+  margin: 4px 0;
+}
+
+.select-dropdown__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+.select-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.select-btn:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.select-btn--active {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+/* Resource List */
+.resource-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* Resource Row - Tabular Design */
+.resource-row {
+  display: grid;
+  grid-template-columns: 32px 44px 1fr 90px 70px 70px 100px auto 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: hsl(var(--card) / 0.5);
+  border: 1px solid hsl(var(--border) / 0.2);
+  border-radius: var(--radius);
+  margin-bottom: 4px;
+  transition: all 0.15s ease;
+  cursor: default;
+}
+
+.resource-row--selectable {
+  cursor: pointer;
+}
+
+.resource-row:hover {
+  background: hsl(var(--card) / 0.8);
+  border-color: hsl(var(--border) / 0.4);
+}
+
+.resource-row--selected {
+  background: hsl(var(--primary) / 0.08);
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.resource-row--disabled .resource-row__thumb,
+.resource-row--disabled .resource-row__name,
+.resource-row--disabled .resource-row__version,
+.resource-row--disabled .resource-row__game,
+.resource-row--disabled .resource-row__loader,
+.resource-row--disabled .resource-row__status {
+  opacity: 0.6;
+}
+
+/* Row Cells */
+.resource-row__checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox-indicator {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: hsl(var(--muted) / 0.4);
+  border: 1.5px solid hsl(var(--border) / 0.5);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.checkbox-indicator:hover {
+  background: hsl(var(--muted) / 0.6);
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.checkbox-indicator--checked {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.checkbox-indicator--checked:hover {
+  background: hsl(var(--primary) / 0.85);
+  border-color: hsl(var(--primary) / 0.85);
+}
+
+.checkbox-indicator__icon {
+  width: 12px;
+  height: 12px;
+}
+
+.resource-row__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resource-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: calc(var(--radius) - 1px);
+  object-fit: cover;
+  background: hsl(var(--muted) / 0.3);
+}
+
+.resource-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--muted-foreground) / 0.4);
+}
+
+.resource-row__name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.resource-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resource-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: calc(var(--radius) - 2px);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.badge__text {
+  line-height: 1;
+}
+
+.badge__label {
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.badge__icon {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.badge__dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  margin-right: -2px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.15s ease;
+}
+
+.badge__dismiss:hover {
+  opacity: 1;
+  background: currentColor;
+}
+
+.badge__dismiss:hover .badge__dismiss-icon {
+  color: hsl(var(--card));
+}
+
+.badge__dismiss-icon {
+  width: 8px;
+  height: 8px;
+}
+
+.badge--new {
+  background: hsl(142 76% 45% / 0.15);
+  color: hsl(142 76% 45%);
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+.badge--updated {
+  background: hsl(217 91% 60% / 0.15);
+  color: hsl(217 91% 60%);
+}
+
+.badge--locked {
+  background: hsl(38 92% 50% / 0.12);
+  color: hsl(38 92% 50%);
+  padding: 2px 8px;
+}
+
+.badge--note {
+  background: hsl(280 60% 55% / 0.12);
+  color: hsl(280 60% 55%);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.badge--note:hover {
+  background: hsl(280 60% 55% / 0.2);
+}
+
+@keyframes pulse-badge {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Environment Badges */
+.env-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: calc(var(--radius) - 2px);
+  flex-shrink: 0;
+}
+
+.env-badge__icon {
+  width: 11px;
+  height: 11px;
+}
+
+.env-badge--client {
+  background: hsl(38 92% 50% / 0.12);
+  color: hsl(38 92% 50%);
+}
+
+.env-badge--server {
+  background: hsl(142 76% 45% / 0.12);
+  color: hsl(142 76% 45%);
+}
+
+.env-badge--both {
+  background: hsl(280 60% 55% / 0.12);
+  color: hsl(280 60% 55%);
+}
+
+.resource-name__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.resource-name__text {
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.resource-name__text:hover {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+}
+
+.resource-name__badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.resource-thumb__img {
+  width: 36px;
+  height: 36px;
+  border-radius: calc(var(--radius) - 1px);
+  object-fit: cover;
+}
+
+.resource-thumb__placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: calc(var(--radius) - 1px);
+  background: hsl(var(--muted) / 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resource-thumb__icon {
+  width: 16px;
+  height: 16px;
+  color: hsl(var(--muted-foreground) / 0.4);
+}
+
+.resource-row__version {
+  display: flex;
+  align-items: center;
+}
+
+.version-text {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resource-row__game {
+  display: flex;
+  align-items: center;
+}
+
+.game-version {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary) / 0.9);
+}
+
+.game-version--error {
+  background: hsl(0 84% 60% / 0.1);
+  color: hsl(0 84% 60%);
+}
+
+.game-version--na {
+  background: transparent;
+  color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.resource-row__loader {
+  display: flex;
+  align-items: center;
+}
+
+.loader-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: calc(var(--radius) - 2px);
+  text-transform: capitalize;
+  background: hsl(var(--muted) / 0.4);
+  color: hsl(var(--muted-foreground));
+}
+
+.loader-badge--na {
+  background: transparent;
+  color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.loader-badge--warning {
+  background: hsl(38 92% 50% / 0.15);
+  color: hsl(38 92% 50%);
+}
+
+.resource-row__status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  min-width: 100px;
+  width: 100px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.status-indicator__icon {
+  width: 14px;
+  height: 14px;
+}
+
+.status-indicator--error {
+  background: hsl(0 84% 60% / 0.15);
+  color: hsl(0 84% 60%);
+}
+
+.status-indicator--warning {
+  background: hsl(38 92% 50% / 0.15);
+  color: hsl(38 92% 50%);
+}
+
+.status-indicator--update {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.status-indicator--update:hover {
+  background: hsl(var(--primary) / 0.25);
+  transform: scale(1.05);
+}
+
+.status-indicator--ok {
+  background: hsl(142 76% 45% / 0.1);
+  color: hsl(142 76% 45% / 0.6);
+}
+
+.status-indicator--checking {
+  background: hsl(var(--muted) / 0.3);
+  color: hsl(var(--muted-foreground));
+}
+
+.resource-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.resource-row:hover .resource-row__actions {
+  opacity: 1;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--muted) / 0.4);
+  color: hsl(var(--muted-foreground));
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn__icon {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--foreground));
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-btn--ghost {
+  background: transparent;
+}
+
+.action-btn--ghost:hover:not(:disabled) {
+  background: hsl(var(--muted) / 0.5);
+}
+
+.action-btn--update {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+}
+
+.action-btn--update:hover:not(:disabled) {
+  background: hsl(var(--primary) / 0.25);
+}
+
+.action-btn--locked {
+  background: hsl(38 92% 50% / 0.15);
+  color: hsl(38 92% 50%);
+}
+
+.action-btn--note {
+  background: hsl(217 91% 60% / 0.15);
+  color: hsl(217 91% 60%);
+}
+
+.action-btn--danger:hover:not(:disabled) {
+  background: hsl(0 84% 60% / 0.15);
+  color: hsl(0 84% 60%);
+}
+
+.action-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+
+.action-spinner__icon {
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--primary));
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.resource-row__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: hsl(var(--muted-foreground) / 0.25);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-switch--on {
+  background: hsl(var(--primary));
+}
+
+.toggle-switch--off {
+  background: hsl(var(--muted-foreground) / 0.25);
+}
+
+.toggle-switch--locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toggle-switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px hsl(0 0% 0% / 0.2);
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch--on .toggle-switch__thumb {
+  transform: translateX(16px);
+}
+
+/* Resource Empty State */
+.resource-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.resource-empty__icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: hsl(var(--muted) / 0.3);
+  color: hsl(var(--muted-foreground) / 0.4);
+  margin-bottom: 16px;
+}
+
+.resource-empty__title {
+  font-size: 14px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 4px;
+}
+
+.resource-empty__desc {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground) / 0.7);
+}
+
+/* Library Panel */
+.library-panel {
+  display: flex;
+  flex-direction: column;
+  width: 40%;
+  background: hsl(var(--muted) / 0.05);
+  border-left: 1px solid hsl(var(--border) / 0.2);
+}
+
+.library-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: hsl(var(--muted) / 0.1);
+  border-bottom: 1px solid hsl(var(--border) / 0.2);
+}
+
+.library-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.library-panel__icon {
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--primary));
+}
+
+.library-panel__count {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+}
+
+.library-panel__warning-count {
+  font-size: 10px;
+  font-weight: 500;
+  color: hsl(38 92% 50%);
+}
+
+.library-panel__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.library-panel__close:hover {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.library-panel__search {
+  padding: 8px 12px;
+  border-bottom: 1px solid hsl(var(--border) / 0.2);
+}
+
+.library-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.library-search__icon {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--muted-foreground) / 0.5);
+  pointer-events: none;
+}
+
+.library-search__input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 32px;
+  font-size: 12px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: var(--radius);
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.library-search__input::placeholder {
+  color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.library-search__input:focus {
+  background: hsl(var(--card));
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.library-panel__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.library-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: hsl(var(--card) / 0.5);
+  border: 1px solid hsl(var(--border) / 0.2);
+  border-radius: var(--radius);
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.library-item:hover {
+  background: hsl(var(--card) / 0.8);
+  border-color: hsl(var(--border) / 0.4);
+}
+
+.library-item--warning {
+  border-left: 2px solid hsl(38 92% 50% / 0.6);
+}
+
+.library-item--incompatible {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.library-item__thumb {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.library-item__img {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--radius) - 2px);
+  object-fit: cover;
+}
+
+.library-item__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--muted) / 0.3);
+  border-radius: calc(var(--radius) - 2px);
+  color: hsl(var(--muted-foreground) / 0.4);
+}
+
+.library-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.library-item__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-item__name-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s ease;
+}
+
+.library-item__name-text:hover {
+  color: hsl(var(--primary));
+}
+
+.library-item__status-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.library-item__status-icon--error {
+  color: hsl(0 84% 60%);
+}
+
+.library-item__status-icon--warning {
+  color: hsl(38 92% 50%);
+}
+
+.library-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.library-item__version {
+  color: hsl(var(--primary) / 0.8);
+  font-weight: 500;
+}
+
+.library-item__loader {
+  color: hsl(var(--muted-foreground));
+  text-transform: capitalize;
+}
+
+.library-item__loader--warning {
+  color: hsl(38 92% 50% / 0.8);
+}
+
+.library-item__reason {
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-item__reason--error {
+  color: hsl(0 84% 60% / 0.8);
+}
+
+.library-item__reason--warning {
+  color: hsl(38 92% 50% / 0.8);
+}
+
+.library-item__action {
+  flex-shrink: 0;
+}
+
+.library-item__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.library-item:hover .library-item__add {
+  opacity: 1;
+}
+
+.library-item__add:hover {
+  background: hsl(var(--primary) / 0.2);
+}
+
+.library-item__add--warning {
+  background: hsl(38 92% 50% / 0.1);
+  color: hsl(38 92% 50%);
+}
+
+.library-item__add--warning:hover {
+  background: hsl(38 92% 50% / 0.2);
+}
+
+.library-item__locked {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: hsl(var(--muted-foreground) / 0.3);
+}
+
+.library-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: hsl(var(--muted-foreground) / 0.4);
+}
+
+.library-panel__empty p {
+  margin-top: 8px;
+  font-size: 12px;
 }
 </style>

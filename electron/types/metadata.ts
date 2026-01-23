@@ -45,6 +45,22 @@ export interface Mod {
   issues_url?: string; // Issue tracker URL
   source_url?: string; // Source code URL
   wiki_url?: string; // Wiki URL
+  /**
+   * Mod environment/side compatibility.
+   * - client: Client-side only (won't affect server)
+   * - server: Server-side only (required on server, optional on client)  
+   * - both: Required on both client and server
+   * - unknown: Not specified by the mod author
+   */
+  environment?: "client" | "server" | "both" | "unknown";
+  /** 
+   * Whether this file is a server pack (CurseForge metadata).
+   * Used to identify server-side only mods for export filtering.
+   * - true: Server pack/server-side only
+   * - false: Client-side (or both)
+   * - undefined/null: Unknown/not specified
+   */
+  isServerPack?: boolean | null;
 }
 
 // ==================== MODPACK TYPES ====================
@@ -104,6 +120,8 @@ export interface CreateModpackData {
   loader?: string;
   loader_version?: string;
   description?: string;
+  /** Recommended RAM in MB */
+  recommended_ram?: number;
 }
 
 // ==================== VERSION CONTROL TYPES ====================

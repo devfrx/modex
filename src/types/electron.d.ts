@@ -443,9 +443,27 @@ export interface ElectronAPI {
 
   // ========== EXPORT/IMPORT ==========
   export: {
+    /** Get folder tree for export selection UI */
+    getOverridesTree: (modpackId: string) => Promise<Array<{
+      name: string;
+      type: "folder" | "file";
+      path: string;
+      children?: Array<{ name: string; type: "folder" | "file"; path: string }>;
+    }>>;
     /** Export modpack as CurseForge manifest.json inside ZIP */
     curseforge: (
-      modpackId: string
+      modpackId: string,
+      options?: {
+        profileName?: string;
+        version?: string;
+        selectedFolders?: string[];
+        /** Specific file/folder paths to exclude (relative paths like "config/mymod.toml") */
+        excludedPaths?: string[];
+        includeRamRecommendation?: boolean;
+        ramRecommendation?: number;
+        /** If true, only include server-side mods (isServerPack=true or unspecified) */
+        serverModsOnly?: boolean;
+      }
     ) => Promise<{ success: boolean; path: string } | null>;
     /** Export modpack as MODEX manifest */
     modex: (
@@ -1336,6 +1354,10 @@ export interface CFFile {
   gameVersions: string[];
   dependencies: CFDependency[];
   fileFingerprint: number;
+  /** Whether this file is a server pack (server-side only) */
+  isServerPack?: boolean | null;
+  /** File ID of the corresponding server pack (if this is client pack) */
+  serverPackFileId?: number | null;
 }
 
 export interface CFFileIndex {

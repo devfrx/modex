@@ -128,6 +128,28 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
     selectedModIds.value = newSet;
   }
 
+  // Select all mods with specific environment (excludes locked)
+  function selectByEnvironment(environment: "client" | "server" | "both" | "unknown"): void {
+    const envMods = filteredMods.value.filter(
+      (mod) => {
+        if (!mod.id || lockedModIds.value.has(mod.id)) return false;
+        if (environment === "unknown") {
+          return !mod.environment || mod.environment === "unknown";
+        }
+        return mod.environment === environment;
+      }
+    );
+    log.debug('Selecting mods by environment', { environment, count: envMods.length });
+
+    const newSet = new Set<string>();
+    for (const mod of envMods) {
+      if (mod.id) {
+        newSet.add(mod.id);
+      }
+    }
+    selectedModIds.value = newSet;
+  }
+
   // Clear all selections
   function clearSelection(): void {
     log.debug('Clearing all selections', { previousCount: selectedModIds.value.size });
@@ -177,6 +199,7 @@ export function useModpackSelection(options: UseModpackSelectionOptions) {
     selectHalfEnabled,
     selectAllDisabled,
     selectHalfDisabled,
+    selectByEnvironment,
     clearSelection,
     isSelected,
   };

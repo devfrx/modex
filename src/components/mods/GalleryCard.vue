@@ -230,10 +230,10 @@ function handleImageError(e: Event) {
 
 <style scoped>
 .gallery-card {
-  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 20px -4px hsl(var(--background) / 0.3);
 }
 
 .gallery-card:hover {
-  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 30px -4px hsl(var(--background) / 0.5);
 }
 </style>

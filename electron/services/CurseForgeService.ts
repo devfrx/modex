@@ -85,6 +85,10 @@ export interface CFFile {
   sortableGameVersions?: CFSortableGameVersion[];
   dependencies: CFDependency[];
   fileFingerprint: number;
+  /** Whether this file is a server pack (server-side only) */
+  isServerPack?: boolean | null;
+  /** File ID of the corresponding server pack (if this is client pack) */
+  serverPackFileId?: number | null;
 }
 
 export interface CFFileIndex {
@@ -917,6 +921,8 @@ export class CurseForgeService {
     date_created: string;
     date_modified: string;
     website_url: string;
+    environment?: "client" | "server" | "both" | "unknown";
+    isServerPack?: boolean | null;
   } {
     let loader = "unknown";
     let game_version = "unknown";
@@ -1050,6 +1056,22 @@ export class CurseForgeService {
       return 0;
     });
 
+    // Determine mod environment from gameVersions array
+    // CurseForge includes "Client" and/or "Server" strings in this array
+    const gameVersionsLower = file.gameVersions.map((v) => v.toLowerCase());
+    const hasClient = gameVersionsLower.includes("client");
+    const hasServer = gameVersionsLower.includes("server");
+
+    let environment: "client" | "server" | "both" | "unknown" = "unknown";
+    if (hasClient && hasServer) {
+      environment = "both";
+    } else if (hasClient) {
+      environment = "client";
+    } else if (hasServer) {
+      environment = "server";
+    }
+    // If neither is specified, leave as "unknown"
+
     return {
       source: "curseforge",
       cf_project_id: mod.id,
@@ -1080,6 +1102,10 @@ export class CurseForgeService {
       date_created: mod.dateCreated,
       date_modified: mod.dateModified,
       website_url: `https://www.curseforge.com/minecraft/${urlPath}/${mod.slug}`,
+      // Environment from gameVersions array (Client/Server)
+      environment,
+      // Server pack indicator from CurseForge
+      isServerPack: file.isServerPack ?? null,
     };
   }
 

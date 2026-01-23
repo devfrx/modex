@@ -14,7 +14,11 @@ export type ModsFilterType =
   | "updates"
   | "recent-updated"
   | "recent-added"
-  | "with-notes";
+  | "with-notes"
+  | "env-client"
+  | "env-server"
+  | "env-both"
+  | "env-unknown";
 
 export type ContentTypeTab = "mods" | "resourcepacks" | "shaders";
 export type SortByField = "name" | "version" | "date";
@@ -70,6 +74,25 @@ export function useModpackFiltering(options: UseModpackFilteringOptions) {
     return counts;
   });
 
+  // Environment counts for current content type
+  const environmentCounts = computed(() => {
+    const counts = { client: 0, server: 0, both: 0, unknown: 0 };
+    for (const m of currentMods.value) {
+      // Only count mods of current content type
+      const modContentType = m.content_type || "mod";
+      if (contentTypeTab.value === "mods" && modContentType !== "mod") continue;
+      if (contentTypeTab.value === "resourcepacks" && modContentType !== "resourcepack") continue;
+      if (contentTypeTab.value === "shaders" && modContentType !== "shader") continue;
+      
+      const env = m.environment || "unknown";
+      if (env === "client") counts.client++;
+      else if (env === "server") counts.server++;
+      else if (env === "both") counts.both++;
+      else counts.unknown++;
+    }
+    return counts;
+  });
+
   // Filtered & Sorted Mods
   const filteredInstalledMods = computed(() => {
     let mods = currentMods.value.filter((m) => {
@@ -116,6 +139,19 @@ export function useModpackFiltering(options: UseModpackFilteringOptions) {
       }
       if (modsFilter.value === "with-notes") {
         return !!modNotes.value[m.id];
+      }
+      // Environment filters
+      if (modsFilter.value === "env-client") {
+        return m.environment === "client";
+      }
+      if (modsFilter.value === "env-server") {
+        return m.environment === "server";
+      }
+      if (modsFilter.value === "env-both") {
+        return m.environment === "both";
+      }
+      if (modsFilter.value === "env-unknown") {
+        return !m.environment || m.environment === "unknown";
       }
       return true;
     });
@@ -170,6 +206,7 @@ export function useModpackFiltering(options: UseModpackFilteringOptions) {
 
     // Computed
     contentTypeCounts,
+    environmentCounts,
     filteredInstalledMods,
     activeFilterCount,
 

@@ -780,6 +780,7 @@ export class MetadataManager {
       loader: data.loader,
       loader_version: data.loader_version,
       description: data.description,
+      recommended_ram: data.recommended_ram,
       created_at: new Date().toISOString(),
       mod_ids: [],
     };
@@ -5181,6 +5182,9 @@ ${modLinks}
     }
 
     const mcVersion = manifest.minecraft?.version || "1.20.1";
+    
+    // Extract recommendedRam if present
+    const recommendedRam = manifest.minecraft?.recommendedRam;
 
     // Create modpack with loader version
     const modpackId = await this.createModpack({
@@ -5191,6 +5195,7 @@ ${modLinks}
       loader_version: loaderVersion,
       description: `Imported from CurseForge. Author: ${manifest.author || "Unknown"
         }`,
+      recommended_ram: recommendedRam,
     });
 
     const errors: string[] = [];
@@ -5356,6 +5361,10 @@ ${modLinks}
             date_created: formattedMod.date_created,
             date_modified: formattedMod.date_modified,
             website_url: formattedMod.website_url,
+            // Environment from CurseForge gameVersions
+            environment: formattedMod.environment,
+            // Server pack indicator from CurseForge
+            isServerPack: formattedMod.isServerPack ?? null,
           } as Omit<Mod, "id" | "created_at">,
           modName: formattedMod.name,
           isDisabled: !isRequired,
@@ -5606,6 +5615,8 @@ ${modLinks}
             date_created: formattedMod.date_created,
             date_modified: formattedMod.date_modified,
             website_url: formattedMod.website_url,
+            environment: formattedMod.environment,
+            isServerPack: formattedMod.isServerPack ?? null,
           });
           // Update index
           existingModsIndex.set(cacheKey, existingMod);
@@ -5983,6 +5994,8 @@ ${modLinks}
                 date_created: formattedMod.date_created,
                 date_modified: formattedMod.date_modified,
                 website_url: formattedMod.website_url,
+                environment: formattedMod.environment,
+                isServerPack: formattedMod.isServerPack ?? null,
               };
 
               log.info(
@@ -6011,6 +6024,9 @@ ${modLinks}
               description: modEntry.description,
               author: modEntry.author,
               thumbnail_url: modEntry.thumbnail_url,
+              // Fallback: environment unknown since CF API failed
+              environment: "unknown" as const,
+              isServerPack: null,
             };
           }
         } else {
@@ -6029,6 +6045,9 @@ ${modLinks}
             description: modEntry.description,
             author: modEntry.author,
             thumbnail_url: modEntry.thumbnail_url,
+            // Fallback: environment unknown for Modrinth/fallback
+            environment: "unknown" as const,
+            isServerPack: null,
           };
         }
 
@@ -6768,6 +6787,8 @@ ${modLinks}
                 date_created: formattedMod.date_created,
                 date_modified: formattedMod.date_modified,
                 website_url: formattedMod.website_url,
+                environment: formattedMod.environment,
+                isServerPack: formattedMod.isServerPack ?? null,
               });
             } else {
               throw new Error("Mod or file not found on CurseForge");
@@ -6792,6 +6813,9 @@ ${modLinks}
               description: conflict.modEntry.description,
               author: conflict.modEntry.author,
               thumbnail_url: conflict.modEntry.thumbnail_url,
+              // Fallback: environment unknown since CF API failed
+              environment: "unknown" as const,
+              isServerPack: null,
             });
           }
         } else {
@@ -6810,6 +6834,9 @@ ${modLinks}
             description: conflict.modEntry.description,
             author: conflict.modEntry.author,
             thumbnail_url: conflict.modEntry.thumbnail_url,
+            // Fallback: environment unknown for Modrinth/fallback
+            environment: "unknown" as const,
+            isServerPack: null,
           });
         }
 
@@ -6989,6 +7016,8 @@ ${modLinks}
             date_created: formattedMod.date_created,
             date_modified: formattedMod.date_modified,
             website_url: formattedMod.website_url,
+            environment: formattedMod.environment,
+            isServerPack: formattedMod.isServerPack ?? null,
           });
 
           newModIds.push(newMod.id);

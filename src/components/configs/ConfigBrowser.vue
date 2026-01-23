@@ -955,18 +955,18 @@ watch(folderCategory, () => {
 }
 
 .action-btn-star:hover {
-    color: rgb(250 204 21);
-    background-color: rgb(250 204 21 / 0.1);
+    color: hsl(var(--warning));
+    background-color: hsl(var(--warning) / 0.1);
 }
 
 .action-btn-structured:hover {
-    color: rgb(168 85 247);
-    background-color: rgb(168 85 247 / 0.1);
+    color: hsl(var(--primary));
+    background-color: hsl(var(--primary) / 0.1);
 }
 
 .action-btn-delete:hover {
-    color: rgb(248 113 113);
-    background-color: rgb(239 68 68 / 0.1);
+    color: hsl(var(--destructive));
+    background-color: hsl(var(--destructive) / 0.1);
 }
 
 /* Folder Tree */
@@ -976,19 +976,19 @@ watch(folderCategory, () => {
 
 /* File Type Colors */
 .file-json {
-    color: rgb(250 204 21);
+    color: hsl(var(--warning));
 }
 
 .file-toml {
-    color: rgb(96 165 250);
+    color: hsl(var(--info));
 }
 
 .file-yaml {
-    color: rgb(74 222 128);
+    color: hsl(var(--success));
 }
 
 .file-cfg {
-    color: rgb(192 132 252);
+    color: hsl(var(--primary));
 }
 
 .file-default {
@@ -1022,14 +1022,14 @@ watch(folderCategory, () => {
 }
 
 .backup-btn-restore:hover {
-    color: rgb(74 222 128);
-    background-color: rgb(34 197 94 / 0.1);
+    color: hsl(var(--success));
+    background-color: hsl(var(--success) / 0.1);
     transform: scale(1.1);
 }
 
 .backup-btn-delete:hover {
-    color: rgb(248 113 113);
-    background-color: rgb(239 68 68 / 0.1);
+    color: hsl(var(--destructive));
+    background-color: hsl(var(--destructive) / 0.1);
     transform: scale(1.1);
 }
 

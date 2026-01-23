@@ -13,6 +13,7 @@ import path from "path";
 import fs from "fs-extra";
 import { safeStorage } from "electron";
 import { createLogger } from "./LoggerService.js";
+import { fetchWithTimeout } from "../utils/fetchWithTimeout.js";
 
 const log = createLogger("Gist");
 
@@ -228,26 +229,26 @@ export class GistService {
    */
   async validateToken(token: string): Promise<boolean> {
     try {
-      const response = await fetch("https://api.github.com/user", {
+      const response = await fetchWithTimeout("https://api.github.com/user", {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github.v3+json",
           "User-Agent": "ModEx-App",
         },
-      });
+      }, 15000);
 
       if (!response.ok) {
         return false;
       }
 
       // Check if token has gist scope by trying to list gists
-      const gistsResponse = await fetch("https://api.github.com/gists?per_page=1", {
+      const gistsResponse = await fetchWithTimeout("https://api.github.com/gists?per_page=1", {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github.v3+json",
           "User-Agent": "ModEx-App",
         },
-      });
+      }, 15000);
 
       return gistsResponse.ok;
     } catch (err) {
@@ -272,13 +273,13 @@ export class GistService {
     if (!token) return null;
 
     try {
-      const response = await fetch("https://api.github.com/user", {
+      const response = await fetchWithTimeout("https://api.github.com/user", {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github.v3+json",
           "User-Agent": "ModEx-App",
         },
-      });
+      }, 15000);
 
       if (!response.ok) return null;
 
@@ -304,7 +305,7 @@ export class GistService {
       const perPage = options?.perPage || 30;
       const page = options?.page || 1;
 
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `https://api.github.com/gists?per_page=${perPage}&page=${page}`,
         {
           headers: {
@@ -312,7 +313,8 @@ export class GistService {
             Accept: "application/vnd.github.v3+json",
             "User-Agent": "ModEx-App",
           },
-        }
+        },
+        15000
       );
 
       if (!response.ok) {
@@ -347,7 +349,7 @@ export class GistService {
     }
 
     try {
-      const response = await fetch("https://api.github.com/gists", {
+      const response = await fetchWithTimeout("https://api.github.com/gists", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -364,7 +366,7 @@ export class GistService {
             },
           },
         }),
-      });
+      }, 30000);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -408,7 +410,7 @@ export class GistService {
         body.description = options.description;
       }
 
-      const response = await fetch(`https://api.github.com/gists/${options.gistId}`, {
+      const response = await fetchWithTimeout(`https://api.github.com/gists/${options.gistId}`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -417,7 +419,7 @@ export class GistService {
           "User-Agent": "ModEx-App",
         },
         body: JSON.stringify(body),
-      });
+      }, 30000);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -455,7 +457,7 @@ export class GistService {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
+      const response = await fetchWithTimeout(`https://api.github.com/gists/${gistId}`, { headers }, 15000);
 
       if (!response.ok) {
         return null;
@@ -497,14 +499,14 @@ export class GistService {
     }
 
     try {
-      const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+      const response = await fetchWithTimeout(`https://api.github.com/gists/${gistId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github.v3+json",
           "User-Agent": "ModEx-App",
         },
-      });
+      }, 15000);
 
       if (!response.ok) {
         // 404 means Gist was already deleted externally - treat as success

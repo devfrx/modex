@@ -751,7 +751,7 @@ async function updateAllMods(): Promise<void> {
     align-items: center;
     gap: 16px;
     padding: 16px 20px;
-    border-radius: 12px;
+    border-radius: calc(var(--radius) + 4px);
     border: 1px solid hsl(38 92% 50% / 0.3);
     background: hsl(38 92% 50% / 0.1);
 }
@@ -805,7 +805,7 @@ async function updateAllMods(): Promise<void> {
     transform: translateY(-50%);
     width: 24px;
     height: 24px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -829,7 +829,7 @@ async function updateAllMods(): Promise<void> {
     display: flex;
     gap: 2px;
     padding: 2px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: hsl(var(--muted) / 0.5);
 }
 
@@ -838,7 +838,7 @@ async function updateAllMods(): Promise<void> {
     align-items: center;
     justify-content: center;
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     font-size: 12px;
     font-weight: 500;
     color: hsl(var(--muted-foreground));
@@ -852,7 +852,7 @@ async function updateAllMods(): Promise<void> {
 .filter-btn.active {
     color: hsl(var(--foreground));
     background: hsl(var(--background));
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px hsl(var(--background) / 0.3);
 }
 
 .filter-enabled.active {
@@ -866,7 +866,7 @@ async function updateAllMods(): Promise<void> {
 .sort-btn {
     width: 32px;
     height: 32px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -885,14 +885,14 @@ async function updateAllMods(): Promise<void> {
     display: flex;
     gap: 2px;
     padding: 2px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: hsl(var(--muted) / 0.5);
 }
 
 .view-btn {
     width: 32px;
     height: 32px;
-    border-radius: 6px;
+    border-radius: calc(var(--radius) - 2px);
     display: flex;
     align-items: center;
     justify-content: center;

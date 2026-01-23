@@ -175,6 +175,8 @@ export function registerCurseForgeHandlers(deps: CurseForgeIpcDeps): void {
         date_created: modData.date_created,
         date_modified: modData.date_modified,
         website_url: modData.website_url,
+        environment: modData.environment,
+        isServerPack: modData.isServerPack ?? null,
       });
 
       return mod;

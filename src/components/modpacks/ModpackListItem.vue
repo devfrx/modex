@@ -35,6 +35,7 @@ defineEmits<{
     (e: "toggle-favorite", id: string): void;
     (e: "share", id: string, name: string): void;
     (e: "convert", id: string): void;
+    (e: "export", id: string): void;
 }>();
 
 const showActions = ref(false);
@@ -149,6 +150,10 @@ function getLoaderColor(loader?: string) {
                     <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
                         @click.stop="$emit('edit', modpack.id); showActions = false">
                         <Icon name="Edit" class="w-4 h-4" /> Edit
+                    </button>
+                    <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
+                        @click.stop="$emit('export', modpack.id); showActions = false">
+                        <Icon name="Download" class="w-4 h-4" /> Export
                     </button>
                     <button class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-muted"
                         @click.stop="$emit('clone', modpack.id); showActions = false">

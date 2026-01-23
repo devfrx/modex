@@ -44,6 +44,7 @@ const defaultHytaleItems: SidebarNavItem[] = [
   { id: "hytale-modpacks", name: "My Packs", route: "/hytale/modpacks", icon: "Package", enabled: true, order: 2, games: ["hytale"] },
   { id: "hytale-browse", name: "Browse Mods", route: "/hytale/browse", icon: "LayoutGrid", enabled: true, order: 3, games: ["hytale"] },
   { id: "hytale-worlds", name: "Worlds", route: "/hytale/worlds", icon: "FolderTree", enabled: true, order: 4, games: ["hytale"] },
+  { id: "hytale-guide", name: "Guide", route: "/guide", icon: "BookOpen", enabled: true, order: 5, games: ["hytale"] },
 ];
 
 // Legacy items for backwards compatibility

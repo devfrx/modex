@@ -3550,8 +3550,8 @@ watch(
 
                   <!-- Game Version Cell -->
                   <div class="resource-row__game">
-                    <Tooltip v-if="mod.game_versions?.length >= 1" :content="mod.game_versions.join(', ')"
-                      position="top">
+                    <Tooltip v-if="mod.game_versions && mod.game_versions.length >= 1"
+                      :content="mod.game_versions.join(', ')" position="top">
                       <span class="game-version" :class="{ 'game-version--error': !mod.isCompatible }">
                         {{ mod.game_versions[0] }}
                       </span>
@@ -3747,8 +3747,8 @@ watch(
                         class="library-item__status-icon library-item__status-icon--warning" />
                     </div>
                     <div class="library-item__meta">
-                      <Tooltip v-if="mod.game_versions?.length >= 1" :content="mod.game_versions.join(', ')"
-                        position="top">
+                      <Tooltip v-if="mod.game_versions && mod.game_versions.length >= 1"
+                        :content="mod.game_versions.join(', ')" position="top">
                         <span class="library-item__version">
                           {{ mod.game_versions[0] }}
                         </span>

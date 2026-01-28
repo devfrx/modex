@@ -20,6 +20,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ProgressDialog from "@/components/ui/ProgressDialog.vue";
 import BulkActionBar from "@/components/ui/BulkActionBar.vue";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import type { Modpack, Mod } from "@/types/electron";
 import ModpackIcon from "@/assets/modex_modpack_icon2.png";
 
@@ -1293,16 +1294,18 @@ onUnmounted(() => {
               </span>
             </button>
             <div class="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-              <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
-                title="Grid View">
-                <Icon name="LayoutGrid" class="w-3.5 h-3.5" />
-              </button>
-              <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
-                :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'"
-                title="List View">
-                <Icon name="List" class="w-3.5 h-3.5" />
-              </button>
+              <Tooltip content="Grid View" position="bottom">
+                <button @click="viewMode = 'grid'" class="p-1.5 rounded transition-all"
+                  :class="viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+                  <Icon name="LayoutGrid" class="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+              <Tooltip content="List View" position="bottom">
+                <button @click="viewMode = 'list'" class="p-1.5 rounded transition-all"
+                  :class="viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'">
+                  <Icon name="List" class="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -1519,25 +1522,32 @@ onUnmounted(() => {
     <!-- Bulk Action Bar -->
     <BulkActionBar v-if="selectedModpackIds.size > 0" :count="selectedModpackIds.size" label="modpacks"
       @clear="clearSelection">
-      <Button variant="secondary" size="sm" class="gap-2" @click="exportSelectedModpacks"
-        title="Export all as CurseForge">
-        <Icon name="Upload" class="w-4 h-4" />
-        Export
-      </Button>
-      <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size !== 2"
-        @click="openCompareWithSelected" title="Compare selected modpacks">
-        <Icon name="ArrowLeftRight" class="w-4 h-4" />
-        Compare
-      </Button>
-      <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size < 2"
-        @click="mergeSelectedModpacks" title="Merge into new modpack">
-        <Icon name="Merge" class="w-4 h-4" />
-        Merge
-      </Button>
-      <Button variant="secondary" size="sm" class="gap-2" @click="openSelectedFolders" title="Open all in Explorer">
-        <Icon name="FolderOpen" class="w-4 h-4" />
-        Folders
-      </Button>
+      <Tooltip content="Export all as CurseForge" position="top">
+        <Button variant="secondary" size="sm" class="gap-2" @click="exportSelectedModpacks">
+          <Icon name="Upload" class="w-4 h-4" />
+          Export
+        </Button>
+      </Tooltip>
+      <Tooltip content="Compare selected modpacks" position="top">
+        <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size !== 2"
+          @click="openCompareWithSelected">
+          <Icon name="ArrowLeftRight" class="w-4 h-4" />
+          Compare
+        </Button>
+      </Tooltip>
+      <Tooltip content="Merge into new modpack" position="top">
+        <Button variant="secondary" size="sm" class="gap-2" :disabled="selectedModpackIds.size < 2"
+          @click="mergeSelectedModpacks">
+          <Icon name="Merge" class="w-4 h-4" />
+          Merge
+        </Button>
+      </Tooltip>
+      <Tooltip content="Open all in Explorer" position="top">
+        <Button variant="secondary" size="sm" class="gap-2" @click="openSelectedFolders">
+          <Icon name="FolderOpen" class="w-4 h-4" />
+          Folders
+        </Button>
+      </Tooltip>
       <Button variant="secondary" size="sm" class="gap-2" @click="duplicateSelectedModpacks">
         <Icon name="Copy" class="w-4 h-4" />
         Duplicate
@@ -1620,9 +1630,10 @@ onUnmounted(() => {
                 <div class="flex items-center gap-2 mt-1">
                   <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{
                     conflict.existingGameVersion || "unknown" }}</span>
-                  <span class="text-xs text-muted-foreground truncate max-w-[200px]"
-                    :title="conflict.existingVersion">{{
+                  <Tooltip :content="conflict.existingVersion" position="top">
+                    <span class="text-xs text-muted-foreground truncate max-w-[200px]">{{
                       conflict.existingVersion }}</span>
+                  </Tooltip>
                 </div>
                 <div class="text-xs text-muted-foreground mt-1">
                   Already in your library
@@ -1643,8 +1654,10 @@ onUnmounted(() => {
                   <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{{
                     conflict.newGameVersion
                     || "unknown" }}</span>
-                  <span class="text-xs text-muted-foreground truncate max-w-[200px]" :title="conflict.newVersion">{{
-                    conflict.newVersion }}</span>
+                  <Tooltip :content="conflict.newVersion" position="top">
+                    <span class="text-xs text-muted-foreground truncate max-w-[200px]">{{
+                      conflict.newVersion }}</span>
+                  </Tooltip>
                 </div>
                 <div class="text-xs text-muted-foreground mt-1">
                   From the imported modpack

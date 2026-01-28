@@ -4,6 +4,7 @@ import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import FilePickerDialog from "@/components/mods/FilePickerDialog.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import { useToast } from "@/composables/useToast";
 import type { Mod } from "@/types/electron";
 
@@ -188,11 +189,13 @@ onMounted(() => {
             </div>
 
             <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button size="icon" variant="secondary"
-                class="h-7 w-7 rounded-md bg-background/60 backdrop-blur-md border border-border/30 hover:bg-background"
-                @click.stop="openCurseForge(mod.links?.websiteUrl)" title="View on CurseForge">
-                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
-              </Button>
+              <Tooltip content="View on CurseForge" position="left">
+                <Button size="icon" variant="secondary"
+                  class="h-7 w-7 rounded-md bg-background/60 backdrop-blur-md border border-border/30 hover:bg-background"
+                  @click.stop="openCurseForge(mod.links?.websiteUrl)">
+                  <Icon name="ExternalLink" class="w-3.5 h-3.5" />
+                </Button>
+              </Tooltip>
             </div>
           </div>
 
@@ -200,9 +203,11 @@ onMounted(() => {
           <div class="p-3.5 flex-1 flex flex-col relative -mt-8">
             <div class="mb-2.5">
               <div class="flex justify-between items-start gap-2 mb-1">
-                <h4 class="font-semibold truncate text-sm group-hover:text-primary transition-colors" :title="mod.name">
-                  {{ mod.name }}
-                </h4>
+                <Tooltip :content="mod.name" position="top">
+                  <h4 class="font-semibold truncate text-sm group-hover:text-primary transition-colors">
+                    {{ mod.name }}
+                  </h4>
+                </Tooltip>
               </div>
               <p class="text-xs text-muted-foreground line-clamp-2 min-h-[2.5em] leading-relaxed">
                 {{ mod.summary }}

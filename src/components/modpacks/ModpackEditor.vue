@@ -14,6 +14,7 @@ import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import ProgressDialog from "@/components/ui/ProgressDialog.vue";
 import ModUpdateDialog from "@/components/mods/ModUpdateDialog.vue";
@@ -286,6 +287,7 @@ const {
   changelogMod,
   updatesAvailableCount,
   updatingMods,
+  checkAllUpdatesProgress,
   checkModUpdate,
   updateMod,
   checkAllUpdates,
@@ -1192,6 +1194,9 @@ function handleCloseStructuredEditor() {
 async function saveModpackInfo() {
   if (!modpack.value) return;
 
+  // Track if loader version changed for auto-sync
+  const loaderVersionChanged = modpack.value.loader_version !== editForm.value.loader_version;
+
   isSaving.value = true;
   try {
     await window.api.modpacks.update(props.modpackId, {
@@ -1216,6 +1221,11 @@ async function saveModpackInfo() {
     // Re-check sync status (loader version may have changed)
     if (instance.value) {
       instanceSyncStatus.value = await window.api.instances.checkSyncStatus(instance.value.id, props.modpackId);
+
+      // Auto-sync if enabled and loader version changed
+      if (loaderVersionChanged && syncSettings.value.autoSyncEnabled) {
+        await handleSyncInstance();
+      }
     }
 
     emit("update");
@@ -2475,12 +2485,14 @@ watch(
                   class="hidden sm:inline text-xs px-2.5 py-1 rounded-lg bg-muted/60 text-muted-foreground font-mono border border-border/40 backdrop-blur-sm">
                   v{{ modpack.version }}
                 </span>
-                <span v-if="modpack?.remote_source?.url"
-                  class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-xs font-medium border border-primary/30 backdrop-blur-sm"
-                  title="This modpack is linked to a remote source">
-                  <Icon name="Share2" class="w-3 h-3" />
-                  Linked
-                </span>
+                <Tooltip v-if="modpack?.remote_source?.url" content="This modpack is linked to a remote source"
+                  position="bottom">
+                  <span
+                    class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary text-xs font-medium border border-primary/30 backdrop-blur-sm">
+                    <Icon name="Share2" class="w-3 h-3" />
+                    Linked
+                  </span>
+                </Tooltip>
               </div>
 
               <!-- Stats Row -->
@@ -2525,10 +2537,12 @@ watch(
             <div class="flex items-center gap-2 shrink-0">
               <!-- Image Menu -->
               <div class="relative hidden sm:block">
-                <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-xl hover:bg-white/10 backdrop-blur-sm"
-                  @click="showImageMenu = !showImageMenu" title="Manage cover image">
-                  <Icon name="ImagePlus" class="w-4 h-4" />
-                </Button>
+                <Tooltip content="Manage cover image" position="bottom">
+                  <Button variant="ghost" size="sm" class="h-9 w-9 p-0 rounded-xl hover:bg-white/10 backdrop-blur-sm"
+                    @click="showImageMenu = !showImageMenu">
+                    <Icon name="ImagePlus" class="w-4 h-4" />
+                  </Button>
+                </Tooltip>
                 <!-- Click outside to close -->
                 <div v-if="showImageMenu" class="fixed inset-0 z-40" @click="showImageMenu = false"></div>
                 <div v-if="showImageMenu"
@@ -2609,12 +2623,14 @@ watch(
             </div>
 
             <!-- Cloud Sync - Separate floating action -->
-            <button class="tab-float" :class="{ 'tab-float--active': activeTab === 'remote' }"
-              @click="activeTab = 'remote'" title="Sync with cloud & share your modpack">
-              <Icon name="CloudUpload" class="w-4 h-4" />
-              <span class="hidden sm:inline text-sm font-medium">Share</span>
-              <span v-if="gistExistsRemotely || editForm.remote_url" class="tab-float__indicator"></span>
-            </button>
+            <Tooltip content="Sync with cloud & share your modpack" position="left">
+              <button class="tab-float" :class="{ 'tab-float--active': activeTab === 'remote' }"
+                @click="activeTab = 'remote'">
+                <Icon name="CloudUpload" class="w-4 h-4" />
+                <span class="hidden sm:inline text-sm font-medium">Share</span>
+                <span v-if="gistExistsRemotely || editForm.remote_url" class="tab-float__indicator"></span>
+              </button>
+            </Tooltip>
           </div>
 
           <!-- Dropdown menu for secondary tabs -->
@@ -3124,7 +3140,7 @@ watch(
                     <span class="content-type-btn__label">Mods</span>
                     <span class="content-type-btn__count"
                       :class="{ 'content-type-btn__count--active': contentTypeTab === 'mods' }">{{
-                      contentTypeCounts.mods }}</span>
+                        contentTypeCounts.mods }}</span>
                   </button>
                   <button class="content-type-btn"
                     :class="{ 'content-type-btn--active': contentTypeTab === 'resourcepacks' }"
@@ -3133,7 +3149,7 @@ watch(
                     <span class="content-type-btn__label">Packs</span>
                     <span class="content-type-btn__count"
                       :class="{ 'content-type-btn__count--active': contentTypeTab === 'resourcepacks' }">{{
-                      contentTypeCounts.resourcepacks }}</span>
+                        contentTypeCounts.resourcepacks }}</span>
                   </button>
                   <button class="content-type-btn" :class="{ 'content-type-btn--active': contentTypeTab === 'shaders' }"
                     @click="contentTypeTab = 'shaders'">
@@ -3141,7 +3157,7 @@ watch(
                     <span class="content-type-btn__label">Shaders</span>
                     <span class="content-type-btn__count"
                       :class="{ 'content-type-btn__count--active': contentTypeTab === 'shaders' }">{{
-                      contentTypeCounts.shaders }}</span>
+                        contentTypeCounts.shaders }}</span>
                   </button>
                 </div>
               </div>
@@ -3153,24 +3169,28 @@ watch(
                     @click="modsFilter = 'all'">
                     All
                   </button>
-                  <button v-if="incompatibleModCount > 0" class="filter-pill filter-pill--error"
-                    :class="{ 'filter-pill--active': modsFilter === 'incompatible' }"
-                    @click="modsFilter = 'incompatible'" title="Incompatible mods">
-                    <Icon name="AlertCircle" class="filter-pill__icon" />
-                    {{ incompatibleModCount }}
-                  </button>
-                  <button v-if="updatesAvailableCount > 0" class="filter-pill filter-pill--primary"
-                    :class="{ 'filter-pill--active': modsFilter === 'updates' }" @click="modsFilter = 'updates'"
-                    title="Updates available">
-                    <Icon name="ArrowUpCircle" class="filter-pill__icon" />
-                    {{ updatesAvailableCount }}
-                  </button>
-                  <button v-if="disabledModCount > 0" class="filter-pill filter-pill--warning"
-                    :class="{ 'filter-pill--active': modsFilter === 'disabled' }" @click="modsFilter = 'disabled'"
-                    title="Disabled mods">
-                    <Icon name="ToggleLeft" class="filter-pill__icon" />
-                    {{ disabledModCount }}
-                  </button>
+                  <Tooltip v-if="incompatibleModCount > 0" content="Incompatible mods" position="top">
+                    <button class="filter-pill filter-pill--error"
+                      :class="{ 'filter-pill--active': modsFilter === 'incompatible' }"
+                      @click="modsFilter = 'incompatible'">
+                      <Icon name="AlertCircle" class="filter-pill__icon" />
+                      {{ incompatibleModCount }}
+                    </button>
+                  </Tooltip>
+                  <Tooltip v-if="updatesAvailableCount > 0" content="Updates available" position="top">
+                    <button class="filter-pill filter-pill--primary"
+                      :class="{ 'filter-pill--active': modsFilter === 'updates' }" @click="modsFilter = 'updates'">
+                      <Icon name="ArrowUpCircle" class="filter-pill__icon" />
+                      {{ updatesAvailableCount }}
+                    </button>
+                  </Tooltip>
+                  <Tooltip v-if="disabledModCount > 0" content="Disabled mods" position="top">
+                    <button class="filter-pill filter-pill--warning"
+                      :class="{ 'filter-pill--active': modsFilter === 'disabled' }" @click="modsFilter = 'disabled'">
+                      <Icon name="ToggleLeft" class="filter-pill__icon" />
+                      {{ disabledModCount }}
+                    </button>
+                  </Tooltip>
                   <!-- More filters dropdown -->
                   <div
                     v-if="warningModCount > 0 || lockedModCount > 0 || modsWithNotesCount > 0 || recentlyUpdatedCount > 0 || recentlyAddedCount > 0 || environmentCounts.client > 0 || environmentCounts.server > 0 || environmentCounts.both > 0 || environmentCounts.unknown > 0"
@@ -3220,13 +3240,15 @@ watch(
                       </button>
                       <!-- Dismiss All Badges Button -->
                       <div v-if="recentlyUpdatedCount > 0 || recentlyAddedCount > 0" class="h-px bg-border my-1"></div>
-                      <button v-if="recentlyUpdatedCount > 0 || recentlyAddedCount > 0"
-                        class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
-                        @click="dismissAllBadges(); showModsFilterMenu = false"
-                        title="Mark all new and updated mods as read">
-                        <Icon name="CheckCheck" class="w-3 h-3" />
-                        Dismiss All Badges
-                      </button>
+                      <Tooltip v-if="recentlyUpdatedCount > 0 || recentlyAddedCount > 0"
+                        content="Mark all new and updated mods as read" position="left">
+                        <button
+                          class="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                          @click="dismissAllBadges(); showModsFilterMenu = false">
+                          <Icon name="CheckCheck" class="w-3 h-3" />
+                          Dismiss All Badges
+                        </button>
+                      </Tooltip>
                       <!-- Environment Filters -->
                       <div
                         v-if="environmentCounts.client > 0 || environmentCounts.server > 0 || environmentCounts.both > 0 || environmentCounts.unknown > 0"
@@ -3288,17 +3310,27 @@ watch(
                 <div class="toolbar-divider"></div>
 
                 <!-- Check Updates -->
-                <button @click="checkAllUpdates" :disabled="isCheckingAllUpdates" class="toolbar-btn"
-                  :class="{ 'toolbar-btn--active': isCheckingAllUpdates }"
-                  :title="isCheckingAllUpdates ? 'Checking...' : 'Check for updates'">
-                  <Icon name="RefreshCw" class="toolbar-btn__icon" :class="{ 'animate-spin': isCheckingAllUpdates }" />
-                </button>
+                <Tooltip
+                  :content="isCheckingAllUpdates ? `Checking... ${checkAllUpdatesProgress}%` : 'Check for updates'"
+                  position="bottom">
+                  <button @click="checkAllUpdates" :disabled="isCheckingAllUpdates" class="toolbar-btn relative"
+                    :class="{ 'toolbar-btn--active': isCheckingAllUpdates }">
+                    <Icon name="RefreshCw" class="toolbar-btn__icon"
+                      :class="{ 'animate-spin': isCheckingAllUpdates }" />
+                    <span v-if="isCheckingAllUpdates && checkAllUpdatesProgress > 0"
+                      class="absolute -bottom-0.5 -right-0.5 text-[9px] font-bold text-primary bg-background/90 rounded px-0.5 leading-tight">
+                      {{ checkAllUpdatesProgress }}%
+                    </span>
+                  </button>
+                </Tooltip>
 
                 <!-- Library Toggle -->
-                <button @click="isLibraryCollapsed = !isLibraryCollapsed" class="toolbar-btn"
-                  :class="{ 'toolbar-btn--active': !isLibraryCollapsed }" title="Toggle Library">
-                  <Icon name="Package" class="toolbar-btn__icon" />
-                </button>
+                <Tooltip content="Toggle Library" position="bottom">
+                  <button @click="isLibraryCollapsed = !isLibraryCollapsed" class="toolbar-btn"
+                    :class="{ 'toolbar-btn--active': !isLibraryCollapsed }">
+                    <Icon name="Package" class="toolbar-btn__icon" />
+                  </button>
+                </Tooltip>
 
                 <!-- CurseForge Button -->
                 <button v-if="!isLinked" class="toolbar-btn-cta" @click="showCFSearch = true">
@@ -3356,19 +3388,24 @@ watch(
 
                   <!-- Selection Controls -->
                   <div v-if="currentMods.length > 0 && !isLinked" class="select-controls">
-                    <button class="select-controls__btn" @click="selectAll" title="Select all visible">
-                      <Icon name="CheckSquare" class="select-controls__icon" />
-                    </button>
-                    <button class="select-controls__btn" @click="clearSelection" title="Clear selection">
-                      <Icon name="Square" class="select-controls__icon" />
-                    </button>
+                    <Tooltip content="Select all visible" position="top">
+                      <button class="select-controls__btn" @click="selectAll">
+                        <Icon name="ListChecks" class="select-controls__icon" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Clear selection" position="top">
+                      <button class="select-controls__btn" @click="clearSelection">
+                        <Icon name="Square" class="select-controls__icon" />
+                      </button>
+                    </Tooltip>
 
                     <!-- Quick Select Dropdown -->
                     <div class="select-dropdown">
-                      <button class="select-dropdown__trigger" @click="showSelectMenu = !showSelectMenu"
-                        title="Quick select options">
-                        <Icon name="ChevronDown" class="select-controls__icon" />
-                      </button>
+                      <Tooltip content="Quick select options" position="top">
+                        <button class="select-dropdown__trigger" @click="showSelectMenu = !showSelectMenu">
+                          <Icon name="ChevronDown" class="select-controls__icon" />
+                        </button>
+                      </Tooltip>
                       <div v-if="showSelectMenu" class="select-dropdown__menu">
                         <button class="select-dropdown__item" @click="selectAllEnabled(); showSelectMenu = false">
                           <Icon name="ToggleRight" class="select-dropdown__icon" />
@@ -3445,50 +3482,64 @@ watch(
                   <!-- Name & Badges -->
                   <div class="resource-row__name">
                     <div class="resource-name__row">
-                      <span class="resource-name__text" @click.stop="openModDetails(mod)" title="Click for details">
-                        {{ mod.name }}
-                      </span>
+                      <Tooltip content="Click for details" position="top">
+                        <span class="resource-name__text" @click.stop="openModDetails(mod)">
+                          {{ mod.name }}
+                        </span>
+                      </Tooltip>
                       <!-- Environment indicator -->
-                      <span v-if="mod.environment === 'client'" class="env-badge env-badge--client"
-                        title="Client-side only">
-                        <Icon name="Monitor" class="env-badge__icon" />
-                      </span>
-                      <span v-else-if="mod.environment === 'server'" class="env-badge env-badge--server"
-                        title="Server-side only">
-                        <Icon name="Server" class="env-badge__icon" />
-                      </span>
-                      <span v-else-if="mod.environment === 'both'" class="env-badge env-badge--both"
-                        title="Client & Server">
-                        <Icon name="Layers" class="env-badge__icon" />
-                      </span>
+                      <Tooltip v-if="mod.environment === 'client'" content="Client-side only" position="top">
+                        <span class="env-badge env-badge--client">
+                          <Icon name="Monitor" class="env-badge__icon" />
+                        </span>
+                      </Tooltip>
+                      <Tooltip v-else-if="mod.environment === 'server'" content="Server-side only" position="top">
+                        <span class="env-badge env-badge--server">
+                          <Icon name="Server" class="env-badge__icon" />
+                        </span>
+                      </Tooltip>
+                      <Tooltip v-else-if="mod.environment === 'both'" content="Client & Server" position="top">
+                        <span class="env-badge env-badge--both">
+                          <Icon name="Layers" class="env-badge__icon" />
+                        </span>
+                      </Tooltip>
                     </div>
-                    <div class="resource-name__badges">
+                    <div
+                      v-if="recentlyAddedMods.has(mod.id) || recentlyUpdatedMods.has(mod.id) || lockedModIds.has(mod.id) || getModNote(mod.id)"
+                      class="resource-name__badges">
                       <!-- NEW badge with dismiss -->
                       <span v-if="recentlyAddedMods.has(mod.id)" class="badge badge--new">
                         <span class="badge__text">NEW</span>
-                        <button class="badge__dismiss" @click.stop="dismissNewMod(mod.id)" title="Dismiss">
-                          <Icon name="X" class="badge__dismiss-icon" />
-                        </button>
+                        <Tooltip content="Dismiss" position="top">
+                          <button class="badge__dismiss" @click.stop="dismissNewMod(mod.id)">
+                            <Icon name="X" class="badge__dismiss-icon" />
+                          </button>
+                        </Tooltip>
                       </span>
                       <!-- UPDATED badge with dismiss -->
                       <span v-if="recentlyUpdatedMods.has(mod.id)" class="badge badge--updated">
                         <span class="badge__text">UPDATED</span>
-                        <button class="badge__dismiss" @click.stop="dismissUpdatedMod(mod.id)" title="Dismiss">
-                          <Icon name="X" class="badge__dismiss-icon" />
-                        </button>
+                        <Tooltip content="Dismiss" position="top">
+                          <button class="badge__dismiss" @click.stop="dismissUpdatedMod(mod.id)">
+                            <Icon name="X" class="badge__dismiss-icon" />
+                          </button>
+                        </Tooltip>
                       </span>
                       <!-- Locked badge -->
-                      <span v-if="lockedModIds.has(mod.id)" class="badge badge--locked"
-                        title="Locked - version changes disabled">
-                        <Icon name="Lock" class="badge__icon" />
-                        <span class="badge__label">Locked</span>
-                      </span>
+                      <Tooltip v-if="lockedModIds.has(mod.id)" content="Locked - version changes disabled"
+                        position="top">
+                        <span class="badge badge--locked">
+                          <Icon name="Lock" class="badge__icon" />
+                          <span class="badge__label">Locked</span>
+                        </span>
+                      </Tooltip>
                       <!-- Note badge -->
-                      <span v-if="getModNote(mod.id)" class="badge badge--note" :title="getModNote(mod.id)"
-                        @click.stop="openModNoteDialog(mod)">
-                        <Icon name="StickyNote" class="badge__icon" />
-                        <span class="badge__label">Note</span>
-                      </span>
+                      <Tooltip v-if="getModNote(mod.id)" :content="getModNote(mod.id) || ''" position="top">
+                        <span class="badge badge--note" @click.stop="openModNoteDialog(mod)">
+                          <Icon name="StickyNote" class="badge__icon" />
+                          <span class="badge__label">Note</span>
+                        </span>
+                      </Tooltip>
                     </div>
                   </div>
 
@@ -3499,10 +3550,12 @@ watch(
 
                   <!-- Game Version Cell -->
                   <div class="resource-row__game">
-                    <span v-if="mod.game_versions?.length >= 1" class="game-version"
-                      :class="{ 'game-version--error': !mod.isCompatible }" :title="mod.game_versions.join(', ')">
-                      {{ mod.game_versions[0] }}
-                    </span>
+                    <Tooltip v-if="mod.game_versions?.length >= 1" :content="mod.game_versions.join(', ')"
+                      position="top">
+                      <span class="game-version" :class="{ 'game-version--error': !mod.isCompatible }">
+                        {{ mod.game_versions[0] }}
+                      </span>
+                    </Tooltip>
                     <span v-else-if="mod.game_version && mod.game_version !== 'unknown'" class="game-version"
                       :class="{ 'game-version--error': !mod.isCompatible }">
                       {{ mod.game_version }}
@@ -3522,25 +3575,33 @@ watch(
                   <!-- Status Cell - Multiple indicators can show -->
                   <div class="resource-row__status">
                     <!-- Compatible indicator (always show when compatible) -->
-                    <span v-if="mod.isCompatible" class="status-indicator status-indicator--ok" title="Compatible">
-                      <Icon name="Check" class="status-indicator__icon" />
-                    </span>
+                    <Tooltip v-if="mod.isCompatible" content="Compatible" position="top">
+                      <span class="status-indicator status-indicator--ok">
+                        <Icon name="Check" class="status-indicator__icon" />
+                      </span>
+                    </Tooltip>
                     <!-- Incompatible indicator with reason -->
-                    <span v-if="!mod.isCompatible" class="status-indicator status-indicator--error"
-                      :title="`Incompatible: ${mod.incompatibilityReason || 'Game version mismatch'}`">
-                      <Icon name="AlertCircle" class="status-indicator__icon" />
-                    </span>
+                    <Tooltip v-if="!mod.isCompatible"
+                      :content="`Incompatible: ${mod.incompatibilityReason || 'Game version mismatch'}`" position="top">
+                      <span class="status-indicator status-indicator--error">
+                        <Icon name="AlertCircle" class="status-indicator__icon" />
+                      </span>
+                    </Tooltip>
                     <!-- Warning indicator with reason -->
-                    <span v-if="mod.hasWarning" class="status-indicator status-indicator--warning"
-                      :title="`Warning: ${mod.incompatibilityReason || 'Loader mismatch'}`">
-                      <Icon name="AlertTriangle" class="status-indicator__icon" />
-                    </span>
+                    <Tooltip v-if="mod.hasWarning"
+                      :content="`Warning: ${mod.incompatibilityReason || 'Loader mismatch'}`" position="top">
+                      <span class="status-indicator status-indicator--warning">
+                        <Icon name="AlertTriangle" class="status-indicator__icon" />
+                      </span>
+                    </Tooltip>
                     <!-- Update indicator (always show if update available) -->
-                    <span v-if="updateAvailable[mod.id]" class="status-indicator status-indicator--update"
-                      :title="`Update available: ${updateAvailable[mod.id]?.displayName || 'newer version'}`"
-                      @click.stop="quickUpdateMod(mod)">
-                      <Icon name="ArrowUpCircle" class="status-indicator__icon" />
-                    </span>
+                    <Tooltip v-if="updateAvailable[mod.id]"
+                      :content="`Update available: ${updateAvailable[mod.id]?.displayName || 'newer version'}`"
+                      position="top">
+                      <span class="status-indicator status-indicator--update" @click.stop="quickUpdateMod(mod)">
+                        <Icon name="ArrowUpCircle" class="status-indicator__icon" />
+                      </span>
+                    </Tooltip>
                   </div>
 
                   <!-- Actions Cell -->
@@ -3552,51 +3613,60 @@ watch(
 
                     <template v-else>
                       <!-- Update button -->
-                      <button v-if="updateAvailable[mod.id] && !lockedModIds.has(mod.id) && !isLinked"
-                        class="action-btn action-btn--update" @click.stop="quickUpdateMod(mod)"
-                        :title="`Update to ${updateAvailable[mod.id]?.displayName || 'latest'}`">
-                        <Icon name="ArrowUpCircle" class="action-btn__icon" />
-                      </button>
+                      <Tooltip v-if="updateAvailable[mod.id] && !lockedModIds.has(mod.id) && !isLinked"
+                        :content="`Update to ${updateAvailable[mod.id]?.displayName || 'latest'}`" position="top">
+                        <button class="action-btn action-btn--update" @click.stop="quickUpdateMod(mod)">
+                          <Icon name="ArrowUpCircle" class="action-btn__icon" />
+                        </button>
+                      </Tooltip>
 
                       <!-- Version picker -->
-                      <button v-if="mod.cf_project_id && !lockedModIds.has(mod.id) && !isLinked"
-                        class="action-btn action-btn--ghost" @click.stop="openVersionPicker(mod)"
-                        title="Change version">
-                        <Icon name="GitBranch" class="action-btn__icon" />
-                      </button>
+                      <Tooltip v-if="mod.cf_project_id && !lockedModIds.has(mod.id) && !isLinked"
+                        content="Change version" position="top">
+                        <button class="action-btn action-btn--ghost" @click.stop="openVersionPicker(mod)">
+                          <Icon name="GitBranch" class="action-btn__icon" />
+                        </button>
+                      </Tooltip>
 
                       <!-- Lock toggle -->
-                      <button v-if="!isLinked" class="action-btn"
-                        :class="lockedModIds.has(mod.id) ? 'action-btn--locked' : 'action-btn--ghost'"
-                        @click.stop="toggleModLocked(mod.id)" :title="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'">
-                        <Icon :name="lockedModIds.has(mod.id) ? 'Lock' : 'LockOpen'" class="action-btn__icon" />
-                      </button>
+                      <Tooltip v-if="!isLinked" :content="lockedModIds.has(mod.id) ? 'Unlock' : 'Lock'" position="top">
+                        <button class="action-btn"
+                          :class="lockedModIds.has(mod.id) ? 'action-btn--locked' : 'action-btn--ghost'"
+                          @click.stop="toggleModLocked(mod.id)">
+                          <Icon :name="lockedModIds.has(mod.id) ? 'Lock' : 'LockOpen'" class="action-btn__icon" />
+                        </button>
+                      </Tooltip>
 
                       <!-- Note button -->
-                      <button class="action-btn" :class="getModNote(mod.id) ? 'action-btn--note' : 'action-btn--ghost'"
-                        @click.stop="openModNoteDialog(mod)" :title="getModNote(mod.id) ? 'Edit note' : 'Add note'">
-                        <Icon name="MessageSquare" class="action-btn__icon" />
-                      </button>
+                      <Tooltip :content="getModNote(mod.id) ? 'Edit note' : 'Add note'" position="top">
+                        <button class="action-btn"
+                          :class="getModNote(mod.id) ? 'action-btn--note' : 'action-btn--ghost'"
+                          @click.stop="openModNoteDialog(mod)">
+                          <Icon name="MessageSquare" class="action-btn__icon" />
+                        </button>
+                      </Tooltip>
 
                       <!-- Remove button -->
-                      <button v-if="!isLinked && !lockedModIds.has(mod.id)" class="action-btn action-btn--danger"
-                        @click.stop="removeMod(mod.id)" title="Remove">
-                        <Icon name="Trash2" class="action-btn__icon" />
-                      </button>
+                      <Tooltip v-if="!isLinked && !lockedModIds.has(mod.id)" content="Remove" position="top">
+                        <button class="action-btn action-btn--danger" @click.stop="removeMod(mod.id)">
+                          <Icon name="Trash2" class="action-btn__icon" />
+                        </button>
+                      </Tooltip>
                     </template>
                   </div>
 
                   <!-- Toggle Cell -->
                   <div class="resource-row__toggle" @click.stop>
-                    <button class="toggle-switch" :class="[
-                      !disabledModIds.has(mod.id) ? 'toggle-switch--on' : 'toggle-switch--off',
-                      (isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) ? 'toggle-switch--locked' : ''
-                    ]"
-                      @click.stop="!(isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && toggleModEnabled(mod.id)"
-                      :title="disabledModIds.has(mod.id) ? 'Enable' : 'Disable'"
-                      :disabled="isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)">
-                      <span class="toggle-switch__thumb" />
-                    </button>
+                    <Tooltip :content="disabledModIds.has(mod.id) ? 'Enable' : 'Disable'" position="left">
+                      <button class="toggle-switch" :class="[
+                        !disabledModIds.has(mod.id) ? 'toggle-switch--on' : 'toggle-switch--off',
+                        (isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) ? 'toggle-switch--locked' : ''
+                      ]"
+                        @click.stop="!(isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)) && toggleModEnabled(mod.id)"
+                        :disabled="isLinked || lockedModIds.has(mod.id) || updatingMods.has(mod.id)">
+                        <span class="toggle-switch__thumb" />
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
 
@@ -3625,10 +3695,12 @@ watch(
                   <Icon name="Package" class="library-panel__icon" />
                   <span>Library</span>
                   <span class="library-panel__count">{{ compatibleCount }}</span>
-                  <span v-if="warningAvailableCount > 0" class="library-panel__warning-count"
-                    :title="`${warningAvailableCount} with loader mismatch`">
-                    +{{ warningAvailableCount }}
-                  </span>
+                  <Tooltip v-if="warningAvailableCount > 0" :content="`${warningAvailableCount} with loader mismatch`"
+                    position="left">
+                    <span class="library-panel__warning-count">
+                      +{{ warningAvailableCount }}
+                    </span>
+                  </Tooltip>
                 </div>
                 <button @click="isLibraryCollapsed = true" class="library-panel__close">
                   <Icon name="X" class="w-3.5 h-3.5" />
@@ -3664,19 +3736,23 @@ watch(
                   <!-- Info -->
                   <div class="library-item__info">
                     <div class="library-item__name">
-                      <span class="library-item__name-text" @click.stop="openModDetails(mod)" title="Click for details">
-                        {{ mod.name }}
-                      </span>
+                      <Tooltip content="Click for details" position="top">
+                        <span class="library-item__name-text" @click.stop="openModDetails(mod)">
+                          {{ mod.name }}
+                        </span>
+                      </Tooltip>
                       <Icon v-if="!mod.isCompatible" name="AlertCircle"
                         class="library-item__status-icon library-item__status-icon--error" />
                       <Icon v-else-if="mod.hasWarning" name="AlertTriangle"
                         class="library-item__status-icon library-item__status-icon--warning" />
                     </div>
                     <div class="library-item__meta">
-                      <span v-if="mod.game_versions?.length >= 1" class="library-item__version"
-                        :title="mod.game_versions.join(', ')">
-                        {{ mod.game_versions[0] }}
-                      </span>
+                      <Tooltip v-if="mod.game_versions?.length >= 1" :content="mod.game_versions.join(', ')"
+                        position="top">
+                        <span class="library-item__version">
+                          {{ mod.game_versions[0] }}
+                        </span>
+                      </Tooltip>
                       <span v-else-if="mod.game_version && mod.game_version !== 'unknown'"
                         class="library-item__version">
                         {{ mod.game_version }}
@@ -3698,11 +3774,13 @@ watch(
 
                   <!-- Add Button -->
                   <div class="library-item__action">
-                    <button v-if="mod.isCompatible && !isLinked" class="library-item__add"
-                      :class="{ 'library-item__add--warning': mod.hasWarning }" @click.stop="addMod(mod.id)"
-                      :title="mod.hasWarning ? 'Add (different loader)' : 'Add'">
-                      <Icon name="Plus" class="w-3.5 h-3.5" />
-                    </button>
+                    <Tooltip v-if="mod.isCompatible && !isLinked"
+                      :content="mod.hasWarning ? 'Add (different loader)' : 'Add'" position="left">
+                      <button class="library-item__add" :class="{ 'library-item__add--warning': mod.hasWarning }"
+                        @click.stop="addMod(mod.id)">
+                        <Icon name="Plus" class="w-3.5 h-3.5" />
+                      </button>
+                    </Tooltip>
                     <div v-else-if="!mod.isCompatible" class="library-item__locked">
                       <Icon name="Lock" class="w-3 h-3" />
                     </div>
@@ -3739,42 +3817,90 @@ watch(
         </div>
 
         <!-- Settings Tab -->
-        <div v-else-if="activeTab === 'settings'" class="flex-1 p-6 overflow-auto">
-          <div class="max-w-2xl mx-auto space-y-6">
-            <div>
-              <h3 class="text-lg font-semibold mb-4">Modpack Settings</h3>
+        <div v-else-if="activeTab === 'settings'" class="settings-tab">
+          <div class="settings-container">
+            <!-- Header -->
+            <div class="settings-header">
+              <div class="settings-header__icon">
+                <Icon name="Settings" class="settings-header__icon-svg" />
+              </div>
+              <div class="settings-header__content">
+                <h2 class="settings-header__title">Modpack Settings</h2>
+                <p class="settings-header__subtitle">Configure your modpack's identity and technical requirements</p>
+              </div>
+              <div v-if="isLinked" class="settings-header__badge">
+                <Icon name="Link" class="w-3.5 h-3.5" />
+                <span>Linked</span>
+              </div>
+            </div>
 
-              <div class="space-y-4">
-                <!-- Name -->
-                <div class="space-y-2">
-                  <label class="text-sm font-medium flex items-center gap-1.5">
-                    Name
-                    <Icon v-if="isLinked" name="Lock" class="w-3 h-3 text-muted-foreground" />
-                  </label>
-                  <input v-model="editForm.name" type="text" :disabled="isLinked"
-                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed" />
+            <!-- Identity Section -->
+            <div class="settings-section">
+              <div class="settings-section__header">
+                <Icon name="Tag" class="settings-section__icon" />
+                <span class="settings-section__title">Identity</span>
+              </div>
+
+              <div class="settings-section__content">
+                <div class="settings-grid settings-grid--2">
+                  <!-- Name -->
+                  <div class="settings-field">
+                    <label class="settings-field__label">
+                      <span>Name</span>
+                      <Icon v-if="isLinked" name="Lock" class="settings-field__lock" />
+                    </label>
+                    <input v-model="editForm.name" type="text" :disabled="isLinked" class="settings-field__input"
+                      placeholder="My Awesome Modpack" />
+                  </div>
+
+                  <!-- Version -->
+                  <div class="settings-field">
+                    <label class="settings-field__label">
+                      <span>Version</span>
+                      <Icon v-if="isLinked" name="Lock" class="settings-field__lock" />
+                    </label>
+                    <div class="settings-field__input-wrapper">
+                      <input v-model="editForm.version" type="text" :disabled="isLinked" class="settings-field__input"
+                        placeholder="1.0.0" />
+                      <span class="settings-field__input-hint">SemVer</span>
+                    </div>
+                  </div>
                 </div>
 
-                <!-- Version -->
-                <div class="space-y-2">
-                  <label class="text-sm font-medium flex items-center gap-1.5">
-                    Version
-                    <Icon v-if="isLinked" name="Lock" class="w-3 h-3 text-muted-foreground" />
+                <!-- Description -->
+                <div class="settings-field">
+                  <label class="settings-field__label">
+                    <span>Description</span>
+                    <Icon v-if="isLinked" name="Lock" class="settings-field__lock" />
                   </label>
-                  <input v-model="editForm.version" type="text" :disabled="isLinked"
-                    class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="1.0.0" />
+                  <textarea v-model="editForm.description" rows="3" :disabled="isLinked"
+                    class="settings-field__textarea"
+                    placeholder="Describe your modpack's features, goals, and intended experience..."></textarea>
                 </div>
+              </div>
+            </div>
 
-                <!-- MC Version & Loader Row -->
-                <div class="grid grid-cols-2 gap-4">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium flex items-center gap-1.5">
-                      Minecraft Version
-                      <Icon v-if="isExistingModpack" name="Lock" class="w-3 h-3 text-muted-foreground" />
+            <!-- Technical Section -->
+            <div class="settings-section">
+              <div class="settings-section__header">
+                <Icon name="Cpu" class="settings-section__icon" />
+                <span class="settings-section__title">Technical Configuration</span>
+                <span v-if="isExistingModpack" class="settings-section__badge">
+                  <Icon name="Lock" class="w-3 h-3" />
+                  Locked after creation
+                </span>
+              </div>
+
+              <div class="settings-section__content">
+                <div class="settings-grid settings-grid--2">
+                  <!-- MC Version -->
+                  <div class="settings-field">
+                    <label class="settings-field__label">
+                      <Icon name="Gamepad2" class="settings-field__label-icon" />
+                      <span>Minecraft Version</span>
                     </label>
                     <select v-model="editForm.minecraft_version" :disabled="isExistingModpack"
-                      class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed">
+                      class="settings-field__select">
                       <option value="">Select version...</option>
                       <option v-for="v in availableGameVersions" :key="v" :value="v">
                         {{ v }}
@@ -3782,90 +3908,81 @@ watch(
                     </select>
                   </div>
 
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium flex items-center gap-1.5">
-                      Mod Loader
-                      <Icon v-if="isExistingModpack" name="Lock" class="w-3 h-3 text-muted-foreground" />
+                  <!-- Mod Loader -->
+                  <div class="settings-field">
+                    <label class="settings-field__label">
+                      <Icon name="Layers" class="settings-field__label-icon" />
+                      <span>Mod Loader</span>
                     </label>
                     <select v-model="editForm.loader" :disabled="isExistingModpack"
-                      class="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed capitalize">
+                      class="settings-field__select capitalize">
                       <option value="">Select loader...</option>
                       <option v-for="l in loaders" :key="l" :value="l" class="capitalize">
                         {{ l }}
                       </option>
                     </select>
                   </div>
-
-                  <!-- Loader Version -->
-                  <div class="space-y-2 col-span-2">
-                    <label class="text-sm font-medium flex items-center gap-1.5">
-                      {{ editForm.loader ? editForm.loader.charAt(0).toUpperCase() + editForm.loader.slice(1) : 'Loader'
-                      }}
-                      Version
-                      <Icon v-if="isLoadingLoaderVersions" name="Loader2"
-                        class="w-3 h-3 animate-spin text-muted-foreground" />
-                      <!-- Show current version badge when set -->
-                      <span v-if="editForm.loader_version && !isLoadingLoaderVersions"
-                        class="ml-auto text-xs font-normal px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                        Current: {{ editForm.loader_version }}
-                      </span>
-                    </label>
-                    <div class="flex gap-2">
-                      <select v-model="editForm.loader_version" :disabled="isLoadingLoaderVersions || isLinked"
-                        class="flex-1 h-10 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <option v-if="editForm.loader_version && filteredLoaderVersions.length === 0"
-                          :value="editForm.loader_version">
-                          {{ editForm.loader_version }} (current)
-                        </option>
-                        <option v-if="!editForm.loader_version && filteredLoaderVersions.length === 0" value="">
-                          {{ isLoadingLoaderVersions ? 'Loading...' : 'Click to load versions' }}
-                        </option>
-                        <option v-for="lv in filteredLoaderVersions" :key="lv.name"
-                          :value="extractLoaderVersion(lv.name)">{{
-                            extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' (Recommended)' : lv.latest ? ' (Latest)'
-                            : '' }}
-                        </option>
-                      </select>
-                      <Button variant="outline" size="sm" @click="fetchLoaderVersions"
-                        :disabled="isLoadingLoaderVersions || !editForm.minecraft_version || !editForm.loader"
-                        title="Refresh available versions">
-                        <Icon name="RefreshCw" class="w-4 h-4" :class="{ 'animate-spin': isLoadingLoaderVersions }" />
-                      </Button>
-                    </div>
-                    <p class="text-xs text-muted-foreground">
-                      The specific version of the mod loader (used for instance creation and exports)
-                    </p>
-                  </div>
                 </div>
 
-                <p v-if="isExistingModpack" class="text-xs text-muted-foreground">
-                  Minecraft version and loader cannot be changed after modpack
-                  creation to prevent mod compatibility issues.
-                </p>
-
-                <!-- Description -->
-                <div class="space-y-2">
-                  <label class="text-sm font-medium flex items-center gap-1.5">
-                    Description
-                    <Icon v-if="isLinked" name="Lock" class="w-3 h-3 text-muted-foreground" />
+                <!-- Loader Version -->
+                <div class="settings-field">
+                  <label class="settings-field__label">
+                    <Icon name="GitBranch" class="settings-field__label-icon" />
+                    <span>{{ editForm.loader ? editForm.loader.charAt(0).toUpperCase() + editForm.loader.slice(1) :
+                      'Loader' }}
+                      Version</span>
+                    <span v-if="editForm.loader_version && !isLoadingLoaderVersions"
+                      class="settings-field__version-badge">
+                      {{ editForm.loader_version }}
+                    </span>
                   </label>
-                  <textarea v-model="editForm.description" rows="3" :disabled="isLinked"
-                    class="w-full px-3 py-2 rounded-lg border border-border/50 bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="Describe your modpack..."></textarea>
-                </div>
-
-                <!-- Save Button -->
-                <div class="pt-2">
-                  <Button @click="saveModpackInfo" :disabled="isSaving || isLinked" class="gap-2">
-                    <Icon name="Save" class="w-4 h-4" />
-                    {{ isSaving ? "Saving..." : "Save Changes" }}
-                  </Button>
-                  <p v-if="isLinked" class="text-xs text-muted-foreground mt-2">
-                    This modpack is managed by a remote source. Settings cannot
-                    be changed locally.
+                  <div class="settings-field__row">
+                    <select v-model="editForm.loader_version" :disabled="isLoadingLoaderVersions || isLinked"
+                      class="settings-field__select flex-1">
+                      <option v-if="editForm.loader_version && filteredLoaderVersions.length === 0"
+                        :value="editForm.loader_version">
+                        {{ editForm.loader_version }} (current)
+                      </option>
+                      <option v-if="!editForm.loader_version && filteredLoaderVersions.length === 0" value="">
+                        {{ isLoadingLoaderVersions ? 'Loading...' : 'Select or load versions' }}
+                      </option>
+                      <option v-for="lv in filteredLoaderVersions" :key="lv.name"
+                        :value="extractLoaderVersion(lv.name)">
+                        {{ extractLoaderVersion(lv.name) }}{{ lv.recommended ? ' ★ Recommended' : lv.latest ?
+                          ' • Latest' : ''
+                        }}
+                      </option>
+                    </select>
+                    <Tooltip content="Load available versions" position="top">
+                      <button class="settings-field__action-btn" @click="fetchLoaderVersions"
+                        :disabled="isLoadingLoaderVersions || !editForm.minecraft_version || !editForm.loader">
+                        <Icon name="RefreshCw" class="w-4 h-4" :class="{ 'animate-spin': isLoadingLoaderVersions }" />
+                      </button>
+                    </Tooltip>
+                  </div>
+                  <p class="settings-field__hint">
+                    Specific loader version used for instance creation and exports
                   </p>
                 </div>
+
+                <p v-if="isExistingModpack" class="settings-notice">
+                  <Icon name="Info" class="w-4 h-4" />
+                  Minecraft version and loader cannot be changed after modpack creation to prevent compatibility issues
+                </p>
               </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="settings-actions">
+              <Button @click="saveModpackInfo" :disabled="isSaving || isLinked" variant="default"
+                class="settings-actions__save">
+                <Icon name="Save" class="w-4 h-4" />
+                {{ isSaving ? "Saving..." : "Save Changes" }}
+              </Button>
+              <p v-if="isLinked" class="settings-actions__notice">
+                <Icon name="Link" class="w-3.5 h-3.5" />
+                This modpack is linked to a remote source. Settings are read-only.
+              </p>
             </div>
           </div>
         </div>
@@ -3977,8 +4094,10 @@ watch(
                     <div v-for="(mod, index) in modpack.incompatible_mods" :key="index"
                       class="flex items-center justify-between gap-2 p-2 bg-background/30 rounded-md text-sm">
                       <span class="font-medium truncate min-w-0 flex-1">{{ mod.name }}</span>
-                      <span class="text-xs text-muted-foreground shrink-0 max-w-[40%] truncate" :title="mod.reason">{{
-                        mod.reason }}</span>
+                      <Tooltip :content="mod.reason" position="top">
+                        <span class="text-xs text-muted-foreground shrink-0 max-w-[40%] truncate">{{
+                          mod.reason }}</span>
+                      </Tooltip>
                     </div>
                   </div>
                 </div>
@@ -4002,8 +4121,7 @@ watch(
                      For modpack creators who want to share their modpack with others
                      Hidden if modpack is linked to a remote source (subscriber mode)
                 ═══════════════════════════════════════════════════════════════════ -->
-                <div v-if="!editForm.remote_url"
-                  class="p-4 bg-gradient-to-r from-primary/5 to-transparent rounded-xl border border-primary/20">
+                <div v-if="!editForm.remote_url" class="p-4 bg-muted/20 rounded-xl border border-border/50">
                   <h4 class="text-sm font-semibold mb-3 flex items-center gap-2 text-primary">
                     <Icon name="CloudUpload" class="w-4 h-4" />
                     Publisher / Host
@@ -4035,17 +4153,23 @@ watch(
                           </div>
                         </div>
                         <div class="flex gap-1">
-                          <Button variant="ghost" size="sm" @click="copyGistUrl" title="Copy raw URL">
-                            <Icon name="Share2" class="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="sm" @click="openGistInBrowser" title="Open in browser">
-                            <Icon name="ExternalLink" class="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive"
-                            @click="deleteGistFromRemote" :disabled="isDeletingGist" title="Delete Gist from GitHub">
-                            <Icon v-if="!isDeletingGist" name="Trash2" class="w-3.5 h-3.5" />
-                            <Icon v-else name="Loader2" class="w-3.5 h-3.5 animate-spin" />
-                          </Button>
+                          <Tooltip content="Copy raw URL" position="top">
+                            <Button variant="ghost" size="sm" @click="copyGistUrl">
+                              <Icon name="Share2" class="w-3.5 h-3.5" />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content="Open in browser" position="top">
+                            <Button variant="ghost" size="sm" @click="openGistInBrowser">
+                              <Icon name="ExternalLink" class="w-3.5 h-3.5" />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content="Delete Gist from GitHub" position="top">
+                            <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive"
+                              @click="deleteGistFromRemote" :disabled="isDeletingGist">
+                              <Icon v-if="!isDeletingGist" name="Trash2" class="w-3.5 h-3.5" />
+                              <Icon v-else name="Loader2" class="w-3.5 h-3.5 animate-spin" />
+                            </Button>
+                          </Tooltip>
                         </div>
                       </div>
                     </div>
@@ -4138,7 +4262,7 @@ watch(
                      SUBSCRIBER / CLIENT SECTION  
                      For users who want to sync with a remote modpack (read-only updates)
                 ═══════════════════════════════════════════════════════════════════ -->
-                <div class="p-4 bg-gradient-to-r from-blue-500/5 to-transparent rounded-xl border border-blue-500/20">
+                <div class="p-4 bg-muted/20 rounded-xl border border-border/50">
                   <h4 class="text-sm font-semibold mb-3 flex items-center gap-2 text-blue-500">
                     <Icon name="Download" class="w-4 h-4" />
                     Subscriber / Client
@@ -4178,10 +4302,11 @@ watch(
                         <input v-model="editForm.remote_url" type="text"
                           class="flex-1 h-9 px-3 rounded-lg border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50"
                           placeholder="https://gist.githubusercontent.com/..." @change="sanitizeRemoteUrl" />
-                        <Button v-if="editForm.remote_url" variant="ghost" size="sm" @click="editForm.remote_url = ''"
-                          title="Clear URL">
-                          <Icon name="X" class="w-4 h-4" />
-                        </Button>
+                        <Tooltip v-if="editForm.remote_url" content="Clear URL" position="top">
+                          <Button variant="ghost" size="sm" @click="editForm.remote_url = ''">
+                            <Icon name="X" class="w-4 h-4" />
+                          </Button>
+                        </Tooltip>
                       </div>
                       <p class="text-xs text-muted-foreground">
                         Paste the raw URL of a JSON manifest to sync with the host's modpack.
@@ -4220,10 +4345,12 @@ watch(
         bottom: `${20 - floatingBarPosition.y}px`
       }">
         <!-- Drag Handle / Reset Position Button -->
-        <button v-if="floatingBarPosition.x !== 0 || floatingBarPosition.y !== 0" class="floating-bar-reset-btn"
-          @click="resetFloatingBarPosition" title="Reset position">
-          <Icon name="RotateCcw" class="w-3 h-3" />
-        </button>
+        <Tooltip v-if="floatingBarPosition.x !== 0 || floatingBarPosition.y !== 0" content="Reset position"
+          position="top">
+          <button class="floating-bar-reset-btn" @click="resetFloatingBarPosition">
+            <Icon name="RotateCcw" class="w-3 h-3" />
+          </button>
+        </Tooltip>
 
         <!-- Sync Status Panel (above main bar) -->
         <Transition enter-active-class="transition duration-200 ease-out"
@@ -4352,15 +4479,18 @@ watch(
               <div class="sync-mode-section">
                 <span class="text-[10px] text-muted-foreground uppercase">Sync Mode</span>
                 <div class="sync-mode-buttons">
-                  <button @click="selectedSyncMode = 'new_only'" class="sync-mode-btn"
-                    :class="{ 'sync-mode-active': selectedSyncMode === 'new_only' }"
-                    title="Only add new files, keep existing ones unchanged">New Only</button>
-                  <button @click="selectedSyncMode = 'overwrite'" class="sync-mode-btn"
-                    :class="{ 'sync-mode-active-warning': selectedSyncMode === 'overwrite' }"
-                    title="Replace all files with modpack versions">Overwrite</button>
-                  <button @click="selectedSyncMode = 'skip'" class="sync-mode-btn"
-                    :class="{ 'sync-mode-active-muted': selectedSyncMode === 'skip' }"
-                    title="Don't sync now, I'll do it manually">Skip</button>
+                  <Tooltip content="Only add new files, keep existing ones unchanged" position="top">
+                    <button @click="selectedSyncMode = 'new_only'" class="sync-mode-btn"
+                      :class="{ 'sync-mode-active': selectedSyncMode === 'new_only' }">New Only</button>
+                  </Tooltip>
+                  <Tooltip content="Replace all files with modpack versions" position="top">
+                    <button @click="selectedSyncMode = 'overwrite'" class="sync-mode-btn"
+                      :class="{ 'sync-mode-active-warning': selectedSyncMode === 'overwrite' }">Overwrite</button>
+                  </Tooltip>
+                  <Tooltip content="Don't sync now, I'll do it manually" position="top">
+                    <button @click="selectedSyncMode = 'skip'" class="sync-mode-btn"
+                      :class="{ 'sync-mode-active-muted': selectedSyncMode === 'skip' }">Skip</button>
+                  </Tooltip>
                 </div>
                 <p class="text-[10px] text-muted-foreground/70 mt-1.5">
                   {{ selectedSyncMode === 'new_only' ? 'Adds missing files without touching existing ones' :
@@ -4395,16 +4525,19 @@ watch(
           :class="{ 'floating-bar-minimized': isFloatingBarMinimized, 'floating-bar-is-dragging': isDraggingFloatingBar }"
           @mousedown="startDragFloatingBar">
           <!-- Drag Handle Indicator -->
-          <div class="floating-bar-drag-handle" title="Drag to move">
-            <Icon name="GripVertical" class="w-3 h-3" />
-          </div>
+          <Tooltip content="Drag to move" position="top">
+            <div class="floating-bar-drag-handle">
+              <Icon name="GripVertical" class="w-3 h-3" />
+            </div>
+          </Tooltip>
 
           <!-- Minimize/Expand Toggle -->
-          <button class="floating-bar-minimize-btn" @click="isFloatingBarMinimized = !isFloatingBarMinimized"
-            :title="isFloatingBarMinimized ? 'Expand Bar' : 'Minimize Bar'">
-            <Icon v-if="!isFloatingBarMinimized" name="ChevronDown" class="w-4 h-4" />
-            <Icon v-else name="ChevronUp" class="w-4 h-4" />
-          </button>
+          <Tooltip :content="isFloatingBarMinimized ? 'Expand Bar' : 'Minimize Bar'" position="top">
+            <button class="floating-bar-minimize-btn" @click="isFloatingBarMinimized = !isFloatingBarMinimized">
+              <Icon v-if="!isFloatingBarMinimized" name="ChevronDown" class="w-4 h-4" />
+              <Icon v-else name="ChevronUp" class="w-4 h-4" />
+            </button>
+          </Tooltip>
 
           <!-- Main Content (hidden when minimized) -->
           <template v-if="!isFloatingBarMinimized">
@@ -4412,36 +4545,44 @@ watch(
 
             <!-- Primary: Play/Create Instance Button -->
             <template v-if="!instance">
-              <button class="floating-bar-play floating-bar-create-instance" @click="handleCreateInstance()"
-                title="Create Instance" :disabled="isCreatingInstance">
-                <Icon v-if="isCreatingInstance" name="Loader2" class="w-5 h-5 animate-spin" />
-                <Icon v-else name="Plus" class="w-5 h-5" />
-              </button>
+              <Tooltip content="Create Instance" position="top">
+                <button class="floating-bar-play floating-bar-create-instance" @click="handleCreateInstance()"
+                  :disabled="isCreatingInstance">
+                  <Icon v-if="isCreatingInstance" name="Loader2" class="w-5 h-5 animate-spin" />
+                  <Icon v-else name="Plus" class="w-5 h-5" />
+                </button>
+              </Tooltip>
               <span class="floating-bar-status-text text-amber-400">{{ isCreatingInstance ? 'Creating...'
                 : 'No instance' }}</span>
             </template>
 
             <template v-else-if="instance.state === 'installing'">
-              <button class="floating-bar-play floating-bar-syncing" disabled title="Syncing...">
-                <Icon name="Loader2" class="w-5 h-5 animate-spin" />
-              </button>
+              <Tooltip content="Syncing..." position="top">
+                <button class="floating-bar-play floating-bar-syncing" disabled>
+                  <Icon name="Loader2" class="w-5 h-5 animate-spin" />
+                </button>
+              </Tooltip>
               <span class="floating-bar-status-text text-blue-400">Syncing...</span>
             </template>
 
             <template v-else-if="isLaunching">
-              <button class="floating-bar-play floating-bar-launching" disabled title="Launching...">
-                <Icon name="Loader2" class="w-5 h-5 animate-spin" />
-              </button>
+              <Tooltip content="Launching..." position="top">
+                <button class="floating-bar-play floating-bar-launching" disabled>
+                  <Icon name="Loader2" class="w-5 h-5 animate-spin" />
+                </button>
+              </Tooltip>
               <span class="floating-bar-status-text text-primary">Launching...</span>
             </template>
 
             <template v-else-if="isGameRunning">
-              <button class="floating-bar-play"
-                :class="runningGame?.status === 'running' ? 'floating-bar-play-game' : 'floating-bar-play-launcher'"
-                @click="handleKillGame()" :title="runningGame?.status === 'running' ? 'Stop Game' : 'Stop Launcher'">
-                <Icon v-if="runningGame?.status !== 'running'" name="Square" class="w-4 h-4 fill-current" />
-                <Icon v-else name="X" class="w-5 h-5" />
-              </button>
+              <Tooltip :content="runningGame?.status === 'running' ? 'Stop Game' : 'Stop Launcher'" position="top">
+                <button class="floating-bar-play"
+                  :class="runningGame?.status === 'running' ? 'floating-bar-play-game' : 'floating-bar-play-launcher'"
+                  @click="handleKillGame()">
+                  <Icon v-if="runningGame?.status !== 'running'" name="Square" class="w-4 h-4 fill-current" />
+                  <Icon v-else name="X" class="w-5 h-5" />
+                </button>
+              </Tooltip>
               <span class="floating-bar-status-text"
                 :class="runningGame?.status === 'running' ? 'text-green-400' : 'text-amber-400'">
                 {{ runningGame?.status === 'running' ? 'Playing' : 'Loading...' }}
@@ -4449,10 +4590,12 @@ watch(
             </template>
 
             <template v-else>
-              <button class="floating-bar-play" :class="{ 'floating-bar-play-ready': instance.state === 'ready' }"
-                :disabled="instance.state !== 'ready'" @click="handleLaunch()" title="Play">
-                <Icon name="Play" class="w-5 h-5 fill-current" />
-              </button>
+              <Tooltip content="Play" position="top">
+                <button class="floating-bar-play" :class="{ 'floating-bar-play-ready': instance.state === 'ready' }"
+                  :disabled="instance.state !== 'ready'" @click="handleLaunch()">
+                  <Icon name="Play" class="w-5 h-5 fill-current" />
+                </button>
+              </Tooltip>
               <span v-if="instance.state === 'ready'" class="floating-bar-status-text text-green-400">Ready</span>
               <span v-else class="floating-bar-status-text text-muted-foreground">{{ instance.state }}</span>
             </template>
@@ -4460,17 +4603,20 @@ watch(
             <!-- Sync Status Indicator -->
             <template v-if="instance && instanceSyncStatus?.needsSync">
               <div class="floating-bar-divider" />
-              <button class="floating-bar-btn floating-bar-btn-sync"
-                :class="{ 'floating-bar-btn-active': showSyncDetails }" @click="showSyncDetails = !showSyncDetails"
-                :title="`${instanceSyncStatus.totalDifferences} changes pending`">
-                <Icon name="AlertTriangle" class="w-4 h-4" />
-                <span class="floating-bar-sync-count">{{ instanceSyncStatus.totalDifferences }}</span>
-              </button>
-              <button class="floating-bar-btn floating-bar-btn-sync-action" @click="handleSyncInstance"
-                :disabled="isSyncingInstance" title="Sync Now">
-                <Icon v-if="isSyncingInstance" name="Loader2" class="w-4 h-4 animate-spin" />
-                <Icon v-else name="RefreshCw" class="w-4 h-4" />
-              </button>
+              <Tooltip :content="`${instanceSyncStatus.totalDifferences} changes pending`" position="top">
+                <button class="floating-bar-btn floating-bar-btn-sync"
+                  :class="{ 'floating-bar-btn-active': showSyncDetails }" @click="showSyncDetails = !showSyncDetails">
+                  <Icon name="AlertTriangle" class="w-4 h-4" />
+                  <span class="floating-bar-sync-count">{{ instanceSyncStatus.totalDifferences }}</span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Sync Now" position="top">
+                <button class="floating-bar-btn floating-bar-btn-sync-action" @click="handleSyncInstance"
+                  :disabled="isSyncingInstance">
+                  <Icon v-if="isSyncingInstance" name="Loader2" class="w-4 h-4 animate-spin" />
+                  <Icon v-else name="RefreshCw" class="w-4 h-4" />
+                </button>
+              </Tooltip>
             </template>
 
             <!-- In Sync Badge -->
@@ -4487,21 +4633,28 @@ watch(
 
             <!-- Instance Actions (when instance exists) -->
             <template v-if="instance">
-              <button class="floating-bar-btn" @click="openInstanceSettings()" title="Instance Settings">
-                <Icon name="Sliders" class="w-4 h-4" />
-              </button>
-              <button class="floating-bar-btn" @click="handleOpenInstanceFolder()" title="Open Folder">
-                <Icon name="FolderOpen" class="w-4 h-4" />
-              </button>
-              <button class="floating-bar-btn" @click="showLogConsole = !showLogConsole"
-                :class="{ 'floating-bar-btn-active': showLogConsole }"
-                :title="showLogConsole ? 'Hide Console' : 'Show Console'">
-                <Icon name="Terminal" class="w-4 h-4" />
-              </button>
-              <button class="floating-bar-btn floating-bar-btn-delete-instance" @click="showDeleteInstanceDialog = true"
-                title="Delete Instance">
-                <Icon name="FolderX" class="w-4 h-4" />
-              </button>
+              <Tooltip content="Instance Settings" position="top">
+                <button class="floating-bar-btn" @click="openInstanceSettings()">
+                  <Icon name="Sliders" class="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip content="Open Folder" position="top">
+                <button class="floating-bar-btn" @click="handleOpenInstanceFolder()">
+                  <Icon name="FolderOpen" class="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip :content="showLogConsole ? 'Hide Console' : 'Show Console'" position="top">
+                <button class="floating-bar-btn" @click="showLogConsole = !showLogConsole"
+                  :class="{ 'floating-bar-btn-active': showLogConsole }">
+                  <Icon name="Terminal" class="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip content="Delete Instance" position="top">
+                <button class="floating-bar-btn floating-bar-btn-delete-instance"
+                  @click="showDeleteInstanceDialog = true">
+                  <Icon name="FolderX" class="w-4 h-4" />
+                </button>
+              </Tooltip>
             </template>
 
             <!-- Selection Actions (only in mods tab with selection) -->
@@ -4510,31 +4663,40 @@ watch(
               <span class="floating-bar-count">{{ selectedModIds.size }} selected</span>
               <div class="floating-bar-divider" />
 
-              <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-enable" @click="bulkEnableSelected"
-                title="Enable">
-                <Icon name="ToggleRight" class="w-4 h-4" />
-              </button>
-              <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-disable" @click="bulkDisableSelected"
-                title="Disable">
-                <Icon name="ToggleLeft" class="w-4 h-4" />
-              </button>
-              <button v-if="!isLinked" class="floating-bar-btn" @click="bulkLockSelected" title="Lock">
-                <Icon name="Lock" class="w-4 h-4" />
-              </button>
-              <button v-if="!isLinked" class="floating-bar-btn" @click="bulkUnlockSelected" title="Unlock">
-                <Icon name="LockOpen" class="w-4 h-4" />
-              </button>
+              <Tooltip v-if="!isLinked" content="Enable" position="top">
+                <button class="floating-bar-btn floating-bar-btn-enable" @click="bulkEnableSelected">
+                  <Icon name="ToggleRight" class="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip v-if="!isLinked" content="Disable" position="top">
+                <button class="floating-bar-btn floating-bar-btn-disable" @click="bulkDisableSelected">
+                  <Icon name="ToggleLeft" class="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip v-if="!isLinked" content="Lock" position="top">
+                <button class="floating-bar-btn" @click="bulkLockSelected">
+                  <Icon name="Lock" class="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip v-if="!isLinked" content="Unlock" position="top">
+                <button class="floating-bar-btn" @click="bulkUnlockSelected">
+                  <Icon name="LockOpen" class="w-4 h-4" />
+                </button>
+              </Tooltip>
 
               <div v-if="!isLinked" class="floating-bar-divider" />
 
-              <button v-if="!isLinked" class="floating-bar-btn floating-bar-btn-danger" @click="removeSelectedMods"
-                title="Remove">
-                <Icon name="Trash2" class="w-4 h-4" />
-              </button>
+              <Tooltip v-if="!isLinked" content="Remove" position="top">
+                <button class="floating-bar-btn floating-bar-btn-danger" @click="removeSelectedMods">
+                  <Icon name="Trash2" class="w-4 h-4" />
+                </button>
+              </Tooltip>
 
-              <button class="floating-bar-btn floating-bar-btn-clear" @click="clearSelection" title="Clear selection">
-                <Icon name="X" class="w-4 h-4" />
-              </button>
+              <Tooltip content="Clear selection" position="top">
+                <button class="floating-bar-btn floating-bar-btn-clear" @click="clearSelection">
+                  <Icon name="X" class="w-4 h-4" />
+                </button>
+              </Tooltip>
             </template>
           </template>
 
@@ -4700,12 +4862,16 @@ watch(
           </div>
 
           <div class="flex items-center gap-1">
-            <button @click="clearLogs" class="log-console-btn" title="Clear">
-              <Icon name="Trash2" class="w-3.5 h-3.5" />
-            </button>
-            <button @click="showLogConsole = false" class="log-console-btn" title="Close">
-              <Icon name="X" class="w-4 h-4" />
-            </button>
+            <Tooltip content="Clear" position="top">
+              <button @click="clearLogs" class="log-console-btn">
+                <Icon name="Trash2" class="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Close" position="top">
+              <button @click="showLogConsole = false" class="log-console-btn">
+                <Icon name="X" class="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
         <div ref="logScrollRef" class="log-console-content">
@@ -4892,7 +5058,8 @@ watch(
     <!-- Version Picker Dialog -->
     <FilePickerDialog :open="showVersionPickerDialog" :mod="versionPickerMod" :game-version="modpack?.minecraft_version"
       :mod-loader="modpack?.loader" :content-type="versionPickerMod?.content_type || 'mod'"
-      @close="showVersionPickerDialog = false" @select="handleVersionSelected" />
+      :current-file-id="versionPickerMod?.currentFileId" @close="showVersionPickerDialog = false"
+      @select="handleVersionSelected" />
 
     <!-- Mod Details Modal -->
     <ModDetailsModal :open="showModDetailsModal" :mod="modDetailsTarget" :context="{
@@ -5332,7 +5499,7 @@ watch(
   border: 1px solid hsl(var(--border) / 0.6);
   border-radius: 1rem;
   box-shadow:
-    0 10px 40px hsl(var(--foreground) / 0.15),
+    0 10px 40px hsl(0 0% 0% / 0.3),
     0 0 0 1px hsl(var(--border) / 0.1);
   padding: 6px;
   overflow: hidden;
@@ -7124,10 +7291,11 @@ watch(
 /* Resource Row - Tabular Design */
 .resource-row {
   display: grid;
-  grid-template-columns: 32px 44px 1fr 90px 70px 70px 100px auto 44px;
+  grid-template-columns: 32px 44px minmax(0, 1fr) 90px 70px 70px 100px 140px 44px;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
+  min-height: 52px;
   background: hsl(var(--card) / 0.5);
   border: 1px solid hsl(var(--border) / 0.2);
   border-radius: var(--radius);
@@ -7226,7 +7394,9 @@ watch(
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  width: 100%;
   overflow: hidden;
+  contain: inline-size;
 }
 
 .resource-name {
@@ -7255,6 +7425,8 @@ watch(
   border-radius: calc(var(--radius) - 2px);
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .badge__text {
@@ -7318,6 +7490,8 @@ watch(
   background: hsl(38 92% 50% / 0.12);
   color: hsl(38 92% 50%);
   padding: 2px 8px;
+  flex-shrink: 0;
+  max-width: none;
 }
 
 .badge--note {
@@ -7379,6 +7553,9 @@ watch(
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .resource-name__text {
@@ -7391,8 +7568,10 @@ watch(
   cursor: pointer;
   transition: all 0.15s ease;
   padding: 2px 4px;
-  margin: -2px -4px;
   border-radius: calc(var(--radius) - 2px);
+  min-width: 0;
+  flex: 1 1 0;
+  max-width: fit-content;
 }
 
 .resource-name__text:hover {
@@ -7404,8 +7583,9 @@ watch(
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
-  margin-top: 2px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  max-width: 100%;
 }
 
 .resource-thumb__img {
@@ -7552,6 +7732,7 @@ watch(
 .resource-row__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -7613,8 +7794,12 @@ watch(
 }
 
 .action-btn--note {
-  background: hsl(217 91% 60% / 0.15);
-  color: hsl(217 91% 60%);
+  background: hsl(280 60% 55% / 0.15);
+  color: hsl(280 60% 55%);
+}
+
+.action-btn--note:hover:not(:disabled) {
+  background: hsl(280 60% 55% / 0.25);
 }
 
 .action-btn--danger:hover:not(:disabled) {
@@ -8028,5 +8213,311 @@ watch(
 .library-panel__empty p {
   margin-top: 8px;
   font-size: 12px;
+}
+
+/* =====================================================
+   Settings Tab Styles
+   ===================================================== */
+.settings-tab {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.1) 100%);
+}
+
+.settings-container {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Header */
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid hsl(var(--border) / 0.3);
+}
+
+.settings-header__icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(var(--primary) / 0.05));
+  border-radius: 12px;
+  border: 1px solid hsl(var(--primary) / 0.2);
+}
+
+.settings-header__icon-svg {
+  width: 24px;
+  height: 24px;
+  color: hsl(var(--primary));
+}
+
+.settings-header__content {
+  flex: 1;
+}
+
+.settings-header__title {
+  font-size: 20px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+
+.settings-header__subtitle {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 2px;
+}
+
+.settings-header__badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid hsl(var(--primary) / 0.2);
+}
+
+/* Sections */
+.settings-section {
+  background: hsl(var(--card) / 0.6);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.settings-section__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  background: hsl(var(--muted) / 0.2);
+  border-bottom: 1px solid hsl(var(--border) / 0.2);
+}
+
+.settings-section__icon {
+  width: 18px;
+  height: 18px;
+  color: hsl(var(--primary));
+}
+
+.settings-section__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.settings-section__badge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 12px;
+}
+
+.settings-section__content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Grid Layouts */
+.settings-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-grid--2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 600px) {
+  .settings-grid--2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Fields */
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-field__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.settings-field__label-icon {
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--muted-foreground));
+}
+
+.settings-field__lock {
+  width: 12px;
+  height: 12px;
+  color: hsl(var(--muted-foreground) / 0.6);
+}
+
+.settings-field__version-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+.settings-field__input,
+.settings-field__select,
+.settings-field__textarea {
+  width: 100%;
+  padding: 10px 14px;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 10px;
+  font-size: 13px;
+  color: hsl(var(--foreground));
+  transition: all 0.15s ease;
+}
+
+.settings-field__input:focus,
+.settings-field__select:focus,
+.settings-field__textarea:focus {
+  outline: none;
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
+}
+
+.settings-field__input:disabled,
+.settings-field__select:disabled,
+.settings-field__textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: hsl(var(--muted) / 0.3);
+}
+
+.settings-field__textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.settings-field__input-wrapper {
+  position: relative;
+}
+
+.settings-field__input-wrapper .settings-field__input {
+  padding-right: 60px;
+}
+
+.settings-field__input-hint {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground) / 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-field__row {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-field__action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 10px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-field__action-btn:hover:not(:disabled) {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.settings-field__action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.settings-field__hint {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground) / 0.7);
+  margin-top: -4px;
+}
+
+/* Notice */
+.settings-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: 10px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.5;
+}
+
+.settings-notice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Actions */
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.settings-actions__save {
+  align-self: flex-start;
+  gap: 8px;
+}
+
+.settings-actions__notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
 }
 </style>

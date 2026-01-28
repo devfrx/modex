@@ -12,6 +12,7 @@ import { ref, onMounted, watch, computed, onUnmounted } from "vue";
 import { createLogger } from "@/utils/logger";
 import type { GameType, GameConfig } from "@/types";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 
 const log = createLogger("GameSelector");
 
@@ -120,21 +121,23 @@ onUnmounted(() => {
 <template>
     <div ref="dropdownRef" class="relative">
         <!-- Trigger Button -->
-        <button :disabled="disabled" @click="isOpen = !isOpen"
-            class="flex items-center w-full rounded-lg bg-muted/50 hover:bg-muted/80 border border-border/30 hover:border-border/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            :class="[
-                collapsed ? 'justify-center p-2' : 'gap-2 px-2.5 py-2',
-                isOpen && 'border-primary/40 bg-muted/70'
-            ]" :title="collapsed ? gameInfo[activeGame].name : undefined">
-            <img :src="getGameIcon(activeGame)" :alt="gameInfo[activeGame].name" class="w-5 h-5 shrink-0" />
-            <template v-if="!collapsed">
-                <span class="flex-1 text-left font-medium text-sm text-foreground">
-                    {{ gameInfo[activeGame].name }}
-                </span>
-                <Icon name="ChevronDown" class="w-4 h-4 text-muted-foreground transition-transform duration-200"
-                    :class="isOpen && 'rotate-180'" />
-            </template>
-        </button>
+        <Tooltip :content="gameInfo[activeGame].name" position="right" :disabled="!collapsed">
+            <button :disabled="disabled" @click="isOpen = !isOpen"
+                class="flex items-center w-full rounded-lg bg-muted/50 hover:bg-muted/80 border border-border/30 hover:border-border/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                :class="[
+                    collapsed ? 'justify-center p-2' : 'gap-2 px-2.5 py-2',
+                    isOpen && 'border-primary/40 bg-muted/70'
+                ]">
+                <img :src="getGameIcon(activeGame)" :alt="gameInfo[activeGame].name" class="w-5 h-5 shrink-0" />
+                <template v-if="!collapsed">
+                    <span class="flex-1 text-left font-medium text-sm text-foreground">
+                        {{ gameInfo[activeGame].name }}
+                    </span>
+                    <Icon name="ChevronDown" class="w-4 h-4 text-muted-foreground transition-transform duration-200"
+                        :class="isOpen && 'rotate-180'" />
+                </template>
+            </button>
+        </Tooltip>
 
         <!-- Dropdown Content -->
         <Transition name="dropdown">

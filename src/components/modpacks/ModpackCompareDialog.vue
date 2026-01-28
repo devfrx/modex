@@ -4,6 +4,7 @@ import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import { useToast } from "@/composables/useToast";
 import type { Mod, Modpack } from "@/types/electron";
 
@@ -636,14 +637,16 @@ const packBName = computed(
                 </div>
               </div>
             </div>
-            <Button variant="ghost" size="icon"
-              class="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 hover:bg-amber-500/20 hover:text-amber-600"
-              :disabled="!areCompatible || !!packB?.remote_source?.url || isCopying"
-              :title="packB?.remote_source?.url ? 'Target pack is read-only' : areCompatible ? 'Copy to Pack B' : 'Incompatible'"
-              @click="copyToB(mod.id)">
-              <Icon v-if="packB?.remote_source?.url" name="Lock" class="w-3.5 h-3.5 text-muted-foreground" />
-              <Icon v-else name="ArrowRight" class="w-3.5 h-3.5" />
-            </Button>
+            <Tooltip
+              :content="packB?.remote_source?.url ? 'Target pack is read-only' : areCompatible ? 'Copy to Pack B' : 'Incompatible'"
+              position="left">
+              <Button variant="ghost" size="icon"
+                class="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 hover:bg-amber-500/20 hover:text-amber-600"
+                :disabled="!areCompatible || !!packB?.remote_source?.url || isCopying" @click="copyToB(mod.id)">
+                <Icon v-if="packB?.remote_source?.url" name="Lock" class="w-3.5 h-3.5 text-muted-foreground" />
+                <Icon v-else name="ArrowRight" class="w-3.5 h-3.5" />
+              </Button>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -697,14 +700,16 @@ const packBName = computed(
           </div>
           <div v-for="mod in onlyInB" :key="mod.id"
             class="group flex items-center justify-between p-2.5 rounded-lg border border-transparent hover:border-primary/30 hover:bg-primary/5 transition-all text-sm">
-            <Button variant="ghost" size="icon"
-              class="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 hover:bg-primary/20 hover:text-primary"
-              :disabled="!areCompatible || !!packA?.remote_source?.url || isCopying"
-              :title="packA?.remote_source?.url ? 'Target pack is read-only' : areCompatible ? 'Copy to Pack A' : 'Incompatible'"
-              @click="copyToA(mod.id)">
-              <Icon v-if="packA?.remote_source?.url" name="Lock" class="w-3.5 h-3.5 text-muted-foreground" />
-              <Icon v-else name="ArrowRight" class="w-3.5 h-3.5 rotate-180" />
-            </Button>
+            <Tooltip
+              :content="packA?.remote_source?.url ? 'Target pack is read-only' : areCompatible ? 'Copy to Pack A' : 'Incompatible'"
+              position="right">
+              <Button variant="ghost" size="icon"
+                class="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 hover:bg-primary/20 hover:text-primary"
+                :disabled="!areCompatible || !!packA?.remote_source?.url || isCopying" @click="copyToA(mod.id)">
+                <Icon v-if="packA?.remote_source?.url" name="Lock" class="w-3.5 h-3.5 text-muted-foreground" />
+                <Icon v-else name="ArrowRight" class="w-3.5 h-3.5 rotate-180" />
+              </Button>
+            </Tooltip>
             <div class="min-w-0 pl-3 text-right flex items-center gap-2 justify-end">
               <div class="min-w-0">
                 <div class="font-medium truncate">{{ mod.name }}</div>
@@ -751,35 +756,39 @@ const packBName = computed(
               <!-- Version A -->
               <div class="flex flex-col items-center gap-1 w-32">
                 <span class="text-[10px] text-muted-foreground uppercase">{{ packAName }}</span>
-                <span class="text-xs font-mono bg-amber-500/10 text-amber-600 px-2 py-1 rounded truncate max-w-full"
-                  :title="diff.modA.version">
-                  {{ diff.modA.version || 'N/A' }}
-                </span>
+                <Tooltip :content="diff.modA.version" position="top">
+                  <span class="text-xs font-mono bg-amber-500/10 text-amber-600 px-2 py-1 rounded truncate max-w-full">
+                    {{ diff.modA.version || 'N/A' }}
+                  </span>
+                </Tooltip>
               </div>
 
               <!-- Actions -->
               <div class="flex items-center gap-1">
-                <Button variant="ghost" size="icon" class="h-7 w-7 hover:bg-primary/20 hover:text-primary"
-                  :disabled="!!packB?.remote_source?.url || isCopying"
-                  :title="`Use ${packAName}'s version in ${packBName}`"
-                  @click="updateVersion(diff.projectId, diff.modA.id!, 'AtoB')">
-                  <Icon name="ArrowRight" class="w-3.5 h-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" class="h-7 w-7 hover:bg-primary/20 hover:text-primary"
-                  :disabled="!!packA?.remote_source?.url || isCopying"
-                  :title="`Use ${packBName}'s version in ${packAName}`"
-                  @click="updateVersion(diff.projectId, diff.modB.id!, 'BtoA')">
-                  <Icon name="ArrowRight" class="w-3.5 h-3.5 rotate-180" />
-                </Button>
+                <Tooltip :content="`Use ${packAName}'s version in ${packBName}`" position="top">
+                  <Button variant="ghost" size="icon" class="h-7 w-7 hover:bg-primary/20 hover:text-primary"
+                    :disabled="!!packB?.remote_source?.url || isCopying"
+                    @click="updateVersion(diff.projectId, diff.modA.id!, 'AtoB')">
+                    <Icon name="ArrowRight" class="w-3.5 h-3.5" />
+                  </Button>
+                </Tooltip>
+                <Tooltip :content="`Use ${packBName}'s version in ${packAName}`" position="top">
+                  <Button variant="ghost" size="icon" class="h-7 w-7 hover:bg-primary/20 hover:text-primary"
+                    :disabled="!!packA?.remote_source?.url || isCopying"
+                    @click="updateVersion(diff.projectId, diff.modB.id!, 'BtoA')">
+                    <Icon name="ArrowRight" class="w-3.5 h-3.5 rotate-180" />
+                  </Button>
+                </Tooltip>
               </div>
 
               <!-- Version B -->
               <div class="flex flex-col items-center gap-1 w-32">
                 <span class="text-[10px] text-muted-foreground uppercase">{{ packBName }}</span>
-                <span class="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded truncate max-w-full"
-                  :title="diff.modB.version">
-                  {{ diff.modB.version || 'N/A' }}
-                </span>
+                <Tooltip :content="diff.modB.version" position="top">
+                  <span class="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded truncate max-w-full">
+                    {{ diff.modB.version || 'N/A' }}
+                  </span>
+                </Tooltip>
               </div>
             </div>
           </div>

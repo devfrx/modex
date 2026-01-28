@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import { useMinecraft } from "@/composables/useMinecraft";
 import type { MinecraftInstallation } from "@/types";
 import { useToast } from "@/composables/useToast";
@@ -265,9 +266,11 @@ async function handleLaunch(installation: MinecraftInstallation) {
               </span>
             </div>
 
-            <p class="text-xs text-muted-foreground mt-1 truncate" :title="installation.path">
-              {{ installation.path }}
-            </p>
+            <Tooltip :content="installation.path" position="top">
+              <p class="text-xs text-muted-foreground mt-1 truncate">
+                {{ installation.path }}
+              </p>
+            </Tooltip>
 
             <div class="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
               <span v-if="installation.version" class="flex items-center gap-1">
@@ -285,24 +288,32 @@ async function handleLaunch(installation: MinecraftInstallation) {
 
           <!-- Actions -->
           <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" size="icon" title="Open mods folder" @click="openModsFolder(installation.id)">
-              <Icon name="FolderOpen" class="w-4 h-4" />
-            </Button>
+            <Tooltip content="Open mods folder" position="top">
+              <Button variant="ghost" size="icon" @click="openModsFolder(installation.id)">
+                <Icon name="FolderOpen" class="w-4 h-4" />
+              </Button>
+            </Tooltip>
 
-            <Button variant="ghost" size="icon" title="Set as default" :disabled="installation.isDefault"
-              @click="setDefault(installation.id)">
-              <Icon name="Star" class="w-4 h-4" :class="installation.isDefault && 'fill-yellow-500 text-yellow-500'" />
-            </Button>
+            <Tooltip content="Set as default" position="top">
+              <Button variant="ghost" size="icon" :disabled="installation.isDefault"
+                @click="setDefault(installation.id)">
+                <Icon name="Star" class="w-4 h-4"
+                  :class="installation.isDefault && 'fill-yellow-500 text-yellow-500'" />
+              </Button>
+            </Tooltip>
 
-            <Button variant="ghost" size="icon" title="Launch Minecraft" @click="handleLaunch(installation)">
-              <Icon name="Play" class="w-4 h-4" />
-            </Button>
+            <Tooltip content="Launch Minecraft" position="top">
+              <Button variant="ghost" size="icon" @click="handleLaunch(installation)">
+                <Icon name="Play" class="w-4 h-4" />
+              </Button>
+            </Tooltip>
 
-            <Button v-if="installation.type === 'custom'" variant="ghost" size="icon"
-              class="text-red-400 hover:text-red-300 hover:bg-red-500/10" title="Remove"
-              @click="removeInstallation(installation.id)">
-              <Icon name="Trash2" class="w-4 h-4" />
-            </Button>
+            <Tooltip v-if="installation.type === 'custom'" content="Remove" position="top">
+              <Button variant="ghost" size="icon" class="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                @click="removeInstallation(installation.id)">
+                <Icon name="Trash2" class="w-4 h-4" />
+              </Button>
+            </Tooltip>
           </div>
         </div>
       </div>

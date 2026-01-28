@@ -321,6 +321,7 @@ const iconMap: Record<string, string> = {
   'PanelRightClose': 'solar:siderbar-bold',
   'Sidebar': 'solar:siderbar-bold',
   'CheckSquare': 'solar:checkbox-bold',
+  'ListChecks': 'solar:checklist-minimalistic-bold',
   'Square': 'solar:stop-bold',
   'Circle': 'solar:record-bold',
   'CircleDot': 'solar:record-circle-bold',

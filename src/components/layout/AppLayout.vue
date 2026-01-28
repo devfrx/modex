@@ -28,7 +28,7 @@ function closeSidebar() {
 
     <!-- Mobile overlay -->
     <Transition name="fade">
-      <div v-if="sidebarOpen" class="fixed inset-0 bg-black/50 z-40 sm:hidden" @click="closeSidebar" />
+      <div v-if="sidebarOpen" class="fixed inset-0 bg-black/50 z-50 sm:hidden" @click="closeSidebar" />
     </Transition>
 
     <!-- Sidebar - hidden on mobile, visible as drawer when open -->
@@ -42,12 +42,12 @@ function closeSidebar() {
       <Sidebar :is-open="sidebarOpen" @close="closeSidebar" />
     </div>
 
-    <main class="flex-1 overflow-auto sm:ml-0 flex flex-col">
+    <main class="flex-1 overflow-auto sm:ml-0 flex flex-col relative">
       <!-- Global API Key Warning Banner -->
       <ApiKeyBanner />
 
       <!-- Main content -->
-      <div class="flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto relative">
         <slot />
       </div>
     </main>

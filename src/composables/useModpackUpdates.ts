@@ -46,6 +46,7 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
   const checkingUpdates = options.checkingUpdates ?? ref<Record<string, boolean>>({});
   const updateAvailable = options.updateAvailable ?? ref<Record<string, UpdateInfo | null>>({});
   const isCheckingAllUpdates = options.isCheckingAllUpdates ?? ref(false);
+  const checkAllUpdatesProgress = ref(0); // 0-100 percentage
 
   // Track mods currently being updated (untouchable during update)
   const updatingMods = ref<Set<string>>(new Set());
@@ -147,15 +148,20 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
     if (cfMods.length === 0) return;
 
     isCheckingAllUpdates.value = true;
+    checkAllUpdatesProgress.value = 0;
 
-    // Process in parallel batches
-    const BATCH_SIZE = 5;
+    // Process in parallel batches - increased batch size for faster checking
+    const BATCH_SIZE = 20;
+    let completed = 0;
     for (let i = 0; i < cfMods.length; i += BATCH_SIZE) {
       const batch = cfMods.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map((mod) => checkModUpdate(mod)));
+      completed += batch.length;
+      checkAllUpdatesProgress.value = Math.round((completed / cfMods.length) * 100);
     }
 
     isCheckingAllUpdates.value = false;
+    checkAllUpdatesProgress.value = 0;
   }
 
   // Quick update single mod to latest
@@ -228,10 +234,11 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
     }
     updatingMods.value = updatingSet;
 
-    for (const mod of modsToUpdate) {
+    // Helper to update a single mod
+    const updateSingleMod = async (mod: Mod): Promise<boolean> => {
       try {
         const latest = updateAvailable.value[mod.id];
-        if (!latest) continue;
+        if (!latest) return false;
 
         const result = await window.api.updates.applyUpdate(
           mod.id,
@@ -243,17 +250,28 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
           const updatedModId = result.newModId || mod.id;
           recentlyUpdatedMods.value.add(updatedModId);
           delete updateAvailable.value[mod.id];
-          successCount++;
-        } else {
-          failCount++;
+          return true;
         }
+        return false;
       } catch {
-        failCount++;
+        return false;
       } finally {
         // Remove this mod from updating set
         const newUpdating = new Set(updatingMods.value);
         newUpdating.delete(mod.id);
         updatingMods.value = newUpdating;
+      }
+    };
+
+    // Process updates in parallel batches for better performance
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < modsToUpdate.length; i += BATCH_SIZE) {
+      const batch = modsToUpdate.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(batch.map(updateSingleMod));
+      
+      for (const success of results) {
+        if (success) successCount++;
+        else failCount++;
       }
     }
 
@@ -406,6 +424,9 @@ export function useModpackUpdates(options: UseModpackUpdatesOptions) {
 
     // Computed
     updatesAvailableCount,
+
+    // Progress
+    checkAllUpdatesProgress,
 
     // Methods
     checkModUpdate,

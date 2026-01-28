@@ -13,6 +13,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import { useInstances } from "@/composables/useInstances";
 import { useToast } from "@/composables/useToast";
 import Button from "@/components/ui/Button.vue";
@@ -612,12 +613,14 @@ function handleConfigReverted(event: Event) {
                                 {{ stats.modCount }} mods
                             </span>
                             <!-- Sync Status Indicator -->
-                            <span v-if="syncStatus?.needsSync"
-                                class="header-tag border-amber-500/30 text-amber-400 bg-amber-500/10"
-                                :title="`${syncStatus.totalDifferences} difference(s) with modpack`">
-                                <Icon name="RefreshCw" class="w-3 h-3" />
-                                Needs Sync
-                            </span>
+                            <Tooltip v-if="syncStatus?.needsSync"
+                                :content="`${syncStatus.totalDifferences} difference(s) with modpack`"
+                                position="bottom">
+                                <span class="header-tag border-amber-500/30 text-amber-400 bg-amber-500/10">
+                                    <Icon name="RefreshCw" class="w-3 h-3" />
+                                    Needs Sync
+                                </span>
+                            </Tooltip>
                             <span v-else-if="instance && syncStatus && !syncStatus.needsSync"
                                 class="header-tag border-green-500/30 text-green-400 bg-green-500/10">
                                 <Icon name="Check" class="w-3 h-3" />
@@ -849,16 +852,19 @@ function handleConfigReverted(event: Event) {
 
                                             <!-- Action Buttons -->
                                             <div class="flex items-center gap-2">
-                                                <button @click="showLogConsole = !showLogConsole"
-                                                    class="p-1.5 rounded-md hover:bg-black/20 transition-colors"
-                                                    :title="showLogConsole ? 'Hide Logs' : 'Show Logs'">
-                                                    <Icon name="Terminal" class="w-4 h-4" />
-                                                </button>
-                                                <button v-if="runningGame?.gamePid" @click="handleKillGame"
-                                                    class="p-1.5 rounded-md hover:bg-red-500/30 text-red-300 transition-colors"
-                                                    title="Stop Game">
-                                                    <Icon name="Square" class="w-4 h-4" />
-                                                </button>
+                                                <Tooltip :content="showLogConsole ? 'Hide Logs' : 'Show Logs'"
+                                                    position="top">
+                                                    <button @click="showLogConsole = !showLogConsole"
+                                                        class="p-1.5 rounded-md hover:bg-black/20 transition-colors">
+                                                        <Icon name="Terminal" class="w-4 h-4" />
+                                                    </button>
+                                                </Tooltip>
+                                                <Tooltip v-if="runningGame?.gamePid" content="Stop Game" position="top">
+                                                    <button @click="handleKillGame"
+                                                        class="p-1.5 rounded-md hover:bg-red-500/30 text-red-300 transition-colors">
+                                                        <Icon name="Square" class="w-4 h-4" />
+                                                    </button>
+                                                </Tooltip>
                                             </div>
                                         </div>
                                     </div>
@@ -1134,7 +1140,7 @@ function handleConfigReverted(event: Event) {
                                                         class="w-3 h-3" />
                                                     <Icon v-else name="Package" class="w-3 h-3" />
                                                     <span class="truncate line-through opacity-60">{{ item.oldFilename
-                                                        }}</span>
+                                                    }}</span>
                                                     <span class="text-orange-400">→</span>
                                                     <span class="truncate text-orange-400">{{ item.newFilename }}</span>
                                                     <span v-if="item.willBeDisabled"
@@ -1154,7 +1160,7 @@ function handleConfigReverted(event: Event) {
                                                 <Icon name="Trash2" class="w-4 h-4" />
                                                 <span class="font-medium">Mods to remove ({{
                                                     syncStatus.extraInInstance.filter(i => i.type === 'mod').length
-                                                }})</span>
+                                                    }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These mods are not in the modpack and will be removed during sync.
@@ -1181,7 +1187,7 @@ function handleConfigReverted(event: Event) {
                                                 <Icon name="Package" class="w-4 h-4" />
                                                 <span class="font-medium">Extra files ({{
                                                     syncStatus.extraInInstance.filter(i => i.type !== 'mod').length
-                                                }})</span>
+                                                    }})</span>
                                             </div>
                                             <div class="ml-6 text-xs text-muted-foreground/80 mb-1">
                                                 These files will be preserved.
@@ -1328,9 +1334,9 @@ function handleConfigReverted(event: Event) {
                                         <div class="flex-1">
                                             <div class="flex items-center justify-between mb-1">
                                                 <span class="font-medium text-foreground">{{ syncProgress.stage
-                                                    }}</span>
+                                                }}</span>
                                                 <span class="text-sm font-mono text-primary">{{ progressPercent
-                                                    }}%</span>
+                                                }}%</span>
                                             </div>
                                             <div class="text-xs text-muted-foreground">
                                                 {{ syncProgress.current }} / {{ syncProgress.total }}
@@ -1364,7 +1370,7 @@ function handleConfigReverted(event: Event) {
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.modsDownloaded
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Downloaded</div>
                                         </div>
                                         <div class="stat-box">
@@ -1374,7 +1380,7 @@ function handleConfigReverted(event: Event) {
                                         </div>
                                         <div class="stat-box">
                                             <div class="text-lg font-bold text-foreground">{{ syncResult.configsCopied
-                                                }}</div>
+                                            }}</div>
                                             <div class="stat-label">Configs</div>
                                         </div>
                                         <div class="stat-box">

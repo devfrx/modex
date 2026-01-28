@@ -2,6 +2,7 @@
 import Icon from "@/components/ui/Icon.vue";
 import type { Mod } from "@/types/electron";
 import Button from "@/components/ui/Button.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 
 const props = defineProps<{
   mod: Mod;
@@ -91,31 +92,35 @@ function handleImageError(e: Event) {
         class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
 
       <!-- Top Left: Favorite Button -->
-      <button
-        class="absolute top-3 left-3 z-20 p-1.5 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 hover:bg-black/50 transition-all duration-200"
-        :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
-        @click.stop="$emit('toggle-favorite', mod.id)" title="Toggle favorite">
-        <Icon name="Heart" class="w-4 h-4 transition-colors" :class="favorite
-          ? 'fill-rose-500 text-rose-500'
-          : 'text-white/70 hover:text-rose-500'
-          " />
-      </button>
+      <Tooltip content="Toggle favorite" position="right">
+        <button
+          class="absolute top-3 left-3 z-20 p-1.5 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 hover:bg-black/50 transition-all duration-200"
+          :class="favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+          @click.stop="$emit('toggle-favorite', mod.id)">
+          <Icon name="Heart" class="w-4 h-4 transition-colors" :class="favorite
+            ? 'fill-rose-500 text-rose-500'
+            : 'text-white/70 hover:text-rose-500'
+            " />
+        </button>
+      </Tooltip>
 
       <!-- Top Right: Selection Checkbox & Badges -->
       <div class="absolute top-3 right-3 z-20 flex items-center gap-2">
         <!-- Duplicate Warning -->
-        <div v-if="isDuplicate" class="p-1.5 rounded-full bg-orange-500/20 backdrop-blur-sm"
-          title="Potential duplicate">
-          <Icon name="AlertTriangle" class="w-3.5 h-3.5 text-orange-400" />
-        </div>
+        <Tooltip v-if="isDuplicate" content="Potential duplicate" position="bottom">
+          <div class="p-1.5 rounded-full bg-orange-500/20 backdrop-blur-sm">
+            <Icon name="AlertTriangle" class="w-3.5 h-3.5 text-orange-400" />
+          </div>
+        </Tooltip>
 
         <!-- Usage Badge -->
-        <div v-if="usageCount && usageCount > 0"
-          class="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/20 backdrop-blur-sm text-primary text-[10px] font-medium border border-primary/30"
-          title="Used in modpacks">
-          <Icon name="Package" class="w-3 h-3" />
-          <span>{{ usageCount }}</span>
-        </div>
+        <Tooltip v-if="usageCount && usageCount > 0" content="Used in modpacks" position="bottom">
+          <div
+            class="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/20 backdrop-blur-sm text-primary text-[10px] font-medium border border-primary/30">
+            <Icon name="Package" class="w-3 h-3" />
+            <span>{{ usageCount }}</span>
+          </div>
+        </Tooltip>
 
         <!-- Selection Checkbox -->
         <div class="transition-all duration-200" :class="selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -162,19 +167,20 @@ function handleImageError(e: Event) {
           </span>
 
           <!-- Game Version -->
-          <span v-if="
+          <Tooltip v-if="
             contentType !== 'mod' &&
             mod.game_versions &&
             mod.game_versions.length > 1
-          " class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/10 text-white/80 backdrop-blur-sm"
-            :title="mod.game_versions.join(', ')">
-            {{ mod.game_versions.slice(0, 2).join(", ")
-            }}{{
-              mod.game_versions.length > 2
-                ? ` +${mod.game_versions.length - 2}`
-                : ""
-            }}
-          </span>
+          " :content="mod.game_versions.join(', ')" position="top">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/10 text-white/80 backdrop-blur-sm">
+              {{ mod.game_versions.slice(0, 2).join(", ")
+              }}{{
+                mod.game_versions.length > 2
+                  ? ` +${mod.game_versions.length - 2}`
+                  : ""
+              }}
+            </span>
+          </Tooltip>
           <span v-else
             class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/10 text-white/80 backdrop-blur-sm">
             {{ mod.game_version }}
@@ -201,27 +207,35 @@ function handleImageError(e: Event) {
             {{ mod.game_version }}
           </div>
 
-          <Button v-if="mod.cf_project_id" variant="ghost" size="icon"
-            class="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
-            @click.stop="$emit('request-update', mod)" title="Check for Update">
-            <Icon name="RefreshCw" class="w-3.5 h-3.5" />
-          </Button>
-          <Button v-if="mod.slug" variant="ghost" size="icon"
-            class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50" @click.stop="openCurseForge"
-            title="View on CurseForge">
-            <Icon name="Globe" class="w-3.5 h-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon"
-            class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            @click.stop="$emit('show-details', mod)" title="Details">
-            <Icon name="Info" class="w-3.5 h-3.5" />
-          </Button>
+          <Tooltip v-if="mod.cf_project_id" content="Check for Update" position="top">
+            <Button variant="ghost" size="icon"
+              class="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+              @click.stop="$emit('request-update', mod)">
+              <Icon name="RefreshCw" class="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
+          <Tooltip v-if="mod.slug" content="View on CurseForge" position="top">
+            <Button variant="ghost" size="icon"
+              class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              @click.stop="openCurseForge">
+              <Icon name="Globe" class="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
+          <Tooltip content="Details" position="top">
+            <Button variant="ghost" size="icon"
+              class="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              @click.stop="$emit('show-details', mod)">
+              <Icon name="Info" class="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
           <div class="flex-1" />
-          <Button variant="ghost" size="icon"
-            class="h-7 w-7 text-white/60 hover:text-destructive hover:bg-destructive/10"
-            @click.stop="$emit('delete', mod.id)" title="Delete">
-            <Icon name="Trash2" class="w-3.5 h-3.5" />
-          </Button>
+          <Tooltip content="Delete" position="top">
+            <Button variant="ghost" size="icon"
+              class="h-7 w-7 text-white/60 hover:text-destructive hover:bg-destructive/10"
+              @click.stop="$emit('delete', mod.id)">
+              <Icon name="Trash2" class="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
     </div>

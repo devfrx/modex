@@ -26,6 +26,7 @@ import { useLibraryFiltering, type ModGroup } from "@/composables/useLibraryFilt
 import { useLibraryPagination } from "@/composables/useLibraryPagination";
 import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { Mod, Modpack } from "@/types/electron";
@@ -1080,11 +1081,12 @@ onUnmounted(() => {
                     <option value="version">Version</option>
                     <option value="loader">Loader</option>
                   </select>
-                  <button @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
-                    class="h-9 w-9 rounded-md border border-border bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors"
-                    :title="sortDir === 'asc' ? 'Ascending' : 'Descending'">
-                    <span class="text-sm">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
-                  </button>
+                  <Tooltip :content="sortDir === 'asc' ? 'Ascending' : 'Descending'" position="top">
+                    <button @click="sortDir = sortDir === 'asc' ? 'desc' : 'asc'"
+                      class="h-9 w-9 rounded-md border border-border bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors">
+                      <span class="text-sm">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
             </div>
@@ -1397,10 +1399,12 @@ onUnmounted(() => {
                     group.primary.id
                   ),
                 }" @click="toggleSelection(group.primary.id)">
-                <div class="font-medium text-xs truncate pr-6 hover:text-primary transition-colors"
-                  @click.stop="showModDetails(group.primary)" title="Click to view details">
-                  {{ group.primary.name }}
-                </div>
+                <Tooltip content="Click to view details" position="top">
+                  <div class="font-medium text-xs truncate pr-6 hover:text-primary transition-colors"
+                    @click.stop="showModDetails(group.primary)">
+                    {{ group.primary.name }}
+                  </div>
+                </Tooltip>
                 <div class="text-caption text-muted-foreground truncate">
                   {{ group.primary.loader }} • {{ group.primary.version }}
                 </div>
@@ -1423,11 +1427,13 @@ onUnmounted(() => {
                       variant.id
                     ),
                   }" @click="toggleSelection(variant.id)">
-                  <div class="font-medium text-xs truncate text-muted-foreground hover:text-primary transition-colors"
-                    @click.stop="showModDetails(variant)" title="Click to view details">
-                    <Icon name="ChevronRight" class="w-2.5 h-2.5 inline -ml-0.5" />
-                    {{ variant.game_version }}
-                  </div>
+                  <Tooltip content="Click to view details" position="top">
+                    <div class="font-medium text-xs truncate text-muted-foreground hover:text-primary transition-colors"
+                      @click.stop="showModDetails(variant)">
+                      <Icon name="ChevronRight" class="w-2.5 h-2.5 inline -ml-0.5" />
+                      {{ variant.game_version }}
+                    </div>
+                  </Tooltip>
                   <div class="text-caption text-muted-foreground truncate">
                     {{ variant.loader }} • {{ variant.version }}
                   </div>
@@ -1450,13 +1456,16 @@ onUnmounted(() => {
         <Icon name="Trash2" class="w-4 h-4" />
         Delete
       </Button>
-      <Button variant="secondary" size="sm" class="gap-2" :disabled="!selectedModsCompatibility.compatible" :title="selectedModsCompatibility.compatible
+      <Tooltip :content="selectedModsCompatibility.compatible
         ? 'Create modpack from selected mods'
         : 'Selected mods have different game versions or loaders'
-        " @click="showCreateModpackDialog = true">
-        <Icon name="PackagePlus" class="w-4 h-4" />
-        Create Pack
-      </Button>
+        " position="top">
+        <Button variant="secondary" size="sm" class="gap-2" :disabled="!selectedModsCompatibility.compatible"
+          @click="showCreateModpackDialog = true">
+          <Icon name="PackagePlus" class="w-4 h-4" />
+          Create Pack
+        </Button>
+      </Tooltip>
       <Button variant="secondary" size="sm" class="gap-2" @click="showAddToModpackDialog = true">
         <Icon name="PlusCircle" class="w-4 h-4" />
         Add to Pack

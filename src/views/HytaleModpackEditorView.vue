@@ -9,6 +9,7 @@ import { useToast } from "@/composables/useToast";
 import { useHytale } from "@/composables/useHytale";
 import type { HytaleModpack, HytaleMod } from "@/types";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -581,24 +582,30 @@ watch(() => route.params.id, async () => {
                         <div class="mod-name-row">
                             <span class="mod-name">{{ mod.name }}</span>
                             <!-- Update indicator -->
-                            <span v-if="hasUpdate(mod.modId)" class="update-badge" title="Update available">
-                                <Icon name="ArrowUpCircle" class="w-3.5 h-3.5" />
-                            </span>
+                            <Tooltip v-if="hasUpdate(mod.modId)" content="Update available" position="top">
+                                <span class="update-badge">
+                                    <Icon name="ArrowUpCircle" class="w-3.5 h-3.5" />
+                                </span>
+                            </Tooltip>
                         </div>
                         <span v-if="mod.version" class="mod-version">v{{ mod.version }}</span>
                     </div>
 
                     <div class="mod-actions">
                         <!-- Update button (when update available) -->
-                        <button v-if="hasUpdate(mod.modId)" class="mod-update" @click="applyUpdate(mod.modId)"
-                            :disabled="isUpdating(mod.modId)" title="Update to latest version">
-                            <Icon v-if="!isUpdating(mod.modId)" name="Download" class="w-4 h-4" />
-                            <Icon v-else name="RefreshCw" class="w-4 h-4 animate-spin" />
-                        </button>
+                        <Tooltip v-if="hasUpdate(mod.modId)" content="Update to latest version" position="top">
+                            <button class="mod-update" @click="applyUpdate(mod.modId)"
+                                :disabled="isUpdating(mod.modId)">
+                                <Icon v-if="!isUpdating(mod.modId)" name="Download" class="w-4 h-4" />
+                                <Icon v-else name="RefreshCw" class="w-4 h-4 animate-spin" />
+                            </button>
+                        </Tooltip>
 
-                        <button class="mod-remove" @click="handleRemoveMod(mod.modId)" title="Remove from modpack">
-                            <Icon name="Minus" class="w-4 h-4" />
-                        </button>
+                        <Tooltip content="Remove from modpack" position="top">
+                            <button class="mod-remove" @click="handleRemoveMod(mod.modId)">
+                                <Icon name="Minus" class="w-4 h-4" />
+                            </button>
+                        </Tooltip>
                     </div>
                 </div>
             </div>

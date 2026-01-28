@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import { computed, ref } from "vue";
 import type { Mod } from "@/types/electron";
 
@@ -88,13 +89,17 @@ const imageUrl = computed(() => {
 
                 <!-- Status badges -->
                 <div class="rest-badges">
-                    <span v-if="isDuplicate" class="badge-warning" title="Potential duplicate">
-                        <Icon name="AlertTriangle" class="w-3 h-3" />
-                    </span>
-                    <span v-if="usageCount && usageCount > 0" class="badge-usage" title="Used in modpacks">
-                        <Icon name="Package" class="w-2.5 h-2.5" />
-                        <span>{{ usageCount }}</span>
-                    </span>
+                    <Tooltip v-if="isDuplicate" content="Potential duplicate" position="left">
+                        <span class="badge-warning">
+                            <Icon name="AlertTriangle" class="w-3 h-3" />
+                        </span>
+                    </Tooltip>
+                    <Tooltip v-if="usageCount && usageCount > 0" content="Used in modpacks" position="left">
+                        <span class="badge-usage">
+                            <Icon name="Package" class="w-2.5 h-2.5" />
+                            <span>{{ usageCount }}</span>
+                        </span>
+                    </Tooltip>
                 </div>
 
                 <!-- Type badge -->
@@ -190,13 +195,16 @@ const imageUrl = computed(() => {
 
                 <div class="dock-divider" />
 
-                <button v-if="mod.cf_project_id" class="dock-btn" @click.stop="$emit('request-update', mod)"
-                    title="Check Update">
-                    <Icon name="RefreshCw" class="w-4 h-4" />
-                </button>
-                <button v-if="mod.slug" class="dock-btn" @click.stop="openCurseForge" title="CurseForge">
-                    <Icon name="Globe" class="w-4 h-4" />
-                </button>
+                <Tooltip v-if="mod.cf_project_id" content="Check Update" position="top">
+                    <button class="dock-btn" @click.stop="$emit('request-update', mod)">
+                        <Icon name="RefreshCw" class="w-4 h-4" />
+                    </button>
+                </Tooltip>
+                <Tooltip v-if="mod.slug" content="CurseForge" position="top">
+                    <button class="dock-btn" @click.stop="openCurseForge">
+                        <Icon name="Globe" class="w-4 h-4" />
+                    </button>
+                </Tooltip>
 
                 <!-- More menu -->
                 <div class="dock-more">

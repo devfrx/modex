@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 
 defineProps<{
   count: number;
@@ -36,11 +37,13 @@ defineEmits<{
 
       <!-- Close button -->
       <div class="pl-2 border-l border-border flex-shrink-0">
-        <button
-          class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
-          @click="$emit('clear')" title="Clear selection">
-          <Icon name="X" class="w-4 h-4" />
-        </button>
+        <Tooltip content="Clear selection" position="top">
+          <button
+            class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
+            @click="$emit('clear')">
+            <Icon name="X" class="w-4 h-4" />
+          </button>
+        </Tooltip>
       </div>
     </div>
   </div>

@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import Icon from "@/components/ui/Icon.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import ChangelogDialog from "./ChangelogDialog.vue";
 import ModDetailsModal from "./ModDetailsModal.vue";
 import { useToast } from "@/composables/useToast";
@@ -117,6 +118,19 @@ const showReleaseConfig = ref(false); // To toggle advanced filter visibility if
 const filterRelease = ref(true);
 const filterBeta = ref(false);
 const filterAlpha = ref(false);
+
+// Download dropdown state - track which mod has its dropdown open
+const downloadDropdownModId = ref<number | null>(null);
+// Position for the fixed dropdown
+const dropdownPosition = ref<{ top: number; right: number }>({ top: 0, right: 0 });
+// Cache for available release types per mod (fetched when dropdown opens)
+const modReleaseTypesCache = ref<Map<number, { release: boolean; beta: boolean; alpha: boolean; loading: boolean }>>(new Map());
+
+// Computed for the currently selected mod in dropdown
+const dropdownMod = computed<CFMod | null>(() => {
+  if (downloadDropdownModId.value === null) return null;
+  return searchResults.value.find(m => m.id === downloadDropdownModId.value) || null;
+});
 
 // Bulk selection state
 const selectedModIds = ref<Set<number>>(new Set()); // For Header selection (Quick Download)
@@ -337,6 +351,9 @@ watch(selectedContentType, async (newType) => {
   // Reset category selection
   selectedCategory.value = 0;
 
+  // Clear the release types cache when content type changes
+  modReleaseTypesCache.value.clear();
+
   // Reload categories for new content type
   try {
     const cfCategories = await window.api.curseforge.getCategories(newType);
@@ -361,6 +378,9 @@ watch([selectedVersion, selectedLoader], ([v, l]) => {
   else localStorage.removeItem(STORAGE_KEYS.VERSION);
   if (l) localStorage.setItem(STORAGE_KEYS.LOADER, l);
   else localStorage.removeItem(STORAGE_KEYS.LOADER);
+
+  // Clear the release types cache when filters change
+  modReleaseTypesCache.value.clear();
 });
 
 watch(selectedSortField, (newVal) => {
@@ -860,52 +880,137 @@ function isModInstalled(modId: number): boolean {
   return props.installedProjectFiles?.has(modId) || false;
 }
 
-// Get the latest file ID from latestFilesIndexes that matches current filters
-// Priority: Release (1) > Beta (2) > Alpha (3)
-function getLatestFileId(mod: CFMod): number | null {
-  if (!mod.latestFilesIndexes?.length) return null;
-
+// Helper to check if a file matches current filters
+function fileMatchesFilters(f: CFFileIndex): boolean {
   const isModContent = selectedContentType.value === "mods";
 
-  // Helper to check if a file matches current filters
-  const matchesFilters = (f: CFFileIndex): boolean => {
-    // For mods, filter by loader
-    if (isModContent && selectedLoader.value) {
-      const loaderMap: Record<string, number> = { forge: 1, fabric: 4, quilt: 5, neoforge: 6 };
-      const targetLoaderId = loaderMap[selectedLoader.value.toLowerCase()];
-      if (targetLoaderId && f.modLoader !== targetLoaderId && f.modLoader !== 0) return false;
+  // For mods, filter by loader
+  if (isModContent && selectedLoader.value) {
+    const loaderMap: Record<string, number> = { forge: 1, fabric: 4, quilt: 5, neoforge: 6 };
+    const targetLoaderId = loaderMap[selectedLoader.value.toLowerCase()];
+    if (targetLoaderId && f.modLoader !== targetLoaderId && f.modLoader !== 0) return false;
+  }
+
+  // Filter by game version if set
+  if (selectedVersion.value) {
+    if (f.gameVersion !== selectedVersion.value &&
+      !f.gameVersion?.startsWith(selectedVersion.value + ".") &&
+      !selectedVersion.value.startsWith(f.gameVersion + ".")) {
+      return false;
     }
+  }
 
-    // Filter by game version if set
-    if (selectedVersion.value) {
-      if (f.gameVersion !== selectedVersion.value &&
-        !f.gameVersion?.startsWith(selectedVersion.value + ".") &&
-        !selectedVersion.value.startsWith(f.gameVersion + ".")) {
-        return false;
-      }
-    }
+  return true;
+}
 
-    return true;
-  };
+// Get the latest file ID from latestFilesIndexes that matches current filters
+// Returns the latest file by date (first matching file in the index, as they're already sorted)
+// Optionally filter by specific release type
+function getLatestFileId(mod: CFMod, releaseTypeFilter?: number | null): number | null {
+  if (!mod.latestFilesIndexes?.length) return null;
 
-  // Try to find files in priority order: Release > Beta > Alpha
-  for (const releaseType of [1, 2, 3]) {
+  // If a specific release type is requested, find only that type
+  if (releaseTypeFilter !== undefined && releaseTypeFilter !== null) {
     const matchingFile = mod.latestFilesIndexes.find((f: CFFileIndex) =>
-      f.releaseType === releaseType && matchesFilters(f)
+      f.releaseType === releaseTypeFilter && fileMatchesFilters(f)
     );
     if (matchingFile) return matchingFile.fileId;
+
+    // Fallback without filters for specific type
+    const fallbackFile = mod.latestFilesIndexes.find((f: CFFileIndex) =>
+      f.releaseType === releaseTypeFilter
+    );
+    return fallbackFile?.fileId ?? null;
   }
 
-  // Fallback: try any file type without filters
-  for (const releaseType of [1, 2, 3]) {
-    const fallbackFile = mod.latestFilesIndexes.find((f: CFFileIndex) => f.releaseType === releaseType);
-    if (fallbackFile) return fallbackFile.fileId;
+  // Default: find any matching file (latest by date regardless of release type)
+  // latestFilesIndexes contains files per game version, so we look for the first match
+  const matchingFile = mod.latestFilesIndexes.find((f: CFFileIndex) => fileMatchesFilters(f));
+  if (matchingFile) return matchingFile.fileId;
+
+  // Fallback: first file in the list
+  return mod.latestFilesIndexes[0]?.fileId ?? null;
+}
+
+// Get available release types from cache, or return default (all enabled while loading)
+function getAvailableReleaseTypes(mod: CFMod): { release: boolean; beta: boolean; alpha: boolean; loading: boolean } {
+  const cached = modReleaseTypesCache.value.get(mod.id);
+  if (cached) return cached;
+
+  // Return loading state - all options shown as available until we know for sure
+  return { release: true, beta: true, alpha: true, loading: true };
+}
+
+// Fetch and cache available release types for a mod
+async function fetchAvailableReleaseTypes(mod: CFMod): Promise<void> {
+  // Already cached or loading
+  if (modReleaseTypesCache.value.has(mod.id)) return;
+
+  // Mark as loading
+  modReleaseTypesCache.value.set(mod.id, { release: false, beta: false, alpha: false, loading: true });
+
+  try {
+    const isModContent = selectedContentType.value === "mods";
+    const files = await window.api.curseforge.getModFiles(mod.id, {
+      gameVersion: selectedVersion.value || undefined,
+      modLoader: isModContent ? selectedLoader.value || undefined : undefined,
+    });
+
+    const result = { release: false, beta: false, alpha: false, loading: false };
+
+    // Helper to check version match for non-mods
+    const matchesVersion = (f: CFFile): boolean => {
+      if (!isModContent && selectedVersion.value) {
+        return f.gameVersions?.some(
+          (gv: string) =>
+            gv === selectedVersion.value ||
+            gv.startsWith(selectedVersion.value + ".") ||
+            selectedVersion.value.startsWith(gv + ".")
+        );
+      }
+      return true;
+    };
+
+    for (const f of files) {
+      if (!matchesVersion(f)) continue;
+      if (f.releaseType === 1) result.release = true;
+      else if (f.releaseType === 2) result.beta = true;
+      else if (f.releaseType === 3) result.alpha = true;
+    }
+
+    modReleaseTypesCache.value.set(mod.id, result);
+  } catch (err) {
+    log.error("Failed to fetch release types", { modId: mod.id, error: String(err) });
+    // On error, enable all types to allow user to try downloading
+    modReleaseTypesCache.value.set(mod.id, { release: true, beta: true, alpha: true, loading: false });
+  }
+}
+
+// Open download dropdown and fetch release types
+async function openDownloadDropdown(mod: CFMod, event: MouseEvent) {
+  if (downloadDropdownModId.value === mod.id) {
+    downloadDropdownModId.value = null;
+    return;
   }
 
-  return null;
+  // Calculate position based on the button that was clicked
+  const button = event.currentTarget as HTMLElement;
+  const rect = button.getBoundingClientRect();
+
+  // Position dropdown below the button, aligned to the right
+  dropdownPosition.value = {
+    top: rect.bottom + 4, // 4px gap
+    right: window.innerWidth - rect.right
+  };
+
+  downloadDropdownModId.value = mod.id;
+
+  // Fetch release types if not cached
+  await fetchAvailableReleaseTypes(mod);
 }
 
 // Check if the latest file for a mod is already installed
+// Check against the true latest (by date) regardless of release type
 function isLatestFileInstalled(mod: CFMod): boolean {
   const latestFileId = getLatestFileId(mod);
   if (!latestFileId) return false;
@@ -956,9 +1061,12 @@ async function addFileToLibrary(mod: CFMod, file: CFFile) {
   }
 }
 
-// Quick Download (Latest file matching filters - Release > Beta > Alpha fallback)
-async function quickDownload(mod: CFMod) {
+// Quick Download (Latest file matching filters)
+// If releaseTypeFilter is provided, only download that specific type
+// Otherwise, download the latest file by date (first in the list)
+async function quickDownload(mod: CFMod, releaseTypeFilter?: number | null) {
   isAddingMod.value = mod.id;
+  downloadDropdownModId.value = null; // Close dropdown
   try {
     // For shaders/resourcepacks, don't filter by loader
     const isModContent = selectedContentType.value === "mods";
@@ -967,6 +1075,12 @@ async function quickDownload(mod: CFMod) {
       gameVersion: selectedVersion.value || undefined,
       modLoader: isModContent ? selectedLoader.value || undefined : undefined,
     });
+
+    // Sort files by date descending to get the latest first
+    const sortedFiles = [...files].sort(
+      (a: CFFile, b: CFFile) =>
+        new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
+    );
 
     // Helper to check version match for non-mods
     const matchesVersion = (f: CFFile): boolean => {
@@ -981,17 +1095,25 @@ async function quickDownload(mod: CFMod) {
       return true;
     };
 
-    // Find file with priority: Release (1) > Beta (2) > Alpha (3)
     let targetFile: CFFile | undefined;
-    for (const releaseType of [1, 2, 3]) {
-      targetFile = files.find((f: CFFile) => f.releaseType === releaseType && matchesVersion(f));
-      if (targetFile) break;
+
+    if (releaseTypeFilter !== undefined && releaseTypeFilter !== null) {
+      // Find the latest file of the specific release type
+      targetFile = sortedFiles.find(
+        (f: CFFile) => f.releaseType === releaseTypeFilter && matchesVersion(f)
+      );
+    } else {
+      // Find the latest file by date (regardless of release type)
+      targetFile = sortedFiles.find((f: CFFile) => matchesVersion(f));
     }
 
-    // Ultimate fallback: first file in the list
-    if (!targetFile) targetFile = files[0];
+    // Ultimate fallback: first file in the sorted list
+    if (!targetFile) targetFile = sortedFiles[0];
 
-    if (!targetFile) return;
+    if (!targetFile) {
+      toast.error("No file found", "No compatible file was found for this mod.");
+      return;
+    }
 
     const addedMod = await window.api.curseforge.addToLibrary(
       mod.id,
@@ -1000,7 +1122,8 @@ async function quickDownload(mod: CFMod) {
       selectedContentType.value
     );
     if (addedMod) {
-      log.info("Quick download successful", { modId: mod.id, fileId: targetFile.id });
+      const releaseTypeName = targetFile.releaseType === 1 ? "Release" : targetFile.releaseType === 2 ? "Beta" : "Alpha";
+      log.info("Quick download successful", { modId: mod.id, fileId: targetFile.id, releaseType: releaseTypeName });
       // Add to modpack if selected
       if (targetModpackId.value) {
         try {
@@ -1354,9 +1477,11 @@ function getReleaseColor(type: number) {
             <template v-if="!fullScreen">
               <div class="h-8 w-px bg-border mx-1"></div>
 
-              <Button variant="ghost" size="icon" @click="emit('close')" title="Close">
-                <Icon name="X" class="w-5 h-5" />
-              </Button>
+              <Tooltip content="Close" position="bottom">
+                <Button variant="ghost" size="icon" @click="emit('close')">
+                  <Icon name="X" class="w-5 h-5" />
+                </Button>
+              </Tooltip>
             </template>
           </div>
 
@@ -1394,24 +1519,28 @@ function getReleaseColor(type: number) {
                 <div class="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/30 transition-colors relative"
                   @click="toggleExpand(mod)">
                   <!-- Checkbox for Bulk Selection -->
-                  <button v-if="isSelectionMode && !isModInstalled(mod.id)"
-                    @click.stop="toggleModHeaderSelection(mod.id)"
-                    class="p-1 rounded hover:bg-background transition-colors mr-1" title="Select Latest Release">
-                    <div class="w-5 h-5 border rounded flex items-center justify-center transition-all" :class="selectedModIds.has(mod.id)
-                      ? 'bg-primary border-primary text-primary-foreground'
-                      : 'border-muted-foreground/30 bg-background'
-                      ">
-                      <Icon v-if="selectedModIds.has(mod.id)" name="Check" class="w-3.5 h-3.5" />
-                    </div>
-                  </button>
+                  <Tooltip v-if="isSelectionMode && !isModInstalled(mod.id)" content="Select Latest Release"
+                    position="right">
+                    <button @click.stop="toggleModHeaderSelection(mod.id)"
+                      class="p-1 rounded hover:bg-background transition-colors mr-1">
+                      <div class="w-5 h-5 border rounded flex items-center justify-center transition-all" :class="selectedModIds.has(mod.id)
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-muted-foreground/30 bg-background'
+                        ">
+                        <Icon v-if="selectedModIds.has(mod.id)" name="Check" class="w-3.5 h-3.5" />
+                      </div>
+                    </button>
+                  </Tooltip>
                   <!-- Disabled checkbox for installed mods in selection mode -->
-                  <div v-else-if="isSelectionMode && isModInstalled(mod.id)"
-                    class="p-1 mr-1 opacity-50 cursor-not-allowed" title="Already installed">
-                    <div
-                      class="w-5 h-5 border rounded flex items-center justify-center border-muted-foreground/30 bg-muted/50">
-                      <Icon name="Check" class="w-3.5 h-3.5 text-muted-foreground" />
+                  <Tooltip v-else-if="isSelectionMode && isModInstalled(mod.id)" content="Already installed"
+                    position="right">
+                    <div class="p-1 mr-1 opacity-50 cursor-not-allowed">
+                      <div
+                        class="w-5 h-5 border rounded flex items-center justify-center border-muted-foreground/30 bg-muted/50">
+                        <Icon name="Check" class="w-3.5 h-3.5 text-muted-foreground" />
+                      </div>
                     </div>
-                  </div>
+                  </Tooltip>
 
                   <!-- Icon -->
                   <div class="w-12 h-12 rounded-lg bg-muted border border-border overflow-hidden shrink-0">
@@ -1436,7 +1565,7 @@ function getReleaseColor(type: number) {
                     <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span class="flex items-center gap-1"><span class="font-medium text-foreground">{{
                         formatDownloads(mod.downloadCount)
-                          }}</span>
+                      }}</span>
                         downloads</span>
                       <span class="w-1 h-1 rounded-full bg-border"></span>
                       <span class="truncate max-w-[150px]">by {{ getAuthors(mod) }}</span>
@@ -1447,25 +1576,53 @@ function getReleaseColor(type: number) {
 
                   <!-- Actions -->
                   <div class="flex items-center gap-2" v-if="!isSelectionMode">
-                    <Button variant="ghost" size="icon" @click.stop="viewModDetails(mod, $event)" title="View Details">
-                      <Icon name="Eye" class="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                    <Button variant="ghost" size="icon" @click.stop="openModPage(mod)" title="View on CurseForge">
-                      <Icon name="ExternalLink" class="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                    <Button :class="isLatestFileInstalled(mod) ? '' : 'gap-1.5'" class="min-w-[90px]" size="sm"
-                      :variant="isLatestFileInstalled(mod) ? 'secondary' : 'default'"
-                      :disabled="isAddingMod === mod.id || isLatestFileInstalled(mod)" @click.stop="quickDownload(mod)">
-                      <Icon v-if="isAddingMod === mod.id" name="Loader2" class="w-4 h-4 animate-spin" />
-                      <template v-else-if="isLatestFileInstalled(mod)">
-                        <Icon name="Check" class="w-4 h-4 mr-1" />
-                        <span>Installed</span>
-                      </template>
-                      <template v-else>
-                        <Icon name="ArrowDownToLine" class="w-4 h-4" />
-                        <span>Latest</span>
-                      </template>
-                    </Button>
+                    <Tooltip content="View Details" position="top">
+                      <Button variant="ghost" size="icon" @click.stop="viewModDetails(mod, $event)">
+                        <Icon name="Eye" class="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </Tooltip>
+                    <Tooltip content="View on CurseForge" position="top">
+                      <Button variant="ghost" size="icon" @click.stop="openModPage(mod)">
+                        <Icon name="ExternalLink" class="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </Tooltip>
+
+                    <!-- Split Button: Latest Download with Dropdown -->
+                    <div class="relative flex">
+                      <!-- Main Button -->
+                      <Button :class="[
+                        isLatestFileInstalled(mod) ? '' : 'gap-1.5',
+                        'rounded-r-none border-r border-r-primary-foreground/20'
+                      ]" class="min-w-[90px]" size="sm"
+                        :variant="isLatestFileInstalled(mod) ? 'secondary' : isModInstalled(mod.id) ? 'outline' : 'default'"
+                        :disabled="isAddingMod === mod.id || isLatestFileInstalled(mod)"
+                        @click.stop="quickDownload(mod)">
+                        <Icon v-if="isAddingMod === mod.id" name="Loader2" class="w-4 h-4 animate-spin" />
+                        <template v-else-if="isLatestFileInstalled(mod)">
+                          <Icon name="Check" class="w-4 h-4 mr-1" />
+                          <span>Installed</span>
+                        </template>
+                        <template v-else-if="isModInstalled(mod.id)">
+                          <Icon name="ArrowUpCircle" class="w-4 h-4" />
+                          <span>Update</span>
+                        </template>
+                        <template v-else>
+                          <Icon name="ArrowDownToLine" class="w-4 h-4" />
+                          <span>Latest</span>
+                        </template>
+                      </Button>
+
+                      <!-- Dropdown Toggle -->
+                      <Tooltip content="Download options" position="top">
+                        <Button size="sm" class="px-1.5 rounded-l-none"
+                          :variant="isLatestFileInstalled(mod) ? 'secondary' : isModInstalled(mod.id) ? 'outline' : 'default'"
+                          :disabled="isAddingMod === mod.id" @click.stop="openDownloadDropdown(mod, $event)">
+                          <Icon v-if="getAvailableReleaseTypes(mod).loading && downloadDropdownModId === mod.id"
+                            name="Loader2" class="w-3.5 h-3.5 animate-spin" />
+                          <Icon v-else name="ChevronDown" class="w-3.5 h-3.5" />
+                        </Button>
+                      </Tooltip>
+                    </div>
                   </div>
 
                   <Icon name="ChevronDown" class="w-5 h-5 text-muted-foreground/50 transition-transform duration-300"
@@ -1502,32 +1659,36 @@ function getReleaseColor(type: number) {
                       </div>
 
                       <div class="flex-1 grid grid-cols-12 gap-4 items-center text-sm">
-                        <div class="col-span-5 font-medium truncate" :title="file.displayName">
-                          {{ file.displayName }}
-                        </div>
+                        <Tooltip :content="file.displayName" position="top">
+                          <div class="col-span-5 font-medium truncate">
+                            {{ file.displayName }}
+                          </div>
+                        </Tooltip>
                         <!-- Game versions for shaders/resourcepacks -->
                         <div v-if="selectedContentType !== 'mods'" class="col-span-2">
-                          <span v-if="
+                          <Tooltip v-if="
                             file.gameVersions && file.gameVersions.length > 0
-                          " class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded"
-                            :title="file.gameVersions.filter((gv: string) => /^1\.\d+(\.\d+)?$/.test(gv)).join(', ')">
-                            {{
-                              file.gameVersions
-                                .filter((gv: string) =>
-                                  /^1\.\d+(\.\d+)?$/.test(gv)
-                                )
-                                .slice(0, 2)
-                                .join(", ")
-                            }}
-                            <span
-                              v-if="file.gameVersions.filter((gv: string) => /^1\.\d+(\.\d+)?$/.test(gv)).length > 2">
-                              +{{
-                                file.gameVersions.filter((gv: string) =>
-                                  /^1\.\d+(\.\d+)?$/.test(gv)
-                                ).length - 2
+                          " :content="file.gameVersions.filter(gv => /^1\\.\\d+(\\.\\d+)?$/.test(gv)).join(', ')"
+                            position="top">
+                            <span class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                              {{
+                                file.gameVersions
+                                  .filter((gv: string) =>
+                                    /^1\\.\\d+(\\.\\d+)?$/.test(gv)
+                                  )
+                                  .slice(0, 2)
+                                  .join(", ")
                               }}
+                              <span
+                                v-if="file.gameVersions.filter((gv: string) => /^1\\.\\d+(\\.\\d+)?$/.test(gv)).length > 2">
+                                +{{
+                                  file.gameVersions.filter((gv: string) =>
+                                    /^1\\.\\d+(\\.\\d+)?$/.test(gv)
+                                  ).length - 2
+                                }}
+                              </span>
                             </span>
-                          </span>
+                          </Tooltip>
                         </div>
                         <div v-else class="col-span-2"></div>
                         <div class="col-span-2 text-xs text-muted-foreground">
@@ -1551,10 +1712,12 @@ function getReleaseColor(type: number) {
                       </div>
 
                       <div v-if="!isSelectionMode" class="flex items-center">
-                        <Button variant="ghost" size="icon" class="h-8 w-8 text-muted-foreground mr-1"
-                          title="View Changelog" @click.stop="viewChangelog(mod, file)">
-                          <Icon name="FileText" class="w-4 h-4" />
-                        </Button>
+                        <Tooltip content="View Changelog" position="top">
+                          <Button variant="ghost" size="icon" class="h-8 w-8 text-muted-foreground mr-1"
+                            @click.stop="viewChangelog(mod, file)">
+                            <Icon name="FileText" class="w-4 h-4" />
+                          </Button>
+                        </Tooltip>
 
                         <Button size="sm" :variant="isFileInstalled(mod.id, file.id)
                           ? 'secondary'
@@ -1607,6 +1770,65 @@ function getReleaseColor(type: number) {
         gameVersion: selectedVersion || undefined,
         loader: selectedLoader || undefined
       }" :readonly="true" :hide-files-tab="true" @close="closeModDetails" />
+
+    <!-- Fixed Dropdown Menu for Download Options -->
+    <Teleport to="body">
+      <div v-if="dropdownMod">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 z-[9998]" @click="downloadDropdownModId = null">
+        </div>
+
+        <!-- Dropdown -->
+        <div class="fixed w-44 bg-popover border border-border rounded-lg shadow-lg z-[9999] py-1"
+          :style="{ top: dropdownPosition.top + 'px', right: dropdownPosition.right + 'px' }">
+          <!-- Loading indicator -->
+          <div v-if="getAvailableReleaseTypes(dropdownMod).loading"
+            class="flex items-center justify-center py-3 text-muted-foreground">
+            <Icon name="Loader2" class="w-4 h-4 animate-spin mr-2" />
+            <span class="text-xs">Loading...</span>
+          </div>
+
+          <template v-else>
+            <!-- Latest (any type) -->
+            <button class="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
+              @click="quickDownload(dropdownMod)">
+              <Icon name="ArrowDownToLine" class="w-4 h-4 text-muted-foreground" />
+              <span>Latest</span>
+              <span class="text-[10px] text-muted-foreground ml-auto">any</span>
+            </button>
+
+            <div class="h-px bg-border my-1"></div>
+
+            <!-- Latest Release -->
+            <button class="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
+              :disabled="!getAvailableReleaseTypes(dropdownMod).release"
+              :class="!getAvailableReleaseTypes(dropdownMod).release ? 'opacity-40 cursor-not-allowed' : ''"
+              @click="quickDownload(dropdownMod, 1)">
+              <div class="w-2.5 h-2.5 rounded-full bg-primary"></div>
+              <span>Latest Release</span>
+            </button>
+
+            <!-- Latest Beta -->
+            <button class="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
+              :disabled="!getAvailableReleaseTypes(dropdownMod).beta"
+              :class="!getAvailableReleaseTypes(dropdownMod).beta ? 'opacity-40 cursor-not-allowed' : ''"
+              @click="quickDownload(dropdownMod, 2)">
+              <div class="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+              <span>Latest Beta</span>
+            </button>
+
+            <!-- Latest Alpha -->
+            <button class="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 transition-colors"
+              :disabled="!getAvailableReleaseTypes(dropdownMod).alpha"
+              :class="!getAvailableReleaseTypes(dropdownMod).alpha ? 'opacity-40 cursor-not-allowed' : ''"
+              @click="quickDownload(dropdownMod, 3)">
+              <div class="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
+              <span>Latest Alpha</span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </Teleport>
   </component>
 </template>
 

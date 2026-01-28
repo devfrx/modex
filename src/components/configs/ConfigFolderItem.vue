@@ -4,6 +4,7 @@
  */
 import { computed } from "vue";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import type { ConfigFolder, ConfigFile } from "@/types";
 
 const props = defineProps<{
@@ -71,9 +72,11 @@ function formatSize(bytes: number): string {
             <Icon :name="isExpanded ? 'FolderOpen' : 'Folder'" class="w-4 h-4 text-amber-400" />
             <span class="folder-name">{{ folder.name }}</span>
             <span class="folder-count">{{ folder.fileCount }}</span>
-            <button class="folder-action" @click.stop="emit('openFolder', folder.path)" title="Open in Explorer">
-                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
-            </button>
+            <Tooltip content="Open in Explorer" position="top">
+                <button class="folder-action" @click.stop="emit('openFolder', folder.path)">
+                    <Icon name="ExternalLink" class="w-3.5 h-3.5" />
+                </button>
+            </Tooltip>
         </div>
 
         <!-- Children -->
@@ -93,16 +96,21 @@ function formatSize(bytes: number): string {
                 <span class="file-name">{{ file.name }}</span>
                 <span class="file-size">{{ formatSize(file.size) }}</span>
                 <div class="file-actions">
-                    <button class="file-action file-action-structured" @click.stop="emit('openStructured', file)"
-                        title="Edit as Key-Value">
-                        <Icon name="Settings2" class="w-3.5 h-3.5" />
-                    </button>
-                    <button class="file-action" @click.stop="emit('openExternal', file)" title="Open External">
-                        <Icon name="ExternalLink" class="w-3.5 h-3.5" />
-                    </button>
-                    <button class="file-action file-action-delete" @click.stop="emit('delete', file)" title="Delete">
-                        <Icon name="Trash2" class="w-3.5 h-3.5" />
-                    </button>
+                    <Tooltip content="Edit as Key-Value" position="top">
+                        <button class="file-action file-action-structured" @click.stop="emit('openStructured', file)">
+                            <Icon name="Settings2" class="w-3.5 h-3.5" />
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Open External" position="top">
+                        <button class="file-action" @click.stop="emit('openExternal', file)">
+                            <Icon name="ExternalLink" class="w-3.5 h-3.5" />
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Delete" position="top">
+                        <button class="file-action file-action-delete" @click.stop="emit('delete', file)">
+                            <Icon name="Trash2" class="w-3.5 h-3.5" />
+                        </button>
+                    </Tooltip>
                 </div>
             </div>
         </div>

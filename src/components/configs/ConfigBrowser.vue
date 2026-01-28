@@ -19,6 +19,7 @@ import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ConfigFolderItem from "./ConfigFolderItem.vue";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import type { ConfigFolder, ConfigFile, ConfigBackup } from "@/types";
 
 const log = createLogger("ConfigBrowser");
@@ -450,12 +451,16 @@ watch(folderCategory, () => {
                     </div>
                 </div>
                 <div class="flex items-center gap-1">
-                    <button @click="loadFolders" :disabled="isLoading" class="header-btn" title="Refresh">
-                        <Icon name="RefreshCw" :class="['w-4 h-4', isLoading && 'animate-spin']" />
-                    </button>
-                    <button @click="showBackupsDialog = true; loadBackups();" class="header-btn" title="Backups">
-                        <Icon name="History" class="w-4 h-4" />
-                    </button>
+                    <Tooltip content="Refresh" position="bottom">
+                        <button @click="loadFolders" :disabled="isLoading" class="header-btn">
+                            <Icon name="RefreshCw" :class="['w-4 h-4', isLoading && 'animate-spin']" />
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Backups" position="bottom">
+                        <button @click="showBackupsDialog = true; loadBackups();" class="header-btn">
+                            <Icon name="History" class="w-4 h-4" />
+                        </button>
+                    </Tooltip>
                     <div class="w-px h-4 bg-border/50 mx-1"></div>
                     <Button variant="ghost" size="sm" @click="importConfigs" :disabled="isImporting"
                         class="gap-1.5 h-8">
@@ -590,17 +595,22 @@ watch(folderCategory, () => {
                             <div class="text-xs text-muted-foreground truncate">{{ file.path }}</div>
                         </div>
                         <div class="search-result-actions">
-                            <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
-                                title="Remove from favorites">
-                                <Icon name="Star" class="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                            </button>
-                            <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
-                                title="Edit as Key-Value">
-                                <Icon name="Settings2" class="w-3.5 h-3.5" />
-                            </button>
-                            <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
-                                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
-                            </button>
+                            <Tooltip content="Remove from favorites" position="top">
+                                <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)">
+                                    <Icon name="Star" class="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Edit as Key-Value" position="top">
+                                <button class="action-btn action-btn-structured"
+                                    @click.stop="emit('openStructured', file)">
+                                    <Icon name="Settings2" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Open externally" position="top">
+                                <button class="action-btn" @click.stop="openExternal(file)">
+                                    <Icon name="ExternalLink" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
                         </div>
                     </div>
                 </div>
@@ -629,21 +639,29 @@ watch(folderCategory, () => {
                             <div class="text-xs text-muted-foreground truncate">{{ file.path }}</div>
                         </div>
                         <div class="search-result-actions">
-                            <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
-                                :title="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'">
-                                <Icon name="Star"
-                                    :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
-                            </button>
-                            <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
-                                title="Edit as Key-Value">
-                                <Icon name="Settings2" class="w-3.5 h-3.5" />
-                            </button>
-                            <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
-                                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
-                            </button>
-                            <button class="action-btn action-btn-delete" @click.stop="deleteFile(file)" title="Delete">
-                                <Icon name="Trash2" class="w-3.5 h-3.5" />
-                            </button>
+                            <Tooltip :content="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'"
+                                position="top">
+                                <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)">
+                                    <Icon name="Star"
+                                        :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Edit as Key-Value" position="top">
+                                <button class="action-btn action-btn-structured"
+                                    @click.stop="emit('openStructured', file)">
+                                    <Icon name="Settings2" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Open externally" position="top">
+                                <button class="action-btn" @click.stop="openExternal(file)">
+                                    <Icon name="ExternalLink" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Delete" position="top">
+                                <button class="action-btn action-btn-delete" @click.stop="deleteFile(file)">
+                                    <Icon name="Trash2" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
                         </div>
                     </div>
                 </div>
@@ -676,21 +694,29 @@ watch(folderCategory, () => {
                             </div>
                         </div>
                         <div class="search-result-actions">
-                            <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)"
-                                :title="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'">
-                                <Icon name="Star"
-                                    :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
-                            </button>
-                            <button class="action-btn action-btn-structured" @click.stop="emit('openStructured', file)"
-                                title="Edit as Key-Value">
-                                <Icon name="Settings2" class="w-3.5 h-3.5" />
-                            </button>
-                            <button class="action-btn" @click.stop="openExternal(file)" title="Open externally">
-                                <Icon name="ExternalLink" class="w-3.5 h-3.5" />
-                            </button>
-                            <button class="action-btn action-btn-delete" @click.stop="deleteFile(file)" title="Delete">
-                                <Icon name="Trash2" class="w-3.5 h-3.5" />
-                            </button>
+                            <Tooltip :content="favorites.has(file.path) ? 'Remove from favorites' : 'Add to favorites'"
+                                position="top">
+                                <button class="action-btn action-btn-star" @click.stop="toggleFavorite(file.path)">
+                                    <Icon name="Star"
+                                        :class="['w-3.5 h-3.5', favorites.has(file.path) ? 'fill-yellow-400 text-yellow-400' : '']" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Edit as Key-Value" position="top">
+                                <button class="action-btn action-btn-structured"
+                                    @click.stop="emit('openStructured', file)">
+                                    <Icon name="Settings2" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Open externally" position="top">
+                                <button class="action-btn" @click.stop="openExternal(file)">
+                                    <Icon name="ExternalLink" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
+                            <Tooltip content="Delete" position="top">
+                                <button class="action-btn action-btn-delete" @click.stop="deleteFile(file)">
+                                    <Icon name="Trash2" class="w-3.5 h-3.5" />
+                                </button>
+                            </Tooltip>
                         </div>
                     </div>
                 </div>

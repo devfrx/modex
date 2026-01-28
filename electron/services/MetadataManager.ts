@@ -1458,11 +1458,45 @@ export class MetadataManager {
     const savedNotes = currentVersion.mod_notes || {};
     const currentNotes = modpack.mod_notes || {};
 
+    // Build a map of saved notes by project ID for updated mods
+    // This allows us to track notes correctly when a mod is updated (ID changes but project stays same)
+    const savedNotesByCfProjectId = new Map<number, { modId: string; note: string }>();
+    const savedNotesByMrProjectId = new Map<string, { modId: string; note: string }>();
+    
+    for (const [modId, note] of Object.entries(savedNotes)) {
+      const snapshot = snapshotMap.get(modId);
+      if (snapshot?.cf_project_id) {
+        savedNotesByCfProjectId.set(snapshot.cf_project_id, { modId, note });
+      }
+      if (snapshot?.mr_project_id) {
+        savedNotesByMrProjectId.set(snapshot.mr_project_id, { modId, note });
+      }
+    }
+
     // Find added notes
     for (const modId of Object.keys(currentNotes)) {
       if (!savedNotes[modId] && currentModIds.has(modId)) {
         const mod = library.mods.find(m => m.id === modId);
-        result.changes.notesAdded.push({ id: modId, name: mod?.name || modId, note: currentNotes[modId] });
+        
+        // Check if this is an updated mod that had a note in the saved version
+        // If the note was preserved during update, don't count it as "added"
+        let preservedFromUpdate = false;
+        if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) {
+          const savedNoteInfo = savedNotesByCfProjectId.get(mod.cf_project_id);
+          if (savedNoteInfo && savedNoteInfo.note === currentNotes[modId]) {
+            preservedFromUpdate = true;
+          }
+        }
+        if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) {
+          const savedNoteInfo = savedNotesByMrProjectId.get(mod.mr_project_id);
+          if (savedNoteInfo && savedNoteInfo.note === currentNotes[modId]) {
+            preservedFromUpdate = true;
+          }
+        }
+        
+        if (!preservedFromUpdate) {
+          result.changes.notesAdded.push({ id: modId, name: mod?.name || modId, note: currentNotes[modId] });
+        }
       }
     }
 
@@ -1473,8 +1507,46 @@ export class MetadataManager {
         result.changes.notesRemoved.push({ id: modId, name: mod?.name || modId, note: savedNotes[modId] });
       }
     }
+    
+    // Handle removed notes for updated mods (old mod ID no longer in currentModIds, but project is updated)
+    // Don't count as removed if the note was transferred to the new mod ID
+    for (const modId of Object.keys(savedNotes)) {
+      if (!currentModIds.has(modId)) {
+        const snapshot = snapshotMap.get(modId);
+        
+        // Check if this mod was updated (replaced by newer version)
+        let wasUpdated = false;
+        let notePreserved = false;
+        
+        if (snapshot?.cf_project_id && updatedCfProjectIds.has(snapshot.cf_project_id)) {
+          wasUpdated = true;
+          const currentMod = currentModsByCfProjectId.get(snapshot.cf_project_id);
+          if (currentMod && currentNotes[currentMod.id]) {
+            notePreserved = true;
+          }
+        }
+        if (snapshot?.mr_project_id && updatedMrProjectIds.has(snapshot.mr_project_id)) {
+          wasUpdated = true;
+          const currentMod = currentModsByMrProjectId.get(snapshot.mr_project_id);
+          if (currentMod && currentNotes[currentMod.id]) {
+            notePreserved = true;
+          }
+        }
+        
+        // Only count as removed if the mod wasn't updated OR the note wasn't preserved
+        if (!wasUpdated) {
+          // Mod was truly removed (not updated), this is handled elsewhere as modsRemoved
+          // Notes for removed mods don't need to be tracked separately
+        } else if (wasUpdated && !notePreserved) {
+          // Mod was updated but note was lost - this shouldn't happen with our fix
+          // but track it just in case
+          const mod = library.mods.find(m => m.id === modId);
+          result.changes.notesRemoved.push({ id: modId, name: mod?.name || snapshot?.name || modId, note: savedNotes[modId] });
+        }
+      }
+    }
 
-    // Find changed notes
+    // Find changed notes (including for updated mods where the note content changed)
     for (const modId of Object.keys(currentNotes)) {
       if (savedNotes[modId] && savedNotes[modId] !== currentNotes[modId]) {
         const mod = library.mods.find(m => m.id === modId);
@@ -1484,6 +1556,35 @@ export class MetadataManager {
           oldNote: savedNotes[modId],
           newNote: currentNotes[modId]
         });
+      }
+      
+      // Check for note changes on updated mods (different mod ID but same project)
+      if (!savedNotes[modId] && currentModIds.has(modId)) {
+        const mod = library.mods.find(m => m.id === modId);
+        
+        // Check if this is an updated mod with a different note than before
+        if (mod?.cf_project_id && updatedCfProjectIds.has(mod.cf_project_id)) {
+          const savedNoteInfo = savedNotesByCfProjectId.get(mod.cf_project_id);
+          if (savedNoteInfo && savedNoteInfo.note !== currentNotes[modId]) {
+            result.changes.notesChanged.push({
+              id: modId,
+              name: mod?.name || modId,
+              oldNote: savedNoteInfo.note,
+              newNote: currentNotes[modId]
+            });
+          }
+        }
+        if (mod?.mr_project_id && updatedMrProjectIds.has(mod.mr_project_id)) {
+          const savedNoteInfo = savedNotesByMrProjectId.get(mod.mr_project_id);
+          if (savedNoteInfo && savedNoteInfo.note !== currentNotes[modId]) {
+            result.changes.notesChanged.push({
+              id: modId,
+              name: mod?.name || modId,
+              oldNote: savedNoteInfo.note,
+              newNote: currentNotes[modId]
+            });
+          }
+        }
       }
     }
 
@@ -2822,6 +2923,21 @@ export class MetadataManager {
         modpack.disabled_mod_ids = modpack.disabled_mod_ids.filter(id => id !== oldModId);
         if (!modpack.disabled_mod_ids.includes(newModId)) {
           modpack.disabled_mod_ids.push(newModId);
+        }
+      }
+
+      // Preserve mod note: copy note from old mod ID to new mod ID
+      if (modpack.mod_notes?.[oldModId]) {
+        if (!modpack.mod_notes) modpack.mod_notes = {};
+        modpack.mod_notes[newModId] = modpack.mod_notes[oldModId];
+        delete modpack.mod_notes[oldModId];
+      }
+
+      // Preserve locked state: if old mod was locked, lock new mod too
+      if (modpack.locked_mod_ids?.includes(oldModId)) {
+        modpack.locked_mod_ids = modpack.locked_mod_ids.filter(id => id !== oldModId);
+        if (!modpack.locked_mod_ids.includes(newModId)) {
+          modpack.locked_mod_ids.push(newModId);
         }
       }
 

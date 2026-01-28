@@ -2,6 +2,7 @@
 import { RouterLink, useRouter, useRoute } from "vue-router";
 import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import ModexLogo from "@/assets/modex_logo_h2_nobg.png";
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useSidebar } from "@/composables/useSidebar";
@@ -149,16 +150,20 @@ const groupedItems = computed(() => {
         <div class="nav-group" v-if="groupedItems.myItems.length">
           <span v-if="!settings.collapsed" class="nav-group__label">Your Content</span>
           <div class="nav-group__items">
-            <RouterLink v-for="item in groupedItems.myItems" :key="item.id" :to="item.route" class="nav-item"
-              :class="{ 'nav-item--active': isRouteActive(item.route), 'nav-item--collapsed': settings.collapsed }"
-              @click="handleNavClick" :title="settings.collapsed ? item.name : undefined">
-              <div class="nav-item__icon-wrap">
-                <Icon :name="item.icon" class="nav-item__icon" />
-              </div>
-              <span v-if="!settings.collapsed" class="nav-item__text">{{ item.name }}</span>
-              <span v-if="!settings.collapsed && getItemCount(item.id)" class="nav-item__count">{{ getItemCount(item.id)
-              }}</span>
-            </RouterLink>
+            <Tooltip v-for="item in groupedItems.myItems" :key="item.id" :content="item.name" position="right"
+              :disabled="!settings.collapsed">
+              <RouterLink :to="item.route" class="nav-item"
+                :class="{ 'nav-item--active': isRouteActive(item.route), 'nav-item--collapsed': settings.collapsed }"
+                @click="handleNavClick">
+                <div class="nav-item__icon-wrap">
+                  <Icon :name="item.icon" class="nav-item__icon" />
+                </div>
+                <span v-if="!settings.collapsed" class="nav-item__text">{{ item.name }}</span>
+                <span v-if="!settings.collapsed && getItemCount(item.id)" class="nav-item__count">{{
+                  getItemCount(item.id)
+                  }}</span>
+              </RouterLink>
+            </Tooltip>
           </div>
         </div>
 
@@ -166,14 +171,17 @@ const groupedItems = computed(() => {
         <div class="nav-group" v-if="groupedItems.browseItems.length">
           <span v-if="!settings.collapsed" class="nav-group__label">Discover</span>
           <div class="nav-group__items">
-            <RouterLink v-for="item in groupedItems.browseItems" :key="item.id" :to="item.route" class="nav-item"
-              :class="{ 'nav-item--active': isRouteActive(item.route), 'nav-item--collapsed': settings.collapsed }"
-              @click="handleNavClick" :title="settings.collapsed ? item.name : undefined">
-              <div class="nav-item__icon-wrap">
-                <Icon :name="item.icon" class="nav-item__icon" />
-              </div>
-              <span v-if="!settings.collapsed" class="nav-item__text">{{ item.name }}</span>
-            </RouterLink>
+            <Tooltip v-for="item in groupedItems.browseItems" :key="item.id" :content="item.name" position="right"
+              :disabled="!settings.collapsed">
+              <RouterLink :to="item.route" class="nav-item"
+                :class="{ 'nav-item--active': isRouteActive(item.route), 'nav-item--collapsed': settings.collapsed }"
+                @click="handleNavClick">
+                <div class="nav-item__icon-wrap">
+                  <Icon :name="item.icon" class="nav-item__icon" />
+                </div>
+                <span v-if="!settings.collapsed" class="nav-item__text">{{ item.name }}</span>
+              </RouterLink>
+            </Tooltip>
           </div>
         </div>
 
@@ -181,48 +189,56 @@ const groupedItems = computed(() => {
         <div class="nav-group" v-if="groupedItems.otherItems.length">
           <span v-if="!settings.collapsed" class="nav-group__label">More</span>
           <div class="nav-group__items">
-            <RouterLink v-for="item in groupedItems.otherItems" :key="item.id" :to="item.route" class="nav-item"
-              :class="{ 'nav-item--active': isRouteActive(item.route), 'nav-item--collapsed': settings.collapsed }"
-              @click="handleNavClick" :title="settings.collapsed ? item.name : undefined">
-              <div class="nav-item__icon-wrap">
-                <Icon :name="item.icon" class="nav-item__icon" />
-              </div>
-              <span v-if="!settings.collapsed" class="nav-item__text">{{ item.name }}</span>
-            </RouterLink>
+            <Tooltip v-for="item in groupedItems.otherItems" :key="item.id" :content="item.name" position="right"
+              :disabled="!settings.collapsed">
+              <RouterLink :to="item.route" class="nav-item"
+                :class="{ 'nav-item--active': isRouteActive(item.route), 'nav-item--collapsed': settings.collapsed }"
+                @click="handleNavClick">
+                <div class="nav-item__icon-wrap">
+                  <Icon :name="item.icon" class="nav-item__icon" />
+                </div>
+                <span v-if="!settings.collapsed" class="nav-item__text">{{ item.name }}</span>
+              </RouterLink>
+            </Tooltip>
           </div>
         </div>
       </nav>
 
       <!-- Search Trigger -->
-      <button class="search-trigger" :class="{ 'search-trigger--collapsed': settings.collapsed }" @click="triggerSearch"
-        :title="settings.collapsed ? `Search ${modKey}+K` : undefined">
-        <Icon name="Search" class="search-trigger__icon" />
-        <template v-if="!settings.collapsed">
-          <span class="search-trigger__text">Search</span>
-          <div class="search-trigger__shortcut">
-            <kbd class="search-trigger__key">{{ modKey }}</kbd>
-            <kbd class="search-trigger__key">K</kbd>
-          </div>
-        </template>
-      </button>
+      <Tooltip :content="`Search ${modKey}+K`" position="right" :disabled="!settings.collapsed">
+        <button class="search-trigger" :class="{ 'search-trigger--collapsed': settings.collapsed }"
+          @click="triggerSearch">
+          <Icon name="Search" class="search-trigger__icon" />
+          <template v-if="!settings.collapsed">
+            <span class="search-trigger__text">Search</span>
+            <div class="search-trigger__shortcut">
+              <kbd class="search-trigger__key">{{ modKey }}</kbd>
+              <kbd class="search-trigger__key">K</kbd>
+            </div>
+          </template>
+        </button>
+      </Tooltip>
 
       <!-- Bottom Actions -->
       <div class="nav-rail__bottom">
         <!-- Dev -->
-        <RouterLink v-if="isDev" to="/dev" class="bottom-action bottom-action--dev"
-          :class="{ 'bottom-action--collapsed': settings.collapsed }" @click="handleNavClick"
-          :title="settings.collapsed ? 'Dev' : undefined">
-          <Icon name="Zap" class="bottom-action__icon" />
-          <span v-if="!settings.collapsed" class="bottom-action__text">Dev</span>
-        </RouterLink>
+        <Tooltip v-if="isDev" content="Dev" position="right" :disabled="!settings.collapsed">
+          <RouterLink to="/dev" class="bottom-action bottom-action--dev"
+            :class="{ 'bottom-action--collapsed': settings.collapsed }" @click="handleNavClick">
+            <Icon name="Zap" class="bottom-action__icon" />
+            <span v-if="!settings.collapsed" class="bottom-action__text">Dev</span>
+          </RouterLink>
+        </Tooltip>
 
         <!-- Settings -->
-        <RouterLink to="/settings" class="bottom-action bottom-action--settings"
-          :class="{ 'bottom-action--collapsed': settings.collapsed, 'bottom-action--active': isRouteActive('/settings') }"
-          @click="handleNavClick" :title="settings.collapsed ? 'Settings' : undefined">
-          <Icon name="Settings" class="bottom-action__icon bottom-action__icon--spin" />
-          <span v-if="!settings.collapsed" class="bottom-action__text">Settings</span>
-        </RouterLink>
+        <Tooltip content="Settings" position="right" :disabled="!settings.collapsed">
+          <RouterLink to="/settings" class="bottom-action bottom-action--settings"
+            :class="{ 'bottom-action--collapsed': settings.collapsed, 'bottom-action--active': isRouteActive('/settings') }"
+            @click="handleNavClick">
+            <Icon name="Settings" class="bottom-action__icon bottom-action__icon--spin" />
+            <span v-if="!settings.collapsed" class="bottom-action__text">Settings</span>
+          </RouterLink>
+        </Tooltip>
       </div>
     </aside>
 

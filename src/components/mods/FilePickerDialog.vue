@@ -4,6 +4,7 @@ import { createLogger } from "@/utils/logger";
 import Dialog from "@/components/ui/Dialog.vue";
 import Button from "@/components/ui/Button.vue";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 
 const log = createLogger("FilePickerDialog");
 
@@ -19,6 +20,7 @@ const props = defineProps<{
     modLoader?: string;
     contentType?: "mod" | "resourcepack" | "shader";
     installedProjectFiles?: Map<number, Set<number>>;
+    currentFileId?: number;
 }>();
 
 const emit = defineEmits<{
@@ -55,10 +57,14 @@ async function loadFiles() {
                 new Date(b.fileDate).getTime() - new Date(a.fileDate).getTime()
         );
 
-        // Auto-select first compatible file
-        const compatible = filteredFiles.value;
-        if (compatible.length > 0) {
-            selectedFileId.value = compatible[0].id;
+        // If we have a currentFileId, select it; otherwise auto-select first compatible
+        if (props.currentFileId && files.value.some(f => f.id === props.currentFileId)) {
+            selectedFileId.value = props.currentFileId;
+        } else {
+            const compatible = filteredFiles.value;
+            if (compatible.length > 0) {
+                selectedFileId.value = compatible[0].id;
+            }
         }
     } catch (err) {
         log.error("Failed to load files", { modId: props.mod?.id, error: String(err) });
@@ -204,9 +210,11 @@ watch(
                         Select a file version to add
                     </p>
                 </div>
-                <Button variant="ghost" size="icon" class="h-8 w-8" @click="openCurseForge" title="View on CurseForge">
-                    <Icon name="ExternalLink" class="w-4 h-4" />
-                </Button>
+                <Tooltip content="View on CurseForge" position="bottom">
+                    <Button variant="ghost" size="icon" class="h-8 w-8" @click="openCurseForge">
+                        <Icon name="ExternalLink" class="w-4 h-4" />
+                    </Button>
+                </Tooltip>
             </div>
         </template>
 

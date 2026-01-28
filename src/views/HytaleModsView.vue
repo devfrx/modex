@@ -17,6 +17,7 @@ import { useToast } from "@/composables/useToast";
 import { useLibraryPagination } from "@/composables/useLibraryPagination";
 import type { HytaleMod } from "@/types";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import Dialog from "@/components/ui/Dialog.vue";
@@ -576,11 +577,12 @@ async function updateAllMods(): Promise<void> {
                         </div>
 
                         <!-- Sort -->
-                        <button class="sort-btn" @click="toggleSort"
-                            :title="sortDir === 'asc' ? 'Sort A-Z' : 'Sort Z-A'">
-                            <Icon v-if="sortDir === 'asc'" name="SortAsc" class="w-4 h-4" />
-                            <Icon v-else name="SortDesc" class="w-4 h-4" />
-                        </button>
+                        <Tooltip :content="sortDir === 'asc' ? 'Sort A-Z' : 'Sort Z-A'" position="bottom">
+                            <button class="sort-btn" @click="toggleSort">
+                                <Icon v-if="sortDir === 'asc'" name="SortAsc" class="w-4 h-4" />
+                                <Icon v-else name="SortDesc" class="w-4 h-4" />
+                            </button>
+                        </Tooltip>
 
                         <!-- View toggle -->
                         <div class="view-toggle">

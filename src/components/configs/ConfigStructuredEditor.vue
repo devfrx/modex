@@ -21,26 +21,29 @@
             <div class="header-actions">
                 <!-- Mode Toggle (Visual/Raw) -->
                 <div class="mode-toggle">
-                    <button class="mode-btn" :class="{ active: editorMode === 'visual' }" @click="switchToVisualMode"
-                        title="Editor Visuale">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" class="w-4 h-4">
-                            <rect x="3" y="3" width="7" height="7" />
-                            <rect x="14" y="3" width="7" height="7" />
-                            <rect x="14" y="14" width="7" height="7" />
-                            <rect x="3" y="14" width="7" height="7" />
-                        </svg>
-                        Visual
-                    </button>
-                    <button class="mode-btn" :class="{ active: editorMode === 'raw' }" @click="switchToRawMode"
-                        title="Editor Raw">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" class="w-4 h-4">
-                            <polyline points="16 18 22 12 16 6" />
-                            <polyline points="8 6 2 12 8 18" />
-                        </svg>
-                        Raw
-                    </button>
+                    <Tooltip content="Editor Visuale" position="bottom">
+                        <button class="mode-btn" :class="{ active: editorMode === 'visual' }"
+                            @click="switchToVisualMode">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" class="w-4 h-4">
+                                <rect x="3" y="3" width="7" height="7" />
+                                <rect x="14" y="3" width="7" height="7" />
+                                <rect x="14" y="14" width="7" height="7" />
+                                <rect x="3" y="14" width="7" height="7" />
+                            </svg>
+                            Visual
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Editor Raw" position="bottom">
+                        <button class="mode-btn" :class="{ active: editorMode === 'raw' }" @click="switchToRawMode">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" class="w-4 h-4">
+                                <polyline points="16 18 22 12 16 6" />
+                                <polyline points="8 6 2 12 8 18" />
+                            </svg>
+                            Raw
+                        </button>
+                    </Tooltip>
                 </div>
 
                 <div class="header-divider"></div>
@@ -135,14 +138,16 @@
                                         <span class="key-name">{{ entry.key }}</span>
                                         <span :class="['key-type', `type-${entry.type}`]">{{ entry.type }}</span>
                                     </div>
-                                    <button v-if="isModified(entry.keyPath)" class="reset-btn"
-                                        @click="resetValue(entry.keyPath)" title="Ripristina valore originale">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" stroke-width="2">
-                                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                            <path d="M3 3v5h5" />
-                                        </svg>
-                                    </button>
+                                    <Tooltip v-if="isModified(entry.keyPath)" content="Ripristina valore originale"
+                                        position="top">
+                                        <button class="reset-btn" @click="resetValue(entry.keyPath)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                <path d="M3 3v5h5" />
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
                                 </div>
 
                                 <!-- Card Value -->
@@ -156,7 +161,7 @@
                                                 <div class="toggle-thumb" />
                                             </div>
                                             <span>{{ getEditValue(entry.keyPath, entry.value) ? 'Attivo' : 'Disattivo'
-                                            }}</span>
+                                                }}</span>
                                         </button>
                                     </template>
 
@@ -229,7 +234,7 @@
                                                             <span class="object-item-type">{{ Array.isArray(item) ?
                                                                 'array' : 'object' }}</span>
                                                             <span class="object-item-preview">{{ getObjectPreview(item)
-                                                            }}</span>
+                                                                }}</span>
                                                         </button>
 
                                                         <!-- Expanded Object Editor -->
@@ -324,16 +329,17 @@
 
                                                     <span v-else class="complex-item">{{ JSON.stringify(item) }}</span>
 
-                                                    <button class="array-remove-btn"
-                                                        @click="removeArrayItem(entry.keyPath, entry.value, index)"
-                                                        title="Rimuovi">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                                            fill="none" stroke="currentColor" stroke-width="2">
-                                                            <polyline points="3 6 5 6 21 6" />
-                                                            <path
-                                                                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                        </svg>
-                                                    </button>
+                                                    <Tooltip content="Rimuovi" position="top">
+                                                        <button class="array-remove-btn"
+                                                            @click="removeArrayItem(entry.keyPath, entry.value, index)">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                                fill="none" stroke="currentColor" stroke-width="2">
+                                                                <polyline points="3 6 5 6 21 6" />
+                                                                <path
+                                                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                            </svg>
+                                                        </button>
+                                                    </Tooltip>
                                                 </div>
 
                                                 <!-- Empty array message -->
@@ -472,6 +478,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, reactive, nextTick } from 'vue';
 import { createLogger } from '@/utils/logger';
+import Tooltip from '@/components/ui/Tooltip.vue';
 import type { ConfigEntry, ConfigSection, ParsedConfig } from '@/types';
 
 const log = createLogger('ConfigStructuredEditor');

@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { createLogger } from "@/utils/logger";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import Button from "@/components/ui/Button.vue";
 import Dialog from "@/components/ui/Dialog.vue";
 import ChangelogDialog from "@/components/mods/ChangelogDialog.vue";
@@ -535,9 +536,11 @@ onMounted(async () => {
                         <template v-if="!fullScreen">
                             <div class="h-8 w-px bg-border mx-1 hidden sm:block"></div>
 
-                            <Button variant="ghost" size="icon" @click="emit('close')" title="Close">
-                                <Icon name="X" class="w-5 h-5" />
-                            </Button>
+                            <Tooltip content="Close" position="bottom">
+                                <Button variant="ghost" size="icon" @click="emit('close')">
+                                    <Icon name="X" class="w-5 h-5" />
+                                </Button>
+                            </Tooltip>
                         </template>
                     </div>
 
@@ -602,7 +605,7 @@ onMounted(async () => {
                                                 <h3 class="font-medium text-foreground truncate">{{ modpack.name }}</h3>
                                                 <p class="text-xs text-muted-foreground line-clamp-2 mt-0.5">{{
                                                     modpack.summary
-                                                    }}
+                                                }}
                                                 </p>
                                             </div>
 
@@ -668,15 +671,18 @@ onMounted(async () => {
                                         <div v-for="file in filteredFiles.slice(0, 10)" :key="file.id"
                                             class="flex items-center gap-3 p-2 rounded-lg hover:bg-background border border-transparent hover:border-border transition-all group/file">
                                             <div class="flex-1 grid grid-cols-12 gap-4 items-center text-sm">
-                                                <div class="col-span-5 font-medium truncate" :title="file.displayName">
-                                                    {{ file.displayName }}
-                                                </div>
+                                                <Tooltip :content="file.displayName" position="top">
+                                                    <div class="col-span-5 font-medium truncate">
+                                                        {{ file.displayName }}
+                                                    </div>
+                                                </Tooltip>
                                                 <div class="col-span-2">
-                                                    <span
-                                                        class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded"
-                                                        :title="getMinecraftVersions(file)">
-                                                        {{ getMinecraftVersions(file) }}
-                                                    </span>
+                                                    <Tooltip :content="getMinecraftVersions(file)" position="top">
+                                                        <span
+                                                            class="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                                                            {{ getMinecraftVersions(file) }}
+                                                        </span>
+                                                    </Tooltip>
                                                 </div>
                                                 <div class="col-span-2 text-xs text-muted-foreground">
                                                     {{ formatDate(file.fileDate) }}
@@ -695,11 +701,13 @@ onMounted(async () => {
                                             </div>
 
                                             <div class="flex items-center">
-                                                <Button variant="ghost" size="icon"
-                                                    class="h-8 w-8 text-muted-foreground mr-1" title="View Changelog"
-                                                    @click.stop="viewChangelog(modpack, file)">
-                                                    <Icon name="FileText" class="w-4 h-4" />
-                                                </Button>
+                                                <Tooltip content="View Changelog" position="top">
+                                                    <Button variant="ghost" size="icon"
+                                                        class="h-8 w-8 text-muted-foreground mr-1"
+                                                        @click.stop="viewChangelog(modpack, file)">
+                                                        <Icon name="FileText" class="w-4 h-4" />
+                                                    </Button>
+                                                </Tooltip>
                                                 <Button @click="importModpack(modpack, file)"
                                                     :disabled="importingModpackId === modpack.id" size="sm"
                                                     variant="ghost" class="h-8 w-24 ml-2 text-xs">

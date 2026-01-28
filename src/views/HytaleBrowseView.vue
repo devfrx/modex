@@ -14,6 +14,7 @@
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import Button from "@/components/ui/Button.vue";
 import Input from "@/components/ui/Input.vue";
 import HytaleCFModDetailsModal from "@/components/hytale/HytaleCFModDetailsModal.vue";
@@ -331,9 +332,10 @@ onMounted(async () => {
                                 <Icon v-else name="Download" class="w-4 h-4 mr-2" />
                                 {{ installingMods.has(mod.id) ? 'Installing...' : 'Install' }}
                             </Button>
-                            <Button size="sm" variant="outline" @click.stop="handleShowDetails(mod)"
-                                title="View details">
-                                <Icon name="Info" class="w-4 h-4" />
+                            <Button size="sm" variant="outline" @click.stop="handleShowDetails(mod)">
+                                <Tooltip content="View details" position="top">
+                                    <Icon name="Info" class="w-4 h-4" />
+                                </Tooltip>
                             </Button>
                         </div>
                     </div>

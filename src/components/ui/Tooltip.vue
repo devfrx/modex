@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from "vue";
 
 const props = withDefaults(
     defineProps<{
@@ -16,23 +16,12 @@ const props = withDefaults(
 );
 
 const isVisible = ref(false);
-const triggerRef = ref<HTMLElement | null>(null);
+const wrapperRef = ref<HTMLElement | null>(null);
+const tooltipRef = ref<HTMLElement | null>(null);
 let timeout: ReturnType<typeof setTimeout> | null = null;
 
-const positionClasses = computed(() => {
-    switch (props.position) {
-        case "top":
-            return "bottom-full left-1/2 -translate-x-1/2 mb-2";
-        case "bottom":
-            return "top-full left-1/2 -translate-x-1/2 mt-2";
-        case "left":
-            return "right-full top-1/2 -translate-y-1/2 mr-2";
-        case "right":
-            return "left-full top-1/2 -translate-y-1/2 ml-2";
-        default:
-            return "bottom-full left-1/2 -translate-x-1/2 mb-2";
-    }
-});
+// Position calculated dynamically based on trigger element
+const tooltipStyle = ref<{ top: string; left: string }>({ top: "0px", left: "0px" });
 
 const arrowClasses = computed(() => {
     switch (props.position) {
@@ -49,9 +38,52 @@ const arrowClasses = computed(() => {
     }
 });
 
+function getTriggerElement(): HTMLElement | null {
+    // With display:contents, we need to get the first actual child element
+    if (!wrapperRef.value) return null;
+    const firstChild = wrapperRef.value.firstElementChild as HTMLElement | null;
+    return firstChild;
+}
+
+function updatePosition() {
+    const trigger = getTriggerElement();
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const gap = 8; // spacing between trigger and tooltip
+
+    let top = 0;
+    let left = 0;
+
+    switch (props.position) {
+        case "top":
+            top = rect.top - gap;
+            left = rect.left + rect.width / 2;
+            break;
+        case "bottom":
+            top = rect.bottom + gap;
+            left = rect.left + rect.width / 2;
+            break;
+        case "left":
+            top = rect.top + rect.height / 2;
+            left = rect.left - gap;
+            break;
+        case "right":
+            top = rect.top + rect.height / 2;
+            left = rect.right + gap;
+            break;
+    }
+
+    tooltipStyle.value = {
+        top: `${top}px`,
+        left: `${left}px`,
+    };
+}
+
 function showTooltip() {
     if (props.disabled) return;
     timeout = setTimeout(() => {
+        updatePosition();
         isVisible.value = true;
     }, props.delay);
 }
@@ -70,30 +102,36 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div ref="triggerRef" class="relative inline-flex" @mouseenter="showTooltip" @mouseleave="hideTooltip"
-        @focus="showTooltip" @blur="hideTooltip">
+    <div ref="wrapperRef" class="contents" @mouseenter="showTooltip" @mouseleave="hideTooltip" @focus="showTooltip"
+        @blur="hideTooltip">
         <slot />
-        <Transition name="fade">
-            <div v-if="isVisible && content" class="absolute z-50 pointer-events-none" :class="positionClasses">
-                <div
-                    class="px-2.5 py-1.5 text-xs font-medium rounded-lg shadow-lg bg-popover text-popover-foreground border border-border whitespace-nowrap">
-                    {{ content }}
+        <Teleport to="body">
+            <Transition name="tooltip-fade">
+                <div v-if="isVisible && content" ref="tooltipRef" class="fixed z-[9999] pointer-events-none" :class="{
+                    '-translate-x-1/2 -translate-y-full': position === 'top',
+                    '-translate-x-1/2': position === 'bottom',
+                    '-translate-x-full -translate-y-1/2': position === 'left',
+                    '-translate-y-1/2': position === 'right',
+                }" :style="tooltipStyle">
+                    <div
+                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg shadow-lg bg-popover text-popover-foreground border border-border whitespace-nowrap">
+                        {{ content }}
+                    </div>
+                    <div class="absolute border-4" :class="arrowClasses" />
                 </div>
-                <div class="absolute border-4" :class="arrowClasses" />
-            </div>
-        </Transition>
+            </Transition>
+        </Teleport>
     </div>
 </template>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
+.tooltip-fade-enter-active,
+.tooltip-fade-leave-active {
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.tooltip-fade-enter-from,
+.tooltip-fade-leave-to {
     opacity: 0;
-    transform: scale(0.95);
 }
 </style>

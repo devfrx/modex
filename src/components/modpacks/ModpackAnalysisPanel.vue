@@ -3,6 +3,7 @@ import { ref, watch, computed } from "vue";
 import { createLogger } from "@/utils/logger";
 import { useToast } from "@/composables/useToast";
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import Button from "@/components/ui/Button.vue";
 import type {
     ModpackAnalysis,
@@ -475,12 +476,14 @@ watch(
 
                     <!-- Action Buttons -->
                     <div class="flex items-center gap-2">
-                        <Button variant="outline" size="sm" class="gap-1.5" @click="refreshDependencies"
-                            :disabled="isRefreshingDeps" title="Fetch latest dependency data from CurseForge">
-                            <Icon v-if="isRefreshingDeps" name="Loader2" class="w-4 h-4 animate-spin" />
-                            <Icon v-else name="GitBranch" class="w-4 h-4" />
-                            Sync
-                        </Button>
+                        <Tooltip content="Fetch latest dependency data from CurseForge" position="bottom">
+                            <Button variant="outline" size="sm" class="gap-1.5" @click="refreshDependencies"
+                                :disabled="isRefreshingDeps">
+                                <Icon v-if="isRefreshingDeps" name="Loader2" class="w-4 h-4 animate-spin" />
+                                <Icon v-else name="GitBranch" class="w-4 h-4" />
+                                Sync
+                            </Button>
+                        </Tooltip>
                         <Button variant="outline" size="sm" class="gap-1.5" @click="() => runAnalysis()">
                             <Icon name="RefreshCw" class="w-4 h-4" />
                             Re-scan
@@ -572,13 +575,13 @@ watch(
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0">
-                                    <a v-if="dep.modSlug"
-                                        :href="`https://www.curseforge.com/minecraft/mc-mods/${dep.modSlug}`"
-                                        target="_blank" class="p-2 rounded-lg hover:bg-accent transition-colors"
-                                        title="View on CurseForge">
-                                        <Icon name="ExternalLink"
-                                            class="w-4 h-4 text-muted-foreground hover:text-foreground" />
-                                    </a>
+                                    <Tooltip v-if="dep.modSlug" content="View on CurseForge" position="top">
+                                        <a :href="`https://www.curseforge.com/minecraft/mc-mods/${dep.modSlug}`"
+                                            target="_blank" class="p-2 rounded-lg hover:bg-accent transition-colors">
+                                            <Icon name="ExternalLink"
+                                                class="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                                        </a>
+                                    </Tooltip>
                                     <Button variant="default" size="sm" class="h-8 text-xs gap-1.5"
                                         @click="addDependency(dep)"
                                         :disabled="isLinked || installingDepIds.has(dep.modId)">

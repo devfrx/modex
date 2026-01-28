@@ -88,7 +88,7 @@ export interface CurseForgeExportOptions {
   excludedPaths?: string[];
   includeRamRecommendation?: boolean;
   ramRecommendation?: number;
-  /** If true, only include server-side mods (isServerPack=true or unspecified) */
+  /** If true, only include server-side mods (environment: server/both/unknown, excludes client-only) */
   serverModsOnly?: boolean;
 }
 
@@ -284,23 +284,30 @@ export function registerExportHandlers(deps: ExportIpcDeps): void {
       let { manifest, modpack, modlist, mods } =
         await metadataManager.exportToCurseForge(modpackId, curseforgeService);
 
-      // Filter mods if serverModsOnly is enabled
-      // Server packs include: isServerPack=true OR isServerPack=null/undefined (unknown)
-      // Client-only mods (isServerPack=false explicitly) are excluded
+      // Filter mods based on serverModsOnly filter (excludes client-only mods)
+      let filteredMods = mods;
+      
+      // Filter by serverModsOnly if enabled
+      // Server packs include: environment = 'server', 'both', or 'unknown' (undefined/null)
+      // Client-only mods (environment = 'client' explicitly) are excluded
       if (options?.serverModsOnly) {
-        const serverModIds = new Set(
-          mods
-            .filter((m: any) => m.isServerPack !== false) // Include true or null/undefined
-            .map((m: any) => m.cf_project_id)
-        );
-        
-        manifest.files = manifest.files.filter((f: any) => serverModIds.has(f.projectID));
-        log.info(`Export CF: Filtered to server mods only, ${manifest.files.length} mods included`);
-        
-        // Regenerate modlist with only server mods
-        const serverMods = mods.filter((m: any) => serverModIds.has(m.cf_project_id));
-        modlist = generateModlistHtml(serverMods);
+        filteredMods = filteredMods.filter((m: any) => {
+          const env = m.environment || 'unknown';
+          // Include server, both, and unknown - exclude client only
+          return env !== 'client';
+        });
+        log.info(`Export CF: Filtered to server mods only (server/both/unknown)`);
       }
+
+      // Get the CF project IDs of filtered mods
+      const includedModIds = new Set(filteredMods.map((m: any) => m.cf_project_id));
+      
+      // Filter manifest files to only include the filtered mods
+      manifest.files = manifest.files.filter((f: any) => includedModIds.has(f.projectID));
+      log.info(`Export CF: Final mod count: ${manifest.files.length} mods included`);
+      
+      // Regenerate modlist with filtered mods
+      modlist = generateModlistHtml(filteredMods);
 
       // Apply custom options if provided
       if (options?.profileName) {

@@ -27,7 +27,7 @@ export interface ExportOptions {
     excludedPaths: string[];
     includeRamRecommendation: boolean;
     ramRecommendation: number;
-    /** If true, only include server-side mods (isServerPack=true or unspecified) */
+    /** If true, only include server-side mods (server/both/unknown environments) */
     serverModsOnly: boolean;
 }
 
@@ -76,6 +76,7 @@ watch(() => props.open, async (isOpen) => {
     if (isOpen && props.modpack) {
         profileName.value = props.modpack.name;
         version.value = props.modpack.version || "1.0.0";
+        serverModsOnly.value = false;
         await loadFolderTree();
     }
 });
@@ -133,9 +134,22 @@ function isPartiallySelected(entry: FolderEntry): boolean {
     return selectedCount > 0 && selectedCount < childCount;
 }
 
+function isModsFolder(entry: FolderEntry): boolean {
+    return entry.name.toLowerCase() === 'mods' && entry.type === 'folder';
+}
+
+function isModsFolderLocked(entry: FolderEntry): boolean {
+    return serverModsOnly.value && isModsFolder(entry);
+}
+
 function toggleSelection(entry: FolderEntry) {
     // Don't allow selection of non-existing items
     if (entry.exists === false) {
+        return;
+    }
+    
+    // Don't allow toggling mods folder when serverModsOnly is enabled
+    if (isModsFolderLocked(entry)) {
         return;
     }
 
@@ -339,8 +353,8 @@ function handleClose() {
                             :class="serverModsOnly ? 'translate-x-4' : 'translate-x-0'" />
                     </button>
                     <label class="text-sm text-muted-foreground flex items-center gap-1.5">
-                        Select server mods only
-                        <Icon name="HelpCircle" class="w-3.5 h-3.5 text-muted-foreground/60" />
+                        Export server-side mods only
+                        <span class="text-xs text-muted-foreground/60">(server, both, unknown)</span>
                     </label>
                 </div>
 
@@ -361,7 +375,9 @@ function handleClose() {
                             <div class="flex items-center gap-2 px-3 py-2 transition-colors" :class="[
                                 doesNotExist(entry)
                                     ? 'opacity-40 cursor-not-allowed'
-                                    : 'hover:bg-muted/30 cursor-pointer'
+                                    : isModsFolderLocked(entry)
+                                        ? 'opacity-60 cursor-not-allowed bg-primary/5'
+                                        : 'hover:bg-muted/30 cursor-pointer'
                             ]" @click="toggleSelection(entry)">
                                 <!-- Expand toggle -->
                                 <button
@@ -399,13 +415,19 @@ function handleClose() {
                                         found)</span>
                                 </span>
                                 <Icon v-if="hasWarning(entry)" name="AlertTriangle" class="w-3.5 h-3.5 text-warning" />
+                                <!-- Locked indicator for mods folder -->
+                                <span v-if="isModsFolderLocked(entry)" class="ml-auto text-xs text-primary/80 flex items-center gap-1">
+                                    <Icon name="Lock" class="w-3 h-3" />
+                                    server filter active
+                                </span>
                             </div>
 
                             <!-- Children (expanded) -->
                             <template v-if="entry.isExpanded && entry.children">
                                 <div v-for="child in entry.children" :key="child.path"
-                                    class="flex items-center gap-2 px-3 py-2 pl-10 hover:bg-muted/30 transition-colors cursor-pointer bg-muted/5"
-                                    @click="toggleSelection(child)">
+                                    class="flex items-center gap-2 px-3 py-2 pl-10 transition-colors bg-muted/5"
+                                    :class="isModsFolderLocked(entry) ? 'opacity-60 cursor-not-allowed' : 'hover:bg-muted/30 cursor-pointer'"
+                                    @click="!isModsFolderLocked(entry) && toggleSelection(child)">
                                     <!-- Spacer for alignment -->
                                     <div class="w-4.5" />
 

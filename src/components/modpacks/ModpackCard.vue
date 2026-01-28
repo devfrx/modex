@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Icon from "@/components/ui/Icon.vue";
+import Tooltip from "@/components/ui/Tooltip.vue";
 import { ref, computed } from "vue";
 import DefaultModpackImage from "@/assets/modpack-placeholder.png";
 
@@ -169,28 +170,39 @@ const imageUrl = computed(() => {
 
       <!-- Cloud/Sync Status (visible in hover) -->
       <div class="hover-cloud-status">
-        <span v-if="modpack.cf_project_id" class="status-badge status-cf" title="CurseForge">
-          <Icon name="Flame" class="w-3.5 h-3.5" />
-        </span>
+        <Tooltip v-if="modpack.cf_project_id" content="CurseForge" position="left">
+          <span class="status-badge status-cf">
+            <Icon name="Flame" class="w-3.5 h-3.5" />
+          </span>
+        </Tooltip>
         <template v-if="modpack.cloudStatus === 'error'">
-          <span v-if="modpack.remote_source?.url" class="status-badge status-error" title="Sync Error">
-            <Icon name="Link2Off" class="w-3.5 h-3.5" />
-          </span>
-          <span v-else class="status-badge status-error" title="Cloud Error">
-            <Icon name="CloudOff" class="w-3.5 h-3.5" />
-          </span>
+          <Tooltip v-if="modpack.remote_source?.url" content="Sync Error" position="left">
+            <span class="status-badge status-error">
+              <Icon name="Link2Off" class="w-3.5 h-3.5" />
+            </span>
+          </Tooltip>
+          <Tooltip v-else content="Cloud Error" position="left">
+            <span class="status-badge status-error">
+              <Icon name="CloudOff" class="w-3.5 h-3.5" />
+            </span>
+          </Tooltip>
         </template>
-        <span v-else-if="modpack.cloudStatus === 'published'" class="status-badge status-published"
-          title="Published to Cloud">
-          <Icon name="Cloud" class="w-3.5 h-3.5" />
-        </span>
-        <span v-else-if="modpack.cloudStatus === 'subscribed' || modpack.remote_source?.url"
-          class="status-badge status-synced" title="Synced from Remote">
-          <Icon name="Link2" class="w-3.5 h-3.5" />
-        </span>
-        <span v-if="modpack.hasUnsavedChanges" class="status-badge status-unsaved" title="Unsaved Changes">
-          <Icon name="CircleDot" class="w-3.5 h-3.5" />
-        </span>
+        <Tooltip v-else-if="modpack.cloudStatus === 'published'" content="Published to Cloud" position="left">
+          <span class="status-badge status-published">
+            <Icon name="Cloud" class="w-3.5 h-3.5" />
+          </span>
+        </Tooltip>
+        <Tooltip v-else-if="modpack.cloudStatus === 'subscribed' || modpack.remote_source?.url"
+          content="Synced from Remote" position="left">
+          <span class="status-badge status-synced">
+            <Icon name="Link2" class="w-3.5 h-3.5" />
+          </span>
+        </Tooltip>
+        <Tooltip v-if="modpack.hasUnsavedChanges" content="Unsaved Changes" position="left">
+          <span class="status-badge status-unsaved">
+            <Icon name="CircleDot" class="w-3.5 h-3.5" />
+          </span>
+        </Tooltip>
       </div>
 
       <!-- Central hero section -->
@@ -212,15 +224,21 @@ const imageUrl = computed(() => {
 
         <div class="dock-divider" />
 
-        <button class="dock-btn" @click.stop="$emit('edit', modpack.id)" title="Edit">
-          <Icon name="Edit" class="w-4 h-4" />
-        </button>
-        <button class="dock-btn" @click.stop="$emit('share', modpack.id, modpack.name)" title="Share">
-          <Icon name="Share2" class="w-4 h-4" />
-        </button>
-        <button class="dock-btn" @click.stop="$emit('open-folder', modpack.id)" title="Open Folder">
-          <Icon name="FolderOpen" class="w-4 h-4" />
-        </button>
+        <Tooltip content="Edit" position="top">
+          <button class="dock-btn" @click.stop="$emit('edit', modpack.id)">
+            <Icon name="Edit" class="w-4 h-4" />
+          </button>
+        </Tooltip>
+        <Tooltip content="Share" position="top">
+          <button class="dock-btn" @click.stop="$emit('share', modpack.id, modpack.name)">
+            <Icon name="Share2" class="w-4 h-4" />
+          </button>
+        </Tooltip>
+        <Tooltip content="Open Folder" position="top">
+          <button class="dock-btn" @click.stop="$emit('open-folder', modpack.id)">
+            <Icon name="FolderOpen" class="w-4 h-4" />
+          </button>
+        </Tooltip>
 
         <!-- More menu -->
         <div class="dock-more">

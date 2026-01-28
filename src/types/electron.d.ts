@@ -461,7 +461,7 @@ export interface ElectronAPI {
         excludedPaths?: string[];
         includeRamRecommendation?: boolean;
         ramRecommendation?: number;
-        /** If true, only include server-side mods (isServerPack=true or unspecified) */
+        /** If true, only include server-side mods (environment: server/both/unknown, excludes client-only) */
         serverModsOnly?: boolean;
       }
     ) => Promise<{ success: boolean; path: string } | null>;
